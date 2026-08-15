@@ -330,12 +330,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
-        let alert = NSAlert()
-        alert.alertStyle = success ? .informational : .critical
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: L10n.text("OK"))
-        alert.runModal()
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.alertStyle = success ? .informational : .warning
+            alert.messageText = title
+            alert.informativeText = message
+            alert.addButton(withTitle: L10n.text("OK"))
+            NSApp.activate(ignoringOtherApps: true)
+            DispatchQueue.main.async {
+                alert.runModal()
+            }
+        }
     }
 
     private func installMainMenu() {
