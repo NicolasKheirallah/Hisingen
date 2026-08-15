@@ -712,11 +712,24 @@ struct VehicleTabView: View {
         let ready = chargingReadyLine
         let secondary = chargingSecondaryLine
         let details = chargingDetailRows
-        guard headline != nil || !details.isEmpty || state.chargingSamples.count >= 2
+        let activeSamples: [ChargingSample] = {
+            if !state.chargingSamples.isEmpty { return state.chargingSamples }
+            if state.isCharging, let pct = state.batteryPercentage {
+                return [ChargingSample(timestamp: state.fetchedAt, batteryPercentage: pct, powerWatts: state.chargingPowerWatts)]
+            }
+            return []
+        }()
+        guard headline != nil || !details.isEmpty || !activeSamples.isEmpty
             || !state.chargingSessions.isEmpty else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green)
+                CardHeader(
+                    symbol: "bolt.fill",
+                    title: L10n.text("Charging"),
+                    color: .green,
+                    isSemantic: true,
+                    isPulsing: state.isCharging
+                )
 
                 if let headline {
                     Text(headline)
@@ -739,12 +752,13 @@ struct VehicleTabView: View {
                         .id(secondary)
                         .transition(.opacity)
                 }
-                if state.chargingSamples.count >= 2 {
+                if !activeSamples.isEmpty {
                     ChargingCurveView(
-                        samples: state.chargingSamples,
+                        samples: activeSamples,
                         targetPercentage: state.chargeTargetPercentage,
                         readyDate: chargingReadyDate,
-                        isLive: true
+                        isLive: state.isCharging,
+                        currentPowerWatts: state.chargingPowerWatts
                     )
                     .transition(.opacity)
                 }
@@ -771,7 +785,7 @@ struct VehicleTabView: View {
                     .font(.system(size: 12, weight: .medium))
                 }
             }
-            .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(state.chargingSamples.count >= 2)")
+            .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(activeSamples.count)")
         })
     }
 
@@ -1177,57 +1191,87 @@ struct LocationCardView: View {
 struct ChargingCurveView: View {
     let samples: [ChargingSample]
     let targetPercentage: Int?
-
     let readyDate: Date?
     let isLive: Bool
+    var currentPowerWatts: Int? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
+    @State private var isHovering = false
+    @State private var hoverLocation: CGPoint? = nil
 
-    private var startSample: ChargingSample { samples[0] }
-    private var lastSample: ChargingSample { samples[samples.count - 1] }
-    private var targetPct: Double? { targetPercentage.map(Double.init) }
+    private var startSample: ChargingSample { samples.first ?? ChargingSample(batteryPercentage: 0) }
+    private var lastSample: ChargingSample { samples.last ?? startSample }
+    private var effectiveTargetPct: Double? {
+        targetPercentage.map(Double.init) ?? (isLive && readyDate != nil ? 100.0 : nil)
+    }
 
     private var domain: (low: Double, high: Double) {
         var values = [startSample.batteryPercentage, lastSample.batteryPercentage]
-        if let targetPct { values.append(targetPct) }
-        let low = (values.min() ?? 0) - 4
-        let high = (values.max() ?? 100) + 4
-        return (low, max(low + 1, high))
+        if let effectiveTargetPct { values.append(effectiveTargetPct) }
+        let minV = values.min() ?? 0
+        let maxV = values.max() ?? 100
+        let span = max(8.0, maxV - minV)
+        let padding = max(2.5, span * 0.12)
+        let low = max(0, minV - padding)
+        let high = min(100, maxV + padding)
+        return (low, max(low + 1.0, high))
     }
 
     private var timeSpan: (start: Date, end: Date) {
         let start = startSample.timestamp
-        let end = readyDate ?? lastSample.timestamp
-        return (start, end.timeIntervalSince(start) > 60 ? end : start.addingTimeInterval(60))
+        let rawEnd = (isLive ? (readyDate ?? lastSample.timestamp) : lastSample.timestamp)
+        let end = rawEnd.timeIntervalSince(start) > 60 ? rawEnd : start.addingTimeInterval(60)
+        return (start, end)
+    }
+
+    private func xCoord(_ date: Date, horizontalInset: CGFloat, chartWidth: CGFloat, timeStart: Date, totalSpan: TimeInterval) -> CGFloat {
+        let fraction = CGFloat(date.timeIntervalSince(timeStart) / totalSpan)
+        return horizontalInset + min(max(fraction, 0), 1) * chartWidth
+    }
+
+    private func yCoord(_ pct: Double, verticalInset: CGFloat, chartHeight: CGFloat, domainLow: Double, domainHigh: Double) -> CGFloat {
+        let fraction = CGFloat((pct - domainLow) / (domainHigh - domainLow))
+        return verticalInset + (1.0 - min(max(fraction, 0), 1)) * chartHeight
     }
 
     private var summaryText: String {
-        if isLive, let targetPct {
-            return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, targetPct)
+        let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
+        if isLive {
+            if let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage {
+                return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, effectiveTargetPct)
+            }
+            if pctAdded >= 0.5 {
+                return String(format: "%.0f%% (+%.0f%%)", lastSample.batteryPercentage, pctAdded)
+            }
+            return String(format: "%.0f%%", lastSample.batteryPercentage)
         }
-        return String(format: "%.0f%% → %.0f%%", startSample.batteryPercentage, lastSample.batteryPercentage)
+        return String(format: "%.0f%% → %.0f%% (+%.0f%%)", startSample.batteryPercentage, lastSample.batteryPercentage, pctAdded)
     }
 
     var body: some View {
-        guard samples.count >= 2 else { return AnyView(EmptyView()) }
+        guard !samples.isEmpty else { return AnyView(EmptyView()) }
         let (domainLow, domainHigh) = domain
         let (timeStart, timeEnd) = timeSpan
-        let span = max(60, timeEnd.timeIntervalSince(timeStart))
-
-        func y(_ pct: Double, height: CGFloat) -> CGFloat {
-            height - CGFloat((pct - domainLow) / (domainHigh - domainLow)) * height
-        }
-        func x(_ date: Date, width: CGFloat) -> CGFloat {
-            CGFloat(date.timeIntervalSince(timeStart) / span) * width
-        }
+        let totalSpan = max(60, timeEnd.timeIntervalSince(timeStart))
 
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(alignment: .center, spacing: 6) {
                     Label(L10n.text("Charging Curve"), systemImage: "chart.xyaxis.line")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
+                    if isLive {
+                        Circle()
+                            .fill(HisingenTheme.semanticGood)
+                            .frame(width: 5, height: 5)
+                            .opacity(pulse ? 1.0 : 0.45)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: pulse)
+                        Text(L10n.text("Live").uppercased())
+                            .font(.system(size: 8, weight: .bold))
+                            .tracking(0.3)
+                            .foregroundStyle(HisingenTheme.semanticGood)
+                    }
                     Spacer()
                     Text(summaryText)
                         .font(.system(size: 11, weight: .semibold))
@@ -1238,77 +1282,228 @@ struct ChargingCurveView: View {
                 GeometryReader { geo in
                     let width = geo.size.width
                     let height = geo.size.height
-                    let points = samples.map { CGPoint(x: x($0.timestamp, width: width), y: y($0.batteryPercentage, height: height)) }
-                    let lastPoint = points[points.count - 1]
+                    let horizontalInset: CGFloat = 8
+                    let verticalInset: CGFloat = 7
+                    let chartWidth = max(1, width - horizontalInset * 2)
+                    let chartHeight = max(1, height - verticalInset * 2)
+                    let bottomY = verticalInset + chartHeight
+
+                    let points = samples.map { sample in
+                        CGPoint(
+                            x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                            y: yCoord(sample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                        )
+                    }
+                    let firstPoint = points.first ?? CGPoint(x: horizontalInset, y: yCoord(startSample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh))
+                    let lastPoint = points.last ?? firstPoint
                     let projectedEnd: CGPoint? = {
-                        guard isLive, let readyDate, let targetPct, targetPct > lastSample.batteryPercentage else { return nil }
-                        return CGPoint(x: x(readyDate, width: width), y: y(targetPct, height: height))
+                        guard isLive, let readyDate, let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage else { return nil }
+                        return CGPoint(
+                            x: xCoord(readyDate, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                            y: yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                        )
+                    }()
+
+                    let hoverInfo: (point: CGPoint, pct: Double, date: Date, powerWatts: Int?, isProjected: Bool)? = {
+                        guard isHovering, let hoverPos = hoverLocation else { return nil }
+                        let clampedX = min(max(hoverPos.x, horizontalInset), width - horizontalInset)
+                        let timeFrac = Double((clampedX - horizontalInset) / chartWidth)
+                        let hoveredDate = timeStart.addingTimeInterval(timeFrac * totalSpan)
+
+                        if hoveredDate <= lastSample.timestamp || projectedEnd == nil {
+                            let closest = samples.min(by: { abs($0.timestamp.timeIntervalSince(hoveredDate)) < abs($1.timestamp.timeIntervalSince(hoveredDate)) }) ?? lastSample
+                            let pt = CGPoint(
+                                x: xCoord(closest.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                                y: yCoord(closest.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                            )
+                            return (pt, closest.batteryPercentage, closest.timestamp, closest.powerWatts ?? currentPowerWatts, false)
+                        } else if let readyDate, let effectiveTargetPct {
+                            let projTotal = readyDate.timeIntervalSince(lastSample.timestamp)
+                            let projElapsed = hoveredDate.timeIntervalSince(lastSample.timestamp)
+                            let projFrac = projTotal > 0 ? min(max(projElapsed / projTotal, 0), 1) : 1.0
+                            let interpPct = lastSample.batteryPercentage + projFrac * (effectiveTargetPct - lastSample.batteryPercentage)
+                            let pt = CGPoint(
+                                x: xCoord(hoveredDate, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                                y: yCoord(interpPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                            )
+                            return (pt, interpPct, hoveredDate, nil, true)
+                        }
+                        return nil
                     }()
 
                     ZStack {
-                        if let targetPct {
-                            let guideY = y(targetPct, height: height)
-                            Path { path in
-                                path.move(to: CGPoint(x: 0, y: guideY))
-                                path.addLine(to: CGPoint(x: width, y: guideY))
-                            }
-                            .stroke(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
 
-                            Text(L10n.format("Target %d%%", targetPercentage ?? 100))
+                        if let effectiveTargetPct {
+                            let guideY = yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                            Path { path in
+                                path.move(to: CGPoint(x: horizontalInset, y: guideY))
+                                path.addLine(to: CGPoint(x: width - horizontalInset, y: guideY))
+                            }
+                            .stroke(Color.secondary.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+                            Text(L10n.format("Target %d%%", Int(effectiveTargetPct)))
                                 .font(.system(size: 8, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
+                                .padding(.vertical, 1.5)
                                 .background(.regularMaterial, in: Capsule())
-                                .position(x: width - 30, y: max(8, guideY - 9))
+                                .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
                         }
 
-                        smoothPath(points)
-                            .addingClosedBottom(width: width, height: height)
+
+                        if let projectedEnd {
+                            Path { path in
+                                path.move(to: lastPoint)
+                                path.addLine(to: projectedEnd)
+                                path.addLine(to: CGPoint(x: projectedEnd.x, y: bottomY))
+                                path.addLine(to: CGPoint(x: lastPoint.x, y: bottomY))
+                                path.closeSubpath()
+                            }
                             .fill(
                                 LinearGradient(
-                                    colors: [HisingenTheme.accent.opacity(0.22), HisingenTheme.accent.opacity(0.01)],
+                                    colors: [HisingenTheme.accent.opacity(0.10), HisingenTheme.accent.opacity(0.01)],
                                     startPoint: .top, endPoint: .bottom
                                 )
                             )
+                        }
 
-                        smoothPath(points)
-                            .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                            .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
+
+                        if points.count >= 2 {
+                            smoothPath(points)
+                                .addingClosedBottom(firstX: firstPoint.x, lastX: lastPoint.x, bottomY: bottomY)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
+                                        startPoint: .top, endPoint: .bottom
+                                    )
+                                )
+                        }
+
 
                         if let projectedEnd {
                             Path { path in
                                 path.move(to: lastPoint)
                                 path.addLine(to: projectedEnd)
                             }
-                            .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [1, 4]))
+                            .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, dash: [4, 4]))
+
 
                             Circle()
-                                .strokeBorder(HisingenTheme.accent.opacity(0.7), lineWidth: 1.5)
-                                .background(Circle().fill(.regularMaterial))
+                                .strokeBorder(HisingenTheme.accent.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
+                                .background(Circle().fill(HisingenTheme.accent.opacity(0.18)))
                                 .frame(width: 8, height: 8)
                                 .position(projectedEnd)
                         }
 
-                        Circle()
-                            .fill(HisingenTheme.accent.opacity(0.7))
-                            .frame(width: 5, height: 5)
-                            .position(points[0])
+
+                        if points.count >= 2 {
+                            smoothPath(points)
+                                .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                                .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
+
+
+                            if isLive && !reduceMotion {
+                                smoothPath(points)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [HisingenTheme.accent.opacity(0.2), Color.white.opacity(0.85), HisingenTheme.accent],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        ),
+                                        style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                                    )
+                                    .opacity(pulse ? 0.85 : 0.3)
+                            }
+                        }
+
 
                         Circle()
-                            .fill(HisingenTheme.accent)
-                            .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 1))
-                            .frame(width: 7, height: 7)
-                            .shadow(color: HisingenTheme.accent.opacity(isLive && pulse ? 0.7 : 0.3), radius: isLive && pulse ? 5 : 2)
-                            .scaleEffect(isLive && pulse ? 1.25 : 1.0)
-                            .position(lastPoint)
+                            .fill(HisingenTheme.accent.opacity(0.75))
+                            .frame(width: 5, height: 5)
+                            .position(firstPoint)
+
+
+                        ZStack {
+                            if isLive && !reduceMotion {
+                                Circle()
+                                    .stroke(HisingenTheme.accent.opacity(pulse ? 0.0 : 0.65), lineWidth: 1.5)
+                                    .frame(width: 16, height: 16)
+                                    .scaleEffect(pulse ? 1.65 : 0.85)
+                            }
+                            Circle()
+                                .fill(HisingenTheme.accent)
+                                .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                                .frame(width: 7.5, height: 7.5)
+                                .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
+                        }
+                        .position(lastPoint)
+
+
+                        if let info = hoverInfo {
+
+                            Path { path in
+                                path.move(to: CGPoint(x: info.point.x, y: verticalInset))
+                                path.addLine(to: CGPoint(x: info.point.x, y: bottomY))
+                            }
+                            .stroke(HisingenTheme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+
+
+                            Circle()
+                                .fill(HisingenTheme.accent)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                                .frame(width: 9, height: 9)
+                                .shadow(color: HisingenTheme.accent.opacity(0.6), radius: 4)
+                                .position(info.point)
+
+
+                            HStack(spacing: 4) {
+                                Text(String(format: "%.0f%%", info.pct))
+                                    .font(.system(size: 9, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(HisingenTheme.accent)
+                                if let watts = info.powerWatts, watts > 0 {
+                                    Text("· \(Format.kilowatts(watts: watts))")
+                                        .font(.system(size: 8.5, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("· " + Format.shortTime(date: info.date))
+                                    .font(.system(size: 8.5))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.tertiary)
+                                if info.isProjected {
+                                    Text("(\(L10n.text("Projected")))")
+                                        .font(.system(size: 8, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.regularMaterial, in: Capsule())
+                            .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                            .position(
+                                x: min(max(info.point.x, 60), width - 60),
+                                y: max(verticalInset + 10, info.point.y - 18)
+                            )
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            isHovering = true
+                            hoverLocation = location
+                        case .ended:
+                            isHovering = false
+                            hoverLocation = nil
+                        }
                     }
                     .onAppear {
                         guard isLive, !reduceMotion else { return }
-                        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { pulse = true }
+                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { pulse = true }
                     }
                 }
-                .frame(height: 56)
+                .frame(height: 60)
                 .padding(.vertical, 2)
                 .accessibilityHidden(true)
 
@@ -1317,42 +1512,60 @@ struct ChargingCurveView: View {
                     Spacer()
                     curveCaption(
                         title: isLive ? L10n.text("Now") : L10n.text("Finished"),
-                        pct: lastSample.batteryPercentage, date: lastSample.timestamp, emphasized: isLive
+                        pct: lastSample.batteryPercentage,
+                        date: lastSample.timestamp,
+                        emphasized: isLive,
+                        isLive: isLive
                     )
-                    if let targetPct {
+                    if let effectiveTargetPct {
                         Spacer()
                         curveCaption(
                             title: isLive ? L10n.text("Ready") : L10n.text("Target"),
-                            pct: targetPct, date: isLive ? readyDate : nil
+                            pct: effectiveTargetPct,
+                            date: isLive ? readyDate : nil,
+                            isProjected: isLive
                         )
                     }
                 }
             }
-            .padding(8)
+            .padding(9)
             .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
         )
     }
 
     @ViewBuilder
-    private func curveCaption(title: String, pct: Double, date: Date?, emphasized: Bool = false) -> some View {
+    private func curveCaption(
+        title: String,
+        pct: Double,
+        date: Date?,
+        emphasized: Bool = false,
+        isLive: Bool = false,
+        isProjected: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(title.uppercased())
-                .font(.system(size: 8, weight: .semibold))
-                .tracking(0.4)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 3) {
+                if isLive {
+                    Circle()
+                        .fill(HisingenTheme.accent)
+                        .frame(width: 4, height: 4)
+                }
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(.tertiary)
+            }
             Text(String(format: "%.0f%%", pct))
                 .font(.system(size: 12, weight: emphasized ? .bold : .semibold))
                 .monospacedDigit()
                 .foregroundStyle(emphasized ? HisingenTheme.accent : .primary)
             if let date {
-                Text(date, style: .time)
+                Text(Format.shortTime(date: date))
                     .font(.system(size: 9))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
         }
     }
-
 
     private func smoothPath(_ points: [CGPoint]) -> Path {
         var path = Path()
@@ -1377,23 +1590,24 @@ struct ChargingCurveView: View {
 }
 
 private extension Path {
-    func addingClosedBottom(width: CGFloat, height: CGFloat) -> Path {
+    func addingClosedBottom(firstX: CGFloat, lastX: CGFloat, bottomY: CGFloat) -> Path {
         var closed = self
-        closed.addLine(to: CGPoint(x: width, y: height))
-        closed.addLine(to: CGPoint(x: 0, y: height))
+        closed.addLine(to: CGPoint(x: lastX, y: bottomY))
+        closed.addLine(to: CGPoint(x: firstX, y: bottomY))
         closed.closeSubpath()
         return closed
     }
 }
 
-
 struct ChargingSessionRow: View {
     let session: ChargingSession
+
+    @State private var isHovered = false
 
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 8) {
-                if session.samples.count >= 2 {
+                if !session.samples.isEmpty {
                     ChargingCurveView(
                         samples: session.samples,
                         targetPercentage: session.targetPercentage,
@@ -1427,6 +1641,14 @@ struct ChargingSessionRow: View {
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle())
         .font(.system(size: 11))
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        )
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }
 
