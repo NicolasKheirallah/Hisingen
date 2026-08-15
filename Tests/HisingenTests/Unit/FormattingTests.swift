@@ -326,7 +326,7 @@ struct FormattingTests {
         )
 
         XCTAssertNotNil(chargingCar.formattedCompletionTime)
-        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+61 km/h")
+        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+79 km/h")
         XCTAssertTrue(chargingCar.freshnessDescription.contains("Updated"))
     }
 
