@@ -81,7 +81,7 @@ struct KeychainStore: Sendable {
     private func save(_ value: String, account: String) throws {
         let attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         let updateStatus = SecItemUpdate(
             baseQuery(account: account) as CFDictionary,
