@@ -1,7 +1,14 @@
 .build*/
 .swiftpm/
 *.app
+*.dmg
+dmg-staging/
 *.zip
 .DS_Store
 xcuserdata/
 DerivedData/
+*.cert
+*.p12
+*.key
+*.csr
+
