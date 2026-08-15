@@ -15,60 +15,132 @@ enum KeychainError: Error, LocalizedError {
     }
 }
 
+private final class InMemorySecretCache: @unchecked Sendable {
+    static let shared = InMemorySecretCache()
+    private let lock = NSLock()
+    private var cache: [String: String] = [:]
+
+    func get(_ key: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache[key]
+    }
+
+    func set(_ key: String, value: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let value {
+            cache[key] = value
+        } else {
+            cache.removeValue(forKey: key)
+        }
+    }
+}
+
+private struct VolvoSecretBundle: Codable {
+    var clientSecret: String?
+    var apiKey: String?
+    var sessionToken: String?
+}
+
 struct KeychainStore: Sendable {
     static let app = KeychainStore(service: "io.kheirallah.hisingen")
 
     let service: String
 
-
     private static let passwordAccount = "polestar-password"
     private static let sessionAccount = "polestar-refresh-token"
-
-    private static let volvoSessionAccount = "volvo-refresh-token"
-    private static let volvoClientSecretAccount = "volvo-client-secret"
-    private static let volvoApiKeyAccount = "volvo-vcc-api-key"
-
-
-    private static let passwordDraftAccount = "polestar-password-draft"
-    private static let volvoClientSecretDraftAccount = "volvo-client-secret-draft"
-    private static let volvoApiKeyDraftAccount = "volvo-vcc-api-key-draft"
-
+    private static let volvoBundleAccount = "volvo-credentials-bundle"
 
     func savePassword(_ password: String) throws { try save(password, account: Self.passwordAccount) }
     func readPassword() throws -> String? { try read(account: Self.passwordAccount) }
     func deletePassword() throws { try delete(account: Self.passwordAccount) }
 
-
     func saveSessionToken(_ token: String) throws { try save(token, account: Self.sessionAccount) }
     func readSessionToken() throws -> String? { try read(account: Self.sessionAccount) }
     func deleteSessionToken() throws { try delete(account: Self.sessionAccount) }
 
+    func saveVolvoSessionToken(_ token: String) throws {
+        var bundle = readVolvoBundle()
+        bundle.sessionToken = token
+        try saveVolvoBundle(bundle)
+    }
 
-    func saveVolvoSessionToken(_ token: String) throws { try save(token, account: Self.volvoSessionAccount) }
-    func readVolvoSessionToken() throws -> String? { try read(account: Self.volvoSessionAccount) }
-    func deleteVolvoSessionToken() throws { try delete(account: Self.volvoSessionAccount) }
+    func readVolvoSessionToken() throws -> String? {
+        readVolvoBundle().sessionToken
+    }
 
-    func saveVolvoClientSecret(_ value: String) throws { try save(value, account: Self.volvoClientSecretAccount) }
-    func readVolvoClientSecret() throws -> String? { try read(account: Self.volvoClientSecretAccount) }
-    func deleteVolvoClientSecret() throws { try delete(account: Self.volvoClientSecretAccount) }
+    func deleteVolvoSessionToken() throws {
+        var bundle = readVolvoBundle()
+        bundle.sessionToken = nil
+        try saveVolvoBundle(bundle)
+    }
 
-    func saveVolvoApiKey(_ value: String) throws { try save(value, account: Self.volvoApiKeyAccount) }
-    func readVolvoApiKey() throws -> String? { try read(account: Self.volvoApiKeyAccount) }
-    func deleteVolvoApiKey() throws { try delete(account: Self.volvoApiKeyAccount) }
+    func saveVolvoClientSecret(_ value: String) throws {
+        var bundle = readVolvoBundle()
+        bundle.clientSecret = value
+        try saveVolvoBundle(bundle)
+    }
 
+    func readVolvoClientSecret() throws -> String? {
+        readVolvoBundle().clientSecret
+    }
 
-    func savePasswordDraft(_ value: String) throws { try save(value, account: Self.passwordDraftAccount) }
-    func readPasswordDraft() throws -> String? { try read(account: Self.passwordDraftAccount) }
-    func deletePasswordDraft() throws { try delete(account: Self.passwordDraftAccount) }
+    func deleteVolvoClientSecret() throws {
+        var bundle = readVolvoBundle()
+        bundle.clientSecret = nil
+        try saveVolvoBundle(bundle)
+    }
 
-    func saveVolvoClientSecretDraft(_ value: String) throws { try save(value, account: Self.volvoClientSecretDraftAccount) }
-    func readVolvoClientSecretDraft() throws -> String? { try read(account: Self.volvoClientSecretDraftAccount) }
-    func deleteVolvoClientSecretDraft() throws { try delete(account: Self.volvoClientSecretDraftAccount) }
+    func saveVolvoApiKey(_ value: String) throws {
+        var bundle = readVolvoBundle()
+        bundle.apiKey = value
+        try saveVolvoBundle(bundle)
+    }
 
-    func saveVolvoApiKeyDraft(_ value: String) throws { try save(value, account: Self.volvoApiKeyDraftAccount) }
-    func readVolvoApiKeyDraft() throws -> String? { try read(account: Self.volvoApiKeyDraftAccount) }
-    func deleteVolvoApiKeyDraft() throws { try delete(account: Self.volvoApiKeyDraftAccount) }
+    func readVolvoApiKey() throws -> String? {
+        readVolvoBundle().apiKey
+    }
 
+    func deleteVolvoApiKey() throws {
+        var bundle = readVolvoBundle()
+        bundle.apiKey = nil
+        try saveVolvoBundle(bundle)
+    }
+
+    func savePasswordDraft(_ value: String) throws {}
+    func readPasswordDraft() throws -> String? { nil }
+    func deletePasswordDraft() throws {}
+
+    func saveVolvoClientSecretDraft(_ value: String) throws {}
+    func readVolvoClientSecretDraft() throws -> String? { nil }
+    func deleteVolvoClientSecretDraft() throws {}
+
+    func saveVolvoApiKeyDraft(_ value: String) throws {}
+    func readVolvoApiKeyDraft() throws -> String? { nil }
+    func deleteVolvoApiKeyDraft() throws {}
+
+    private func readVolvoBundle() -> VolvoSecretBundle {
+        if let raw = try? read(account: Self.volvoBundleAccount),
+           let data = raw.data(using: .utf8),
+           let bundle = try? JSONDecoder().decode(VolvoSecretBundle.self, from: data) {
+            return bundle
+        }
+        let legacySecret = try? read(account: "volvo-client-secret")
+        let legacyApiKey = try? read(account: "volvo-vcc-api-key")
+        let legacySession = try? read(account: "volvo-refresh-token")
+        let bundle = VolvoSecretBundle(clientSecret: legacySecret ?? nil, apiKey: legacyApiKey ?? nil, sessionToken: legacySession ?? nil)
+        if legacySecret != nil || legacyApiKey != nil || legacySession != nil {
+            try? saveVolvoBundle(bundle)
+        }
+        return bundle
+    }
+
+    private func saveVolvoBundle(_ bundle: VolvoSecretBundle) throws {
+        let data = try JSONEncoder().encode(bundle)
+        guard let str = String(data: data, encoding: .utf8) else { return }
+        try save(str, account: Self.volvoBundleAccount)
+    }
 
     private func baseQuery(account: String) -> [String: Any] {
         [
@@ -79,6 +151,7 @@ struct KeychainStore: Sendable {
     }
 
     private func save(_ value: String, account: String) throws {
+        InMemorySecretCache.shared.set(account, value: value)
         let attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -89,8 +162,6 @@ struct KeychainStore: Sendable {
         )
         if updateStatus == errSecSuccess { return }
         guard updateStatus == errSecItemNotFound else {
-
-
             throw KeychainError.status(updateStatus)
         }
 
@@ -100,8 +171,10 @@ struct KeychainStore: Sendable {
         guard addStatus == errSecSuccess else { throw KeychainError.status(addStatus) }
     }
 
-
     private func read(account: String) throws -> String? {
+        if let cached = InMemorySecretCache.shared.get(account) {
+            return cached
+        }
         var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -112,10 +185,13 @@ struct KeychainStore: Sendable {
         guard status == errSecSuccess, let data = item as? Data else {
             throw KeychainError.status(status)
         }
-        return String(data: data, encoding: .utf8)
+        let result = String(data: data, encoding: .utf8)
+        InMemorySecretCache.shared.set(account, value: result)
+        return result
     }
 
     private func delete(account: String) throws {
+        InMemorySecretCache.shared.set(account, value: nil)
         let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)

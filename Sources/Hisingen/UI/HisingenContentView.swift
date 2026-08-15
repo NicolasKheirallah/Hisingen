@@ -688,17 +688,12 @@ struct VehicleTabView: View {
                 rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill"))
             }
         }
-        if let session = state.chargingSessions.last {
-            rows.append(KVRow(L10n.text("Last Charge"),
-                              String(format: "+%.0f%% · %.1f kWh", session.percentageAdded, session.kwhDelivered),
-                              symbol: "clock.arrow.circlepath"))
-            if let cost = session.cost {
-                rows.append(KVRow(L10n.text("Last Charge Cost"),
-                                  String(format: "%.2f %@", cost, Preferences.currencySymbol),
-                                  symbol: "creditcard"))
-            }
-        }
         return rows
+    }
+
+    private var chargingReadyDate: Date? {
+        guard let minutes = state.estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
+        return Date().addingTimeInterval(TimeInterval(minutes * 60))
     }
 
     private var chargingCard: AnyView? {
@@ -707,7 +702,8 @@ struct VehicleTabView: View {
         let ready = chargingReadyLine
         let secondary = chargingSecondaryLine
         let details = chargingDetailRows
-        guard headline != nil || !details.isEmpty || state.chargingSamples.count >= 2 else { return nil }
+        guard headline != nil || !details.isEmpty || state.chargingSamples.count >= 2
+            || !state.chargingSessions.isEmpty else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green)
@@ -734,14 +730,32 @@ struct VehicleTabView: View {
                         .transition(.opacity)
                 }
                 if state.chargingSamples.count >= 2 {
-                    ChargingSparklineView(samples: state.chargingSamples)
-                        .transition(.opacity)
+                    ChargingCurveView(
+                        samples: state.chargingSamples,
+                        targetPercentage: state.chargeTargetPercentage,
+                        readyDate: chargingReadyDate,
+                        isLive: true
+                    )
+                    .transition(.opacity)
                 }
 
                 if !details.isEmpty {
                     DisclosureGroup(L10n.text("Details")) {
                         VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }
                             .padding(.top, 6)
+                    }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    .font(.system(size: 12, weight: .medium))
+                }
+
+                if !state.chargingSessions.isEmpty {
+                    DisclosureGroup(L10n.text("Charging History")) {
+                        VStack(spacing: 8) {
+                            ForEach(state.chargingSessions.reversed(), id: \.id) { session in
+                                ChargingSessionRow(session: session)
+                            }
+                        }
+                        .padding(.top, 6)
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())
                     .font(.system(size: 12, weight: .medium))
@@ -1150,98 +1164,259 @@ struct LocationCardView: View {
 }
 
 
-struct ChargingSparklineView: View {
+struct ChargingCurveView: View {
     let samples: [ChargingSample]
+    let targetPercentage: Int?
+
+    let readyDate: Date?
+    let isLive: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    private var startSample: ChargingSample { samples[0] }
+    private var lastSample: ChargingSample { samples[samples.count - 1] }
+    private var targetPct: Double? { targetPercentage.map(Double.init) }
+
+    private var domain: (low: Double, high: Double) {
+        var values = [startSample.batteryPercentage, lastSample.batteryPercentage]
+        if let targetPct { values.append(targetPct) }
+        let low = (values.min() ?? 0) - 4
+        let high = (values.max() ?? 100) + 4
+        return (low, max(low + 1, high))
+    }
+
+    private var timeSpan: (start: Date, end: Date) {
+        let start = startSample.timestamp
+        let end = readyDate ?? lastSample.timestamp
+        return (start, end.timeIntervalSince(start) > 60 ? end : start.addingTimeInterval(60))
+    }
+
+    private var summaryText: String {
+        if isLive, let targetPct {
+            return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, targetPct)
+        }
+        return String(format: "%.0f%% → %.0f%%", startSample.batteryPercentage, lastSample.batteryPercentage)
+    }
 
     var body: some View {
         guard samples.count >= 2 else { return AnyView(EmptyView()) }
-        let percentages = samples.map(\.batteryPercentage)
-        let minPct = percentages.min() ?? 0
-        let maxPct = percentages.max() ?? 100
-        let range = max(1.0, maxPct - minPct)
+        let (domainLow, domainHigh) = domain
+        let (timeStart, timeEnd) = timeSpan
+        let span = max(60, timeEnd.timeIntervalSince(timeStart))
+
+        func y(_ pct: Double, height: CGFloat) -> CGFloat {
+            height - CGFloat((pct - domainLow) / (domainHigh - domainLow)) * height
+        }
+        func x(_ date: Date, width: CGFloat) -> CGFloat {
+            CGFloat(date.timeIntervalSince(timeStart) / span) * width
+        }
 
         return AnyView(
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(L10n.text("Session Curve"), systemImage: "waveform.path.ecg")
+                    Label(L10n.text("Charging Curve"), systemImage: "chart.xyaxis.line")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if let first = samples.first, let last = samples.last {
-                        Text(String(format: "%.0f%% → %.0f%%", first.batteryPercentage, last.batteryPercentage))
-                            .font(.system(size: 11, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.green)
-                    }
+                    Text(summaryText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.accent)
                 }
 
                 GeometryReader { geo in
                     let width = geo.size.width
                     let height = geo.size.height
-                    let step = width / CGFloat(max(1, samples.count - 1))
+                    let points = samples.map { CGPoint(x: x($0.timestamp, width: width), y: y($0.batteryPercentage, height: height)) }
+                    let lastPoint = points[points.count - 1]
+                    let projectedEnd: CGPoint? = {
+                        guard isLive, let readyDate, let targetPct, targetPct > lastSample.batteryPercentage else { return nil }
+                        return CGPoint(x: x(readyDate, width: width), y: y(targetPct, height: height))
+                    }()
 
                     ZStack {
-
-                        Path { path in
-                            path.move(to: CGPoint(x: 0, y: height))
-                            for (index, sample) in samples.enumerated() {
-                                let normalized = CGFloat((sample.batteryPercentage - minPct) / range)
-                                let x = CGFloat(index) * step
-                                let y = height - (normalized * (height - 8) + 4)
-                                path.addLine(to: CGPoint(x: x, y: y))
+                        if let targetPct {
+                            let guideY = y(targetPct, height: height)
+                            Path { path in
+                                path.move(to: CGPoint(x: 0, y: guideY))
+                                path.addLine(to: CGPoint(x: width, y: guideY))
                             }
-                            path.addLine(to: CGPoint(x: CGFloat(samples.count - 1) * step, y: height))
-                            path.closeSubpath()
+                            .stroke(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+                            Text(L10n.format("Target %d%%", targetPercentage ?? 100))
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(.regularMaterial, in: Capsule())
+                                .position(x: width - 30, y: max(8, guideY - 9))
                         }
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.green.opacity(0.22), Color.green.opacity(0.01)],
-                                startPoint: .top,
-                                endPoint: .bottom
+
+                        smoothPath(points)
+                            .addingClosedBottom(width: width, height: height)
+                            .fill(
+                                LinearGradient(
+                                    colors: [HisingenTheme.accent.opacity(0.22), HisingenTheme.accent.opacity(0.01)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
                             )
-                        )
 
+                        smoothPath(points)
+                            .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                            .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
 
-                        Path { path in
-                            for (index, sample) in samples.enumerated() {
-                                let normalized = CGFloat((sample.batteryPercentage - minPct) / range)
-                                let x = CGFloat(index) * step
-                                let y = height - (normalized * (height - 8) + 4)
-                                if index == 0 {
-                                    path.move(to: CGPoint(x: x, y: y))
-                                } else {
-                                    path.addLine(to: CGPoint(x: x, y: y))
-                                }
+                        if let projectedEnd {
+                            Path { path in
+                                path.move(to: lastPoint)
+                                path.addLine(to: projectedEnd)
                             }
-                        }
-                        .stroke(
-                            LinearGradient(
-                                colors: [Color.green.opacity(0.7), Color.green],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
-                        )
+                            .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [1, 4]))
 
-
-                        if let lastSample = samples.last {
-                            let normalized = CGFloat((lastSample.batteryPercentage - minPct) / range)
-                            let x = CGFloat(samples.count - 1) * step
-                            let y = height - (normalized * (height - 8) + 4)
                             Circle()
-                                .fill(Color.green)
-                                .frame(width: 6, height: 6)
-                                .position(x: x, y: y)
+                                .strokeBorder(HisingenTheme.accent.opacity(0.7), lineWidth: 1.5)
+                                .background(Circle().fill(.regularMaterial))
+                                .frame(width: 8, height: 8)
+                                .position(projectedEnd)
                         }
+
+                        Circle()
+                            .fill(HisingenTheme.accent.opacity(0.7))
+                            .frame(width: 5, height: 5)
+                            .position(points[0])
+
+                        Circle()
+                            .fill(HisingenTheme.accent)
+                            .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 1))
+                            .frame(width: 7, height: 7)
+                            .shadow(color: HisingenTheme.accent.opacity(isLive && pulse ? 0.7 : 0.3), radius: isLive && pulse ? 5 : 2)
+                            .scaleEffect(isLive && pulse ? 1.25 : 1.0)
+                            .position(lastPoint)
+                    }
+                    .onAppear {
+                        guard isLive, !reduceMotion else { return }
+                        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { pulse = true }
                     }
                 }
-                .frame(height: 48)
+                .frame(height: 56)
                 .padding(.vertical, 2)
                 .accessibilityHidden(true)
+
+                HStack(alignment: .top) {
+                    curveCaption(title: L10n.text("Start"), pct: startSample.batteryPercentage, date: startSample.timestamp)
+                    Spacer()
+                    curveCaption(
+                        title: isLive ? L10n.text("Now") : L10n.text("Finished"),
+                        pct: lastSample.batteryPercentage, date: lastSample.timestamp, emphasized: isLive
+                    )
+                    if let targetPct {
+                        Spacer()
+                        curveCaption(
+                            title: isLive ? L10n.text("Ready") : L10n.text("Target"),
+                            pct: targetPct, date: isLive ? readyDate : nil
+                        )
+                    }
+                }
             }
             .padding(8)
             .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
         )
+    }
+
+    @ViewBuilder
+    private func curveCaption(title: String, pct: Double, date: Date?, emphasized: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .semibold))
+                .tracking(0.4)
+                .foregroundStyle(.tertiary)
+            Text(String(format: "%.0f%%", pct))
+                .font(.system(size: 12, weight: emphasized ? .bold : .semibold))
+                .monospacedDigit()
+                .foregroundStyle(emphasized ? HisingenTheme.accent : .primary)
+            if let date {
+                Text(date, style: .time)
+                    .font(.system(size: 9))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+
+    private func smoothPath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        guard points.count > 1 else { return path }
+        if points.count == 2 {
+            path.addLine(to: points[1])
+            return path
+        }
+        for i in 0..<points.count - 1 {
+            let p0 = points[max(0, i - 1)]
+            let p1 = points[i]
+            let p2 = points[i + 1]
+            let p3 = points[min(points.count - 1, i + 2)]
+            let cp1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
+            let cp2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
+            path.addCurve(to: p2, control1: cp1, control2: cp2)
+        }
+        return path
+    }
+}
+
+private extension Path {
+    func addingClosedBottom(width: CGFloat, height: CGFloat) -> Path {
+        var closed = self
+        closed.addLine(to: CGPoint(x: width, y: height))
+        closed.addLine(to: CGPoint(x: 0, y: height))
+        closed.closeSubpath()
+        return closed
+    }
+}
+
+
+struct ChargingSessionRow: View {
+    let session: ChargingSession
+
+    var body: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 8) {
+                if session.samples.count >= 2 {
+                    ChargingCurveView(
+                        samples: session.samples,
+                        targetPercentage: session.targetPercentage,
+                        readyDate: nil,
+                        isLive: false
+                    )
+                }
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Duration"), Format.shortDuration(minutes: session.durationMinutes), symbol: "timer")
+                    KVRow(L10n.text("Energy Delivered"), String(format: "%.1f kWh", session.kwhDelivered), symbol: "bolt.fill")
+                    if let peak = session.peakPowerWatts, peak > 0 {
+                        KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
+                    }
+                    if let cost = session.cost {
+                        KVRow(L10n.text("Cost"), String(format: "%.2f %@", cost, Preferences.currencySymbol), symbol: "creditcard")
+                    }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(Format.dateTimeFormatter.string(from: session.startDate))
+                        .font(.system(size: 11, weight: .medium))
+                    Text(String(format: "+%.0f%% · %.1f kWh", session.percentageAdded, session.kwhDelivered))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+        }
+        .disclosureGroupStyle(WholeRowDisclosureStyle())
+        .font(.system(size: 11))
     }
 }
 
