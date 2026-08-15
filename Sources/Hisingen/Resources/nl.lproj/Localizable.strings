@@ -708,3 +708,7 @@
 "%@, selected" = "%@, geselecteerd";
 "Add or Manage Vehicles…" = "Voertuigen toevoegen of beheren…";
 "Switch to %@ (%@ · %d%%)…" = "Overschakelen naar %@ (%@ · %d%%)…";
+
+/* Added: Volvo theme */
+"Volvo" = "Volvo";
+"Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Niet officieel — Volvo's blauwe accentkleur, zachte panelen, contrast tussen licht en vet lettertype";

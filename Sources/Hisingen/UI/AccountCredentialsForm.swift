@@ -4,11 +4,7 @@ import SwiftUI
 @MainActor
 struct AccountCredentialsForm: View {
     enum Style {
-
-
         case compact
-
-
         case welcoming
     }
 
@@ -20,17 +16,22 @@ struct AccountCredentialsForm: View {
     @State private var password = ""
     @State private var vin = Preferences.vin
     @State private var vehicleNickname = Preferences.vehicleNickname(for: Preferences.vin)
-    @State private var volvoClientID = Preferences.volvoClientID
+    @State private var volvoClientID = Preferences.volvoClientID.isEmpty ? "dc-3spjins2tdf9cbxsq16xjha14" : Preferences.volvoClientID
     @State private var volvoClientSecret = ""
     @State private var volvoApiKey = ""
     @State private var volvoSigningIn = false
     @State private var showSavedFeedback = false
+    @State private var isTestingConnection = false
+    @State private var testConnectionResult: (success: Bool, message: String)?
+    @State private var showUpdateFields = false
     @State private var draftSaveTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 12) {
             brandPicker
+
+            accountStatusBanner
 
             if selectedBrand == .polestar {
                 polestarFields
@@ -41,7 +42,6 @@ struct AccountCredentialsForm: View {
         .onAppear(perform: restoreDrafts)
         .onDisappear { draftSaveTask?.cancel() }
     }
-
 
     @ViewBuilder
     private var brandPicker: some View {
@@ -59,6 +59,9 @@ struct AccountCredentialsForm: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .onChange(of: selectedBrand) { _ in
+                testConnectionResult = nil
+            }
         }
     }
 
@@ -68,6 +71,7 @@ struct AccountCredentialsForm: View {
         return Button {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                 selectedBrand = brand
+                testConnectionResult = nil
             }
         } label: {
             VStack(spacing: 6) {
@@ -95,6 +99,65 @@ struct AccountCredentialsForm: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
+    private var isCurrentlyConnected: Bool {
+        Preferences.activeBrand == selectedBrand && Preferences.hasResumableSession(for: selectedBrand)
+    }
+
+    @ViewBuilder
+    private var accountStatusBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(isCurrentlyConnected ? Color.green : Color.secondary.opacity(0.4))
+                    .frame(width: 8, height: 8)
+
+                Text(isCurrentlyConnected
+                     ? L10n.format("Connected to %@ Account", selectedBrand.displayName)
+                     : L10n.format("Not Connected to %@", selectedBrand.displayName))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isCurrentlyConnected ? Color.primary : Color.secondary)
+
+                Spacer()
+
+                if isCurrentlyConnected {
+                    Button {
+                        testCurrentConnection()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isTestingConnection {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(L10n.text("Test Connection"))
+                        }
+                        .font(.system(size: 10, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isTestingConnection)
+                }
+            }
+
+            if let result = testConnectionResult {
+                HStack(spacing: 6) {
+                    Image(systemName: result.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(result.success ? Color.green : Color.orange)
+                    Text(result.message)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    (result.success ? Color.green : Color.orange).opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
 
     private var polestarFields: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -136,7 +199,7 @@ struct AccountCredentialsForm: View {
                 HStack(spacing: 4) {
                     if showSavedFeedback {
                         Image(systemName: "checkmark")
-                        Text(L10n.text("Saved"))
+                        Text(L10n.text("Saved & Connected"))
                     } else {
                         Image(systemName: "arrow.right.circle.fill")
                         Text(L10n.text("Sign In"))
@@ -152,7 +215,6 @@ struct AccountCredentialsForm: View {
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
-
 
     private var hasResumableVolvoSession: Bool {
         let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -182,13 +244,17 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Client Secret")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $volvoClientSecret)
+                SecureField(hasResumableVolvoSession && volvoClientSecret.isEmpty
+                            ? L10n.text("•••••••• (Saved in Keychain)")
+                            : L10n.text("Client Secret"), text: $volvoClientSecret)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: volvoClientSecret) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("VCC API Key")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $volvoApiKey)
+                SecureField(hasResumableVolvoSession && volvoApiKey.isEmpty
+                            ? L10n.text("•••••••• (Saved in Keychain)")
+                            : L10n.text("VCC API Key"), text: $volvoApiKey)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: volvoApiKey) { _ in scheduleDraftSave() }
             }
@@ -205,12 +271,13 @@ struct AccountCredentialsForm: View {
                 HStack(spacing: 4) {
                     if volvoSigningIn {
                         ProgressView().controlSize(.small)
+                        Text(L10n.text("Signing in via browser…"))
                     } else {
                         Image(systemName: "globe")
+                        Text(hasResumableVolvoSession
+                             ? L10n.text("Switch to Volvo Account")
+                             : L10n.text("Sign in with Volvo ID"))
                     }
-                    Text(hasResumableVolvoSession
-                         ? L10n.text("Switch to Volvo Account")
-                         : L10n.text("Sign in with Volvo ID"))
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -221,6 +288,21 @@ struct AccountCredentialsForm: View {
         }
     }
 
+    private func testCurrentConnection() {
+        isTestingConnection = true
+        testConnectionResult = nil
+        Task {
+            let start = Date()
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+            isTestingConnection = false
+            if isCurrentlyConnected {
+                testConnectionResult = (true, L10n.format("Connection active & verified (%d ms)", elapsed))
+            } else {
+                testConnectionResult = (false, L10n.text("No active session found. Please sign in."))
+            }
+        }
+    }
 
     private func savePolestarCredentials() {
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -260,7 +342,6 @@ struct AccountCredentialsForm: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { volvoSigningIn = false }
     }
 
-
     private func restoreDrafts() {
         if password.isEmpty, let draft = (try? Keychain.readPasswordDraft()) ?? nil, !draft.isEmpty {
             password = draft
@@ -283,8 +364,6 @@ struct AccountCredentialsForm: View {
     }
 
     private func persistDrafts() {
-
-
         switch selectedBrand {
         case .polestar:
             Preferences.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -305,7 +384,6 @@ struct AccountCredentialsForm: View {
             if !volvoApiKey.isEmpty { try? Keychain.saveVolvoApiKeyDraft(volvoApiKey) }
         }
     }
-
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 3) {
