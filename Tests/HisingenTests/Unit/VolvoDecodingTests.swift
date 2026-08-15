@@ -277,6 +277,48 @@ struct VolvoDecodingTests {
     }
 
     @Test
+    func testStandardVolvoConnectedVehicleClimatizationDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "status": {"value": "PARKING_CLIMATE_OFF", "timestamp": "2026-08-15T21:00:00.000Z"},
+                "timeRemaining": {"value": 0},
+                "interiorTemperature": {"value": 21.5},
+                "targetTemperature": {"value": 22.0}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "PARKING_CLIMATE_OFF")
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 0)
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 21.5)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 22.0)
+    }
+
+    @Test
+    func testAlternateVolvoClimatizationKeysDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "climatizationStatus": {"value": "PARKING_CLIMATE_HEATING"},
+                "preconditioning": {"value": "PRECONDITIONING_ON"},
+                "cabinTemperature": {"value": 17.0},
+                "setTemperature": {"value": 21.0},
+                "durationMinutes": {"value": 30}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "PARKING_CLIMATE_HEATING")
+        XCTAssertEqual(dto.preconditioning?.value, "PRECONDITIONING_ON")
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 17.0)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 21.0)
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 30)
+    }
+
+    @Test
     func testBrakesDecoding() throws {
         let json = """
         {
