@@ -18,7 +18,6 @@ struct SettingsView: View {
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
 
-
     @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit

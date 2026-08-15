@@ -49,6 +49,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdatesIfEnabled()
         resumeStoredSession()
         cacheDormantBrandSnapshot()
+        setupURLEventHandling()
+    }
+
+    private func setupURLEventHandling() {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
     }
 
 
@@ -484,6 +494,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             Preferences.launchAtLogin = service.status == .enabled || service.status == .requiresApproval
             logger.error("Launch-at-login update failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            handleIncomingURL(url)
+        }
+    }
+
+    @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              let url = URL(string: urlString) else { return }
+        handleIncomingURL(url)
+    }
+
+    private func handleIncomingURL(_ url: URL) {
+        if url.scheme?.lowercased() == "hisingen" {
+            volvoSignInPresenter.handleCallbackURL(url)
         }
     }
 }
