@@ -71,6 +71,7 @@ struct OutlineGeometry {
     }
 }
 
+@MainActor
 struct VehicleSideProfileDoorsView: View {
     let openings: [OpeningReading]
     let isLocked: Bool?
@@ -478,6 +479,7 @@ struct ChargeLidContourShape: Shape {
     }
 }
 
+@MainActor
 struct VehicleSideProfileTiresView: View {
     let tyres: [TyrePressure]
     var hoveredPosition: TyrePosition? = nil
@@ -558,15 +560,18 @@ struct VehicleSideProfileTiresView: View {
                     .fill(activeColor.opacity(warning ? 0.35 : 0.22))
                     .frame(width: ringSize + 10, height: ringSize + 10)
                     .scaleEffect(hovered ? 1.15 : 1.0)
+                    .position(pos)
+                    .blur(radius: 2)
             }
 
-            // Tire wheel rim ring
+            // Outer tire ring border
             Circle()
-                .stroke(activeColor, lineWidth: hovered || warning ? 2.5 : 1.8)
+                .stroke(activeColor.opacity(warning ? 0.95 : 0.75), lineWidth: warning ? 2.0 : 1.5)
                 .frame(width: ringSize, height: ringSize)
-                .shadow(color: activeColor.opacity(hovered || warning ? 0.65 : 0.25), radius: hovered || warning ? 5 : 2)
+                .position(pos)
+                .shadow(color: activeColor.opacity(warning ? 0.6 : 0.3), radius: warning ? 4 : 2)
 
-            // Hub center indicator
+            // Inner hubcap dot
             Circle()
                 .fill(activeColor)
                 .frame(width: 8, height: 8)
@@ -577,6 +582,7 @@ struct VehicleSideProfileTiresView: View {
     }
 }
 
+@MainActor
 private struct FallbackCarSilhouetteView: View {
     var body: some View {
         let profile = CarProfile.current

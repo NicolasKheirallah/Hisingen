@@ -1690,6 +1690,7 @@ struct LocationCardView: View {
 }
 
 
+@MainActor
 struct ChargingCurveView: View {
     let samples: [ChargingSample]
     let targetPercentage: Int?
