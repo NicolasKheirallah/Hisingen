@@ -417,6 +417,40 @@ struct KVRow: View {
     }
 }
 
+
+private struct ChargingFlowHighlight: View {
+    let width: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+
+    private let cometWidth: CGFloat = 44
+    private let speed: CGFloat = 60
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let travel = width + cometWidth
+            let elapsed = timeline.date.timeIntervalSinceReferenceDate
+            let cycle = Double(travel / speed)
+            let x = cycle > 0
+                ? CGFloat(elapsed.truncatingRemainder(dividingBy: cycle)) * speed - cometWidth
+                : -cometWidth
+
+            LinearGradient(
+                colors: [.clear, .white.opacity(0.85), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: cometWidth, height: height)
+            .offset(x: x)
+        }
+        .frame(width: max(0, width), height: height)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .blendMode(.plusLighter)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 struct BatteryGauge: View {
     let fraction: Double
     let targetFraction: Double?
@@ -467,6 +501,11 @@ struct BatteryGauge: View {
                             x: 0, y: 1)
                     .animation(.easeInOut(duration: 0.6), value: fraction)
                     .animation(.easeInOut(duration: 0.4), value: color)
+
+
+                if isCharging && !reduceMotion && !isPolestar {
+                    ChargingFlowHighlight(width: currentWidth, height: 9, cornerRadius: gaugeRadius)
+                }
 
 
                 if let targetFraction {

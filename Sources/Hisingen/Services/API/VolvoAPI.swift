@@ -357,7 +357,11 @@ actor VolvoAPI {
 
     private func discoverVehicles(preferredVIN: String?) async throws {
         let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
-        guard !list.isEmpty else { throw VolvoError.notConfigured }
+        guard !list.isEmpty else {
+            cars = []
+            selectedVIN = nil
+            return
+        }
         var summaries: [CarSummary] = []
         for entry in list {
             let details = try? await vehicleDetails(vin: entry.vin)
