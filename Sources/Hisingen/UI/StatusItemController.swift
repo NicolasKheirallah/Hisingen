@@ -16,6 +16,7 @@ final class StatusItemController: NSObject {
     var checkingForUpdates = false
     var cars: [CarSummary] = []
     var activeVin: String?
+    var diagnostics: DiagnosticsSnapshot?
 
 
     var cachedSnapshots: [String: VehicleState] = [:]
@@ -31,6 +32,7 @@ final class StatusItemController: NSObject {
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
+    var onTestConnection: () -> Void = {}
 
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -375,10 +377,11 @@ final class StatusItemController: NSObject {
         statusItem.button?.setAccessibilityLabel(L10n.text("Hisingen, refreshing"))
     }
 
-    func render(data: VehicleState?, error: String?, authenticated: Bool) {
+    func render(data: VehicleState?, error: String?, authenticated: Bool, diagnostics: DiagnosticsSnapshot? = nil) {
         latestState = data
         latestError = error
         self.authenticated = authenticated
+        if let diagnostics { self.diagnostics = diagnostics }
         let title = barTitle(for: data)
         let iconName = Format.icon(for: data, includeConnection: Preferences.features.contains(.chargingDetails))
         var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
