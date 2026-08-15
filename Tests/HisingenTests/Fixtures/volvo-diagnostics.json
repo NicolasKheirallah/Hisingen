@@ -1,0 +1,13 @@
+{
+  "data": {
+    "serviceWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "serviceTrigger": { "value": "CALENDAR_TIME", "timestamp": "2026-08-15T09:00:00Z" },
+    "timeToService": { "value": 5, "unit": "months", "timestamp": "2026-08-15T09:00:00Z" },
+    "distanceToService": { "value": 8500, "unit": "km", "timestamp": "2026-08-15T09:00:00Z" },
+    "brakeFluidLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "engineCoolantLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "oilLevelWarning": { "value": "TOO_LOW", "timestamp": "2026-08-15T09:00:00Z" },
+    "washerFluidLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "batteryChargeLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" }
+  }
+}

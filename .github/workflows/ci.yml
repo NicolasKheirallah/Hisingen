@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [macos-14, macos-15]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@13aacd865c20de90d75de16800850573e321f07f # v4.0.0
+        with:
+          path: .build
+          key: ${{ matrix.os }}-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            ${{ matrix.os }}-spm-
+
+      - name: Verify toolchain
+        run: |
+          set -euo pipefail
+          swift --version
+          make doctor
+
+      - name: Build with complete concurrency checks
+        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+
+      - name: Test
+        run: swift test --disable-xctest --enable-swift-testing -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+
+      - name: Bundle app
+        run: make app SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+
+      - name: Validate bundle
+        run: |
+          set -euo pipefail
+          test -x Hisingen.app/Contents/MacOS/Hisingen
+          plutil -lint Hisingen.app/Contents/Info.plist
+          lipo Hisingen.app/Contents/MacOS/Hisingen -verify_arch arm64
+          codesign --verify --deep --strict --verbose=2 Hisingen.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' Hisingen.app/Contents/Info.plist)" = "true"

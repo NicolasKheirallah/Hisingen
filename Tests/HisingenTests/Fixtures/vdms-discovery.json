@@ -1,0 +1,30 @@
+{
+  "data": {
+    "vdms": {
+      "getVehiclesInformation": [
+        {
+          "vin": "LP5SVSEDEKML000001",
+          "internalVehicleIdentifier": "veh-abc-123",
+          "registrationNo": "ABC123",
+          "modelYear": "2024",
+          "content": {
+            "model": {
+              "name": "Polestar 4"
+            }
+          }
+        },
+        {
+          "vin": "LP2SVSEDEKML000002",
+          "internalVehicleIdentifier": "veh-xyz-789",
+          "registrationNo": "DEF456",
+          "modelYear": "2022",
+          "content": {
+            "model": {
+              "name": "Polestar 2"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

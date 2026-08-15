@@ -1,0 +1,9 @@
+{
+  "data": {
+    "frontLeftWindow": { "value": "CLOSED", "timestamp": "2026-08-15T09:00:00Z" },
+    "frontRightWindow": { "value": "CLOSED", "timestamp": "2026-08-15T09:00:00Z" },
+    "rearLeftWindow": { "value": "CLOSED", "timestamp": "2026-08-15T09:00:00Z" },
+    "rearRightWindow": { "value": "CLOSED", "timestamp": "2026-08-15T09:00:00Z" },
+    "sunroof": { "value": "CLOSED", "timestamp": "2026-08-15T09:00:00Z" }
+  }
+}

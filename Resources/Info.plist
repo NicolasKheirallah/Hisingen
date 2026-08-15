@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>io.kheirallah.hisingen-cc97f41c-af39-4eb1-a7e6-0014f6e1c80f</string>
+	<key>CFBundleName</key>
+	<string>Hisingen</string>
+	<key>CFBundleDisplayName</key>
+	<string>Hisingen</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>Hisingen</string>
+	<key>CFBundleIconFile</key>
+	<string>Hisingen</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.5.0</string>
+	<key>CFBundleVersion</key>
+	<string>12</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Nicolas Kheirallah. Not affiliated with Polestar or Volvo Cars.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.kheirallah.hisingen.volvo-oauth-cc97f41c-af39-4eb1-a7e6-0014f6e1c80f</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hisingen</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
