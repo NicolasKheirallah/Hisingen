@@ -347,6 +347,7 @@ struct VehicleTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
+            multiCarChips
             heroCard
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
@@ -354,6 +355,42 @@ struct VehicleTabView: View {
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
+    }
+
+    private var multiCarChips: some View {
+        guard cars.count > 1 else { return AnyView(EmptyView()) }
+        let currentVin = activeVin ?? cars.first?.vin ?? ""
+        return AnyView(
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(cars, id: \.vin) { car in
+                        let isSelected = car.vin == currentVin
+                        Button {
+                            onSelectCar(car.vin)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: Preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
+                                    .font(.system(size: 10))
+                                Text(car.title)
+                                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
+                                in: Capsule()
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(isSelected ? HisingenTheme.accent : Color.primary.opacity(0.15), lineWidth: isSelected ? 1.2 : 0.5)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        )
     }
 
 
