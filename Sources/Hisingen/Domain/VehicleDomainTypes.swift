@@ -426,6 +426,54 @@ struct ChargingSession: Codable, Equatable, Sendable {
     let peakPowerWatts: Int?
     let cost: Double?
 
+
+    let targetPercentage: Int?
+
+
+    let samples: [ChargingSample]
+
+    init(
+        id: UUID, vin: String, startDate: Date, endDate: Date,
+        startBatteryPercentage: Double, endBatteryPercentage: Double,
+        kwhDelivered: Double, peakPowerWatts: Int?, cost: Double?,
+        targetPercentage: Int? = nil, samples: [ChargingSample] = []
+    ) {
+        self.id = id
+        self.vin = vin
+        self.startDate = startDate
+        self.endDate = endDate
+        self.startBatteryPercentage = startBatteryPercentage
+        self.endBatteryPercentage = endBatteryPercentage
+        self.kwhDelivered = kwhDelivered
+        self.peakPowerWatts = peakPowerWatts
+        self.cost = cost
+        self.targetPercentage = targetPercentage
+        self.samples = samples
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, vin, startDate, endDate, startBatteryPercentage, endBatteryPercentage
+        case kwhDelivered, peakPowerWatts, cost, targetPercentage, samples
+    }
+
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(UUID.self, forKey: .id),
+            vin: try c.decode(String.self, forKey: .vin),
+            startDate: try c.decode(Date.self, forKey: .startDate),
+            endDate: try c.decode(Date.self, forKey: .endDate),
+            startBatteryPercentage: try c.decode(Double.self, forKey: .startBatteryPercentage),
+            endBatteryPercentage: try c.decode(Double.self, forKey: .endBatteryPercentage),
+            kwhDelivered: try c.decode(Double.self, forKey: .kwhDelivered),
+            peakPowerWatts: try c.decodeIfPresent(Int.self, forKey: .peakPowerWatts),
+            cost: try c.decodeIfPresent(Double.self, forKey: .cost),
+            targetPercentage: try c.decodeIfPresent(Int.self, forKey: .targetPercentage),
+            samples: try c.decodeIfPresent([ChargingSample].self, forKey: .samples) ?? []
+        )
+    }
+
     var durationMinutes: Int {
         Int(max(0, endDate.timeIntervalSince(startDate)) / 60)
     }
@@ -456,7 +504,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
             endBatteryPercentage: endBattery,
             kwhDelivered: estimatedKwh,
             peakPowerWatts: previous.chargingSamples.compactMap(\.powerWatts).max(),
-            cost: pricePerKwh > 0 ? estimatedKwh * pricePerKwh : nil
+            cost: pricePerKwh > 0 ? estimatedKwh * pricePerKwh : nil,
+            targetPercentage: previous.chargeTargetPercentage ?? current.chargeTargetPercentage,
+            samples: previous.chargingSamples
         )
     }
 }

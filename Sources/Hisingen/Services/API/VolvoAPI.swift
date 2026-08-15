@@ -84,7 +84,7 @@ actor VolvoAPI {
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: (Self.readScopes + Self.restrictedScopes).joined(separator: " ")),
+            URLQueryItem(name: "scope", value: Self.readScopes.joined(separator: " ")),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: PKCE.codeChallenge(for: verifier)),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
@@ -362,22 +362,28 @@ actor VolvoAPI {
 
 
     private func discoverVehicles(preferredVIN: String?) async throws {
-        let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
-        guard !list.isEmpty else {
+        do {
+            let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
+            guard !list.isEmpty else {
+                cars = []
+                selectedVIN = nil
+                return
+            }
+            var summaries: [CarSummary] = []
+            for entry in list {
+                let details = try? await vehicleDetails(vin: entry.vin)
+                let title = [details?.descriptions?.model, details?.modelYear.map(String.init)]
+                    .compactMap { $0 }.joined(separator: " · ")
+                summaries.append(CarSummary(vin: entry.vin, title: title.isEmpty ? entry.vin : title))
+            }
+            cars = summaries
+            let selected = preferredVIN.flatMap { wanted in cars.first(where: { $0.vin == wanted }) } ?? cars.first
+            selectedVIN = selected?.vin
+        } catch {
+            logger.warning("Volvo vehicle discovery fallback: \(error.localizedDescription, privacy: .public)")
             cars = []
-            selectedVIN = nil
-            return
+            selectedVIN = preferredVIN
         }
-        var summaries: [CarSummary] = []
-        for entry in list {
-            let details = try? await vehicleDetails(vin: entry.vin)
-            let title = [details?.descriptions?.model, details?.modelYear.map(String.init)]
-                .compactMap { $0 }.joined(separator: " · ")
-            summaries.append(CarSummary(vin: entry.vin, title: title.isEmpty ? entry.vin : title))
-        }
-        cars = summaries
-        let selected = preferredVIN.flatMap { wanted in cars.first(where: { $0.vin == wanted }) } ?? cars.first
-        selectedVIN = selected?.vin
     }
 
     private func vehicleDetails(vin: String) async throws -> VolvoVehicleDetailsDTO {
