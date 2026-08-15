@@ -228,9 +228,7 @@ struct AccountCredentialsForm: View {
         let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedClientID.isEmpty, trimmedClientID == Preferences.volvoClientID,
               volvoClientSecret.isEmpty, volvoApiKey.isEmpty else { return false }
-        return ((try? Keychain.readVolvoClientSecret()) ?? nil)?.isEmpty == false
-            && ((try? Keychain.readVolvoApiKey()) ?? nil)?.isEmpty == false
-            && ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
+        return Preferences.hasResumableSession(for: .volvo)
     }
 
     private var volvoFields: some View {

@@ -152,14 +152,13 @@ enum Preferences {
     static func hasResumableSession(for brand: VehicleBrand) -> Bool {
         switch brand {
         case .polestar:
-            let hasToken = ((try? Keychain.readSessionToken()) ?? nil)?.isEmpty == false
-            let hasPassword = !email.isEmpty && ((try? Keychain.readPassword()) ?? nil)?.isEmpty == false
-            return hasToken || hasPassword
+            if d.bool(forKey: "has_polestar_session") { return true }
+            if !email.isEmpty && d.bool(forKey: "has_polestar_password") { return true }
+            return !email.isEmpty && ((try? Keychain.readSessionToken()) ?? nil)?.isEmpty == false
         case .volvo:
-            return !volvoClientID.isEmpty
-                && ((try? Keychain.readVolvoClientSecret()) ?? nil)?.isEmpty == false
-                && ((try? Keychain.readVolvoApiKey()) ?? nil)?.isEmpty == false
-                && ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
+            if !volvoClientID.isEmpty && d.bool(forKey: "has_volvo_session") { return true }
+            guard !volvoClientID.isEmpty else { return false }
+            return ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
         }
     }
 

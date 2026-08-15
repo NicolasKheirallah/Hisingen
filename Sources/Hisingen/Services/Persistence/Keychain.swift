@@ -52,13 +52,25 @@ struct KeychainStore: Sendable {
     private static let sessionAccount = "polestar-refresh-token"
     private static let volvoBundleAccount = "volvo-credentials-bundle"
 
-    func savePassword(_ password: String) throws { try save(password, account: Self.passwordAccount) }
+    func savePassword(_ password: String) throws {
+        UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
+        try save(password, account: Self.passwordAccount)
+    }
     func readPassword() throws -> String? { try read(account: Self.passwordAccount) }
-    func deletePassword() throws { try delete(account: Self.passwordAccount) }
+    func deletePassword() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_password")
+        try delete(account: Self.passwordAccount)
+    }
 
-    func saveSessionToken(_ token: String) throws { try save(token, account: Self.sessionAccount) }
+    func saveSessionToken(_ token: String) throws {
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
+        try save(token, account: Self.sessionAccount)
+    }
     func readSessionToken() throws -> String? { try read(account: Self.sessionAccount) }
-    func deleteSessionToken() throws { try delete(account: Self.sessionAccount) }
+    func deleteSessionToken() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_session")
+        try delete(account: Self.sessionAccount)
+    }
 
     func saveVolvoSessionToken(_ token: String) throws {
         var bundle = readVolvoBundle()
@@ -137,6 +149,8 @@ struct KeychainStore: Sendable {
     }
 
     private func saveVolvoBundle(_ bundle: VolvoSecretBundle) throws {
+        let hasValid = (bundle.clientSecret?.isEmpty == false) && (bundle.apiKey?.isEmpty == false) && (bundle.sessionToken?.isEmpty == false)
+        UserDefaults.standard.set(hasValid, forKey: "has_volvo_session")
         let data = try JSONEncoder().encode(bundle)
         guard let str = String(data: data, encoding: .utf8) else { return }
         try save(str, account: Self.volvoBundleAccount)
