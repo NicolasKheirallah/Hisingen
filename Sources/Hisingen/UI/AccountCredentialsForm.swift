@@ -1,5 +1,16 @@
 import SwiftUI
 
+@MainActor
+final class AccountDraftState {
+    static let shared = AccountDraftState()
+    var email: String = Preferences.email
+    var password: String = ""
+    var vin: String = Preferences.vin
+    var vehicleNickname: String = Preferences.vehicleNickname(for: Preferences.vin)
+    var volvoClientID: String = Preferences.volvoClientID
+    var volvoClientSecret: String = ""
+    var volvoApiKey: String = ""
+}
 
 @MainActor
 struct AccountCredentialsForm: View {
@@ -12,13 +23,13 @@ struct AccountCredentialsForm: View {
     let onSettingsChanged: (SettingsChange) -> Void
 
     @State private var selectedBrand = Preferences.activeBrand
-    @State private var email = Preferences.email
-    @State private var password = ""
-    @State private var vin = Preferences.vin
-    @State private var vehicleNickname = Preferences.vehicleNickname(for: Preferences.vin)
-    @State private var volvoClientID = Preferences.volvoClientID
-    @State private var volvoClientSecret = ""
-    @State private var volvoApiKey = ""
+    @State private var email = AccountDraftState.shared.email
+    @State private var password = AccountDraftState.shared.password
+    @State private var vin = AccountDraftState.shared.vin
+    @State private var vehicleNickname = AccountDraftState.shared.vehicleNickname
+    @State private var volvoClientID = AccountDraftState.shared.volvoClientID
+    @State private var volvoClientSecret = AccountDraftState.shared.volvoClientSecret
+    @State private var volvoApiKey = AccountDraftState.shared.volvoApiKey
     @State private var volvoSigningIn = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
@@ -168,22 +179,26 @@ struct AccountCredentialsForm: View {
                 TextField("name@example.com", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.username)
+                    .onChange(of: email) { AccountDraftState.shared.email = $0 }
             }
 
             labeledField(L10n.text("Password")) {
                 SecureField(L10n.text("•••••••• (only to update credentials)"), text: $password)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
+                    .onChange(of: password) { AccountDraftState.shared.password = $0 }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
                 TextField("e.g. My Polestar, Midnight", text: $vehicleNickname)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: vehicleNickname) { AccountDraftState.shared.vehicleNickname = $0 }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
                 TextField("YSM...", text: $vin)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: vin) { AccountDraftState.shared.vin = $0 }
             }
 
             Button {
@@ -233,6 +248,7 @@ struct AccountCredentialsForm: View {
             labeledField(L10n.text("Client ID")) {
                 TextField("Client ID", text: $volvoClientID)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: volvoClientID) { AccountDraftState.shared.volvoClientID = $0 }
             }
 
             labeledField(L10n.text("Client Secret")) {
@@ -240,6 +256,7 @@ struct AccountCredentialsForm: View {
                             ? L10n.text("•••••••• (Saved in Keychain)")
                             : L10n.text("Client Secret"), text: $volvoClientSecret)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: volvoClientSecret) { AccountDraftState.shared.volvoClientSecret = $0 }
             }
 
             labeledField(L10n.text("VCC API Key")) {
@@ -247,11 +264,13 @@ struct AccountCredentialsForm: View {
                             ? L10n.text("•••••••• (Saved in Keychain)")
                             : L10n.text("VCC API Key"), text: $volvoApiKey)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: volvoApiKey) { AccountDraftState.shared.volvoApiKey = $0 }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
                 TextField("e.g. My Volvo, Family car", text: $vehicleNickname)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: vehicleNickname) { AccountDraftState.shared.vehicleNickname = $0 }
             }
 
             Button {
