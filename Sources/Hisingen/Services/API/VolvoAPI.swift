@@ -462,9 +462,23 @@ actor VolvoAPI {
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
-        let (_, response) = try await perform(request, operation: "command: \(commandName)")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "{}".data(using: .utf8)
+        let (data, response) = try await perform(request, operation: "command: \(commandName)")
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: commandName) {
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errObj = json["error"] as? [String: Any],
+               let desc = errObj["description"] as? String, !desc.isEmpty {
+                throw VolvoError.permissionDenied(operation: "\(commandName) (\(desc))")
+            }
             throw failure
+        }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let dataObj = json["data"] as? [String: Any] {
+            let status = dataObj["invokeStatus"] as? String
+            let msg = dataObj["message"] as? String
+            let outcome: RemoteCommandOutcome = (status == "COMPLETED" || status == "DELIVERED") ? .completed : .accepted
+            return RemoteCommandResult(outcome: outcome, message: msg?.isEmpty == false ? msg : nil)
         }
         return RemoteCommandResult(outcome: .accepted, message: nil)
     }
