@@ -7,9 +7,8 @@ enum SettingsChange {
     case presentation
     case launchAtLogin
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
-
-
     case switchToBrand(VehicleBrand)
+    case closeSettings
 }
 
 @MainActor
@@ -43,6 +42,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: HisingenTheme.sectionSpacing) {
+                headerBar
                 accountCard
                 appearanceCard
                 displayCard
@@ -56,6 +56,42 @@ struct SettingsView: View {
             .padding(HisingenTheme.sectionSpacing)
         }
         .frame(width: HisingenTheme.popoverWidth)
+    }
+
+    private var headerBar: some View {
+        HStack {
+            Button {
+                onSettingsChanged(.closeSettings)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left")
+                    Text(L10n.text("Dashboard"))
+                }
+                .font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Spacer()
+
+            Text(L10n.text("Settings"))
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(HisingenTheme.ink)
+
+            Spacer()
+
+            Button {
+                onSettingsChanged(.closeSettings)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.text("Back to Dashboard"))
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
     }
 
 
@@ -348,11 +384,14 @@ struct SettingsView: View {
 
 
     private var remoteControlsCard: some View {
-        Card {
+        let isVolvo = Preferences.activeBrand == .volvo
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .secondary)
 
-                Text(L10n.text("Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices."))
+                Text(isVolvo
+                     ? L10n.text("Volvo Connected Vehicle telemetry is active. Write commands depend on your vehicle connected package and developer account tier.")
+                     : L10n.text("Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
@@ -372,23 +411,24 @@ struct SettingsView: View {
 
 
     private var vehicleDataCard: some View {
-        Card {
+        let brandName = Preferences.activeBrand.displayName
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
 
                 subsectionHeader("Vehicle & Identity")
                 VStack(spacing: 4) {
                     featureToggleRow(.vehicleIdentity, symbol: "car.side", title: "Vehicle Identity", detail: "Model, year, license plate & VIN")
-                    featureToggleRow(.ownerGreeting, symbol: "person.text.rectangle", title: "Owner Greeting", detail: "Show the Polestar ID first name")
-                    featureToggleRow(.vehicleImage, symbol: "photo.artframe", title: "Studio Vehicle Image", detail: "Render high-resolution Polestar visual")
+                    featureToggleRow(.ownerGreeting, symbol: "person.text.rectangle", title: "Owner Greeting", detail: L10n.format("Show the %@ ID first name", brandName))
+                    featureToggleRow(.vehicleImage, symbol: "photo.artframe", title: "Studio Vehicle Image", detail: L10n.format("Render high-resolution %@ visual", brandName))
                     featureToggleRow(.vehicleAvailability, symbol: "antenna.radiowaves.left.and.right", title: "Vehicle Availability", detail: "Show online state and unavailable reason")
                 }
 
-                subsectionHeader("Charging")
+                subsectionHeader("Charging & Energy")
                 VStack(spacing: 4) {
                     featureToggleRow(.chargingDetails, symbol: "powerplug.fill", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
                     featureToggleRow(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times")
-                    featureToggleRow(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Charger module status & energy usage")
+                    featureToggleRow(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Battery state, module health & energy usage")
                 }
 
                 subsectionHeader("Status & Security")
@@ -414,7 +454,7 @@ struct SettingsView: View {
                 VStack(spacing: 4) {
                     featureToggleRow(.tripMeters, symbol: "chart.xyaxis.line", title: "Trip Meters", detail: "Manual and automatic trip computers")
                     featureToggleRow(.connectivityDiagnostics, symbol: "antenna.radiowaves.left.and.right", title: "Connectivity", detail: "Vehicle network & signal diagnostics")
-                    featureToggleRow(.softwareUpdates, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software & OTA", detail: "Software version and update status")
+                    featureToggleRow(.softwareUpdates, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software & OTA", detail: L10n.format("%@ software version and update status", brandName))
                 }
             }
         }
