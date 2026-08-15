@@ -115,8 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
 
-    private func switchActiveBrand(to brand: VehicleBrand) {
-        guard Preferences.activeBrand != brand else { return }
+    private func switchActiveBrand(to brand: VehicleBrand, force: Bool = false) {
+        if !force && Preferences.activeBrand == brand { return }
         refreshCoordinator?.stop()
         Preferences.activeBrand = brand
         let hasSession = Preferences.hasResumableSession(for: brand)
@@ -130,11 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
         connectCoordinator()
         render()
-
-
         cacheDormantBrandSnapshot()
     }
-
 
     private func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {
         let trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,12 +144,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-
         if clientSecret.isEmpty, vccApiKey.isEmpty, trimmedClientID == Preferences.volvoClientID,
            let storedSecret = (try? Keychain.readVolvoClientSecret()) ?? nil, !storedSecret.isEmpty,
            let storedApiKey = (try? Keychain.readVolvoApiKey()) ?? nil, !storedApiKey.isEmpty,
            let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil, !sessionToken.isEmpty {
-            switchActiveBrand(to: .volvo)
+            switchActiveBrand(to: .volvo, force: true)
             Task { [weak self] in
                 guard let self else { return }
                 if !trimmedNickname.isEmpty, let vin = await volvoAPI.resolvedVIN(preferred: nil) {
@@ -246,9 +242,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshCoordinator.onDiagnostics = { [weak self] diagnostics in
             guard let self else { return }
-            sessionValid = diagnostics.sessionValid
+            let hasStored = Preferences.hasResumableSession(for: Preferences.activeBrand)
+            sessionValid = diagnostics.sessionValid || hasStored
             lastDiagnostics = diagnostics
-            if diagnostics.sessionValid && Preferences.features.contains(.notifications) {
+            if (diagnostics.sessionValid || hasStored) && Preferences.features.contains(.notifications) {
                 notifier.authenticationSucceeded()
             }
             render()
@@ -274,8 +271,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func render() {
+        let isAuth = sessionValid || Preferences.hasResumableSession(for: Preferences.activeBrand)
         statusController.remoteCommandInProgress = remoteCommandInProgress
-        statusController.render(data: latest, error: lastError, authenticated: sessionValid)
+        statusController.render(data: latest, error: lastError, authenticated: isAuth)
     }
 
     private func toggleSettingsInPopover() {
