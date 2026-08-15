@@ -474,3 +474,4 @@ struct ChargingSample: Codable, Equatable, Sendable {
     }
 }
 
+

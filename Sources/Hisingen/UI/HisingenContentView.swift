@@ -155,11 +155,37 @@ struct HisingenContentView: View {
     private var otherBrand: VehicleBrand { Preferences.activeBrand == .polestar ? .volvo : .polestar }
     private var otherBrandResumable: Bool { Preferences.hasResumableSession(for: otherBrand) }
 
+
     private func vehicleMenuLabel(_ car: CarSummary) -> String {
-        let snapshot = car.vin == activeVin ? state : cachedSnapshots[car.vin]
-        guard let battery = snapshot?.batteryPercentage else { return car.title }
-        let charging = snapshot?.isCharging == true ? " ⚡" : ""
-        return "\(car.title) · \(Int(battery))%\(charging)"
+        let isActive = car.vin == activeVin
+        guard let snapshot = isActive ? state : cachedSnapshots[car.vin] else { return car.title }
+        var label = car.title
+        if let battery = snapshot.batteryPercentage {
+            label += " · \(Int(battery))%"
+            if snapshot.isCharging { label += "⚡" }
+        }
+        let summary = snapshot.stateSummary
+        if summary.severity != .good {
+            label += " · \(summary.message)"
+        }
+        if !isActive {
+            label += " · \(Format.relativeAge(since: snapshot.dataTimestamp))"
+        }
+        return label
+    }
+
+    private func vehicleMenuAccessibilityLabel(_ car: CarSummary, isSelected: Bool) -> String {
+        let base = vehicleMenuLabel(car)
+        return isSelected ? L10n.format("%@, selected", base) : base
+    }
+
+    private func otherBrandMenuLabel() -> String {
+        let name = Preferences.lastVehicleLabel(for: otherBrand)
+        let vin = Preferences.vin(for: otherBrand)
+        if !vin.isEmpty, let battery = cachedSnapshots[vin]?.batteryPercentage {
+            return L10n.format("Switch to %@ (%@ · %d%%)…", otherBrand.displayName, name, Int(battery))
+        }
+        return L10n.format("Switch to %@ (%@)…", otherBrand.displayName, name)
     }
 
     private var vehicleSwitcher: some View {
@@ -169,12 +195,26 @@ struct HisingenContentView: View {
 
         return Menu {
             if cars.count > 1 {
-                ForEach(cars, id: \.vin) { car in
+
+
+                ForEach(Array(cars.enumerated().prefix(9)), id: \.element.vin) { index, car in
+                    let isSelected = car.vin == currentVin
                     Button {
                         onSelectCar(car.vin)
                     } label: {
-                        Label(vehicleMenuLabel(car), systemImage: car.vin == currentVin ? "checkmark.circle.fill" : "circle")
+                        Label(vehicleMenuLabel(car), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
                     }
+                    .accessibilityLabel(vehicleMenuAccessibilityLabel(car, isSelected: isSelected))
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .option)
+                }
+                ForEach(Array(cars.enumerated().dropFirst(9)), id: \.element.vin) { _, car in
+                    let isSelected = car.vin == currentVin
+                    Button {
+                        onSelectCar(car.vin)
+                    } label: {
+                        Label(vehicleMenuLabel(car), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                    }
+                    .accessibilityLabel(vehicleMenuAccessibilityLabel(car, isSelected: isSelected))
                 }
             }
             if otherBrandResumable {
@@ -182,11 +222,14 @@ struct HisingenContentView: View {
                 Button {
                     onSettingsChanged(.switchToBrand(otherBrand))
                 } label: {
-                    Label(
-                        L10n.format("Switch to %@ (%@)…", otherBrand.displayName, Preferences.lastVehicleLabel(for: otherBrand)),
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
+                    Label(otherBrandMenuLabel(), systemImage: "arrow.triangle.2.circlepath")
                 }
+            }
+            Divider()
+            Button {
+                selectedTab = .settings
+            } label: {
+                Label(L10n.text("Add or Manage Vehicles…"), systemImage: "person.crop.circle.badge.plus")
             }
         } label: {
             HStack(spacing: 4) {
@@ -195,6 +238,7 @@ struct HisingenContentView: View {
                 Text(currentCar?.title ?? Preferences.activeBrand.displayName)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 7, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -203,7 +247,7 @@ struct HisingenContentView: View {
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
-        .help(L10n.text("Switch Vehicle (⌥[ / ⌥])"))
+        .help(L10n.format("%@ — Switch Vehicle (⌥[ / ⌥])", currentCar?.title ?? Preferences.activeBrand.displayName))
         .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentCar?.title ?? Preferences.activeBrand.displayName))
     }
 
@@ -1163,4 +1207,5 @@ struct ChargingSparklineView: View {
         )
     }
 }
+
 

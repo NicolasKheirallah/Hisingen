@@ -705,3 +705,8 @@
 /* Added: vehicle switcher cross-brand quick switch */
 "Switch to %@ (%@)…" = "Byt till %@ (%@)…";
 "Current vehicle: %@. Switch vehicle." = "Aktuellt fordon: %@. Byt fordon.";
+
+/* Added: vehicle switcher polish (freshness, warnings, a11y, manage entry) */
+"%@, selected" = "%@, vald";
+"Add or Manage Vehicles…" = "Lägg till eller hantera fordon…";
+"Switch to %@ (%@ · %d%%)…" = "Byt till %@ (%@ · %d%%)…";

@@ -703,3 +703,8 @@
 /* Added: vehicle switcher cross-brand quick switch */
 "Switch to %@ (%@)…" = "Overschakelen naar %@ (%@)…";
 "Current vehicle: %@. Switch vehicle." = "Huidig voertuig: %@. Voertuig wisselen.";
+
+/* Added: vehicle switcher polish (freshness, warnings, a11y, manage entry) */
+"%@, selected" = "%@, geselecteerd";
+"Add or Manage Vehicles…" = "Voertuigen toevoegen of beheren…";
+"Switch to %@ (%@ · %d%%)…" = "Overschakelen naar %@ (%@ · %d%%)…";
