@@ -11,7 +11,18 @@ actor VolvoAPI {
     private let authorizationPath = "/as/authorization.oauth2"
     private let tokenPath = "/as/token.oauth2"
     private let apiBaseURL = URL(string: "https://api.volvocars.com")!
-    let redirectURI = URL(string: "hisingen://oauth/volvo/callback")!
+    /// The redirect URI actually registered with Volvo and sent in both the
+    /// authorization and token requests. Volvo's Developer Portal rejects
+    /// custom URL schemes and localhost as redirect URIs — only a real
+    /// http(s) URL is accepted — so this points at a tiny static bridge
+    /// page (`docs/oauth-callback.html`, published via GitHub Pages) that
+    /// immediately hands the query string off to Hisingen's own
+    /// `hisingen://` scheme. `ASWebAuthenticationSession` (see
+    /// `VolvoSignInPresenter`) is what actually watches for that final
+    /// `hisingen://` navigation, wherever in the redirect chain it happens
+    /// — the intermediate https hop doesn't need any special handling on
+    /// the app side.
+    let redirectURI = URL(string: "https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html")!
 
 
     private static let readScopes = [
