@@ -502,3 +502,4 @@ struct ControlsTabView: View {
         .opacity(0.65)
     }
 }
+

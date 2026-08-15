@@ -52,6 +52,10 @@ These terms and Hisingen itself may change over time. Continued use after a chan
 
 You may stop using Hisingen at any time by quitting the app, signing out, and/or revoking its access from your Polestar or Volvo account settings. Nothing in these terms restricts your right to do so.
 
-## 10. Contact
+## 10. Governing Law
+
+These terms are governed by the laws of Sweden, without regard to conflict-of-law principles. This does not deprive you of any mandatory consumer-protection rights available under the law of your own country of residence.
+
+## 11. Contact
 
 Questions about these terms or about Hisingen: **Nicolas Kheirallah** — [github.com/NicolasKheirallah](https://github.com/NicolasKheirallah).

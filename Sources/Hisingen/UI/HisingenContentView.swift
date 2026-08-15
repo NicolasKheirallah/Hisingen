@@ -151,10 +151,7 @@ struct HisingenContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// The brand not currently active — the switcher offers a one-click
-    /// jump to it when it has a session that can actually be resumed
-    /// (see `Preferences.hasResumableSession`), so multi-brand garages
-    /// aren't stuck re-authenticating through Settings every time.
+
     private var otherBrand: VehicleBrand { Preferences.activeBrand == .polestar ? .volvo : .polestar }
     private var otherBrandResumable: Bool { Preferences.hasResumableSession(for: otherBrand) }
 
@@ -1166,3 +1163,4 @@ struct ChargingSparklineView: View {
         )
     }
 }
+

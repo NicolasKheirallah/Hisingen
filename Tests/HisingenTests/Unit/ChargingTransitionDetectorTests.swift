@@ -88,3 +88,4 @@ struct ChargingTransitionDetectorTests {
     }
 }
 
+

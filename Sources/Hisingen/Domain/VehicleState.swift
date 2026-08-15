@@ -566,3 +566,4 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 }
 
+
