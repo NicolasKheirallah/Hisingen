@@ -149,7 +149,7 @@ enum Format {
         }()
         let primaryRange: String? = {
             if let km = data.totalCombinedRangeKm ?? data.rangeKm ?? data.fuelRangeKm {
-                return "\(unit.convert(km: km)) \(unit.suffix)"
+                return "\(unit.convert(km: km))\(unit.suffix)"
             }
             return nil
         }()

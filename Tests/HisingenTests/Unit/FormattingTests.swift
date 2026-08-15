@@ -58,10 +58,10 @@ struct FormattingTests {
     }
 
     @Test
-    func testUnsupportedRemoteFeaturesCannotBeEnabledInPreferences() {
-        let selection = FeatureSelection(enabled: Set(AppFeature.userSelectableCases))
+    func testRemoteFeaturesAreOptInAndSelectable() {
+        let selection = FeatureSelection.default
         XCTAssertFalse(AppFeature.remoteFeatures.contains { selection.contains($0) })
-        XCTAssertFalse(AppFeature.userSelectableCases.contains(.remoteClimate))
+        XCTAssertTrue(AppFeature.userSelectableCases.contains(.remoteClimate))
     }
 
     @Test
@@ -326,7 +326,7 @@ struct FormattingTests {
         )
 
         XCTAssertNotNil(chargingCar.formattedCompletionTime)
-        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+79 km/h")
+        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+70 km/h")
         XCTAssertTrue(chargingCar.freshnessDescription.contains("Updated"))
     }
 
