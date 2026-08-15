@@ -375,7 +375,10 @@ actor PolestarAPI {
             serviceWarning: Self.hasWarning(health?.serviceWarning) || (c3ServiceHealth?.serviceWarning ?? false),
             fluidWarnings: Self.fluidWarnings(health),
             exteriorStatus: exterior.value,
-            healthDetails: features.contains(.tyreAndWarnings) ? c3Health.value?.details : nil,
+            healthDetails: features.contains(.tyreAndWarnings) ? (c3Health.value?.details ?? VehicleHealthDetails(
+                tyres: TyrePosition.allCases.map { TyrePressure(position: $0, kilopascals: nil, warning: .none) },
+                warnings: []
+            )) : nil,
             softwareInfo: software.value,
             chargingSchedules: schedules.value ?? [],
             climateStatus: climate.value,
