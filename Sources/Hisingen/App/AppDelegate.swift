@@ -161,6 +161,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 switchActiveBrand(to: .volvo)
                 resumeStoredSession()
+                showRemoteResult(
+                    title: L10n.text("Volvo sign-in successful"),
+                    message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
+                    success: true
+                )
             } catch {
                 let mapped = error as? LocalizedError
                 showRemoteResult(

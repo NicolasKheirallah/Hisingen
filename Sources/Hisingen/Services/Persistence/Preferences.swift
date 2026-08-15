@@ -65,11 +65,13 @@ enum MenuBarStyle: String, CaseIterable, Codable {
 enum AppTheme: String, CaseIterable, Codable, Sendable {
     case hisingen
     case polestar
+    case volvo
 
     var title: String {
         switch self {
         case .hisingen: return L10n.text("Hisingen (Default)")
         case .polestar: return L10n.text("Polestar")
+        case .volvo: return L10n.text("Volvo")
         }
     }
 
@@ -77,6 +79,7 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         switch self {
         case .hisingen: return L10n.text("Rounded cards, translucent materials, system accent color")
         case .polestar: return L10n.text("Unofficial — monochrome panels, sharp corners, no color accent")
+        case .volvo: return L10n.text("Unofficial — Volvo's blue accent, soft panels, light/bold type contrast")
         }
     }
 }

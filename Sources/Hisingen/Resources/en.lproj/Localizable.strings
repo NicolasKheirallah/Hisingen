@@ -710,3 +710,7 @@
 "%@, selected" = "%@, selected";
 "Add or Manage Vehicles…" = "Add or Manage Vehicles…";
 "Switch to %@ (%@ · %d%%)…" = "Switch to %@ (%@ · %d%%)…";
+
+/* Added: Volvo theme */
+"Volvo" = "Volvo";
+"Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast";

@@ -3,11 +3,23 @@ import AppKit
 
 @MainActor
 enum HisingenTheme {
-    private static var isPolestar: Bool { Preferences.appTheme == .polestar }
+    private static var theme: AppTheme { Preferences.appTheme }
+    private static var isPolestar: Bool { theme == .polestar }
 
 
-    static var cornerRadius: CGFloat { isPolestar ? 0 : 14 }
-    static var cardPadding: CGFloat { isPolestar ? 16 : 14 }
+    static var cornerRadius: CGFloat {
+        switch theme {
+        case .hisingen: return 14
+        case .polestar: return 0
+        case .volvo: return 10
+        }
+    }
+    static var cardPadding: CGFloat {
+        switch theme {
+        case .hisingen: return 14
+        case .polestar, .volvo: return 16
+        }
+    }
     static let sectionSpacing: CGFloat = 12
     static let smallSpacing: CGFloat = 8
     static let popoverWidth: CGFloat = 430
@@ -16,63 +28,118 @@ enum HisingenTheme {
     static let polestarAmber = Color(red: 229/255, green: 110/255, blue: 35/255)
 
 
+    static let volvoBlue = Color(
+        light: NSColor(red: 0x1c/255, green: 0x6b/255, blue: 0xba/255, alpha: 1),
+        dark: NSColor(red: 0x1f/255, green: 0x78/255, blue: 0xd1/255, alpha: 1)
+    )
+
+
+    static let volvoNavy = Color(red: 0x28/255, green: 0x4e/255, blue: 0x80/255)
+
     static var canvas: Color {
-        Color(light: NSColor.white, dark: NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1))
+        switch theme {
+        case .volvo:
+
+            return Color(light: NSColor.white, dark: NSColor.black)
+        case .hisingen, .polestar:
+            return Color(light: NSColor.white, dark: NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1))
+        }
     }
 
+    static var ink: Color {
+        switch theme {
+        case .polestar: return Color(light: NSColor.black, dark: NSColor.white)
+        case .volvo:
 
-    static var ink: Color { isPolestar ? Color(light: NSColor.black, dark: NSColor.white) : .primary }
+            return Color(light: NSColor(red: 0x14/255, green: 0x14/255, blue: 0x14/255, alpha: 1), dark: NSColor.white)
+        case .hisingen: return .primary
+        }
+    }
 
     static var inkMuted: Color {
-        isPolestar
-            ? Color(light: NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1),
-                    dark: NSColor(red: 0xbb/255, green: 0xbb/255, blue: 0xbb/255, alpha: 1))
-            : .secondary
+        switch theme {
+        case .polestar:
+            return Color(light: NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1),
+                         dark: NSColor(red: 0xbb/255, green: 0xbb/255, blue: 0xbb/255, alpha: 1))
+        case .volvo:
+
+            return Color(light: NSColor(red: 0x70/255, green: 0x70/255, blue: 0x70/255, alpha: 1),
+                         dark: NSColor(red: 0xa3/255, green: 0xa3/255, blue: 0xa3/255, alpha: 1))
+        case .hisingen: return .secondary
+        }
     }
 
     static var hairline: Color {
-        isPolestar
-            ? Color(light: NSColor(red: 0xe5/255, green: 0xe5/255, blue: 0xe5/255, alpha: 1),
-                    dark: NSColor(red: 0x2b/255, green: 0x2b/255, blue: 0x2b/255, alpha: 1))
-            : Color(nsColor: .separatorColor).opacity(0.35)
+        switch theme {
+        case .polestar:
+            return Color(light: NSColor(red: 0xe5/255, green: 0xe5/255, blue: 0xe5/255, alpha: 1),
+                         dark: NSColor(red: 0x2b/255, green: 0x2b/255, blue: 0x2b/255, alpha: 1))
+        case .volvo:
+
+            return Color(light: NSColor(red: 0xeb/255, green: 0xeb/255, blue: 0xeb/255, alpha: 1),
+                         dark: NSColor(red: 0x1f/255, green: 0x1f/255, blue: 0x1f/255, alpha: 1))
+        case .hisingen: return Color(nsColor: .separatorColor).opacity(0.35)
+        }
     }
 
-
-    static var accent: Color { isPolestar ? ink : polestarAmber }
+    static var accent: Color {
+        switch theme {
+        case .polestar: return ink
+        case .volvo: return volvoBlue
+        case .hisingen: return polestarAmber
+        }
+    }
 
     static var cardBackground: AnyShapeStyle {
-        isPolestar ? AnyShapeStyle(canvas) : AnyShapeStyle(.regularMaterial)
+        switch theme {
+        case .polestar, .volvo: return AnyShapeStyle(canvas)
+        case .hisingen: return AnyShapeStyle(.regularMaterial)
+        }
     }
-    static var cardBorderWidth: CGFloat { isPolestar ? 1 : 0.5 }
-    static var cardShadowOpacity: Double { isPolestar ? 0 : 0.04 }
-    static var cardShadowRadius: CGFloat { isPolestar ? 0 : 6 }
+    static var cardBorderWidth: CGFloat {
+        switch theme { case .polestar, .volvo: return 1; case .hisingen: return 0.5 }
+    }
+    static var cardShadowOpacity: Double {
+        switch theme { case .polestar: return 0; case .volvo: return 0.03; case .hisingen: return 0.04 }
+    }
+    static var cardShadowRadius: CGFloat {
+        switch theme { case .polestar: return 0; case .volvo: return 4; case .hisingen: return 6 }
+    }
 
     static var popoverBackground: AnyShapeStyle {
-        isPolestar ? AnyShapeStyle(canvas) : AnyShapeStyle(.ultraThinMaterial)
+        switch theme {
+        case .polestar, .volvo: return AnyShapeStyle(canvas)
+        case .hisingen: return AnyShapeStyle(.ultraThinMaterial)
+        }
     }
 
 
-    static var headingWeight: Font.Weight { isPolestar ? .regular : .semibold }
-    static var valueWeight: Font.Weight { isPolestar ? .regular : .semibold }
-    static var displayWeight: Font.Weight { isPolestar ? .regular : .bold }
-
-
-    static var displayTracking: CGFloat { isPolestar ? -1.2 : 0 }
+    static var headingWeight: Font.Weight {
+        switch theme { case .polestar: return .regular; case .volvo: return .medium; case .hisingen: return .semibold }
+    }
+    static var valueWeight: Font.Weight {
+        switch theme { case .polestar: return .regular; case .volvo: return .medium; case .hisingen: return .semibold }
+    }
+    static var displayWeight: Font.Weight {
+        switch theme { case .polestar: return .regular; case .volvo: return .black; case .hisingen: return .bold }
+    }
+    static var displayTracking: CGFloat {
+        switch theme { case .polestar: return -1.2; case .volvo: return -0.4; case .hisingen: return 0 }
+    }
 
 
     static func decorativeTint(_ preferred: Color) -> Color {
-        isPolestar ? inkMuted : preferred
+        switch theme {
+        case .polestar: return inkMuted
+        case .volvo: return volvoNavy.opacity(0.75)
+        case .hisingen: return preferred
+        }
     }
 
 
     static let semanticGood = Color.green
-
-
     static let semanticActive = Color.blue
-
-
     static let semanticWarning = Color.orange
-
     static let semanticCritical = Color.red
 
     static func batteryColor(percentage: Double, charging: Bool) -> Color {
