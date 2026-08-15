@@ -714,3 +714,19 @@
 /* Added: Volvo theme */
 "Volvo" = "Volvo";
 "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Inofficiellt — Volvos blå accentfärg, mjuka paneler, kontrast mellan lätt och fet text";
+
+/* Added: charging curve & session history */
+"Charging Curve" = "Laddkurva";
+"Target %d%%" = "Mål %d%%";
+"Start" = "Start";
+"Now" = "Nu";
+"Finished" = "Avslutad";
+"Ready" = "Klar";
+"Target" = "Målnivå";
+"Charging History" = "Laddhistorik";
+"Duration" = "Varaktighet";
+"Energy Delivered" = "Levererad energi";
+"Peak Power" = "Toppeffekt";
+"Cost" = "Kostnad";
+"Projected" = "Prognos";
+"Live" = "Live";

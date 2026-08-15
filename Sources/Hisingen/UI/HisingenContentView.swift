@@ -847,6 +847,15 @@ struct VehicleTabView: View {
             rows.append(KVRow(L10n.text("Cloud Connectivity"), state.availability.displayName,
                               symbol: "antenna.radiowaves.left.and.right"))
         }
+        if features.contains(.vehicleIdentity), let colour = state.externalColour, !colour.isEmpty {
+            rows.append(KVRow(L10n.text("Exterior Color"), colour, symbol: "paintpalette.fill"))
+        }
+        if features.contains(.vehicleIdentity), let cap = state.reportedBatteryCapacityKwh, cap > 0 {
+            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", cap), symbol: "battery.100.bolt"))
+        }
+        if features.contains(.vehicleIdentity), let gearbox = state.gearbox, !gearbox.isEmpty {
+            rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
+        }
         if features.contains(.vehicleHealth), let km = state.odometerKm {
             rows.append(KVRow(L10n.text("Odometer"), Format.distance(km: km, grouped: true, unit: Preferences.distanceUnit), symbol: "speedometer"))
         }
@@ -855,12 +864,18 @@ struct VehicleTabView: View {
             if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: Preferences.distanceUnit))" }
             rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
         }
+        if features.contains(.vehicleHealth), let hours = state.engineHoursToService, hours > 0 {
+            rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
+        }
         if features.contains(.tripMeters) {
             if let km = state.tripMeterManualKm {
                 rows.append(KVRow(L10n.text("Manual Trip Meter"), Format.distance(km: Int(km.rounded()), unit: Preferences.distanceUnit), symbol: "m.circle"))
             }
             if let km = state.tripMeterAutomaticKm {
                 rows.append(KVRow(L10n.text("Auto Trip Meter"), Format.distance(km: Int(km.rounded()), unit: Preferences.distanceUnit), symbol: "a.circle"))
+            }
+            if let speed = state.averageSpeedKmH, speed > 0 {
+                rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle"))
             }
         }
         guard !rows.isEmpty else { return nil }

@@ -161,6 +161,10 @@ struct VehicleState: Codable, Equatable, Sendable {
 
 
     var reportedBatteryCapacityKwh: Double? = nil
+    var externalColour: String? = nil
+    var gearbox: String? = nil
+    var engineHoursToService: Int? = nil
+    var averageSpeedKmH: Double? = nil
     let imageData: Data?
     let fetchedAt: Date
     let vehicleReportedAt: Date?
@@ -251,6 +255,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case airQuality, batteryDiagnostics, weather, location, unavailableFeatures, probedCapabilities
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
         case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
+        case externalColour, gearbox, engineHoursToService, averageSpeedKmH
     }
 
     init(from decoder: Decoder) throws {
@@ -294,8 +299,6 @@ struct VehicleState: Codable, Equatable, Sendable {
             probedCapabilities: try values.decodeIfPresent(VehicleProbedCapabilities.self, forKey: .probedCapabilities),
             chargingSamples: try values.decodeIfPresent([ChargingSample].self, forKey: .chargingSamples) ?? [],
             chargingSessions: try values.decodeIfPresent([ChargingSession].self, forKey: .chargingSessions) ?? [],
-
-
             powertrain: try values.decodeIfPresent(PowertrainType.self, forKey: .powertrain) ?? .bev,
             fuelLevelPercent: try values.decodeIfPresent(Double.self, forKey: .fuelLevelPercent),
             fuelRangeKm: try values.decodeIfPresent(Int.self, forKey: .fuelRangeKm),
@@ -305,6 +308,10 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt),
             dataWarnings: try values.decode([String].self, forKey: .dataWarnings)
         )
+        self.externalColour = try values.decodeIfPresent(String.self, forKey: .externalColour)
+        self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
+        self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
+        self.averageSpeedKmH = try values.decodeIfPresent(Double.self, forKey: .averageSpeedKmH)
     }
 
     var isCharging: Bool { chargingState.isActivelyCharging }

@@ -57,6 +57,8 @@ struct VolvoVehicleDetailsDTO: Decodable {
     let modelYear: Int?
     let descriptions: Descriptions?
     let fuelType: String?
+    let externalColour: String?
+    let gearbox: String?
     let batteryCapacityKWH: Double?
     let images: Images?
 
@@ -68,6 +70,7 @@ struct VolvoVehicleDetailsDTO: Decodable {
 
     struct Images: Decodable {
         let exteriorImageUrl: String?
+        let internalImageUrl: String?
     }
 }
 
@@ -226,12 +229,9 @@ struct VolvoTyresDTO: Decodable {
 
 struct VolvoDiagnosticsDTO: Decodable {
     let serviceWarning: VolvoField<String>?
-
-
     let timeToService: VolvoField<Int>?
-
-
     let distanceToService: VolvoField<Int>?
+    let engineHoursToService: VolvoField<Int>?
     let brakeFluidLevelWarning: VolvoField<String>?
     let engineCoolantLevelWarning: VolvoField<String>?
     let oilLevelWarning: VolvoField<String>?
@@ -318,6 +318,82 @@ struct VolvoLocationDTO: Decodable {
     }
     let properties: Properties?
     let geometry: Geometry?
+}
+
+struct VolvoEngineStatusDTO: Decodable {
+    let engineStatus: VolvoField<String>?
+
+    var isRunning: Bool {
+        engineStatus?.value?.uppercased() == "RUNNING"
+    }
+}
+
+struct VolvoBrakesDTO: Decodable {
+    let brakeFluidLevelWarning: VolvoField<String>?
+}
+
+struct VolvoCommandAccessibilityDTO: Decodable {
+    let availabilityStatus: VolvoField<String>?
+
+    var isAvailable: Bool {
+        availabilityStatus?.value?.uppercased() == "AVAILABLE"
+    }
+}
+
+struct VolvoWarningsDTO: Decodable {
+    let brakeLightCenterWarning: VolvoField<String>?
+    let brakeLightLeftWarning: VolvoField<String>?
+    let brakeLightRightWarning: VolvoField<String>?
+    let fogLightFrontWarning: VolvoField<String>?
+    let fogLightRearWarning: VolvoField<String>?
+    let positionLightFrontLeftWarning: VolvoField<String>?
+    let positionLightFrontRightWarning: VolvoField<String>?
+    let positionLightRearLeftWarning: VolvoField<String>?
+    let positionLightRearRightWarning: VolvoField<String>?
+    let highBeamLeftWarning: VolvoField<String>?
+    let highBeamRightWarning: VolvoField<String>?
+    let lowBeamLeftWarning: VolvoField<String>?
+    let lowBeamRightWarning: VolvoField<String>?
+    let daytimeRunningLightLeftWarning: VolvoField<String>?
+    let daytimeRunningLightRightWarning: VolvoField<String>?
+    let turnIndicationFrontLeftWarning: VolvoField<String>?
+    let turnIndicationFrontRightWarning: VolvoField<String>?
+    let turnIndicationRearLeftWarning: VolvoField<String>?
+    let turnIndicationRearRightWarning: VolvoField<String>?
+    let registrationPlateLightWarning: VolvoField<String>?
+    let sideMarkLightsWarning: VolvoField<String>?
+    let hazardLightsWarning: VolvoField<String>?
+    let reverseLightsWarning: VolvoField<String>?
+
+    var activeWarnings: [String] {
+        let list: [(VolvoField<String>?, String)] = [
+            (brakeLightCenterWarning, L10n.text("Center brake light")),
+            (brakeLightLeftWarning, L10n.text("Left brake light")),
+            (brakeLightRightWarning, L10n.text("Right brake light")),
+            (fogLightFrontWarning, L10n.text("Front fog light")),
+            (fogLightRearWarning, L10n.text("Rear fog light")),
+            (positionLightFrontLeftWarning, L10n.text("Front left position light")),
+            (positionLightFrontRightWarning, L10n.text("Front right position light")),
+            (positionLightRearLeftWarning, L10n.text("Rear left position light")),
+            (positionLightRearRightWarning, L10n.text("Rear right position light")),
+            (highBeamLeftWarning, L10n.text("Left high beam")),
+            (highBeamRightWarning, L10n.text("Right high beam")),
+            (lowBeamLeftWarning, L10n.text("Left low beam")),
+            (lowBeamRightWarning, L10n.text("Right low beam")),
+            (daytimeRunningLightLeftWarning, L10n.text("Left DRL")),
+            (daytimeRunningLightRightWarning, L10n.text("Right DRL")),
+            (turnIndicationFrontLeftWarning, L10n.text("Front left turn indicator")),
+            (turnIndicationFrontRightWarning, L10n.text("Front right turn indicator")),
+            (turnIndicationRearLeftWarning, L10n.text("Rear left turn indicator")),
+            (turnIndicationRearRightWarning, L10n.text("Rear right turn indicator")),
+            (registrationPlateLightWarning, L10n.text("License plate light")),
+            (sideMarkLightsWarning, L10n.text("Side marker lights"))
+        ]
+        return list.compactMap { field, name in
+            guard let val = field?.value?.uppercased(), !val.contains("NO_WARNING"), val != "UNSPECIFIED", !val.isEmpty else { return nil }
+            return "\(name): \(val)"
+        }
+    }
 }
 
 
