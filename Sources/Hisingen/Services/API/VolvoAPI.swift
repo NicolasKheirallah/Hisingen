@@ -272,12 +272,12 @@ actor VolvoAPI {
 
         return VehicleState(
             batteryPercentage: energy?.batteryChargeLevel?.value,
-            rangeKm: energy?.electricRange?.value,
+            rangeKm: energy?.rangeKm,
             chargingState: ChargingState(volvoChargingStatus: energy?.chargingStatus?.value),
-            estimatedChargingTimeToFullMinutes: energy?.estimatedChargingTimeToFull?.value,
-            chargeTargetPercentage: energy?.targetBatteryLevel?.value,
+            estimatedChargingTimeToFullMinutes: energy?.estTimeToTargetMinutes,
+            chargeTargetPercentage: energy?.targetPercent,
             chargingPowerWatts: energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) },
-            chargingCurrentAmps: energy?.chargingCurrent?.value.map { Int($0.rounded()) },
+            chargingCurrentAmps: (energy?.chargingCurrent?.value ?? energy?.chargingCurrentLimit?.value).map { Int($0.rounded()) },
             chargingVoltageVolts: energy?.chargingVoltage?.value.map { Int($0.rounded()) },
             chargingType: .unknown,
             chargerConnection: ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value),
