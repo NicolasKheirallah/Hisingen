@@ -14,6 +14,7 @@ struct ControlsTabView: View {
     @State private var ampLimit: Int = 16
     @State private var isInitialized = false
 
+    private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var climateActive: Bool {
         guard let status = state.climateStatus else { return false }
@@ -45,16 +46,16 @@ struct ControlsTabView: View {
 
     private var restrictedNoticeBanner: some View {
         HStack(spacing: 10) {
-            Image(systemName: "lock.shield.fill")
+            Image(systemName: isBrandVolvo ? "checkmark.shield.fill" : "lock.shield.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isBrandVolvo ? HisingenTheme.accent : .secondary)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.text("Remote Controls Temporarily Disabled"))
+                Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Remote Controls Temporarily Disabled"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary)
-                Text(Preferences.activeBrand == .volvo
-                     ? L10n.text("Volvo remote commands aren't enabled in standard builds until their endpoints are verified against a live account.")
+                Text(isBrandVolvo
+                     ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
                      : L10n.text("Polestar's backend restricts remote write commands to paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -62,10 +63,10 @@ struct ControlsTabView: View {
             Spacer()
         }
         .padding(10)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .background(isBrandVolvo ? HisingenTheme.accent.opacity(0.08) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(.separator.opacity(0.3), lineWidth: 0.5)
+                .stroke(isBrandVolvo ? HisingenTheme.accent.opacity(0.3) : Color.primary.opacity(0.15), lineWidth: 0.5)
         )
     }
 
@@ -227,7 +228,7 @@ struct ControlsTabView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(HisingenTheme.polestarAmber)
-                    .disabled(true)
+                    .disabled(isBrandVolvo ? remoteCommandInProgress : true)
 
                     Button {
                         onRemoteCommand(.stopClimate)
@@ -240,7 +241,7 @@ struct ControlsTabView: View {
                         .frame(maxWidth: 80, minHeight: 34)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(true)
+                    .disabled(isBrandVolvo ? remoteCommandInProgress : true)
                 }
 
 
@@ -264,7 +265,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(0.65)
+        .opacity(isBrandVolvo ? 1.0 : 0.65)
     }
 
 
@@ -378,7 +379,7 @@ struct ControlsTabView: View {
                 HStack(spacing: 8) {
                     let isLocked = state.exteriorStatus?.isLocked == true
 
-                    if profile.permits(.locks) {
+                    if profile.permits(.locks) || isBrandVolvo {
                         Button {
                             onRemoteCommand(.lock)
                         } label: {
@@ -392,7 +393,7 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(isLocked ? .secondary : .blue)
-                        .disabled(true)
+                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
 
                         Button {
                             onRemoteCommand(.unlock)
@@ -406,7 +407,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 46)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
                     }
 
                     if profile.permits(.trunk) {
@@ -427,7 +428,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(0.65)
+        .opacity(isBrandVolvo ? 1.0 : 0.65)
     }
 
 
@@ -467,7 +468,7 @@ struct ControlsTabView: View {
                         .disabled(true)
                     }
 
-                    if profile.permits(.honkAndFlash) {
+                    if profile.permits(.honkAndFlash) || isBrandVolvo {
                         Button {
                             onRemoteCommand(.flashLights)
                         } label: {
@@ -480,7 +481,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
 
                         Button {
                             onRemoteCommand(.honkAndFlash)
@@ -494,12 +495,12 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
                     }
                 }
             }
         }
-        .opacity(0.65)
+        .opacity(isBrandVolvo ? 1.0 : 0.65)
     }
 }
 

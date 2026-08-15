@@ -416,6 +416,21 @@ struct FormattingTests {
         XCTAssertEqual(Preferences.vehicleNickname(for: firstVIN), "Comet")
         XCTAssertEqual(Preferences.vehicleNickname(for: secondVIN), "Nova")
     }
+
+    @Test
+    func testShortTimeFormatting() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2026
+        comps.month = 8
+        comps.day = 15
+        comps.hour = 18
+        comps.minute = 52
+        comps.second = 0
+        let date = calendar.date(from: comps) ?? Date()
+        let formatted = Format.shortTime(date: date)
+        XCTAssertFalse(formatted.isEmpty)
+    }
 }
 
 func vehicle(
