@@ -95,6 +95,17 @@ enum Format {
         return formatter
     }()
 
+    static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    static func shortTime(date: Date) -> String {
+        timeFormatter.string(from: date)
+    }
+
     static func scheduleText(_ schedule: VehicleSchedule) -> String {
         guard let hour = schedule.startHour, let minute = schedule.startMinute else { return L10n.text("Active") }
         let start = String(format: "%02d:%02d", hour, minute)

@@ -228,14 +228,30 @@ struct CardHeader: View {
     let symbol: String
     let title: String
     let color: Color
-
-
     var isSemantic: Bool = false
+    var isPulsing: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
                 .foregroundStyle(isSemantic ? color : HisingenTheme.decorativeTint(color))
                 .font(.system(size: 13, weight: HisingenTheme.headingWeight))
+                .scaleEffect(isPulsing && pulse ? 1.15 : 1.0)
+                .shadow(color: isPulsing && pulse ? color.opacity(0.6) : .clear, radius: 4)
+                .animation(
+                    isPulsing && !reduceMotion
+                        ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+                        : .default,
+                    value: pulse
+                )
+                .onAppear {
+                    if isPulsing && !reduceMotion {
+                        pulse = true
+                    }
+                }
             Text(title)
                 .font(.system(size: 13, weight: HisingenTheme.headingWeight))
                 .foregroundStyle(HisingenTheme.ink)

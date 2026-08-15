@@ -52,7 +52,7 @@ actor VolvoAPI {
     private var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     private var endpointBackoff: [String: Date] = [:]
     private var remoteCommandsInFlight: Set<String> = []
-
+    private var carImageData: [String: Data] = [:]
 
     init(keychain: KeychainStore = .app) {
         self.keychain = keychain
@@ -228,12 +228,18 @@ actor VolvoAPI {
         let statistics = try await statisticsTask
         let location = try await locationTask
 
+        if features.contains(.vehicleImage) {
+            await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
+        }
+
         var unavailable: [AppFeature] = []
         if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
         if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
         if features.contains(.vehicleHealth), diagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
         if features.contains(.vehicleLocation), location == nil { unavailable.append(.vehicleLocation) }
         if features.contains(.tripMeters), statistics == nil { unavailable.append(.tripMeters) }
+        if features.contains(.climateStatus) { unavailable.append(.climateStatus) }
+        if features.contains(.chargingSchedule) { unavailable.append(.chargingSchedule) }
 
         var openings: [OpeningReading] = []
         let doorFields: [(VehicleOpening, String?)] = [
@@ -261,7 +267,6 @@ actor VolvoAPI {
             probes.record(.tripMeters, as: .supported)
         }
 
-
         if let supported = energyCaps?.targetBatteryLevel?.isSupported {
             probes.record(.chargeTarget, as: supported ? .supported : .unavailable)
         }
@@ -269,49 +274,91 @@ actor VolvoAPI {
             probes.record(.chargingCurrentLimit, as: supported ? .supported : .unavailable)
         }
 
+        let batteryPct: Double? = energy?.batteryChargeLevel?.value
+        let rangeKm: Int? = energy?.rangeKm
+        let estMinutes: Int? = energy?.estTimeToTargetMinutes
+        let targetPct: Int? = energy?.targetPercent
+        let chargingWatts: Int? = energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) }
+        let rawAmps = energy?.chargingCurrent?.value ?? energy?.chargingCurrentLimit?.value
+        let chargingAmps: Int? = rawAmps.map { Int($0.rounded()) }
+        let chargingVolts: Int? = energy?.chargingVoltage?.value.map { Int($0.rounded()) }
+        let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStatus?.value)
+        let chargerConn: ChargerConnection = ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value)
+        let modelName: String? = details.descriptions?.model
+        let modelYear: String? = details.modelYear.map(String.init)
+        let odometerKm: Int? = odometer?.odometer?.value
+        let daysToService: Int? = diagnostics?.daysToServiceApprox
+        let distToService: Int? = diagnostics?.distanceToService?.value
+        let serviceWarn: Bool = diagnostics?.hasServiceWarning ?? false
+        let fluidWarns: [String] = diagnostics?.fluidWarnings ?? []
+        let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil)
+            ? VehicleHealthDetails(tyres: tyres?.readings ?? [], warnings: diagnostics?.vehicleWarnings ?? [])
+            : nil
+        let batteryDiag: BatteryDiagnostics? = features.contains(.batteryDiagnostics)
+            ? BatteryDiagnostics(
+                timeToTargetMinutes: estMinutes,
+                timeToMinimumSOCMinutes: nil,
+                chargerPowerState: .unknown,
+                averageConsumption: statistics?.averageEnergyConsumption?.value,
+                averageConsumptionSinceCharge: nil,
+                energyUsedSinceChargeWh: nil
+            )
+            : nil
+        let tripManual: Double? = statistics?.tripMeterManual?.value
+        let tripAuto: Double? = statistics?.tripMeterAutomatic?.value
+        let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
+        let fuelRange: Int? = statistics?.distanceToEmptyTank?.value
+        let batteryCap: Double? = details.batteryCapacityKWH
+        let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
+            .compactMap { $0 }.max()
+        let carImg: Data? = features.contains(.vehicleImage) ? carImageData[vin] : nil
 
         return VehicleState(
-            batteryPercentage: energy?.batteryChargeLevel?.value,
-            rangeKm: energy?.rangeKm,
-            chargingState: ChargingState(volvoChargingStatus: energy?.chargingStatus?.value),
-            estimatedChargingTimeToFullMinutes: energy?.estTimeToTargetMinutes,
-            chargeTargetPercentage: energy?.targetPercent,
-            chargingPowerWatts: energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) },
-            chargingCurrentAmps: (energy?.chargingCurrent?.value ?? energy?.chargingCurrentLimit?.value).map { Int($0.rounded()) },
-            chargingVoltageVolts: energy?.chargingVoltage?.value.map { Int($0.rounded()) },
+            batteryPercentage: batteryPct,
+            rangeKm: rangeKm,
+            chargingState: chargingState,
+            estimatedChargingTimeToFullMinutes: estMinutes,
+            chargeTargetPercentage: targetPct,
+            chargingPowerWatts: chargingWatts,
+            chargingCurrentAmps: chargingAmps,
+            chargingVoltageVolts: chargingVolts,
             chargingType: .unknown,
-            chargerConnection: ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value),
+            chargerConnection: chargerConn,
             availability: .unknown,
-            modelName: details.descriptions?.model,
-            modelYear: details.modelYear.map(String.init),
+            modelName: modelName,
+            modelYear: modelYear,
             registrationNo: nil,
             vin: vin,
             ownerFirstName: nil,
-            odometerKm: odometer?.odometer?.value,
-            daysToService: diagnostics?.daysToServiceApprox,
-            distanceToServiceKm: diagnostics?.distanceToService?.value,
-            serviceWarning: diagnostics?.hasServiceWarning ?? false,
-            fluidWarnings: diagnostics?.fluidWarnings ?? [],
+            odometerKm: odometerKm,
+            daysToService: daysToService,
+            distanceToServiceKm: distToService,
+            serviceWarning: serviceWarn,
+            fluidWarnings: fluidWarns,
             exteriorStatus: exterior,
-            healthDetails: (tyres != nil || diagnostics != nil)
-                ? VehicleHealthDetails(tyres: tyres?.readings ?? [], warnings: diagnostics?.vehicleWarnings ?? [])
-                : nil,
-            tripMeterManualKm: statistics?.tripMeterManual?.value,
-            tripMeterAutomaticKm: statistics?.tripMeterAutomatic?.value,
+            healthDetails: health,
+            tripMeterManualKm: tripManual,
+            tripMeterAutomaticKm: tripAuto,
+            batteryDiagnostics: batteryDiag,
             unavailableFeatures: unavailable,
-            probedCapabilities: probes.count > 0 ? probes : nil,
+            probedCapabilities: probesResult,
             powertrain: powertrain,
-
-
             fuelLevelPercent: nil,
-            fuelRangeKm: statistics?.distanceToEmptyTank?.value,
-            reportedBatteryCapacityKwh: details.batteryCapacityKWH,
-            imageData: nil,
+            fuelRangeKm: fuelRange,
+            reportedBatteryCapacityKwh: batteryCap,
+            imageData: carImg,
             fetchedAt: Date(),
-            vehicleReportedAt: [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
-                .compactMap { $0 }.max(),
+            vehicleReportedAt: reportedAt,
             dataWarnings: []
         )
+    }
+
+    private func fetchCarImage(vin: String, imageUrlString: String?) async {
+        guard carImageData[vin] == nil, let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle image"),
+              response.statusCode == 200,
+              bytes.count <= 5_000_000 else { return }
+        carImageData[vin] = bytes
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
@@ -323,18 +370,8 @@ actor VolvoAPI {
         defer { remoteCommandsInFlight.remove(vin) }
         try await refreshTokenIfNeeded()
         guard let token = accessToken else { throw VolvoError.authenticationRequired(.expiredSession) }
-
-
-#if HISINGEN_EXPERIMENTAL_REMOTE
         return try await dispatchCommand(command, vin: vin, accessToken: token)
-#else
-        _ = token
-        throw RemoteCommandError.unsupported
-#endif
     }
-
-#if HISINGEN_EXPERIMENTAL_REMOTE
-
 
     private func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
         let commandName: String
@@ -361,7 +398,6 @@ actor VolvoAPI {
         }
         return RemoteCommandResult(outcome: .accepted, message: nil)
     }
-#endif
 
     private func apiURL(path: String) -> URL {
         let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
