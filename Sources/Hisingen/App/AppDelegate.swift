@@ -105,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
         connectCoordinator()
         render()
+
+
+        cacheDormantBrandSnapshot()
     }
 
 
@@ -479,4 +482,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+
 

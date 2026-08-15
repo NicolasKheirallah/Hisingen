@@ -703,3 +703,8 @@
 /* Added: vehicle switcher cross-brand quick switch */
 "Switch to %@ (%@)…" = "Skift til %@ (%@)…";
 "Current vehicle: %@. Switch vehicle." = "Nuværende køretøj: %@. Skift køretøj.";
+
+/* Added: vehicle switcher polish (freshness, warnings, a11y, manage entry) */
+"%@, selected" = "%@, valgt";
+"Add or Manage Vehicles…" = "Tilføj eller administrer køretøjer…";
+"Switch to %@ (%@ · %d%%)…" = "Skift til %@ (%@ · %d%%)…";
