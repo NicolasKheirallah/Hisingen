@@ -140,6 +140,10 @@ enum Preferences {
         d.string(forKey: vinKey(for: brand)) ?? ""
     }
 
+    static func setVin(_ newVin: String, for brand: VehicleBrand) {
+        d.set(newVin, forKey: vinKey(for: brand))
+    }
+
 
     static func lastVehicleLabel(for brand: VehicleBrand) -> String {
         let storedVIN = vin(for: brand)
