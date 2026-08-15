@@ -1,0 +1,568 @@
+import Foundation
+
+struct CarSummary: Codable, Equatable, Sendable {
+    let vin: String
+    let title: String
+}
+
+enum ChargingState: Codable, Equatable, Sendable {
+    case charging
+    case smartCharging
+    case paused
+    case scheduled
+    case idle
+    case complete
+    case discharging
+    case fault
+    case unknown(String)
+
+    init(apiValue: String?) {
+        let key = (apiValue ?? "")
+            .replacingOccurrences(of: "CHARGING_STATUS_V2_", with: "")
+            .replacingOccurrences(of: "CHARGING_STATUS_", with: "")
+            .uppercased()
+        switch key {
+        case "CHARGING": self = .charging
+        case "SMART_CHARGING": self = .smartCharging
+        case "SMART_CHARGING_PAUSED": self = .paused
+        case "SCHEDULED": self = .scheduled
+        case "IDLE": self = .idle
+        case "DONE": self = .complete
+        case "DISCHARGING": self = .discharging
+        case "ERROR", "FAULT": self = .fault
+        default: self = .unknown(key.isEmpty ? "UNSPECIFIED" : key)
+        }
+    }
+
+    var isActivelyCharging: Bool {
+        self == .charging || self == .smartCharging
+    }
+
+    var displayName: String {
+        switch self {
+        case .charging: return L10n.text("Charging")
+        case .smartCharging: return L10n.text("Smart charging")
+        case .paused: return L10n.text("Charging paused")
+        case .scheduled: return L10n.text("Scheduled")
+        case .idle: return L10n.text("Idle")
+        case .complete: return L10n.text("Complete")
+        case .discharging: return L10n.text("Discharging")
+        case .fault: return L10n.text("Fault")
+        case .unknown(let value):
+            let displayValue = value.replacingOccurrences(of: "_", with: " ").capitalized
+            return L10n.format("Unknown (%@)", displayValue)
+        }
+    }
+}
+
+enum ChargerConnection: String, Codable, Sendable {
+    case connected
+    case disconnected
+    case fault
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .connected: return L10n.text("Connected")
+        case .disconnected: return L10n.text("Disconnected")
+        case .fault: return L10n.text("Fault")
+        case .unknown: return L10n.text("Unavailable")
+        }
+    }
+}
+
+enum ChargingType: String, Codable, Sendable {
+    case ac
+    case dc
+    case wireless
+    case none
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .ac: return "AC"
+        case .dc: return "DC"
+        case .wireless: return L10n.text("Wireless")
+        case .none: return L10n.text("None")
+        case .unknown: return L10n.text("Unavailable")
+        }
+    }
+}
+
+enum VehicleAvailability: Codable, Equatable, Sendable {
+    case available
+    case unavailable(reason: String?)
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .available: return L10n.text("Online")
+        case .unavailable(let reason): return reason ?? L10n.text("Unavailable")
+        case .unknown: return L10n.text("Unknown")
+        }
+    }
+}
+
+enum VehicleStateSeverity: Equatable, Sendable {
+    case good
+    case warning
+    case critical
+}
+
+struct VehicleStateSummary: Equatable, Sendable {
+    let message: String
+    let severity: VehicleStateSeverity
+}
+
+struct VehicleState: Codable, Equatable, Sendable {
+    let batteryPercentage: Double?
+    let rangeKm: Int?
+    let chargingState: ChargingState
+    let estimatedChargingTimeToFullMinutes: Int?
+    let chargeTargetPercentage: Int?
+    let chargingPowerWatts: Int?
+    let chargingCurrentAmps: Int?
+    let chargingVoltageVolts: Int?
+    let chargingType: ChargingType
+    let chargerConnection: ChargerConnection
+    let availability: VehicleAvailability
+    let modelName: String?
+    let modelYear: String?
+    let registrationNo: String?
+    let vin: String
+    let ownerFirstName: String?
+    let odometerKm: Int?
+    let daysToService: Int?
+    let distanceToServiceKm: Int?
+    let serviceWarning: Bool
+    let fluidWarnings: [String]
+    var exteriorStatus: ExteriorSnapshot? = nil
+    var healthDetails: VehicleHealthDetails? = nil
+    var softwareInfo: VehicleSoftwareInfo? = nil
+    var chargingSchedules: [VehicleSchedule] = []
+    var climateStatus: VehicleClimateStatus? = nil
+    var climateTimers: [VehicleSchedule] = []
+    var tripMeterManualKm: Double? = nil
+    var tripMeterAutomaticKm: Double? = nil
+    var connectivity: VehicleConnectivity? = nil
+    var airQuality: VehicleAirQuality? = nil
+    var batteryDiagnostics: BatteryDiagnostics? = nil
+    var weather: VehicleWeather? = nil
+    var location: VehicleLocation? = nil
+    var unavailableFeatures: [AppFeature] = []
+    var probedCapabilities: VehicleProbedCapabilities? = nil
+    var chargingSamples: [ChargingSample] = []
+    var chargingSessions: [ChargingSession] = []
+
+
+    var powertrain: PowertrainType = .bev
+    var fuelLevelPercent: Double? = nil
+    var fuelRangeKm: Int? = nil
+
+
+    var reportedBatteryCapacityKwh: Double? = nil
+    let imageData: Data?
+    let fetchedAt: Date
+    let vehicleReportedAt: Date?
+    let dataWarnings: [String]
+
+    init(
+        batteryPercentage: Double?, rangeKm: Int?, chargingState: ChargingState,
+        estimatedChargingTimeToFullMinutes: Int?, chargeTargetPercentage: Int?,
+        chargingPowerWatts: Int?, chargingCurrentAmps: Int?, chargingVoltageVolts: Int?,
+        chargingType: ChargingType, chargerConnection: ChargerConnection,
+        availability: VehicleAvailability, modelName: String?, modelYear: String?,
+        registrationNo: String?, vin: String, ownerFirstName: String?, odometerKm: Int?,
+        daysToService: Int?, distanceToServiceKm: Int?, serviceWarning: Bool,
+        fluidWarnings: [String], exteriorStatus: ExteriorSnapshot? = nil,
+        healthDetails: VehicleHealthDetails? = nil, softwareInfo: VehicleSoftwareInfo? = nil,
+        chargingSchedules: [VehicleSchedule] = [], climateStatus: VehicleClimateStatus? = nil,
+        climateTimers: [VehicleSchedule] = [], tripMeterManualKm: Double? = nil,
+        tripMeterAutomaticKm: Double? = nil, connectivity: VehicleConnectivity? = nil,
+        airQuality: VehicleAirQuality? = nil, batteryDiagnostics: BatteryDiagnostics? = nil,
+        weather: VehicleWeather? = nil,
+        location: VehicleLocation? = nil,
+        unavailableFeatures: [AppFeature] = [],
+        probedCapabilities: VehicleProbedCapabilities? = nil,
+        chargingSamples: [ChargingSample] = [],
+        chargingSessions: [ChargingSession] = [],
+        powertrain: PowertrainType = .bev,
+        fuelLevelPercent: Double? = nil,
+        fuelRangeKm: Int? = nil,
+        reportedBatteryCapacityKwh: Double? = nil,
+        imageData: Data?, fetchedAt: Date,
+        vehicleReportedAt: Date?, dataWarnings: [String]
+    ) {
+        self.batteryPercentage = batteryPercentage
+        self.rangeKm = rangeKm
+        self.chargingState = chargingState
+        self.estimatedChargingTimeToFullMinutes = estimatedChargingTimeToFullMinutes
+        self.chargeTargetPercentage = chargeTargetPercentage
+        self.chargingPowerWatts = chargingPowerWatts
+        self.chargingCurrentAmps = chargingCurrentAmps
+        self.chargingVoltageVolts = chargingVoltageVolts
+        self.chargingType = chargingType
+        self.chargerConnection = chargerConnection
+        self.availability = availability
+        self.modelName = modelName
+        self.modelYear = modelYear
+        self.registrationNo = registrationNo
+        self.vin = vin
+        self.ownerFirstName = ownerFirstName
+        self.odometerKm = odometerKm
+        self.daysToService = daysToService
+        self.distanceToServiceKm = distanceToServiceKm
+        self.serviceWarning = serviceWarning
+        self.fluidWarnings = fluidWarnings
+        self.exteriorStatus = exteriorStatus
+        self.healthDetails = healthDetails
+        self.softwareInfo = softwareInfo
+        self.chargingSchedules = chargingSchedules
+        self.climateStatus = climateStatus
+        self.climateTimers = climateTimers
+        self.tripMeterManualKm = tripMeterManualKm
+        self.tripMeterAutomaticKm = tripMeterAutomaticKm
+        self.connectivity = connectivity
+        self.airQuality = airQuality
+        self.batteryDiagnostics = batteryDiagnostics
+        self.weather = weather
+        self.location = location
+        self.unavailableFeatures = unavailableFeatures
+        self.probedCapabilities = probedCapabilities
+        self.chargingSamples = chargingSamples
+        self.chargingSessions = chargingSessions
+        self.powertrain = powertrain
+        self.fuelLevelPercent = fuelLevelPercent
+        self.fuelRangeKm = fuelRangeKm
+        self.reportedBatteryCapacityKwh = reportedBatteryCapacityKwh
+        self.imageData = imageData
+        self.fetchedAt = fetchedAt
+        self.vehicleReportedAt = vehicleReportedAt
+        self.dataWarnings = dataWarnings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case batteryPercentage, rangeKm, chargingState, estimatedChargingTimeToFullMinutes
+        case chargeTargetPercentage, chargingPowerWatts, chargingCurrentAmps, chargingVoltageVolts
+        case chargingType, chargerConnection, availability, modelName, modelYear, registrationNo
+        case vin, ownerFirstName, odometerKm, daysToService, distanceToServiceKm, serviceWarning
+        case fluidWarnings, exteriorStatus, healthDetails, softwareInfo, chargingSchedules
+        case climateStatus, climateTimers, tripMeterManualKm, tripMeterAutomaticKm, connectivity
+        case airQuality, batteryDiagnostics, weather, location, unavailableFeatures, probedCapabilities
+        case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
+        case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            batteryPercentage: try values.decodeIfPresent(Double.self, forKey: .batteryPercentage),
+            rangeKm: try values.decodeIfPresent(Int.self, forKey: .rangeKm),
+            chargingState: try values.decode(ChargingState.self, forKey: .chargingState),
+            estimatedChargingTimeToFullMinutes: try values.decodeIfPresent(Int.self, forKey: .estimatedChargingTimeToFullMinutes),
+            chargeTargetPercentage: try values.decodeIfPresent(Int.self, forKey: .chargeTargetPercentage),
+            chargingPowerWatts: try values.decodeIfPresent(Int.self, forKey: .chargingPowerWatts),
+            chargingCurrentAmps: try values.decodeIfPresent(Int.self, forKey: .chargingCurrentAmps),
+            chargingVoltageVolts: try values.decodeIfPresent(Int.self, forKey: .chargingVoltageVolts),
+            chargingType: try values.decode(ChargingType.self, forKey: .chargingType),
+            chargerConnection: try values.decode(ChargerConnection.self, forKey: .chargerConnection),
+            availability: try values.decode(VehicleAvailability.self, forKey: .availability),
+            modelName: try values.decodeIfPresent(String.self, forKey: .modelName),
+            modelYear: try values.decodeIfPresent(String.self, forKey: .modelYear),
+            registrationNo: try values.decodeIfPresent(String.self, forKey: .registrationNo),
+            vin: try values.decode(String.self, forKey: .vin),
+            ownerFirstName: try values.decodeIfPresent(String.self, forKey: .ownerFirstName),
+            odometerKm: try values.decodeIfPresent(Int.self, forKey: .odometerKm),
+            daysToService: try values.decodeIfPresent(Int.self, forKey: .daysToService),
+            distanceToServiceKm: try values.decodeIfPresent(Int.self, forKey: .distanceToServiceKm),
+            serviceWarning: try values.decode(Bool.self, forKey: .serviceWarning),
+            fluidWarnings: try values.decode([String].self, forKey: .fluidWarnings),
+            exteriorStatus: try values.decodeIfPresent(ExteriorSnapshot.self, forKey: .exteriorStatus),
+            healthDetails: try values.decodeIfPresent(VehicleHealthDetails.self, forKey: .healthDetails),
+            softwareInfo: try values.decodeIfPresent(VehicleSoftwareInfo.self, forKey: .softwareInfo),
+            chargingSchedules: try values.decodeIfPresent([VehicleSchedule].self, forKey: .chargingSchedules) ?? [],
+            climateStatus: try values.decodeIfPresent(VehicleClimateStatus.self, forKey: .climateStatus),
+            climateTimers: try values.decodeIfPresent([VehicleSchedule].self, forKey: .climateTimers) ?? [],
+            tripMeterManualKm: try values.decodeIfPresent(Double.self, forKey: .tripMeterManualKm),
+            tripMeterAutomaticKm: try values.decodeIfPresent(Double.self, forKey: .tripMeterAutomaticKm),
+            connectivity: try values.decodeIfPresent(VehicleConnectivity.self, forKey: .connectivity),
+            airQuality: try values.decodeIfPresent(VehicleAirQuality.self, forKey: .airQuality),
+            batteryDiagnostics: try values.decodeIfPresent(BatteryDiagnostics.self, forKey: .batteryDiagnostics),
+            weather: try values.decodeIfPresent(VehicleWeather.self, forKey: .weather),
+            location: try values.decodeIfPresent(VehicleLocation.self, forKey: .location),
+            unavailableFeatures: try values.decodeIfPresent([AppFeature].self, forKey: .unavailableFeatures) ?? [],
+            probedCapabilities: try values.decodeIfPresent(VehicleProbedCapabilities.self, forKey: .probedCapabilities),
+            chargingSamples: try values.decodeIfPresent([ChargingSample].self, forKey: .chargingSamples) ?? [],
+            chargingSessions: try values.decodeIfPresent([ChargingSession].self, forKey: .chargingSessions) ?? [],
+
+
+            powertrain: try values.decodeIfPresent(PowertrainType.self, forKey: .powertrain) ?? .bev,
+            fuelLevelPercent: try values.decodeIfPresent(Double.self, forKey: .fuelLevelPercent),
+            fuelRangeKm: try values.decodeIfPresent(Int.self, forKey: .fuelRangeKm),
+            reportedBatteryCapacityKwh: try values.decodeIfPresent(Double.self, forKey: .reportedBatteryCapacityKwh),
+            imageData: try values.decodeIfPresent(Data.self, forKey: .imageData),
+            fetchedAt: try values.decode(Date.self, forKey: .fetchedAt),
+            vehicleReportedAt: try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt),
+            dataWarnings: try values.decode([String].self, forKey: .dataWarnings)
+        )
+    }
+
+    var isCharging: Bool { chargingState.isActivelyCharging }
+
+
+    var stateSummary: VehicleStateSummary {
+        if exteriorStatus?.alarmTriggered == true {
+            return VehicleStateSummary(message: L10n.text("Alarm triggered"), severity: .critical)
+        }
+        if let battery = batteryPercentage, battery <= 15, !isCharging {
+            return VehicleStateSummary(message: L10n.text("Low battery"), severity: .critical)
+        }
+        if let openings = exteriorStatus?.itemsNeedingAttention, !openings.isEmpty {
+            if openings.count == 1, let only = openings.first {
+                return VehicleStateSummary(message: L10n.format("%@ open", only.displayName), severity: .warning)
+            }
+            return VehicleStateSummary(message: L10n.format("%d items open", openings.count), severity: .warning)
+        }
+        if exteriorStatus?.isLocked == false {
+            return VehicleStateSummary(message: L10n.text("Unlocked"), severity: .warning)
+        }
+        if chargingState == .fault {
+            return VehicleStateSummary(message: L10n.text("Charging fault"), severity: .warning)
+        }
+        if serviceWarning {
+            return VehicleStateSummary(message: L10n.text("Service warning"), severity: .warning)
+        }
+        if let fluid = fluidWarnings.first {
+            return VehicleStateSummary(message: fluid, severity: .warning)
+        }
+        if let warning = healthDetails?.warnings.first {
+            return VehicleStateSummary(message: warning.displayName, severity: .warning)
+        }
+        if healthDetails?.tyres.contains(where: { $0.warning.needsAttention }) == true {
+            return VehicleStateSummary(message: L10n.text("Tyre pressure warning"), severity: .warning)
+        }
+        if softwareInfo?.state == .failed {
+            return VehicleStateSummary(message: L10n.text("Software update failed"), severity: .warning)
+        }
+        if case .unavailable = availability {
+            return VehicleStateSummary(message: availability.displayName, severity: .warning)
+        }
+        if exteriorStatus?.isLocked == true {
+            return VehicleStateSummary(message: L10n.text("Vehicle secured"), severity: .good)
+        }
+        return VehicleStateSummary(message: L10n.text("No issues detected"), severity: .good)
+    }
+
+    var capabilityProfile: VehicleCapabilityProfile {
+        VehicleCapabilityProfile(modelName: modelName, vin: vin, probed: probedCapabilities)
+    }
+
+    var isPluggedIn: Bool? {
+        switch chargerConnection {
+        case .connected, .fault: return true
+        case .disconnected: return false
+        case .unknown: return nil
+        }
+    }
+
+    var isComplete: Bool {
+        if chargingState == .complete { return true }
+        guard let batteryPercentage else { return false }
+        if let chargeTargetPercentage {
+            return batteryPercentage >= Double(chargeTargetPercentage) - 0.5
+        }
+        return batteryPercentage >= 99.5
+    }
+
+    var model: VehicleModel { VehicleModel(modelName: modelName) }
+
+    var estimatedRangeHealth: (percentage: Double, rating: String)? {
+        guard model.hasVerifiedNominalSpecs,
+              let battery = batteryPercentage, battery > 10,
+              let range = rangeKm, range > 0 else { return nil }
+        let nominalRange = model.nominalWltpRangeKm
+        let expectedRangeAtCurrentSoC = nominalRange * (battery / 100.0)
+        let ratio = Double(range) / expectedRangeAtCurrentSoC
+        let clampedRatio = min(max(ratio, 0.70), 1.05)
+        let soh = min(100.0, max(80.0, (clampedRatio >= 1.0 ? 99.5 : (85.0 + (clampedRatio - 0.70) / 0.30 * 14.5))))
+        let rating: String
+        if soh >= 95.0 { rating = L10n.text("Excellent") }
+        else if soh >= 90.0 { rating = L10n.text("Good") }
+        else if soh >= 80.0 { rating = L10n.text("Normal") }
+        else { rating = L10n.text("Degraded") }
+        return (percentage: (soh * 10).rounded() / 10, rating: rating)
+    }
+
+    var estimatedChargingCompletion: Date? {
+        guard isCharging, let minutes = estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
+        guard !isStale() else { return nil }
+        let completion = (vehicleReportedAt ?? fetchedAt).addingTimeInterval(TimeInterval(minutes * 60))
+        return completion > Date() ? completion : nil
+    }
+
+    var formattedCompletionTime: String? {
+        guard let minutes = estimatedChargingTimeToFullMinutes, minutes > 0, isCharging else { return nil }
+        return Format.completionTime(from: minutes, baseDate: vehicleReportedAt ?? fetchedAt)
+    }
+
+    func formattedChargingRate(unit: DistanceUnit) -> String? {
+        guard let watts = chargingPowerWatts, watts > 0, isCharging else { return nil }
+
+
+        guard let consumption = model.averageConsumptionWhPerKm else { return nil }
+        return Format.chargingRateFormatted(powerWatts: watts, consumptionWhPerKm: consumption, unit: unit)
+    }
+
+    @MainActor
+    var formattedChargingRate: String? {
+        formattedChargingRate(unit: Preferences.distanceUnit)
+    }
+
+    var freshnessDescription: String {
+        if isStale() {
+            return L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
+        }
+        return L10n.format("Updated %@", Format.relativeAge(since: dataTimestamp))
+    }
+
+    var dataTimestamp: Date { vehicleReportedAt ?? fetchedAt }
+
+    func isStale(at date: Date = Date()) -> Bool {
+
+
+        if date.timeIntervalSince(fetchedAt) < 120 { return false }
+        let threshold: TimeInterval = isCharging ? 15 * 60 : 60 * 60
+        return date.timeIntervalSince(dataTimestamp) > threshold
+    }
+
+    var cacheableCopy: VehicleState {
+        VehicleState(
+            batteryPercentage: batteryPercentage,
+            rangeKm: rangeKm,
+            chargingState: chargingState,
+            estimatedChargingTimeToFullMinutes: estimatedChargingTimeToFullMinutes,
+            chargeTargetPercentage: chargeTargetPercentage,
+            chargingPowerWatts: chargingPowerWatts,
+            chargingCurrentAmps: chargingCurrentAmps,
+            chargingVoltageVolts: chargingVoltageVolts,
+            chargingType: chargingType,
+            chargerConnection: chargerConnection,
+            availability: availability,
+            modelName: modelName,
+            modelYear: modelYear,
+            registrationNo: nil,
+            vin: vin,
+            ownerFirstName: nil,
+            odometerKm: nil,
+            daysToService: nil,
+            distanceToServiceKm: nil,
+            serviceWarning: false,
+            fluidWarnings: [],
+            weather: nil,
+            unavailableFeatures: [],
+            probedCapabilities: probedCapabilities,
+            chargingSamples: chargingSamples,
+            chargingSessions: chargingSessions,
+            powertrain: powertrain,
+            fuelLevelPercent: fuelLevelPercent,
+            fuelRangeKm: fuelRangeKm,
+            reportedBatteryCapacityKwh: reportedBatteryCapacityKwh,
+            imageData: nil,
+            fetchedAt: fetchedAt,
+            vehicleReportedAt: vehicleReportedAt,
+            dataWarnings: dataWarnings
+        )
+    }
+
+    func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection) -> VehicleState {
+        guard let previous, previous.vin == vin else { return self }
+        let failed = Set(unavailableFeatures)
+        func keep(_ feature: AppFeature) -> Bool {
+            features.contains(feature) && failed.contains(feature)
+        }
+        let previousChargingState: ChargingState? = {
+            if case .unknown = chargingState { return previous.chargingState }
+            return nil
+        }()
+        let mergedAvailability: VehicleAvailability = {
+            guard features.contains(.vehicleAvailability), case .unknown = availability else { return availability }
+            return previous.availability
+        }()
+        let mergedProbes: VehicleProbedCapabilities? = {
+            guard let probedCapabilities else { return previous.probedCapabilities }
+            return previous.probedCapabilities?.merging(newerProbe: probedCapabilities) ?? probedCapabilities
+        }()
+        var merged = VehicleState(
+            batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
+            rangeKm: rangeKm ?? previous.rangeKm,
+            chargingState: previousChargingState ?? chargingState,
+            estimatedChargingTimeToFullMinutes: estimatedChargingTimeToFullMinutes
+                ?? previous.estimatedChargingTimeToFullMinutes,
+            chargeTargetPercentage: chargeTargetPercentage ?? previous.chargeTargetPercentage,
+            chargingPowerWatts: chargingPowerWatts ?? previous.chargingPowerWatts,
+            chargingCurrentAmps: chargingCurrentAmps ?? previous.chargingCurrentAmps,
+            chargingVoltageVolts: chargingVoltageVolts ?? previous.chargingVoltageVolts,
+            chargingType: chargingType == .unknown ? previous.chargingType : chargingType,
+            chargerConnection: chargerConnection == .unknown ? previous.chargerConnection : chargerConnection,
+            availability: mergedAvailability,
+            modelName: modelName ?? (features.contains(.vehicleIdentity) ? previous.modelName : nil),
+            modelYear: modelYear ?? (features.contains(.vehicleIdentity) ? previous.modelYear : nil),
+            registrationNo: registrationNo ?? (features.contains(.vehicleIdentity) ? previous.registrationNo : nil),
+            vin: vin,
+            ownerFirstName: ownerFirstName ?? (features.contains(.ownerGreeting) ? previous.ownerFirstName : nil),
+            odometerKm: odometerKm ?? (features.contains(.vehicleHealth) ? previous.odometerKm : nil),
+            daysToService: daysToService ?? (features.contains(.vehicleHealth) ? previous.daysToService : nil),
+            distanceToServiceKm: distanceToServiceKm
+                ?? (features.contains(.vehicleHealth) ? previous.distanceToServiceKm : nil),
+
+
+            serviceWarning: !serviceWarning && keep(.vehicleHealth) ? previous.serviceWarning : serviceWarning,
+            fluidWarnings: fluidWarnings.isEmpty && keep(.vehicleHealth) ? previous.fluidWarnings : fluidWarnings,
+            exteriorStatus: exteriorStatus ?? (keep(.exteriorStatus) ? previous.exteriorStatus : nil),
+            healthDetails: healthDetails ?? (keep(.tyreAndWarnings) ? previous.healthDetails : nil),
+            softwareInfo: softwareInfo ?? (keep(.softwareUpdates) ? previous.softwareInfo : nil),
+            chargingSchedules: chargingSchedules.isEmpty && keep(.chargingSchedule)
+                ? previous.chargingSchedules : chargingSchedules,
+            climateStatus: climateStatus ?? (keep(.climateStatus) ? previous.climateStatus : nil),
+            climateTimers: climateTimers.isEmpty && keep(.climateStatus) ? previous.climateTimers : climateTimers,
+            tripMeterManualKm: tripMeterManualKm ?? (keep(.tripMeters) ? previous.tripMeterManualKm : nil),
+            tripMeterAutomaticKm: tripMeterAutomaticKm ?? (keep(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
+            connectivity: connectivity ?? (keep(.connectivityDiagnostics) ? previous.connectivity : nil),
+            airQuality: airQuality ?? (keep(.airQuality) ? previous.airQuality : nil),
+            batteryDiagnostics: batteryDiagnostics
+                ?? (keep(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
+            weather: weather ?? (keep(.vehicleWeather) ? previous.weather : nil),
+            location: location ?? (keep(.vehicleLocation) ? previous.location : nil),
+            unavailableFeatures: unavailableFeatures,
+            probedCapabilities: mergedProbes,
+            chargingSessions: previous.chargingSessions,
+            powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
+            fuelLevelPercent: fuelLevelPercent ?? previous.fuelLevelPercent,
+            fuelRangeKm: fuelRangeKm ?? previous.fuelRangeKm,
+            reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? previous.reportedBatteryCapacityKwh,
+            imageData: imageData ?? (features.contains(.vehicleImage) ? previous.imageData : nil),
+            fetchedAt: fetchedAt,
+            vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
+            dataWarnings: dataWarnings
+        )
+        var samples = previous.chargingSamples
+        if merged.isCharging, let pct = merged.batteryPercentage {
+            let sample = ChargingSample(timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts)
+            if let last = samples.last {
+                if sample.timestamp.timeIntervalSince(last.timestamp) >= 20 || abs(sample.batteryPercentage - last.batteryPercentage) >= 0.2 {
+                    samples.append(sample)
+                }
+            } else {
+                samples.append(sample)
+            }
+            if samples.count > 50 {
+                samples.removeFirst(samples.count - 50)
+            }
+        } else if !merged.isCharging {
+            samples.removeAll()
+        }
+        merged.chargingSamples = samples
+        return merged
+    }
+}
+

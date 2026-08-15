@@ -1,0 +1,16 @@
+{
+  "data": {
+    "vin": "YV1FIXTURE0000001",
+    "modelYear": 2024,
+    "fuelType": "ELECTRIC",
+    "batteryCapacityKWH": 64.0,
+    "descriptions": {
+      "model": "EX30",
+      "upholstery": "Fixture Textile",
+      "steering": "Left"
+    },
+    "images": {
+      "exteriorImageUrl": "https://example.invalid/fixture/ex30.png"
+    }
+  }
+}

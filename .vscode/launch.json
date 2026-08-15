@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hisingen}",
+            "name": "Debug Hisingen",
+            "target": "Hisingen",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Hisingen"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hisingen}",
+            "name": "Release Hisingen",
+            "target": "Hisingen",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Hisingen"
+        }
+    ]
+}

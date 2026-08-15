@@ -1,0 +1,562 @@
+import Foundation
+
+typealias VehicleModel = VehicleModelFamily
+
+enum VehicleModelFamily: Codable, Hashable, Sendable {
+    case polestar1
+    case polestar2
+    case polestar3
+    case polestar4
+    case polestar5
+    case polestar6
+    case volvoXC40
+    case volvoXC60
+    case volvoXC90
+    case volvoS60
+    case volvoS90
+    case volvoV60
+    case volvoV90
+
+
+    case volvoC40
+    case volvoEX30
+    case volvoEX90
+    case volvoES90
+    case volvoUnknown(String?)
+    case unknown(String?)
+
+    init(modelName: String?, vin: String? = nil) {
+
+        if let vin = vin?.uppercased(), vin.count >= 4 {
+            let chars = Array(vin)
+            if vin.hasPrefix("YSM") {
+                switch chars[3] {
+                case "V", "E", "S", "2": self = .polestar2; return
+                case "B", "3": self = .polestar3; return
+                case "A", "C", "4": self = .polestar4; return
+                case "5": self = .polestar5; return
+                case "6": self = .polestar6; return
+                default: break
+                }
+            }
+        }
+
+        let normalized = (modelName ?? "")
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+
+
+        if let volvo = Self.volvoModel(from: normalized) {
+            self = volvo
+            return
+        }
+
+        if normalized.contains("polestar 2") || normalized.contains("ps2") || normalized.contains(" 2") || normalized.contains("two") {
+            self = .polestar2
+            return
+        }
+        if normalized.contains("polestar 3") || normalized.contains("ps3") || normalized.contains(" 3") || normalized.contains("three") {
+            self = .polestar3
+            return
+        }
+        if normalized.contains("polestar 4") || normalized.contains("ps4") || normalized.contains(" 4") || normalized.contains("four") {
+            self = .polestar4
+            return
+        }
+        if normalized.contains("polestar 1") || normalized.contains("ps1") || normalized.contains(" 1") || normalized.contains("one") {
+            self = .polestar1
+            return
+        }
+        if normalized.contains("polestar 5") || normalized.contains("ps5") || normalized.contains(" 5") || normalized.contains("five") {
+            self = .polestar5
+            return
+        }
+        if normalized.contains("polestar 6") || normalized.contains("ps6") || normalized.contains(" 6") || normalized.contains("six") {
+            self = .polestar6
+            return
+        }
+
+        let compact = normalized.filter(\.isLetter).replacingOccurrences(of: "polestar", with: "")
+        let number = normalized.first(where: \.isNumber).flatMap { Int(String($0)) }
+        switch number {
+        case 1: self = .polestar1
+        case 2: self = .polestar2
+        case 3: self = .polestar3
+        case 4: self = .polestar4
+        case 5: self = .polestar5
+        case 6: self = .polestar6
+        default:
+            switch compact {
+            case "one": self = .polestar1
+            case "two": self = .polestar2
+            case "three": self = .polestar3
+            case "four": self = .polestar4
+            case "five": self = .polestar5
+            case "six": self = .polestar6
+            default: self = .unknown(modelName)
+            }
+        }
+    }
+
+
+    private static func volvoModel(from normalized: String) -> VehicleModelFamily? {
+        let compact = normalized.replacingOccurrences(of: " ", with: "")
+        if compact.contains("ex30") { return .volvoEX30 }
+        if compact.contains("ex90") { return .volvoEX90 }
+        if compact.contains("es90") { return .volvoES90 }
+        if compact.contains("xc40") { return .volvoXC40 }
+        if compact.contains("xc60") { return .volvoXC60 }
+        if compact.contains("xc90") { return .volvoXC90 }
+        if compact.contains("ex40") || compact.contains("ec40") || compact.contains("c40") { return .volvoC40 }
+        if compact.contains("s60") { return .volvoS60 }
+        if compact.contains("s90") { return .volvoS90 }
+        if compact.contains("v60") { return .volvoV60 }
+        if compact.contains("v90") { return .volvoV90 }
+        return nil
+    }
+
+    var displayName: String {
+        switch self {
+        case .polestar1: return "Polestar 1"
+        case .polestar2: return "Polestar 2"
+        case .polestar3: return "Polestar 3"
+        case .polestar4: return "Polestar 4"
+        case .polestar5: return "Polestar 5"
+        case .polestar6: return "Polestar 6"
+        case .volvoXC40: return "Volvo XC40"
+        case .volvoXC60: return "Volvo XC60"
+        case .volvoXC90: return "Volvo XC90"
+        case .volvoS60: return "Volvo S60"
+        case .volvoS90: return "Volvo S90"
+        case .volvoV60: return "Volvo V60"
+        case .volvoV90: return "Volvo V90"
+        case .volvoC40: return "Volvo C40"
+        case .volvoEX30: return "Volvo EX30"
+        case .volvoEX90: return "Volvo EX90"
+        case .volvoES90: return "Volvo ES90"
+        case .volvoUnknown(let name):
+            return name?.isEmpty == false ? name! : L10n.text("Unknown Volvo model")
+        case .unknown(let name):
+            return name?.isEmpty == false ? name! : L10n.text("Unknown model")
+        }
+    }
+
+    var isKnown: Bool {
+        switch self {
+        case .unknown, .volvoUnknown: return false
+        default: return true
+        }
+    }
+
+    var brand: VehicleBrand {
+        switch self {
+        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+            return .volvo
+        case .polestar1, .polestar2, .polestar3, .polestar4, .polestar5, .polestar6, .unknown:
+            return .polestar
+        }
+    }
+
+
+    var hasVerifiedNominalSpecs: Bool { brand == .polestar }
+
+    var nominalBatteryCapacityKwh: Double {
+        switch self {
+        case .polestar1: return 34.0
+        case .polestar2: return 78.0
+        case .polestar3: return 111.0
+        case .polestar4: return 102.0
+        case .polestar5: return 103.0
+        case .polestar6: return 103.0
+        case .unknown: return 78.0
+        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+            return 0
+        }
+    }
+
+    var nominalUsableCapacityKwh: Double {
+        switch self {
+        case .polestar1: return 30.0
+        case .polestar2: return 75.0
+        case .polestar3: return 107.0
+        case .polestar4: return 94.0
+        case .polestar5: return 96.0
+        case .polestar6: return 96.0
+        case .unknown: return 75.0
+        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+            return 0
+        }
+    }
+
+    var nominalWltpRangeKm: Double {
+        switch self {
+        case .polestar1: return 150.0
+        case .polestar2: return 480.0
+        case .polestar3: return 610.0
+
+
+        case .polestar4: return 610.0
+
+
+        case .polestar5: return 670.0
+
+
+        case .polestar6: return 670.0
+        case .unknown: return 480.0
+        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+            return 0
+        }
+    }
+
+
+    var averageConsumptionWhPerKm: Double? {
+        guard hasVerifiedNominalSpecs, nominalWltpRangeKm > 0 else { return nil }
+        return (nominalUsableCapacityKwh * 1_000) / nominalWltpRangeKm
+    }
+
+    private enum CodingKeys: String, CodingKey { case kind, name }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(String.self, forKey: .kind)
+        switch kind {
+        case "polestar1": self = .polestar1
+        case "polestar2": self = .polestar2
+        case "polestar3": self = .polestar3
+        case "polestar4": self = .polestar4
+        case "polestar5": self = .polestar5
+        case "polestar6": self = .polestar6
+        case "volvoXC40": self = .volvoXC40
+        case "volvoXC60": self = .volvoXC60
+        case "volvoXC90": self = .volvoXC90
+        case "volvoS60": self = .volvoS60
+        case "volvoS90": self = .volvoS90
+        case "volvoV60": self = .volvoV60
+        case "volvoV90": self = .volvoV90
+        case "volvoC40": self = .volvoC40
+        case "volvoEX30": self = .volvoEX30
+        case "volvoEX90": self = .volvoEX90
+        case "volvoES90": self = .volvoES90
+        case "volvoUnknown": self = .volvoUnknown(try c.decodeIfPresent(String.self, forKey: .name))
+        case "unknown": self = .unknown(try c.decodeIfPresent(String.self, forKey: .name))
+        default: self = .unknown(kind)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .polestar1: try c.encode("polestar1", forKey: .kind)
+        case .polestar2: try c.encode("polestar2", forKey: .kind)
+        case .polestar3: try c.encode("polestar3", forKey: .kind)
+        case .polestar4: try c.encode("polestar4", forKey: .kind)
+        case .polestar5: try c.encode("polestar5", forKey: .kind)
+        case .polestar6: try c.encode("polestar6", forKey: .kind)
+        case .volvoXC40: try c.encode("volvoXC40", forKey: .kind)
+        case .volvoXC60: try c.encode("volvoXC60", forKey: .kind)
+        case .volvoXC90: try c.encode("volvoXC90", forKey: .kind)
+        case .volvoS60: try c.encode("volvoS60", forKey: .kind)
+        case .volvoS90: try c.encode("volvoS90", forKey: .kind)
+        case .volvoV60: try c.encode("volvoV60", forKey: .kind)
+        case .volvoV90: try c.encode("volvoV90", forKey: .kind)
+        case .volvoC40: try c.encode("volvoC40", forKey: .kind)
+        case .volvoEX30: try c.encode("volvoEX30", forKey: .kind)
+        case .volvoEX90: try c.encode("volvoEX90", forKey: .kind)
+        case .volvoES90: try c.encode("volvoES90", forKey: .kind)
+        case .volvoUnknown(let name):
+            try c.encode("volvoUnknown", forKey: .kind)
+            try c.encodeIfPresent(name, forKey: .name)
+        case .unknown(let name):
+            try c.encode("unknown", forKey: .kind)
+            try c.encodeIfPresent(name, forKey: .name)
+        }
+    }
+}
+
+enum VehicleCapabilitySupport: String, Codable, Sendable {
+    case supported
+    case vehicleManaged
+    case unavailable
+    case backendDependent
+
+    var permitsRequest: Bool { self != .unavailable }
+
+    var displayName: String {
+        switch self {
+        case .supported: return L10n.text("Supported")
+        case .vehicleManaged: return L10n.text("Automatic")
+        case .unavailable: return L10n.text("Not available")
+        case .backendDependent: return L10n.text("Depends on vehicle service")
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .supported: return "checkmark.circle.fill"
+        case .vehicleManaged: return "gearshape.fill"
+        case .unavailable: return "minus.circle"
+        case .backendDependent: return "questionmark.circle"
+        }
+    }
+}
+
+enum FeatureAvailability: String, Codable, Sendable {
+    case available
+    case vehicleOffline
+    case temporarilyUnavailable
+    case authenticationRequired
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .available: return L10n.text("Available")
+        case .vehicleOffline: return L10n.text("Vehicle offline")
+        case .temporarilyUnavailable: return L10n.text("Temporarily unavailable")
+        case .authenticationRequired: return L10n.text("Sign in required")
+        case .unknown: return L10n.text("Unknown")
+        }
+    }
+
+    var isActionable: Bool { self == .available }
+}
+
+struct VehicleFeatureStatus: Equatable, Sendable {
+    let support: VehicleCapabilitySupport
+    let availability: FeatureAvailability
+
+    var isVisible: Bool { support.permitsRequest }
+    var isUsable: Bool { support.permitsRequest && availability.isActionable }
+}
+
+enum VehicleCapability: String, Codable, CaseIterable, Sendable {
+    case climateStartStop
+    case climateTemperature
+    case seatHeating
+    case steeringWheelHeating
+    case climateTimers
+    case preCleaning
+    case chargeTarget
+    case chargingCurrentLimit
+    case chargingSchedule
+    case chargingScheduleOverride
+    case locks
+    case trunk
+    case windows
+    case honkAndFlash
+    case exteriorStatus
+    case tyrePressureValues
+    case serviceWarnings
+    case tripMeters
+    case connectivity
+    case softwareStatus
+    case softwareInstallControl
+
+    var title: String {
+        switch self {
+        case .climateStartStop: return L10n.text("Climate start & stop")
+        case .climateTemperature: return L10n.text("Climate temperature selection")
+        case .seatHeating: return L10n.text("Seat-heating selection")
+        case .steeringWheelHeating: return L10n.text("Steering-wheel heating selection")
+        case .climateTimers: return L10n.text("Climate timers")
+        case .preCleaning: return L10n.text("Cabin pre-cleaning")
+        case .chargeTarget: return L10n.text("Charge target")
+        case .chargingCurrentLimit: return L10n.text("Charging current limit")
+        case .chargingSchedule: return L10n.text("Charging schedule")
+        case .chargingScheduleOverride: return L10n.text("Charge-schedule override")
+        case .locks: return L10n.text("Lock and unlock")
+        case .trunk: return L10n.text("Trunk unlock")
+        case .windows: return L10n.text("Window control")
+        case .honkAndFlash: return L10n.text("Honk and flash")
+        case .exteriorStatus: return L10n.text("Doors, windows, and lock status")
+        case .tyrePressureValues: return L10n.text("Direct tyre-pressure values")
+        case .serviceWarnings: return L10n.text("Service and vehicle warnings")
+        case .tripMeters: return L10n.text("Trip meters")
+        case .connectivity: return L10n.text("Connectivity diagnostics")
+        case .softwareStatus: return L10n.text("Vehicle software status")
+        case .softwareInstallControl: return L10n.text("Software installation control")
+        }
+    }
+
+    static let displayed: [VehicleCapability] = [
+        .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
+        .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
+        .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
+        .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
+        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl
+    ]
+}
+
+struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
+    private var results: [VehicleCapability: VehicleCapabilitySupport]
+    let probedAt: Date
+
+    static let stalenessInterval: TimeInterval = 6 * 3_600
+
+    init(results: [VehicleCapability: VehicleCapabilitySupport] = [:],
+         probedAt: Date = Date()) {
+        self.results = results
+        self.probedAt = probedAt
+    }
+
+    func support(for capability: VehicleCapability) -> VehicleCapabilitySupport? {
+        results[capability]
+    }
+
+    mutating func record(_ capability: VehicleCapability,
+                          as support: VehicleCapabilitySupport) {
+        results[capability] = support
+    }
+
+    var isStale: Bool {
+        Date().timeIntervalSince(probedAt) > Self.stalenessInterval
+    }
+
+    func merging(newerProbe: VehicleProbedCapabilities) -> VehicleProbedCapabilities {
+        var merged = newerProbe
+        for (capability, support) in results where merged.results[capability] == nil {
+            merged.results[capability] = support
+        }
+        return merged
+    }
+
+    var count: Int { results.count }
+}
+
+struct VehicleCapabilityProfile: Equatable, Sendable {
+    let model: VehicleModelFamily
+    let probed: VehicleProbedCapabilities?
+
+    init(modelName: String?, vin: String? = nil, probed: VehicleProbedCapabilities? = nil) {
+        model = VehicleModelFamily(modelName: modelName, vin: vin)
+        self.probed = probed
+    }
+
+    func support(for capability: VehicleCapability) -> VehicleCapabilitySupport {
+        if let probed, !probed.isStale,
+           let observed = probed.support(for: capability) {
+            return observed
+        }
+        switch model {
+        case .polestar2:
+            switch capability {
+            case .climateTemperature, .seatHeating, .steeringWheelHeating:
+                return .vehicleManaged
+            case .tyrePressureValues:
+                return .unavailable
+            case .softwareInstallControl:
+                return .backendDependent
+            default:
+                return .supported
+            }
+        case .polestar3:
+            switch capability {
+            case .climateTemperature, .seatHeating, .steeringWheelHeating:
+                return .supported
+            case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit:
+                return .backendDependent
+            default:
+                return .supported
+            }
+        case .polestar4:
+            switch capability {
+            case .climateTemperature, .seatHeating, .steeringWheelHeating:
+                return .supported
+            case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl:
+                return .unavailable
+            case .softwareStatus:
+                return .backendDependent
+            default:
+                return .supported
+            }
+        case .polestar1, .polestar5, .polestar6:
+            return .backendDependent
+        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+
+
+            switch capability {
+            case .locks, .honkAndFlash, .exteriorStatus, .climateStartStop, .serviceWarnings:
+                return .supported
+            case .softwareInstallControl:
+                return .unavailable
+            default:
+                return .backendDependent
+            }
+        case .unknown:
+            return .backendDependent
+        }
+    }
+
+    func permits(_ capability: VehicleCapability) -> Bool {
+        support(for: capability).permitsRequest
+    }
+
+    var hasSelectableClimateTemperature: Bool {
+        support(for: .climateTemperature) == .supported
+    }
+
+    var hasSelectableSeatHeating: Bool {
+        support(for: .seatHeating) == .supported
+    }
+
+    var hasSelectableSteeringWheelHeating: Bool {
+        support(for: .steeringWheelHeating) == .supported
+    }
+
+    func supportsAnyCommand(in feature: AppFeature) -> Bool {
+        let capabilities: [VehicleCapability]
+        switch feature {
+        case .remoteClimate: capabilities = [.climateStartStop]
+        case .remotePreCleaning: capabilities = [.preCleaning]
+        case .remoteCharging:
+            capabilities = [.chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride]
+        case .remoteSchedules: capabilities = [.chargingSchedule, .climateTimers]
+        case .remoteLocks: capabilities = [.locks, .trunk]
+        case .remoteWindows: capabilities = [.windows]
+        case .remoteHonkFlash: capabilities = [.honkAndFlash]
+        case .remoteOTA: capabilities = [.softwareInstallControl]
+        default: return true
+        }
+        return capabilities.contains(where: permits)
+    }
+
+    func featureStatus(for capability: VehicleCapability, in state: VehicleState) -> VehicleFeatureStatus {
+        let support = self.support(for: capability)
+        let availability: FeatureAvailability
+        switch state.availability {
+        case .available: availability = .available
+        case .unavailable: availability = .vehicleOffline
+        case .unknown:
+            availability = state.unavailableFeatures.contains(capability.associatedFeature)
+                ? .temporarilyUnavailable : .unknown
+        }
+        return VehicleFeatureStatus(support: support, availability: availability)
+    }
+}
+
+private extension VehicleCapability {
+    var associatedFeature: AppFeature {
+        switch self {
+        case .climateStartStop, .climateTemperature, .seatHeating,
+             .steeringWheelHeating, .climateTimers:
+            return .climateStatus
+        case .preCleaning: return .airQuality
+        case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
+             .chargingScheduleOverride: return .chargingSchedule
+        case .locks, .trunk: return .exteriorStatus
+        case .windows: return .exteriorStatus
+        case .honkAndFlash: return .exteriorStatus
+        case .exteriorStatus: return .exteriorStatus
+        case .tyrePressureValues, .serviceWarnings: return .tyreAndWarnings
+        case .tripMeters: return .tripMeters
+        case .connectivity: return .connectivityDiagnostics
+        case .softwareStatus, .softwareInstallControl: return .softwareUpdates
+        }
+    }
+}
+
