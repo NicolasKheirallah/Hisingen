@@ -16,7 +16,7 @@ struct AccountCredentialsForm: View {
     @State private var password = ""
     @State private var vin = Preferences.vin
     @State private var vehicleNickname = Preferences.vehicleNickname(for: Preferences.vin)
-    @State private var volvoClientID = Preferences.volvoClientID.isEmpty ? "dc-3spjins2tdf9cbxsq16xjha14" : Preferences.volvoClientID
+    @State private var volvoClientID = Preferences.volvoClientID
     @State private var volvoClientSecret = ""
     @State private var volvoApiKey = ""
     @State private var volvoSigningIn = false
