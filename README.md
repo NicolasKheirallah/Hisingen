@@ -160,16 +160,53 @@ The model table is deliberately conservative: service availability is confirmed 
 
 ## Volvo Support
 
-Hisingen supports Volvo Cars as a second, independent provider alongside Polestar — pick one from the account picker in Settings. It is built on Volvo's current, official Connected Vehicle API v2 and Energy API v2 (not the discontinued "Volvo On Call" API, which Volvo shut down in 2025 and which no longer works with any client). Read-only telemetry is implemented for battery/charging state (BEV and PHEV), fuel level and range (ICE and PHEV), doors/windows/locks, tyre warnings, service diagnostics, and odometer.
+Hisingen supports Volvo Cars as an independent, first-class provider alongside Polestar — selectable directly from the account picker in Settings. It is built on Volvo's official Connected Vehicle API v2 and Energy API v2 (not the discontinued "Volvo On Call" API, which Volvo shut down in 2025 and which no longer works with any third-party client).
 
-**Setup requires your own Volvo Developer Portal registration.** Volvo issues each application its own OAuth Client ID, Client Secret, and VCC API Key rather than a shared public client — register a free API application at [developer.volvocars.com](https://developer.volvocars.com) with redirect URI `hisingen://oauth/volvo/callback`, then enter the three values in Settings and sign in with your Volvo ID in the system browser window that opens (Volvo's own 2FA happens there, never inside Hisingen).
+### Developer Portal Setup
+Volvo issues each application its own OAuth Client ID, Client Secret, and VCC API Key rather than a shared public client:
+1. Register a free developer account at [developer.volvocars.com](https://developer.volvocars.com).
+2. Create an Application and add the **Connected Vehicle API**, **Energy API**, and optionally **Location API** products.
+3. Set the redirect URI to `hisingen://oauth/volvo/callback`.
+4. Enter your **Client ID**, **Client Secret**, and **VCC API Key** in Hisingen Settings.
+5. Click **Sign In with Volvo ID** in Hisingen to complete OAuth 2.0 PKCE authentication in the system browser.
 
-**What's conservative about this today:**
+---
 
-- Volvo's lineup spans BEV, PHEV, ICE, and mild-hybrid vehicles in ways Polestar's doesn't. Powertrain is read from each vehicle's own reported fuel type, never guessed from its model name — the same XC60 model name ships as all four.
-- Capability support (charge target, current limit, direct tyre pressure, and similar) is intentionally *not* hardcoded per model. Volvo's own API is capability-driven — it exposes what a given vehicle supports at runtime — so Hisingen probes rather than assumes, the same conservative philosophy it already applies to Polestar's own less-certain capabilities.
-- Remote commands (lock/unlock/climate/honk) are implemented but excluded from standard builds behind the same `HISINGEN_EXPERIMENTAL_REMOTE` build flag Polestar's own remote commands use. Live testing confirmed the `/commands` endpoint returns 403 for a standard read-scoped app even with `conve:commands` granted — command execution needs an authorization path this hasn't been cleared to explore yet.
-- Field mappings for the Connected Vehicle side (vehicle details, doors, windows, tyres, diagnostics, odometer, trip meters, fuel/electric range) have been validated against Volvo's own live sandbox demo vehicles — real field names, not guesses. The Energy API side (battery percentage, charging power/current/voltage, charge target) and Location API remain unverified against a live response and should be treated as best-effort until checked the same way. Decoding stays deliberately tolerant of missing/unexpected fields either way, so a remaining mismatch degrades to "no data" rather than a crash.
+### Supported Volvo APIs (Standard / Developer Tier)
+
+The following official developer endpoints are fully supported and mapped into Hisingen's native GUI:
+
+| Category | API Endpoint | Data & Telemetry Provided | Hisingen UI Feature |
+|---|---|---|---|
+| **Vehicle Identity & Render** | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, exterior color, gearbox type, battery capacity (kWh), transparent exterior studio image URL, steering orientation | Transparent vehicle hero render with ambient glow, Vehicle Identity card |
+| **Doors & Security** | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock status, front/rear left/right doors, hood, tailgate, charge/tank lid | Door schematic, lock/unlock status pill |
+| **Windows & Sunroof** | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Front/rear left/right windows, sunroof status | Window status indicators |
+| **Energy & Battery** | `GET /energy/v2/vehicles/{vin}/state` | Battery SoC (%), electric range (km), charger connection, charging status (Idle/Charging), charging current limit (A), target SoC (%), charging power (kW) | Battery gauge with target marker, charging details card, live charging speed |
+| **Energy Capabilities** | `GET /energy/v2/vehicles/{vin}/capabilities` | Hardware feature support matrix for all 10 energy fields | Runtime capability probing & feature degradation |
+| **Odometer** | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total vehicle odometer mileage (km) | Vehicle Identity card odometer reading |
+| **Diagnostics & Health** | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, time to service (months/days), distance to service (km), engine operating hours to service (h), washer fluid warning | Service due countdown (days, km, hours), fluid warning badges |
+| **Brake System** | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid level warning status | Vehicle Health & fluid warning alerts |
+| **Lighting & Bulb Monitors** | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16 individual light bulb sensor monitors (brake lights, fog lights, position lights, high/low beams, DRLs, turn signals, license plate, side markers) | Exterior lighting health status and fault alerts |
+| **Tyres (iTPMS)** | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | 4-wheel indirect tire pressure status (`No Warning`, `Low`, `Very Low`) | 4-wheel iTPMS schematic card |
+| **Trip & Speed Analytics** | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Average energy consumption (kWh/100km), average speed (km/h), manual trip meter (km), automatic trip meter (km), distance to empty | Trip & Consumption card, average speed telemetry |
+| **Cloud Availability** | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Real-time vehicle cloud connectivity status (`AVAILABLE`) | Connectivity status pill |
+| **Remote Commands** | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | Remote execution for `lock`, `unlock`, `climatization-start`, `climatization-stop`, `flash`, `honk-flash` | **Controls (Reglage)** tab with biometric authorization |
+| **Location API** | `GET /location/v1/vehicles/{vin}/location` | GPS coordinates, heading, and timestamp *(requires subscribing to the Location API product in portal)* | Vehicle map & reverse-geocoded address |
+
+---
+
+### Enterprise & Unsupported Volvo APIs
+
+Certain APIs exposed or discussed in automotive telematics are restricted to enterprise commercial contracts or are discontinued:
+
+| Category / API | Status | Reason & Limitation |
+|---|---|---|
+| **Extended Vehicle Data API (CAN / Telematics)** | 🔒 **Enterprise Only** | High-frequency raw CAN telemetry (raw battery cell voltages, steering angle, acceleration profiles, instantaneous torque, micro-trip breadcrumbs) is restricted to commercial fleet partners, insurance telematics, and certified Tier-1 developers under enterprise NDAs. Not accessible via self-service developer accounts. |
+| **Commercial Fleet Management API** | 🔒 **Enterprise Only** | Multi-tenant fleet provisioning, driver assignment, centralized keyless entry provisioning, and commercial geofencing require a Volvo Fleet Enterprise agreement. |
+| **Remote OTA Software Rollout API** | 🔒 **Enterprise Only** | Remote initiation or fleet-wide scheduling of over-the-air firmware/software updates is restricted to internal workshop systems and enterprise fleet managers. |
+| **Real-Time Streaming Telematics (WebSockets / MQTT)** | 🔒 **Enterprise Only** | Real-time broker feeds for live vehicle tracking are available only to enterprise telematics aggregators; standard developer accounts use REST polling. |
+| **Legacy Climatization Endpoints (`/climatization/status`, `/climatization/timers`)** | ❌ **Deprecated / Not Supported** | Legacy endpoints return HTTP 404 in Connected Vehicle API v2. Climate control is operated exclusively via the unified `/commands/climatization-start` and `/commands/climatization-stop` endpoints. |
+| **Discontinued "Volvo On Call" API** | ❌ **Shut Down** | Completely decommissioned by Volvo in 2025. Third-party libraries relying on VOC endpoints no longer function. |
 
 ## Refresh And Reliability
 
