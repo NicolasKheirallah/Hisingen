@@ -95,6 +95,7 @@ enum VehicleOpening: String, Codable, CaseIterable, Sendable {
     case hood
     case tailgate
     case chargeLid
+    case fuelFlap
     case sunroof
 
     var displayName: String {
@@ -110,6 +111,7 @@ enum VehicleOpening: String, Codable, CaseIterable, Sendable {
         case .hood: return L10n.text("Hood")
         case .tailgate: return L10n.text("Tailgate")
         case .chargeLid: return L10n.text("Charge lid")
+        case .fuelFlap: return L10n.text("Fuel flap")
         case .sunroof: return L10n.text("Sunroof")
         }
     }
@@ -128,9 +130,9 @@ struct OpeningReading: Codable, Equatable, Sendable {
 }
 
 struct ExteriorSnapshot: Codable, Equatable, Sendable {
-    let openings: [OpeningReading]
-    let isLocked: Bool?
-    let alarmTriggered: Bool?
+    var openings: [OpeningReading]
+    var isLocked: Bool?
+    var alarmTriggered: Bool?
 
     var itemsNeedingAttention: [VehicleOpening] {
         openings.filter { $0.state == .open || $0.state == .ajar }.map(\.opening)
@@ -249,13 +251,31 @@ enum SoftwareUpdateState: String, Codable, Sendable {
 }
 
 struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
-
-
     let version: String?
     let title: String?
     let state: SoftwareUpdateState
     let scheduledAt: Date?
     let updatedAt: Date?
+    var installedVersion: String?
+    var latestAvailableVersion: String?
+
+    init(
+        version: String? = nil,
+        title: String? = nil,
+        state: SoftwareUpdateState = .unknown,
+        scheduledAt: Date? = nil,
+        updatedAt: Date? = nil,
+        installedVersion: String? = nil,
+        latestAvailableVersion: String? = nil
+    ) {
+        self.version = version
+        self.title = title
+        self.state = state
+        self.scheduledAt = scheduledAt
+        self.updatedAt = updatedAt
+        self.installedVersion = installedVersion ?? version
+        self.latestAvailableVersion = latestAvailableVersion ?? version
+    }
 }
 
 

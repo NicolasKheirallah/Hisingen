@@ -78,11 +78,14 @@ struct VolvoVehicleDetailsDTO: Decodable {
 enum VolvoPowertrain {
     static func classify(fuelType: String?) -> PowertrainType {
         guard let raw = fuelType?.uppercased() else { return .unknown }
-        let hasElectric = raw.contains("ELECTRIC")
-        let hasFuel = raw.contains("PETROL") || raw.contains("DIESEL")
-        let isMildHybrid = raw.contains("MHEV") || raw.contains("HYBRID") && !raw.contains("PLUG")
+        let hasElectric = raw.contains("ELECTRIC") || raw.contains("BEV") || raw.contains("EV")
+        let hasFuel = raw.contains("PETROL") || raw.contains("DIESEL") || raw.contains("GASOLINE") || raw.contains("BENZIN")
+        let isPlugIn = raw.contains("PLUG") || raw.contains("PHEV") || (raw.contains("RECHARGE") && hasFuel)
+        let isMildHybrid = raw.contains("MHEV") || raw.contains("MILD") || (raw.contains("HYBRID") && !isPlugIn)
         if raw == "NONE" && hasElectric { return .bev }
         if hasElectric && hasFuel { return isMildHybrid ? .mildHybrid : .phev }
+        if isPlugIn { return .phev }
+        if isMildHybrid { return .mildHybrid }
         if hasElectric { return .bev }
         if hasFuel { return .ice }
         return .unknown
@@ -295,6 +298,22 @@ struct VolvoStatisticsDTO: Decodable {
 
 struct VolvoFuelDTO: Decodable {
     let fuelAmount: VolvoField<Double>?
+    let fuelAmountLiters: VolvoField<Double>?
+    let fuelLevelPercent: VolvoField<Double>?
+    let distanceToEmptyTank: VolvoField<Int>?
+    let distanceToEmpty: VolvoField<Int>?
+
+    var liters: Double? {
+        fuelAmount?.value ?? fuelAmountLiters?.value
+    }
+
+    var percentage: Double? {
+        fuelLevelPercent?.value
+    }
+
+    var rangeKm: Int? {
+        distanceToEmpty?.value ?? distanceToEmptyTank?.value
+    }
 }
 
 
@@ -396,6 +415,14 @@ struct VolvoWarningsDTO: Decodable {
     }
 }
 
+
+struct VolvoClimatizationDTO: Decodable {
+    let status: VolvoField<String>?
+    let timeRemainingMinutes: VolvoField<Int>?
+    let interiorTemperatureCelsius: VolvoField<Double>?
+    let targetTemperatureCelsius: VolvoField<Double>?
+    let preconditioning: VolvoField<String>?
+}
 
 struct VolvoTokenResponseDTO: Decodable {
     let accessToken: String

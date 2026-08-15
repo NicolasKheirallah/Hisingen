@@ -75,7 +75,6 @@
 "Est. Charge Cost" = "Gesch. laadkosten";
 "Estimated Range" = "Geschatte actieradius";
 "License Plate" = "Kenteken";
-"Low Level" = "Laag niveau";
 "Manual Trip Meter" = "Handmatige tripteller";
 "Normal" = "Normaal";
 "Open Settings & Sign In" = "Instellingen openen en aanmelden";
@@ -118,7 +117,6 @@
 "Steering Wheel" = "Stuur";
 "ON" = "AAN";
 "OFF" = "UIT";
-"Start Climate" = "Klimaat starten";
 "Stop" = "Stop";
 "Stop Air Cleaning" = "Luchtreiniging stoppen";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Cabinelucht reinigen (PM2,5-voorreiniging)";
@@ -372,7 +370,6 @@
 "⚠︎ Service warning" = "⚠︎ Onderhoudswaarschuwing";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Voertuiggegevens kunnen verouderd zijn";
 "12 V battery low" = "12V-batterij laag";
-"Active" = "Actief";
 "Air quality" = "Luchtkwaliteit";
 "Air quality index" = "Luchtkwaliteitsindex";
 "Automatic trip" = "Automatische trip";
@@ -422,7 +419,6 @@
 "Manual trip" = "Handmatige trip";
 "Network type" = "Netwerktype";
 "No power" = "Geen vermogen";
-"Off" = "Uit";
 "Oil level" = "Oliepeil";
 "Pending" = "In behandeling";
 "Poor" = "Zwak";
@@ -728,3 +724,43 @@
 "Cost" = "Kosten";
 "Projected" = "Prognose";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "Alles normaal";
+"Check Pressure" = "Spanning controleren";
+"Parked" = "Geparkeerd";
+"Moving" = "In beweging";
+"Copy Coordinates" = "Coördinaten kopiëren";
+"Copied" = "Gekopieerd";
+"Google Maps" = "Google Maps";
+"Speed" = "Snelheid";
+"Doors & Openings" = "Deuren & openingen";
+"Vehicle Health & Lighting" = "Voertuiggezondheid & verlichting";
+"Fluid Levels" = "Vloeistofniveaus";
+"Lighting Systems" = "Verlichtingssystemen";
+"All 16 Systems OK" = "Alle 16 systemen OK";
+"Exterior Light" = "Buitenverlichting";
+"Low Level" = "Laag niveau";
+"Open" = "Open";
+"Closed" = "Gesloten";
+"All Closed & Locked" = "Alles gesloten & vergrendeld";
+"All Closed" = "Alles gesloten";
+"%d Open" = "%d open";
+"FL Window" = "VL raam";
+"FR Window" = "VR raam";
+"RL Window" = "AL raam";
+"RR Window" = "AR raam";
+"Charge Lid" = "Laadklep";
+"Start Climate" = "Klimaat starten";
+"Stop Climate" = "Klimaat stoppen";
+"Active" = "Actief";
+"Off" = "Uit";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Weergavemodus";
+"Mode" = "Modus";
+"System (Automatic)" = "Systeem (Automatisch)";
+"Light" = "Licht";
+"Dark" = "Donker";
+"Liquid Glass" = "Vloeibaar glas";
+

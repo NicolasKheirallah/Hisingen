@@ -3,21 +3,25 @@ import AppKit
 
 @MainActor
 enum HisingenTheme {
-    private static var theme: AppTheme { Preferences.appTheme }
-    private static var isPolestar: Bool { theme == .polestar }
+    static var theme: AppTheme { Preferences.appTheme }
+    static var isPolestar: Bool { theme == .polestar }
 
 
     static var cornerRadius: CGFloat {
         switch theme {
-        case .hisingen: return 14
         case .polestar: return 0
-        case .volvo: return 10
+        case .cyanRacing: return 8
+        case .volvo, .swedishGold: return 10
+        case .nordicNight, .sandDune: return 12
+        case .hisingen, .forest: return 14
+        case .aurora: return 16
         }
     }
     static var cardPadding: CGFloat {
         switch theme {
-        case .hisingen: return 14
-        case .polestar, .volvo: return 16
+        case .hisingen, .cyanRacing: return 14
+        case .nordicNight, .aurora, .forest: return 15
+        case .polestar, .volvo, .swedishGold, .sandDune: return 16
         }
     }
     static let sectionSpacing: CGFloat = 12
@@ -39,100 +43,201 @@ enum HisingenTheme {
     static var canvas: Color {
         switch theme {
         case .volvo:
-
-            return Color(light: NSColor.white, dark: NSColor.black)
-        case .hisingen, .polestar:
-            return Color(light: NSColor.white, dark: NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1))
+            return Color(light: NSColor(red: 0.97, green: 0.98, blue: 0.99, alpha: 1), dark: NSColor(red: 0.05, green: 0.06, blue: 0.08, alpha: 1))
+        case .nordicNight:
+            return Color(light: NSColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1), dark: NSColor(red: 0.00, green: 0.00, blue: 0.00, alpha: 1))
+        case .aurora:
+            return Color(light: NSColor(red: 0.95, green: 0.99, blue: 0.97, alpha: 1), dark: NSColor(red: 0.04, green: 0.07, blue: 0.12, alpha: 1))
+        case .swedishGold:
+            return Color(light: NSColor(red: 0.99, green: 0.98, blue: 0.95, alpha: 1), dark: NSColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1))
+        case .cyanRacing:
+            return Color(light: NSColor(red: 0.94, green: 0.98, blue: 1.0, alpha: 1), dark: NSColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 1))
+        case .forest:
+            return Color(light: NSColor(red: 0.95, green: 0.98, blue: 0.95, alpha: 1), dark: NSColor(red: 0.04, green: 0.09, blue: 0.05, alpha: 1))
+        case .sandDune:
+            return Color(light: NSColor(red: 0.98, green: 0.97, blue: 0.94, alpha: 1), dark: NSColor(red: 0.09, green: 0.08, blue: 0.07, alpha: 1))
+        case .hisingen:
+            return Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1))
+        case .polestar:
+            return Color(light: NSColor(white: 0.98, alpha: 1), dark: NSColor(white: 0.08, alpha: 1))
         }
     }
 
     static var ink: Color {
         switch theme {
-        case .polestar: return Color(light: NSColor.black, dark: NSColor.white)
-        case .volvo:
-
-            return Color(light: NSColor(red: 0x14/255, green: 0x14/255, blue: 0x14/255, alpha: 1), dark: NSColor.white)
-        case .hisingen: return .primary
+        case .polestar: return Color(light: NSColor(white: 0.05, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
+        case .volvo: return Color(light: NSColor(red: 0.08, green: 0.10, blue: 0.14, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
+        case .nordicNight: return Color(light: NSColor(red: 0.02, green: 0.12, blue: 0.20, alpha: 1), dark: NSColor.white)
+        case .aurora: return Color(light: NSColor(red: 0.02, green: 0.18, blue: 0.12, alpha: 1), dark: NSColor.white)
+        case .swedishGold: return Color(light: NSColor(red: 0.14, green: 0.11, blue: 0.04, alpha: 1), dark: NSColor.white)
+        case .cyanRacing: return Color(light: NSColor(red: 0.03, green: 0.12, blue: 0.22, alpha: 1), dark: NSColor.white)
+        case .forest: return Color(light: NSColor(red: 0.06, green: 0.16, blue: 0.08, alpha: 1), dark: NSColor.white)
+        case .sandDune: return Color(light: NSColor(red: 0.14, green: 0.12, blue: 0.09, alpha: 1), dark: NSColor.white)
+        case .hisingen: return Color(light: NSColor(red: 0.06, green: 0.08, blue: 0.12, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
         }
     }
 
     static var inkMuted: Color {
         switch theme {
         case .polestar:
-            return Color(light: NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1),
-                         dark: NSColor(red: 0xbb/255, green: 0xbb/255, blue: 0xbb/255, alpha: 1))
+            return Color(light: NSColor(white: 0.40, alpha: 1), dark: NSColor(white: 0.70, alpha: 1))
         case .volvo:
-
-            return Color(light: NSColor(red: 0x70/255, green: 0x70/255, blue: 0x70/255, alpha: 1),
-                         dark: NSColor(red: 0xa3/255, green: 0xa3/255, blue: 0xa3/255, alpha: 1))
-        case .hisingen: return .secondary
+            return Color(light: NSColor(red: 0.38, green: 0.44, blue: 0.52, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
+        case .nordicNight:
+            return Color(light: NSColor(red: 0.08, green: 0.42, blue: 0.58, alpha: 1), dark: NSColor(red: 0.30, green: 0.75, blue: 0.95, alpha: 1))
+        case .aurora:
+            return Color(light: NSColor(red: 0.06, green: 0.45, blue: 0.32, alpha: 1), dark: NSColor(red: 0.28, green: 0.82, blue: 0.60, alpha: 1))
+        case .swedishGold:
+            return Color(light: NSColor(red: 0.48, green: 0.36, blue: 0.10, alpha: 1), dark: NSColor(red: 0.90, green: 0.82, blue: 0.55, alpha: 1))
+        case .cyanRacing:
+            return Color(light: NSColor(red: 0.08, green: 0.42, blue: 0.58, alpha: 1), dark: NSColor(red: 0.45, green: 0.80, blue: 0.98, alpha: 1))
+        case .forest:
+            return Color(light: NSColor(red: 0.18, green: 0.42, blue: 0.22, alpha: 1), dark: NSColor(red: 0.52, green: 0.88, blue: 0.65, alpha: 1))
+        case .sandDune:
+            return Color(light: NSColor(red: 0.42, green: 0.36, blue: 0.30, alpha: 1), dark: NSColor(red: 0.82, green: 0.76, blue: 0.70, alpha: 1))
+        case .hisingen:
+            return Color(light: NSColor(red: 0.38, green: 0.44, blue: 0.52, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
         }
     }
 
     static var hairline: Color {
         switch theme {
         case .polestar:
-            return Color(light: NSColor(red: 0xe5/255, green: 0xe5/255, blue: 0xe5/255, alpha: 1),
-                         dark: NSColor(red: 0x2b/255, green: 0x2b/255, blue: 0x2b/255, alpha: 1))
+            return Color(light: NSColor(white: 0.88, alpha: 1), dark: NSColor(white: 0.20, alpha: 1))
         case .volvo:
-
-            return Color(light: NSColor(red: 0xeb/255, green: 0xeb/255, blue: 0xeb/255, alpha: 1),
-                         dark: NSColor(red: 0x1f/255, green: 0x1f/255, blue: 0x1f/255, alpha: 1))
-        case .hisingen: return Color(nsColor: .separatorColor).opacity(0.35)
+            return Color(light: NSColor(red: 0.88, green: 0.90, blue: 0.93, alpha: 1), dark: NSColor(red: 0.18, green: 0.20, blue: 0.24, alpha: 1))
+        case .nordicNight:
+            return Color(light: NSColor(red: 0.0, green: 0.60, blue: 0.80, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.90, blue: 1.0, alpha: 0.25))
+        case .aurora:
+            return Color(light: NSColor(red: 0.0, green: 0.65, blue: 0.35, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.90, blue: 0.46, alpha: 0.25))
+        case .swedishGold:
+            return Color(light: NSColor(red: 0.72, green: 0.52, blue: 0.05, alpha: 0.35), dark: NSColor(red: 0.83, green: 0.69, blue: 0.22, alpha: 0.30))
+        case .cyanRacing:
+            return Color(light: NSColor(red: 0.0, green: 0.48, blue: 0.78, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.56, blue: 0.82, alpha: 0.30))
+        case .forest:
+            return Color(light: NSColor(red: 0.14, green: 0.48, blue: 0.18, alpha: 0.35), dark: NSColor(red: 0.18, green: 0.49, blue: 0.20, alpha: 0.25))
+        case .sandDune:
+            return Color(light: NSColor(red: 0.65, green: 0.50, blue: 0.25, alpha: 0.35), dark: NSColor(red: 0.77, green: 0.63, blue: 0.35, alpha: 0.30))
+        case .hisingen:
+            return Color(light: NSColor(white: 0.0, alpha: 0.08), dark: NSColor(white: 1.0, alpha: 0.12))
         }
     }
 
     static var accent: Color {
         switch theme {
         case .polestar: return ink
-        case .volvo: return volvoBlue
-        case .hisingen: return polestarAmber
+        case .volvo:
+            return Color(light: NSColor(red: 0.0, green: 0.38, blue: 0.75, alpha: 1), dark: NSColor(red: 0.15, green: 0.55, blue: 0.95, alpha: 1))
+        case .hisingen:
+            return Color(light: NSColor(red: 0.88, green: 0.38, blue: 0.05, alpha: 1), dark: NSColor(red: 0.96, green: 0.50, blue: 0.15, alpha: 1))
+        case .nordicNight:
+            return Color(light: NSColor(red: 0.0, green: 0.55, blue: 0.75, alpha: 1), dark: NSColor(red: 0.0, green: 0.90, blue: 1.0, alpha: 1))
+        case .aurora:
+            return Color(light: NSColor(red: 0.0, green: 0.60, blue: 0.35, alpha: 1), dark: NSColor(red: 0.0, green: 0.92, blue: 0.50, alpha: 1))
+        case .swedishGold:
+            return Color(light: NSColor(red: 0.72, green: 0.52, blue: 0.05, alpha: 1), dark: NSColor(red: 0.88, green: 0.72, blue: 0.22, alpha: 1))
+        case .cyanRacing:
+            return Color(light: NSColor(red: 0.0, green: 0.48, blue: 0.78, alpha: 1), dark: NSColor(red: 0.0, green: 0.65, blue: 0.95, alpha: 1))
+        case .forest:
+            return Color(light: NSColor(red: 0.14, green: 0.48, blue: 0.18, alpha: 1), dark: NSColor(red: 0.30, green: 0.78, blue: 0.35, alpha: 1))
+        case .sandDune:
+            return Color(light: NSColor(red: 0.65, green: 0.50, blue: 0.25, alpha: 1), dark: NSColor(red: 0.82, green: 0.68, blue: 0.42, alpha: 1))
         }
+    }
+
+    static func liquidGlassSpecularBorder(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(light: NSColor(white: 1.0, alpha: 0.85), dark: NSColor(white: 1.0, alpha: 0.30)), location: 0.0),
+                        .init(color: Color(light: NSColor(white: 1.0, alpha: 0.35), dark: NSColor(white: 1.0, alpha: 0.08)), location: 0.35),
+                        .init(color: Color(light: NSColor(white: 0.0, alpha: 0.04), dark: NSColor(white: 0.0, alpha: 0.30)), location: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.8
+            )
     }
 
     static var cardBackground: AnyShapeStyle {
         switch theme {
-        case .polestar, .volvo: return AnyShapeStyle(canvas)
         case .hisingen: return AnyShapeStyle(.regularMaterial)
+        default: return AnyShapeStyle(canvas)
         }
     }
     static var cardBorderWidth: CGFloat {
-        switch theme { case .polestar, .volvo: return 1; case .hisingen: return 0.5 }
+        switch theme {
+        case .hisingen: return 0.5
+        default: return 1
+        }
     }
     static var cardShadowOpacity: Double {
-        switch theme { case .polestar: return 0; case .volvo: return 0.03; case .hisingen: return 0.04 }
+        switch theme {
+        case .polestar: return 0
+        case .volvo: return 0.03
+        default: return 0.04
+        }
     }
     static var cardShadowRadius: CGFloat {
-        switch theme { case .polestar: return 0; case .volvo: return 4; case .hisingen: return 6 }
+        switch theme {
+        case .polestar: return 0
+        case .volvo: return 4
+        default: return 6
+        }
     }
 
     static var popoverBackground: AnyShapeStyle {
         switch theme {
-        case .polestar, .volvo: return AnyShapeStyle(canvas)
         case .hisingen: return AnyShapeStyle(.ultraThinMaterial)
+        default: return AnyShapeStyle(canvas)
         }
     }
 
-
     static var headingWeight: Font.Weight {
-        switch theme { case .polestar: return .regular; case .volvo: return .medium; case .hisingen: return .semibold }
+        switch theme {
+        case .polestar: return .regular
+        case .volvo, .sandDune: return .medium
+        case .hisingen, .nordicNight, .aurora, .forest: return .semibold
+        case .swedishGold, .cyanRacing: return .bold
+        }
     }
     static var valueWeight: Font.Weight {
-        switch theme { case .polestar: return .regular; case .volvo: return .medium; case .hisingen: return .semibold }
+        switch theme {
+        case .polestar: return .regular
+        case .volvo, .sandDune: return .medium
+        case .hisingen, .nordicNight, .aurora, .forest: return .semibold
+        case .swedishGold, .cyanRacing: return .bold
+        }
     }
     static var displayWeight: Font.Weight {
-        switch theme { case .polestar: return .regular; case .volvo: return .black; case .hisingen: return .bold }
+        switch theme {
+        case .polestar: return .regular
+        case .volvo, .cyanRacing: return .black
+        case .nordicNight, .swedishGold: return .heavy
+        case .hisingen, .aurora, .forest, .sandDune: return .bold
+        }
     }
     static var displayTracking: CGFloat {
-        switch theme { case .polestar: return -1.2; case .volvo: return -0.4; case .hisingen: return 0 }
+        switch theme {
+        case .polestar: return -1.2
+        case .cyanRacing: return -0.8
+        case .swedishGold: return -0.6
+        case .nordicNight: return -0.5
+        case .volvo: return -0.4
+        case .sandDune: return -0.3
+        case .aurora: return -0.2
+        case .hisingen, .forest: return 0
+        }
     }
-
 
     static func decorativeTint(_ preferred: Color) -> Color {
         switch theme {
         case .polestar: return inkMuted
         case .volvo: return volvoNavy.opacity(0.75)
         case .hisingen: return preferred
+        default: return accent.opacity(0.8)
         }
     }
 
@@ -153,6 +258,12 @@ enum HisingenTheme {
         return .accentColor
     }
 
+    static func fuelColor(percentage: Double) -> Color {
+        if percentage <= 12 { return semanticCritical }
+        if percentage <= 25 { return semanticWarning }
+        return Color(red: 0.96, green: 0.60, blue: 0.12)
+    }
+
     static func statusColor(state: ChargingState) -> Color {
         if state == .fault { return semanticWarning }
         if state.isActivelyCharging { return semanticGood }
@@ -166,13 +277,37 @@ enum HisingenTheme {
     }
 }
 
-private extension Color {
+extension Color {
 
 
     init(light: NSColor, dark: NSColor) {
         self.init(NSColor(name: nil, dynamicProvider: { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         }))
+    }
+
+    init?(hex: String) {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if hexSanitized.hasPrefix("#") {
+            hexSanitized.remove(at: hexSanitized.startIndex)
+        }
+        guard hexSanitized.count == 6, let rgbValue = UInt64(hexSanitized, radix: 16) else { return nil }
+        self.init(
+            red: Double((rgbValue & 0xFF0000) >> 16) / 255.0,
+            green: Double((rgbValue & 0x00FF00) >> 8) / 255.0,
+            blue: Double(rgbValue & 0x0000FF) / 255.0
+        )
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func withoutFocusRing() -> some View {
+        if #available(macOS 14.0, *) {
+            self.focusable(false).focusEffectDisabled()
+        } else {
+            self.focusable(false)
+        }
     }
 }
 
@@ -211,16 +346,54 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
 struct Card<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
+
     var body: some View {
+        let radius = HisingenTheme.cornerRadius
         content
             .padding(HisingenTheme.cardPadding)
-            .background(HisingenTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous))
+            .background {
+                ZStack {
+                    if HisingenTheme.theme == .hisingen {
+                        // Apple Liquid Glass dynamic material
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.regularMaterial)
+                        // Specular subtle light wash
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(light: NSColor(white: 1.0, alpha: 0.45), dark: NSColor(white: 1.0, alpha: 0.05)),
+                                        Color(light: NSColor(white: 1.0, alpha: 0.10), dark: NSColor(white: 0.0, alpha: 0.12))
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    } else if HisingenTheme.theme == .polestar {
+                        // Polestar stark minimalist panel
+                        RoundedRectangle(cornerRadius: 0, style: .continuous)
+                            .fill(HisingenTheme.canvas)
+                    } else {
+                        // Translucent frosted glass tinted with theme canvas
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.regularMaterial)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(HisingenTheme.canvas.opacity(0.60))
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous)
-                    .stroke(HisingenTheme.hairline, lineWidth: HisingenTheme.cardBorderWidth)
+                ZStack {
+                    if radius > 0 {
+                        HisingenTheme.liquidGlassSpecularBorder(cornerRadius: radius)
+                    }
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .stroke(HisingenTheme.hairline, lineWidth: HisingenTheme.cardBorderWidth)
+                }
             )
-            .shadow(color: .black.opacity(HisingenTheme.cardShadowOpacity), radius: HisingenTheme.cardShadowRadius, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(HisingenTheme.isPolestar ? 0 : 0.03), radius: 2, x: 0, y: 1)
+            .shadow(color: Color.black.opacity(HisingenTheme.isPolestar ? 0 : HisingenTheme.cardShadowOpacity), radius: HisingenTheme.cardShadowRadius, x: 0, y: 3)
     }
 }
 
@@ -581,6 +754,106 @@ struct BatteryGauge: View {
                 withAnimation(.easeInOut(duration: 0.4)) {
                     breathingGlow = false
                 }
+            }
+        }
+    }
+}
+
+struct FuelGauge: View {
+    let fraction: Double
+    let color: Color
+
+    private var isPolestar: Bool { Preferences.appTheme == .polestar }
+    private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
+
+    private var accessibilityValue: String {
+        let percent = Int((fraction * 100).rounded())
+        return L10n.format("Fuel tank %d percent", percent)
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            GeometryReader { geo in
+                let width = geo.size.width
+                let currentWidth = max(0, width * CGFloat(min(max(fraction, 0), 1)))
+
+                RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
+                    .fill(HisingenTheme.ink.opacity(0.08))
+                    .frame(height: 9)
+
+                RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
+                    .fill(
+                        isPolestar
+                            ? AnyShapeStyle(color)
+                            : AnyShapeStyle(LinearGradient(
+                                colors: [color.opacity(0.85), color],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                    )
+                    .frame(width: currentWidth, height: 9)
+                    .shadow(color: isPolestar ? .clear : color.opacity(0.35),
+                            radius: isPolestar ? 0 : 3,
+                            x: 0, y: 1)
+                    .animation(.easeInOut(duration: 0.6), value: fraction)
+                    .animation(.easeInOut(duration: 0.4), value: color)
+            }
+        }
+        .frame(height: 9)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityValue)
+    }
+}
+
+struct DualEnergyGauge: View {
+    let batteryFraction: Double
+    let fuelFraction: Double
+    let batteryColor: Color
+    let fuelColor: Color
+    var isCharging: Bool = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 3) {
+                    Image(systemName: isCharging ? "bolt.fill" : "battery.100percent")
+                        .font(.system(size: 9))
+                        .foregroundStyle(batteryColor)
+                    Text(L10n.text("Battery"))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    Spacer()
+                    Text(String(format: "%.0f%%", min(max(batteryFraction * 100, 0), 100)))
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.ink)
+                }
+                BatteryGauge(
+                    fraction: batteryFraction,
+                    targetFraction: nil,
+                    color: batteryColor,
+                    isCharging: isCharging
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 3) {
+                    Image(systemName: "fuelpump.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(fuelColor)
+                    Text(L10n.text("Fuel"))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    Spacer()
+                    Text(String(format: "%.0f%%", min(max(fuelFraction * 100, 0), 100)))
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.ink)
+                }
+                FuelGauge(
+                    fraction: fuelFraction,
+                    color: fuelColor
+                )
             }
         }
     }

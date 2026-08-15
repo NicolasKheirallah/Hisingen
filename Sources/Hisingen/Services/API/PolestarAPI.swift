@@ -883,6 +883,10 @@ actor PolestarAPI {
     }
 
     private func fetchCarImage() async {
+        if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin) {
+            carImageData = cached
+            return
+        }
         guard carImageData == nil, let pno34, let structureWeek, let modelYear else { return }
         let query = """
         query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String!) {
@@ -920,6 +924,9 @@ actor PolestarAPI {
               http.mimeType?.hasPrefix("image/") == true,
               bytes.count <= 5_000_000 else { return }
         carImageData = bytes
+        if let vin = selectedVIN {
+            CarImageCache.shared.save(bytes, for: vin)
+        }
     }
 
 

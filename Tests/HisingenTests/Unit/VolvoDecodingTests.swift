@@ -236,6 +236,87 @@ struct VolvoDecodingTests {
         XCTAssertEqual(OpeningState(volvoStatus: "AJAR"), .ajar)
         XCTAssertNil(OpeningState(volvoStatus: nil))
     }
+
+    @Test
+    func testWarningsDecodingAndActiveSensors() throws {
+        let json = """
+        {
+            "data": {
+                "brakeLightCenterWarning": {"value": "NO_WARNING"},
+                "brakeLightLeftWarning": {"value": "BULB_FAILURE"},
+                "highBeamRightWarning": {"value": "FAILURE"},
+                "lowBeamLeftWarning": {"value": "NO_WARNING"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoWarningsDTO>.self, from: Data(json.utf8))
+        let warnings = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(warnings.activeWarnings.count, 2)
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Left brake light") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
+    }
+
+    @Test
+    func testClimatizationDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "status": {"value": "HEATING"},
+                "timeRemainingMinutes": {"value": 25},
+                "interiorTemperatureCelsius": {"value": 18.5},
+                "targetTemperatureCelsius": {"value": 21.0}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "HEATING")
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 25)
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 18.5)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 21.0)
+    }
+
+    @Test
+    func testBrakesDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "brakeFluidLevelWarning": {"value": "WARNING"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoBrakesDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.brakeFluidLevelWarning?.value, "WARNING")
+    }
+
+    @Test
+    func testEngineStatusDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "engineStatus": {"value": "RUNNING"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoEngineStatusDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertTrue(dto.isRunning)
+    }
+
+    @Test
+    func testCommandAccessibilityDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "availabilityStatus": {"value": "AVAILABLE"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertTrue(dto.isAvailable)
+    }
 }
 
 

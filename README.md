@@ -15,6 +15,9 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 - [Screenshots](#screenshots)
 - [At A Glance](#at-a-glance)
+- [Multilingual Support](#multilingual-support)
+- [Design, Liquid Glass & Themes](#design-liquid-glass--themes)
+- [Powertrain Support & Measurement Units](#powertrain-support--measurement-units)
 - [Read-Only Capabilities](#read-only-capabilities)
 - [Charging Intelligence](#charging-intelligence)
 - [Notifications](#notifications)
@@ -32,7 +35,7 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 ## Screenshots
 
-The screenshots show the current native popover in Swedish. Hisingen can follow macOS automatically or use English or Swedish independently of the system language.
+The screenshots show the current native popover with Apple Liquid Glass styling. Hisingen supports extensive multilingual localization across 16+ languages and can follow macOS system appearance or be set to Light Mode or Dark Mode independently.
 
 | Vehicle overview | Telemetry details |
 | --- | --- |
@@ -50,15 +53,90 @@ The screenshots show the current native popover in Swedish. Hisingen can follow 
 
 Hisingen keeps the selected vehicle visible without opening a full application window:
 
-- battery percentage, estimated range, charging state, and data freshness;
-- studio render, owner greeting, per-vehicle nickname, model, year, registration number, and VIN;
-- charging connection, AC/DC type, power, current, voltage, target, time remaining, and ready time;
-- locks, openings, alarm, tyres, service, fluid, light, and 12 V warnings;
-- climate state, cabin/requested temperature, timers, air quality, and pre-cleaning status;
-- odometer, trip meters, software/OTA state, network status, location, maps, and weather;
-- configurable notifications, multiple vehicles, and privacy-aware local caching.
+- **Electric, Hybrid & Combustion Powertrains**: Adaptive telemetry cards customized strictly for Pure Electric (BEV), Plug-in Hybrid (PHEV), or Combustion (Petrol/Diesel ICE);
+- **Apple Liquid Glass Materials**: Multi-layer frosted translucent cards (`.regularMaterial`) with specular top-leading light-catchers, subtle luminance sheens, and dual-layer ambient occlusion shadows;
+- **Light Mode & Dark Mode Architecture**: System (Automatic), Forced Light Mode (WCAG AAA high-contrast slate ink), or Forced Dark Mode (smoked obsidian OLED pitch black);
+- **9 Scalable Themes**: Hisingen Glass, Polestar Minimal, Volvo Iron, Nordic Night, Aurora Borealis, Swedish Gold, Cyan Racing, Gothenburg Forest, and Sand Dune;
+- **Multilingual Support**: Fully localized in 16+ languages with independent in-app language switching;
+- **Configurable Measurement Units**: Distance (`km` / `mi`), Fuel Volume (`L` / `gal US` / `UK gal`), and Fuel Economy (`L/100km` / `MPG US` / `MPG UK` / `km/L`);
+- **Pixel-Perfect Vehicle Outline**: Interactive animated schematics for iTPMS tire status, doors, windows, sunroof, hood, tailgate, charge lid, and fuel filler flap;
+- **Battery, Range & Engine Telemetry**: SoC %, electric range, fuel level %, fuel volume, distance to empty, avg fuel consumption, engine hours to service, and charging speed;
+- **Studio Render & Identity**: Transparent configured vehicle studio render, owner greeting, per-vehicle nickname, model, year, registration number, and VIN;
+- **Diagnostics, Lighting & Hardware Health**: 16-bulb lighting monitor, 4-wheel indirect TPMS, brake fluid, washer fluid, service countdown, and 12V battery health;
+- **Climate & Comfort**: Live cabin/requested temperature, heating/cooling state, timers, air quality (AQI, PM2.5), and pre-cleaning status;
+- **Vehicle Software Versioning**: Live software version tracking with installed version, latest available OTA, and release status (e.g. 5.1.17);
+- **Privacy-First & Secure**: Hardware-backed Keychain token isolation, zero external tracking, and automatic stripping of raw GPS coordinates before disk caching.
 
-Standard Hisingen builds are read-only. Remote controls are unavailable because Polestar currently restricts vehicle commands to officially paired mobile clients.
+## Multilingual Support
+
+Hisingen is built for drivers worldwide with full multilingual localization across **16+ languages**. The language can follow your macOS system language automatically or be selected independently inside Settings:
+
+| Language | Locale Code | Native Name | Status |
+|---|---|---|---|
+| **English** | `en` | English | Base / Full Support |
+| **Swedish** | `sv` | Svenska | Full Support |
+| **German** | `de` | Deutsch | Full Support |
+| **Norwegian (Bokmål)** | `nb` | Norsk bokmål | Full Support |
+| **Danish** | `da` | Dansk | Full Support |
+| **Dutch** | `nl` | Nederlands | Full Support |
+| **French** | `fr` | Français | Supported (with English fallback) |
+| **Spanish** | `es` | Español | Supported (with English fallback) |
+| **Italian** | `it` | Italiano | Supported (with English fallback) |
+| **Finnish** | `fi` | Suomi | Supported (with English fallback) |
+| **Portuguese** | `pt` | Português | Supported (with English fallback) |
+| **Norwegian (Nynorsk)** | `nn` | Norsk nynorsk | Supported (with English fallback) |
+| **Norwegian (General)** | `no` | Norsk | Supported (with English fallback) |
+| **Polish** | `pl` | Polski | Supported (with English fallback) |
+| **Chinese (Simplified)** | `zh` | 简体中文 | Supported (with English fallback) |
+| **Korean** | `ko` | 한국어 | Supported (with English fallback) |
+
+All vehicle terms, door names, charging states, diagnostics, unit strings, and settings descriptions are dynamically translated using native string catalogs with automatic fallback.
+
+## Design, Liquid Glass & Themes
+
+### Apple Liquid Glass Material Engine
+Hisingen introduces Apple's modern **Liquid Glass** dynamic material system:
+- **Specular Top-Leading Hairlines**: Two-tone light refraction gradient borders that physically catch ambient light from the top-left corner and smoothly dissipate toward bottom-right shadows.
+- **Translucent Optical Lensing**: Layered `.regularMaterial` frosted glass with adaptive luminance sheens that reflect colors from background desktop wallpapers and windows.
+- **Dual-Layer Ambient Occlusion Shadows**: Crisp 1px contact edge shadow layered over a soft 12px ambient elevation blur.
+
+### Light Mode & Dark Mode Architecture
+- **Appearance Mode Selector**: Switch freely between **System (Automatic)**, **Light Mode**, and **Dark Mode** via a 3-way toggle in Settings.
+- **Light Mode**: High-contrast, WCAG AAA compliant deep charcoal/slate typography (`#0F172A`), crystal-clear glass cards, and punchy saturated accents.
+- **Dark Mode**: Smoked obsidian OLED canvases (`#000000` / `#0B0F19`), luminous electric neon glows, and edge specular highlights.
+
+### 9 Curated Themes Ecosystem
+Choose from 9 distinct visual personalities with category filter pills (`All`, `Brand`, `OLED & Dark`, `Performance`, `Nature`):
+1. **Hisingen Glass** (`.hisingen`): 14pt radius, `.regularMaterial` liquid glass background, Amber `#E56E23` accent.
+2. **Polestar Minimal** (`.polestar`): 0pt radius, sharp architectural edges, Scandinavian monochrome minimalism.
+3. **Volvo Iron** (`.volvo`): 10pt radius, Volvo Iron blue `#1C6BBA` accent, soft navy cards.
+4. **Nordic Night** (`.nordicNight`): 12pt radius, pitch black OLED canvas (`#000000`), electric cyan `#00E5FF` glow.
+5. **Aurora Borealis** (`.aurora`): 16pt radius, midnight slate canvas (`#0B132B`), emerald `#00E676` northern lights.
+6. **Swedish Gold** (`.swedishGold`): 10pt radius, Polestar Engineered Öhlins gold `#D4AF37` accent.
+7. **Cyan Racing** (`.cyanRacing`): 8pt radius, Cyan Racing championship blue `#0090D0` accent.
+8. **Gothenburg Forest** (`.forest`): 14pt radius, Swedish pine green `#4CAF50` earth tones.
+9. **Sand Dune** (`.sandDune`): 12pt radius, warm champagne/titanium `#C5A059` luxury minimalism.
+
+## Powertrain Support & Measurement Units
+
+Hisingen is built with powertrain-aware UI logic that automatically tailors cards and controls to the exact vehicle powertrain:
+
+- **Pure Electric (BEV)** (*Polestar 2, Polestar 3, Polestar 4, Volvo EX30, EX40, EX90, XC40 Recharge BEV*):
+  - Displays Battery SoC %, Electric Range, Charging Status, and `BatteryGauge`.
+  - Shows Charging Details, Charging Curves, Session History, and Range Health Estimate.
+  - Fuel cards and combustion metrics are cleanly hidden.
+- **Pure Combustion (ICE)** (*Volvo XC90 Petrol/Diesel, XC60 B5, XC40 B4, V60 T5*):
+  - Displays Fuel Level %, Remaining Volume, Fuel Range, and `FuelGauge`.
+  - Displays Fuel & Engine Card with Average Fuel Consumption, Engine State (Running/Stopped), Engine Hours to Service, and Fuel Grade.
+  - EV charging cards, battery diagnostics, and charge port controls are cleanly hidden.
+- **Plug-in Hybrid (PHEV)** (*Volvo XC60 T8 Recharge, V60 T6 Recharge, Polestar 1*):
+  - Displays dual readouts (**Battery % + Fuel %**), **`DualEnergyGauge`**, and Combined Total Range.
+  - Renders both Charging Telemetry and Fuel & Engine cards simultaneously.
+
+### Configurable Units
+- **Distance Unit**: Kilometers (`km`) or Miles (`mi`).
+- **Fuel Volume Unit**: Liters (`L`), US Gallons (`gal`), or Imperial Gallons (`UK gal`).
+- **Fuel Economy Unit**: Liters per 100 km (`L/100km`), Miles per Gallon US (`mpg`), Miles per Gallon UK (`mpg (UK)`), or Kilometers per Liter (`km/L`).
 
 ## Read-Only Capabilities
 
@@ -293,7 +371,7 @@ Production releases are universal binaries, Developer ID signed, hardened-runtim
 
 ### Build From Source
 
-Requirements: macOS 13 Ventura or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+.
+Requirements: macOS 13 Ventura or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+. CI and production releases build with Xcode 16.2 specifically (see `.github/workflows/release.yml`); older Xcode 15.x installations are expected to work for local development but aren't what ships.
 
 ```bash
 git clone https://github.com/NicolasKheirallah/hisingen.git

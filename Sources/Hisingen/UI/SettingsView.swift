@@ -17,9 +17,13 @@ struct SettingsView: View {
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
 
-    @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
+    @State private var appTheme: AppTheme = Preferences.appTheme
+    @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
+    @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
+    @State private var fuelEconomyUnit = Preferences.fuelEconomyUnit
+    @State private var selectedThemeCategory: ThemeCategory = .all
     @State private var interfaceLanguage = Preferences.interfaceLanguage
     @State private var tintMenuBarIcon = Preferences.tintMenuBarIcon
     @State private var launchAtLogin = Preferences.launchAtLogin
@@ -105,46 +109,183 @@ struct SettingsView: View {
     }
 
 
+    private var filteredThemes: [AppTheme] {
+        if selectedThemeCategory == .all {
+            return AppTheme.allCases
+        }
+        return AppTheme.allCases.filter { $0.category == selectedThemeCategory }
+    }
+
+    private func themeCategoryCount(_ cat: ThemeCategory) -> Int {
+        if cat == .all { return AppTheme.allCases.count }
+        return AppTheme.allCases.filter { $0.category == cat }.count
+    }
+
     private var appearanceCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "paintpalette", title: L10n.text("Appearance"), color: .purple)
-                VStack(spacing: 6) {
-                    ForEach(AppTheme.allCases, id: \.self) { theme in
-                        themeRow(theme)
+        let vehicleLabel = Preferences.lastVehicleLabel(for: Preferences.activeBrand)
+        return Card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
+                    Spacer()
+                    Text(L10n.format("%d Themes", AppTheme.allCases.count))
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(HisingenTheme.accent)
+                }
+
+                // Appearance Mode Selector (System / Light / Dark)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("Mode"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(HisingenTheme.ink)
+
+                    HStack(spacing: 8) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            let isModeSelected = appearanceMode == mode
+                            Button {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                    appearanceMode = mode
+                                    Preferences.appearanceMode = mode
+                                }
+                                onSettingsChanged(.presentation)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: mode.symbol)
+                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                    Text(mode.title)
+                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                                .background(
+                                    isModeSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                )
+                                .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                            }
+                            .buttonStyle(.plain)
+                            .withoutFocusRing()
+                        }
+                    }
+                }
+
+                Divider().opacity(0.4)
+
+                Text(L10n.format("Active for %@ — each vehicle saves its own theme preference.", vehicleLabel))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+
+                // Category Filter Pills
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(ThemeCategory.allCases, id: \.self) { cat in
+                            categoryFilterButton(cat)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                // 2-Column Responsive Grid of Themes
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    ForEach(filteredThemes, id: \.self) { theme in
+                        themeTile(theme)
                     }
                 }
             }
         }
     }
 
-    private func themeRow(_ theme: AppTheme) -> some View {
+    private func categoryFilterButton(_ cat: ThemeCategory) -> some View {
+        let isSelected = selectedThemeCategory == cat
+        let count = themeCategoryCount(cat)
+        return Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                selectedThemeCategory = cat
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(cat.title)
+                Text("\(count)")
+                    .font(.system(size: 9, weight: .bold))
+                    .opacity(0.85)
+            }
+            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().stroke(isSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+            )
+            .foregroundStyle(isSelected ? HisingenTheme.accent : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func themeTile(_ theme: AppTheme) -> some View {
         let isSelected = appTheme == theme
+        let accentColor = Color(hex: theme.accentColorHex) ?? HisingenTheme.accent
         return Button {
             guard appTheme != theme else { return }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 appTheme = theme
+                Preferences.appTheme = theme
             }
             onSettingsChanged(.presentation)
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? HisingenTheme.accent : Color(.tertiaryLabelColor))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(theme.title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Text(theme.subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    HStack(spacing: 3) {
+                        ForEach(theme.previewHexColors, id: \.self) { hex in
+                            Circle()
+                                .fill(Color(hex: hex) ?? Color.gray)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(accentColor)
+                    } else {
+                        Circle()
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                            .frame(width: 12, height: 12)
+                    }
                 }
-                Spacer()
+
+                Text(theme.title)
+                    .font(.system(size: 11.5, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.85))
+                    .lineLimit(1)
+
+                Text(theme.subtitle)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(8)
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
             .background(
-                isSelected ? HisingenTheme.accent.opacity(0.08) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? accentColor.opacity(0.08) : Color.primary.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        isSelected ? accentColor.opacity(0.6) : Color.primary.opacity(0.08),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
             )
             .contentShape(Rectangle())
         }
@@ -153,7 +294,6 @@ struct SettingsView: View {
         .accessibilityLabel("\(theme.title): \(theme.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
-
 
     private var displayCard: some View {
         Card {
@@ -181,7 +321,7 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $storeChargingHistory) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Session History"))
                                 .font(.system(size: 12, weight: .medium))
@@ -189,12 +329,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: storeChargingHistory) { _ in
-                        Preferences.storeChargingHistory = storeChargingHistory
-                        onSettingsChanged(.presentation)
+                        Spacer()
+                        Toggle("", isOn: $storeChargingHistory)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: storeChargingHistory) { _ in
+                                Preferences.storeChargingHistory = storeChargingHistory
+                                onSettingsChanged(.presentation)
+                            }
                     }
 
                     Divider().opacity(0.4)
@@ -251,7 +394,7 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $tintMenuBarIcon) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Dynamic status bar tinting"))
                                 .font(.system(size: 12, weight: .medium))
@@ -259,12 +402,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: tintMenuBarIcon) { _ in
-                        Preferences.tintMenuBarIcon = tintMenuBarIcon
-                        onSettingsChanged(.presentation)
+                        Spacer()
+                        Toggle("", isOn: $tintMenuBarIcon)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: tintMenuBarIcon) { _ in
+                                Preferences.tintMenuBarIcon = tintMenuBarIcon
+                                onSettingsChanged(.presentation)
+                            }
                     }
 
                     Divider().opacity(0.4)
@@ -289,7 +435,47 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $launchAtLogin) {
+                    HStack {
+                        Text(L10n.text("Fuel volume unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $fuelVolumeUnit) {
+                            ForEach(FuelVolumeUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: fuelVolumeUnit) { _ in
+                            Preferences.fuelVolumeUnit = fuelVolumeUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text(L10n.text("Fuel economy unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $fuelEconomyUnit) {
+                            ForEach(FuelEconomyUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: fuelEconomyUnit) { _ in
+                            Preferences.fuelEconomyUnit = fuelEconomyUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Launch at login"))
                                 .font(.system(size: 12, weight: .medium))
@@ -297,12 +483,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: launchAtLogin) { _ in
-                        Preferences.launchAtLogin = launchAtLogin
-                        onSettingsChanged(.launchAtLogin)
+                        Spacer()
+                        Toggle("", isOn: $launchAtLogin)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: launchAtLogin) { _ in
+                                Preferences.launchAtLogin = launchAtLogin
+                                onSettingsChanged(.launchAtLogin)
+                            }
                     }
 
                     Divider().opacity(0.4)
