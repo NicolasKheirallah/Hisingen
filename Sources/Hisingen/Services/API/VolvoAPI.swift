@@ -78,7 +78,7 @@ actor VolvoAPI {
         pendingVerifier = verifier
         pendingState = state
         var components = URLComponents(
-            url: identityHost.appendingPathComponent(authorizationPath), resolvingAgainstBaseURL: false
+            url: identityURL(path: authorizationPath), resolvingAgainstBaseURL: false
         )!
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
@@ -168,12 +168,12 @@ actor VolvoAPI {
     }
 
     func resolvedVIN(preferred: String?) -> String? {
-        if let preferred, cars.contains(where: { $0.vin == preferred }) { return preferred }
+        if let preferred, !preferred.isEmpty { return preferred }
+        if let selectedVIN, !selectedVIN.isEmpty { return selectedVIN }
         return cars.first?.vin
     }
 
     func selectCar(vin: String, features: FeatureSelection) async throws {
-        guard cars.contains(where: { $0.vin == vin }) else { throw VolvoError.notConfigured }
         selectedVIN = vin
     }
 
@@ -181,12 +181,15 @@ actor VolvoAPI {
         try await refreshTokenIfNeeded()
         guard accessToken != nil else { throw VolvoError.authenticationRequired(.expiredSession) }
 
-        let details = try await vehicleDetails(vin: vin)
+        let details = (try? await vehicleDetails(vin: vin)) ?? VolvoVehicleDetailsDTO(
+            vin: vin, modelYear: nil,
+            descriptions: VolvoVehicleDetailsDTO.Descriptions(model: "Volvo", upholstery: nil, steering: nil),
+            fuelType: "ELECTRIC", batteryCapacityKWH: nil, images: nil
+        )
         let powertrain = VolvoPowertrain.classify(fuelType: details.fuelType)
         let needsEnergy = powertrain.hasElectricRange
             && (features.contains(.chargingDetails) || features.contains(.remoteCharging)
                 || features.contains(.batteryDiagnostics))
-
 
         let needsStatistics = features.contains(.tripMeters)
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
@@ -346,8 +349,8 @@ actor VolvoAPI {
             throw RemoteCommandError.unsupported
         }
         guard let vccApiKey else { throw VolvoError.appNotConfigured }
-        var request = URLRequest(url: apiBaseURL.appendingPathComponent(
-            "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandName)"
+        var request = URLRequest(url: apiURL(
+            path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandName)"
         ))
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -360,6 +363,15 @@ actor VolvoAPI {
     }
 #endif
 
+    private func apiURL(path: String) -> URL {
+        let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        return URL(string: clean, relativeTo: apiBaseURL)!.absoluteURL
+    }
+
+    private func identityURL(path: String) -> URL {
+        let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        return URL(string: clean, relativeTo: identityHost)!.absoluteURL
+    }
 
     private func discoverVehicles(preferredVIN: String?) async throws {
         let savedVIN: String? = if let preferredVIN, !preferredVIN.isEmpty {
@@ -403,10 +415,9 @@ actor VolvoAPI {
         return details
     }
 
-
     private func exchangeCodeForToken(_ code: String, verifier: String) async throws {
         guard let clientID, let clientSecret else { throw VolvoError.appNotConfigured }
-        var request = URLRequest(url: identityHost.appendingPathComponent(tokenPath))
+        var request = URLRequest(url: identityURL(path: tokenPath))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -434,7 +445,7 @@ actor VolvoAPI {
         guard let clientID, let clientSecret, let refreshToken else {
             throw VolvoError.authenticationRequired(.expiredSession)
         }
-        var request = URLRequest(url: identityHost.appendingPathComponent(tokenPath))
+        var request = URLRequest(url: identityURL(path: tokenPath))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -472,14 +483,13 @@ actor VolvoAPI {
         return decoded
     }
 
-
     private func authenticatedGET(_ path: String) async throws -> (Data, HTTPURLResponse) {
         try await refreshTokenIfNeeded()
         guard var token = accessToken, let vccApiKey else {
             throw VolvoError.authenticationRequired(.expiredSession)
         }
         for attempt in 0...1 {
-            var request = URLRequest(url: apiBaseURL.appendingPathComponent(path))
+            var request = URLRequest(url: apiURL(path: path))
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
             request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
