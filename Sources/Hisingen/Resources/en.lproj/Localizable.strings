@@ -714,3 +714,17 @@
 /* Added: Volvo theme */
 "Volvo" = "Volvo";
 "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast";
+
+/* Added: charging curve & session history */
+"Charging Curve" = "Charging Curve";
+"Target %d%%" = "Target %d%%";
+"Start" = "Start";
+"Now" = "Now";
+"Finished" = "Finished";
+"Ready" = "Ready";
+"Target" = "Target";
+"Charging History" = "Charging History";
+"Duration" = "Duration";
+"Energy Delivered" = "Energy Delivered";
+"Peak Power" = "Peak Power";
+"Cost" = "Cost";

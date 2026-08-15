@@ -273,6 +273,12 @@ struct AccountCredentialsForm: View {
                     .onChange(of: vehicleNickname) { AccountDraftState.shared.vehicleNickname = $0 }
             }
 
+            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
+                TextField("YV1...", text: $vin)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: vin) { AccountDraftState.shared.vin = $0 }
+            }
+
             Button {
                 beginVolvoSignIn()
             } label: {
@@ -336,8 +342,18 @@ struct AccountCredentialsForm: View {
 
     private func beginVolvoSignIn() {
         volvoSigningIn = true
+        let upperVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        Preferences.volvoClientID = trimmedClientID
+        if !upperVIN.isEmpty {
+            Preferences.vin = upperVIN
+        }
+        if !vehicleNickname.isEmpty {
+            let nickVIN = upperVIN.isEmpty ? Preferences.vin(for: .volvo) : upperVIN
+            Preferences.setVehicleNickname(vehicleNickname, for: nickVIN)
+        }
         onSettingsChanged(.volvoSignIn(
-            clientID: volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines),
+            clientID: trimmedClientID,
             clientSecret: volvoClientSecret,
             vccApiKey: volvoApiKey,
             nickname: vehicleNickname
