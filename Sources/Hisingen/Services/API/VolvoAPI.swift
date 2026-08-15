@@ -495,13 +495,19 @@ actor VolvoAPI {
             request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
             request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
             let (data, response) = try await perform(request, operation: path)
-            if response.statusCode == 401, attempt == 0 {
-                try await refreshAccessToken(force: true)
-                guard let refreshed = accessToken else {
-                    throw VolvoError.authenticationRequired(.expiredSession)
+            if response.statusCode == 401 {
+                let bodyString = String(data: data, encoding: .utf8) ?? ""
+                if bodyString.localizedCaseInsensitiveContains("VCC-API-KEY") || bodyString.localizedCaseInsensitiveContains("API-KEY") {
+                    throw VolvoError.appNotConfigured
                 }
-                token = refreshed
-                continue
+                if attempt == 0 {
+                    try await refreshAccessToken(force: true)
+                    guard let refreshed = accessToken else {
+                        throw VolvoError.authenticationRequired(.expiredSession)
+                    }
+                    token = refreshed
+                    continue
+                }
             }
             return (data, response)
         }
