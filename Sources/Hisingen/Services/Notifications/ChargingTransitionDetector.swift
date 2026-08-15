@@ -132,3 +132,4 @@ struct ChargingTransitionDetector {
     }
 }
 
+

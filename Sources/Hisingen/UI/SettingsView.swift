@@ -692,3 +692,4 @@ struct SettingsView: View {
     }
 
 }
+

@@ -256,3 +256,4 @@ struct VehicleCapabilityParsingTests {
     }
 }
 
+

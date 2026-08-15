@@ -17,3 +17,4 @@ protocol VehicleProviding: Sendable {
 extension PolestarAPI: VehicleProviding {}
 extension VolvoAPI: VehicleProviding {}
 
+

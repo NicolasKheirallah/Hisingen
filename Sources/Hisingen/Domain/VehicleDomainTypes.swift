@@ -473,3 +473,4 @@ struct ChargingSample: Codable, Equatable, Sendable {
         self.powerWatts = powerWatts
     }
 }
+

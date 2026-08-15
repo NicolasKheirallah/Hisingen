@@ -48,6 +48,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyLaunchAtLogin(userInitiated: false)
         checkForUpdatesIfEnabled()
         resumeStoredSession()
+        cacheDormantBrandSnapshot()
+    }
+
+
+    private func cacheDormantBrandSnapshot() {
+        let dormantBrand: VehicleBrand = Preferences.activeBrand == .polestar ? .volvo : .polestar
+        let dormantVIN = Preferences.vin(for: dormantBrand)
+        guard !dormantVIN.isEmpty, statusController.cachedSnapshots[dormantVIN] == nil,
+              let snapshot = stateStore.snapshot(for: dormantVIN) else { return }
+        statusController.cachedSnapshots[dormantVIN] = snapshot
     }
 
 
@@ -469,3 +479,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+
