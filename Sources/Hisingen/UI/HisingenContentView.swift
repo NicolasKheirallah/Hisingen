@@ -48,7 +48,12 @@ struct HisingenContentView: View {
         VStack(spacing: 0) {
             if settingsMode || (!authenticated && selectedTab == .settings) {
                 SettingsView(notificationPermission: notificationPermission,
-                             onSettingsChanged: onSettingsChanged, onSignOut: onSignOut)
+                             onSettingsChanged: { change in
+                                 if case .closeSettings = change {
+                                     withAnimation { selectedTab = .vehicle }
+                                 }
+                                 onSettingsChanged(change)
+                             }, onSignOut: onSignOut)
                     .id(activeVin ?? Preferences.vin)
             } else if !authenticated {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged)
@@ -66,7 +71,12 @@ struct HisingenContentView: View {
                                             onRemoteCommand: onRemoteCommand)
                         case .settings:
                             SettingsView(notificationPermission: notificationPermission,
-                                         onSettingsChanged: onSettingsChanged, onSignOut: onSignOut)
+                                         onSettingsChanged: { change in
+                                             if case .closeSettings = change {
+                                                 withAnimation { selectedTab = .vehicle }
+                                             }
+                                             onSettingsChanged(change)
+                                         }, onSignOut: onSignOut)
                                 .id(activeVin ?? Preferences.vin)
                         }
                     }
