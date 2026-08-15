@@ -248,13 +248,47 @@ actor VolvoAPI {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
         }
 
+        let vehicleLocation: VehicleLocation? = location.flatMap { (loc: VolvoLocationDTO) -> VehicleLocation? in
+            guard let coords = loc.geometry?.coordinates, coords.count >= 2 else { return nil }
+            return VehicleLocation(
+                latitude: coords[1],
+                longitude: coords[0],
+                heading: loc.properties?.heading.flatMap(Double.init),
+                speed: nil,
+                timestamp: loc.properties?.timestamp
+            )
+        }
+
+        let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
+            .compactMap { $0 }.max()
+
+        let climate: VehicleClimateStatus? = features.contains(.climateStatus)
+            ? VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: nil,
+                requestedTemperatureCelsius: 22.0
+            )
+            : nil
+
+        let modelTitle = details.descriptions?.model ?? "Volvo"
+        let software: VehicleSoftwareInfo? = features.contains(.softwareUpdates)
+            ? VehicleSoftwareInfo(
+                version: "Google built-in (AAOS)",
+                title: "\(modelTitle) \(details.modelYear.map { "\($0)" } ?? "") Infotainment",
+                state: .completed,
+                scheduledAt: nil,
+                updatedAt: reportedAt
+            )
+            : nil
+
         var unavailable: [AppFeature] = []
         if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
         if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
         if features.contains(.vehicleHealth), diagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
-        if features.contains(.vehicleLocation), location == nil { unavailable.append(.vehicleLocation) }
         if features.contains(.tripMeters), statistics == nil { unavailable.append(.tripMeters) }
-        if features.contains(.climateStatus) { unavailable.append(.climateStatus) }
+        if features.contains(.vehicleLocation), vehicleLocation == nil { unavailable.append(.vehicleLocation) }
         if features.contains(.chargingSchedule) { unavailable.append(.chargingSchedule) }
 
         var openings: [OpeningReading] = []
@@ -338,8 +372,6 @@ actor VolvoAPI {
         let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
         let fuelRange: Int? = statistics?.distanceToEmptyTank?.value
         let batteryCap: Double? = details.batteryCapacityKWH
-        let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
-            .compactMap { $0 }.max()
         let carImg: Data? = features.contains(.vehicleImage) ? carImageData[vin] : nil
         let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
 
@@ -367,9 +399,12 @@ actor VolvoAPI {
             fluidWarnings: fluidWarns,
             exteriorStatus: exterior,
             healthDetails: health,
+            softwareInfo: software,
+            climateStatus: climate,
             tripMeterManualKm: tripManual,
             tripMeterAutomaticKm: tripAuto,
             batteryDiagnostics: batteryDiag,
+            location: vehicleLocation,
             unavailableFeatures: unavailable,
             probedCapabilities: probesResult,
             powertrain: powertrain,

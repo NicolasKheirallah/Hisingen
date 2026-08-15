@@ -1054,10 +1054,15 @@ struct VehicleTabView: View {
     private var locationCard: AnyView? {
         guard features.contains(.vehicleLocation) else { return nil }
         guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else {
+            let explanation = (Preferences.activeBrand == .volvo)
+                ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.")
+                : L10n.text("Parking position unavailable.")
             return AnyView(Card {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
-                    CapabilityBadge(title: L10n.text("Parking position"), state: .unavailable)
+                    Text(explanation)
+                        .font(.system(size: 11))
+                        .foregroundStyle(HisingenTheme.inkMuted)
                 }
             })
         }
