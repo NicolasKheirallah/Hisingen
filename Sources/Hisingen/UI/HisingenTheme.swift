@@ -146,7 +146,9 @@ enum HisingenTheme {
         if percentage <= 15 { return semanticCritical }
         if percentage <= 35 { return .yellow }
         if charging {
-            return percentage >= 80 ? semanticGood : semanticActive
+
+
+            return percentage >= 80 ? semanticGood : accent
         }
         return .accentColor
     }
@@ -423,25 +425,40 @@ private struct ChargingFlowHighlight: View {
     let height: CGFloat
     let cornerRadius: CGFloat
 
-    private let cometWidth: CGFloat = 44
-    private let speed: CGFloat = 60
+    private let coreWidth: CGFloat = 38
+    private let haloWidth: CGFloat = 72
+    private let speed: CGFloat = 46
+
+    private func trail(peakOpacity: Double) -> LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(0), location: 0.0),
+                .init(color: .white.opacity(peakOpacity * 0.3), location: 0.55),
+                .init(color: .white.opacity(peakOpacity), location: 1.0)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
 
     var body: some View {
         TimelineView(.animation) { timeline in
-            let travel = width + cometWidth
+            let travel = width + haloWidth
             let elapsed = timeline.date.timeIntervalSinceReferenceDate
             let cycle = Double(travel / speed)
             let x = cycle > 0
-                ? CGFloat(elapsed.truncatingRemainder(dividingBy: cycle)) * speed - cometWidth
-                : -cometWidth
+                ? CGFloat(elapsed.truncatingRemainder(dividingBy: cycle)) * speed - haloWidth
+                : -haloWidth
 
-            LinearGradient(
-                colors: [.clear, .white.opacity(0.85), .clear],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: cometWidth, height: height)
-            .offset(x: x)
+            ZStack(alignment: .leading) {
+                trail(peakOpacity: 0.4)
+                    .frame(width: haloWidth, height: height)
+                    .blur(radius: 3.5)
+                    .offset(x: x)
+                trail(peakOpacity: 0.95)
+                    .frame(width: coreWidth, height: height)
+                    .offset(x: x + (haloWidth - coreWidth) / 2)
+            }
         }
         .frame(width: max(0, width), height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -505,6 +522,16 @@ struct BatteryGauge: View {
 
                 if isCharging && !reduceMotion && !isPolestar {
                     ChargingFlowHighlight(width: currentWidth, height: 9, cornerRadius: gaugeRadius)
+
+
+                    Circle()
+                        .fill(color)
+                        .frame(width: 9, height: 9)
+                        .blur(radius: breathingGlow ? 5 : 2.5)
+                        .opacity(breathingGlow ? 0.95 : 0.55)
+                        .blendMode(.plusLighter)
+                        .offset(x: currentWidth - 4.5)
+                        .allowsHitTesting(false)
                 }
 
 

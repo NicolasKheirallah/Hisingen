@@ -55,7 +55,7 @@ final class StatusItemController: NSObject {
             button.action = #selector(togglePopover(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        popover.behavior = .transient
+        popover.behavior = .semitransient
         popover.delegate = self
         popover.contentSize = NSSize(width: HisingenTheme.popoverWidth, height: 560)
         installGlobalHotKey()
