@@ -312,6 +312,7 @@ extension View {
 }
 
 
+@MainActor
 struct WholeRowDisclosureStyle: DisclosureGroupStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -343,6 +344,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
     }
 }
 
+@MainActor
 struct Card<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
@@ -466,6 +468,7 @@ struct Pill: View {
 }
 
 
+@MainActor
 struct StateSummaryChip: View {
     let message: String
     let severity: VehicleStateSeverity
@@ -657,6 +660,7 @@ private struct ChargingFlowHighlight: View {
     }
 }
 
+@MainActor
 struct BatteryGauge: View {
     let fraction: Double
     let targetFraction: Double?
@@ -759,6 +763,7 @@ struct BatteryGauge: View {
     }
 }
 
+@MainActor
 struct FuelGauge: View {
     let fraction: Double
     let color: Color
@@ -805,6 +810,7 @@ struct FuelGauge: View {
     }
 }
 
+@MainActor
 struct DualEnergyGauge: View {
     let batteryFraction: Double
     let fuelFraction: Double

@@ -1,7 +1,7 @@
 import Foundation
 
 
-struct VolvoField<Value: Decodable>: Decodable {
+struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
     let updatedAt: Date?
     let status: String?
@@ -30,12 +30,12 @@ struct VolvoField<Value: Decodable>: Decodable {
     }
 }
 
-private struct VolvoEnvelopeWrapper<Payload: Decodable>: Decodable {
+private struct VolvoEnvelopeWrapper<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload
 }
 
 
-struct VolvoEnvelope<Payload: Decodable>: Decodable {
+struct VolvoEnvelope<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload?
 
     init(from decoder: Decoder) throws {
@@ -48,11 +48,11 @@ struct VolvoEnvelope<Payload: Decodable>: Decodable {
 }
 
 
-struct VolvoVehicleSummaryDTO: Decodable {
+struct VolvoVehicleSummaryDTO: Decodable, Sendable {
     let vin: String
 }
 
-struct VolvoVehicleDetailsDTO: Decodable {
+struct VolvoVehicleDetailsDTO: Decodable, Sendable {
     let vin: String?
     let modelYear: Int?
     let descriptions: Descriptions?
@@ -62,13 +62,13 @@ struct VolvoVehicleDetailsDTO: Decodable {
     let batteryCapacityKWH: Double?
     let images: Images?
 
-    struct Descriptions: Decodable {
+    struct Descriptions: Decodable, Sendable {
         let model: String?
         let upholstery: String?
         let steering: String?
     }
 
-    struct Images: Decodable {
+    struct Images: Decodable, Sendable {
         let exteriorImageUrl: String?
         let internalImageUrl: String?
     }
@@ -93,7 +93,7 @@ enum VolvoPowertrain {
 }
 
 
-struct VolvoEnergyStateDTO: Decodable {
+struct VolvoEnergyStateDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoField<Double>?
     let electricRange: VolvoField<Double>?
     let chargingStatus: VolvoField<String>?
@@ -120,7 +120,7 @@ struct VolvoEnergyStateDTO: Decodable {
     }
 }
 
-struct VolvoEnergyCapabilitiesDTO: Decodable {
+struct VolvoEnergyCapabilitiesDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoCapabilityFlag?
     let electricRange: VolvoCapabilityFlag?
     let chargingStatus: VolvoCapabilityFlag?
@@ -128,7 +128,7 @@ struct VolvoEnergyCapabilitiesDTO: Decodable {
     let targetBatteryLevel: VolvoCapabilityFlag?
 }
 
-struct VolvoCapabilityFlag: Decodable {
+struct VolvoCapabilityFlag: Decodable, Sendable {
     let isSupported: Bool?
 }
 
@@ -164,7 +164,7 @@ extension ChargerConnection {
 }
 
 
-struct VolvoDoorsDTO: Decodable {
+struct VolvoDoorsDTO: Decodable, Sendable {
     let centralLock: VolvoField<String>?
     let frontLeftDoor: VolvoField<String>?
     let frontRightDoor: VolvoField<String>?
@@ -184,7 +184,7 @@ struct VolvoDoorsDTO: Decodable {
     }
 }
 
-struct VolvoWindowsDTO: Decodable {
+struct VolvoWindowsDTO: Decodable, Sendable {
     let frontLeftWindow: VolvoField<String>?
     let frontRightWindow: VolvoField<String>?
     let rearLeftWindow: VolvoField<String>?
@@ -204,7 +204,7 @@ extension OpeningState {
 }
 
 
-struct VolvoTyresDTO: Decodable {
+struct VolvoTyresDTO: Decodable, Sendable {
     let frontLeft: VolvoField<String>?
     let frontRight: VolvoField<String>?
     let rearLeft: VolvoField<String>?
@@ -230,7 +230,7 @@ struct VolvoTyresDTO: Decodable {
 }
 
 
-struct VolvoDiagnosticsDTO: Decodable {
+struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let serviceWarning: VolvoField<String>?
     let timeToService: VolvoField<Int>?
     let distanceToService: VolvoField<Int>?
@@ -280,12 +280,12 @@ struct VolvoDiagnosticsDTO: Decodable {
 }
 
 
-struct VolvoOdometerDTO: Decodable {
+struct VolvoOdometerDTO: Decodable, Sendable {
     let odometer: VolvoField<Int>?
 }
 
 
-struct VolvoStatisticsDTO: Decodable {
+struct VolvoStatisticsDTO: Decodable, Sendable {
     let tripMeterManual: VolvoField<Double>?
     let tripMeterAutomatic: VolvoField<Double>?
     let distanceToEmptyTank: VolvoField<Int>?
@@ -296,7 +296,7 @@ struct VolvoStatisticsDTO: Decodable {
 }
 
 
-struct VolvoFuelDTO: Decodable {
+struct VolvoFuelDTO: Decodable, Sendable {
     let fuelAmount: VolvoField<Double>?
     let fuelAmountLiters: VolvoField<Double>?
     let fuelLevelPercent: VolvoField<Double>?
@@ -317,29 +317,29 @@ struct VolvoFuelDTO: Decodable {
 }
 
 
-struct VolvoCommandDTO: Decodable {
+struct VolvoCommandDTO: Decodable, Sendable {
     let command: String?
     let href: String?
 }
 
-struct VolvoCommandsListDTO: Decodable {
+struct VolvoCommandsListDTO: Decodable, Sendable {
     let commands: [VolvoCommandDTO]?
 }
 
 
-struct VolvoLocationDTO: Decodable {
-    struct Properties: Decodable {
+struct VolvoLocationDTO: Decodable, Sendable {
+    struct Properties: Decodable, Sendable {
         let heading: String?
         let timestamp: Date?
     }
-    struct Geometry: Decodable {
+    struct Geometry: Decodable, Sendable {
         let coordinates: [Double]?
     }
     let properties: Properties?
     let geometry: Geometry?
 }
 
-struct VolvoEngineStatusDTO: Decodable {
+struct VolvoEngineStatusDTO: Decodable, Sendable {
     let engineStatus: VolvoField<String>?
 
     var isRunning: Bool {
@@ -347,11 +347,11 @@ struct VolvoEngineStatusDTO: Decodable {
     }
 }
 
-struct VolvoBrakesDTO: Decodable {
+struct VolvoBrakesDTO: Decodable, Sendable {
     let brakeFluidLevelWarning: VolvoField<String>?
 }
 
-struct VolvoCommandAccessibilityDTO: Decodable {
+struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
     let availabilityStatus: VolvoField<String>?
 
     var isAvailable: Bool {
@@ -359,7 +359,7 @@ struct VolvoCommandAccessibilityDTO: Decodable {
     }
 }
 
-struct VolvoWarningsDTO: Decodable {
+struct VolvoWarningsDTO: Decodable, Sendable {
     let brakeLightCenterWarning: VolvoField<String>?
     let brakeLightLeftWarning: VolvoField<String>?
     let brakeLightRightWarning: VolvoField<String>?
@@ -416,7 +416,7 @@ struct VolvoWarningsDTO: Decodable {
 }
 
 
-struct VolvoClimatizationDTO: Decodable {
+struct VolvoClimatizationDTO: Decodable, Sendable {
     let status: VolvoField<String>?
     let timeRemainingMinutes: VolvoField<Int>?
     let interiorTemperatureCelsius: VolvoField<Double>?
@@ -496,7 +496,7 @@ struct VolvoClimatizationDTO: Decodable {
     }
 }
 
-struct VolvoTokenResponseDTO: Decodable {
+struct VolvoTokenResponseDTO: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String?
     let expiresIn: Int
