@@ -184,7 +184,7 @@ actor VolvoAPI {
         let details = (try? await vehicleDetails(vin: vin)) ?? VolvoVehicleDetailsDTO(
             vin: vin, modelYear: nil,
             descriptions: VolvoVehicleDetailsDTO.Descriptions(model: "Volvo", upholstery: nil, steering: nil),
-            fuelType: "ELECTRIC", batteryCapacityKWH: nil, images: nil
+            fuelType: "ELECTRIC", externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil
         )
         let powertrain = VolvoPowertrain.classify(fuelType: details.fuelType)
         let needsEnergy = powertrain.hasElectricRange
@@ -218,6 +218,18 @@ actor VolvoAPI {
         async let locationTask: VolvoLocationDTO? = optional(
             enabled: features.contains(.vehicleLocation), key: "location", vin: vin
         ) { try await self.get("/location/v1/vehicles/\(vin)/location") }
+        async let brakesTask: VolvoBrakesDTO? = optional(
+            enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/brakes") }
+        async let warningsTask: VolvoWarningsDTO? = optional(
+            enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "warnings", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings") }
+        async let engineStatusTask: VolvoEngineStatusDTO? = optional(
+            enabled: true, key: "engine-status", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status") }
+        async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
+            enabled: true, key: "command-accessibility", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
 
         let energy = try await energyTask
         let doors = try await doorsTask
@@ -227,6 +239,10 @@ actor VolvoAPI {
         let odometer = try await odometerTask
         let statistics = try await statisticsTask
         let location = try await locationTask
+        let brakes = try await brakesTask
+        let warnings = try await warningsTask
+        let engineStatus = try await engineStatusTask
+        let commandAccessibility = try await commandAccessibilityTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -263,6 +279,7 @@ actor VolvoAPI {
         var probes = VehicleProbedCapabilities()
         if doors != nil || windows != nil { probes.record(.exteriorStatus, as: .supported) }
         if diagnostics != nil { probes.record(.serviceWarnings, as: .supported) }
+        if engineStatus != nil { _ = engineStatus?.isRunning }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
         }
@@ -290,9 +307,21 @@ actor VolvoAPI {
         let daysToService: Int? = diagnostics?.daysToServiceApprox
         let distToService: Int? = diagnostics?.distanceToService?.value
         let serviceWarn: Bool = diagnostics?.hasServiceWarning ?? false
-        let fluidWarns: [String] = diagnostics?.fluidWarnings ?? []
-        let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil)
-            ? VehicleHealthDetails(tyres: tyres?.readings ?? [], warnings: diagnostics?.vehicleWarnings ?? [])
+        var fluidWarns: [String] = diagnostics?.fluidWarnings ?? []
+        if let brakeWarning = brakes?.brakeFluidLevelWarning?.value?.uppercased(),
+           !brakeWarning.contains("NO_WARNING"), !brakeWarning.isEmpty,
+           !fluidWarns.contains(L10n.text("Brake fluid")) {
+            fluidWarns.append(L10n.text("Brake fluid"))
+        }
+
+        var vehicleWarnings: [VehicleWarning] = diagnostics?.vehicleWarnings ?? []
+        let activeBulbWarnings = warnings?.activeWarnings ?? []
+        if !activeBulbWarnings.isEmpty && !vehicleWarnings.contains(.exteriorLight) {
+            vehicleWarnings.append(.exteriorLight)
+        }
+
+        let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil || warnings != nil || brakes != nil)
+            ? VehicleHealthDetails(tyres: tyres?.readings ?? [], warnings: vehicleWarnings)
             : nil
         let batteryDiag: BatteryDiagnostics? = features.contains(.batteryDiagnostics)
             ? BatteryDiagnostics(
@@ -312,8 +341,9 @@ actor VolvoAPI {
         let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
             .compactMap { $0 }.max()
         let carImg: Data? = features.contains(.vehicleImage) ? carImageData[vin] : nil
+        let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
 
-        return VehicleState(
+        var state = VehicleState(
             batteryPercentage: batteryPct,
             rangeKm: rangeKm,
             chargingState: chargingState,
@@ -324,7 +354,7 @@ actor VolvoAPI {
             chargingVoltageVolts: chargingVolts,
             chargingType: .unknown,
             chargerConnection: chargerConn,
-            availability: .unknown,
+            availability: availability,
             modelName: modelName,
             modelYear: modelYear,
             registrationNo: nil,
@@ -349,8 +379,13 @@ actor VolvoAPI {
             imageData: carImg,
             fetchedAt: Date(),
             vehicleReportedAt: reportedAt,
-            dataWarnings: []
+            dataWarnings: activeBulbWarnings
         )
+        state.externalColour = details.externalColour
+        state.gearbox = details.gearbox
+        state.engineHoursToService = diagnostics?.engineHoursToService?.value
+        state.averageSpeedKmH = statistics?.averageSpeed?.value
+        return state
     }
 
     private func fetchCarImage(vin: String, imageUrlString: String?) async {
