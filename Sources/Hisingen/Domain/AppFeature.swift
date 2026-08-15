@@ -102,10 +102,10 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
     ]
 
     static var userSelectableCases: [AppFeature] {
-        allCases.filter { !remoteFeatures.contains($0) }
+        allCases
     }
 
-    static var permittedFeatures: Set<AppFeature> { Set(userSelectableCases) }
+    static var permittedFeatures: Set<AppFeature> { Set(allCases) }
 
     var isRemoteControl: Bool { Self.remoteFeatures.contains(self) }
 }
@@ -113,11 +113,16 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
 struct FeatureSelection: Codable, Equatable, Sendable {
     private(set) var enabled: Set<AppFeature>
 
-
-    static let `default` = FeatureSelection(enabled: [
-        .vehicleIdentity, .vehicleImage, .chargingDetails,
-        .multipleVehicles, .notifications, .updateChecks
-    ])
+    static var `default`: FeatureSelection {
+        FeatureSelection(enabled: [
+            .vehicleIdentity, .vehicleImage, .chargingDetails,
+            .vehicleAvailability, .vehicleHealth, .exteriorStatus,
+            .tyreAndWarnings, .softwareUpdates, .climateStatus,
+            .tripMeters, .batteryDiagnostics, .vehicleLocation,
+            .multipleVehicles, .notifications, .updateChecks,
+            .remoteClimate, .remoteLocks, .remoteHonkFlash
+        ])
+    }
 
     func contains(_ feature: AppFeature) -> Bool { enabled.contains(feature) }
 

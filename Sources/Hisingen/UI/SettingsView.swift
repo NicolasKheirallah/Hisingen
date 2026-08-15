@@ -387,10 +387,10 @@ struct SettingsView: View {
         let isVolvo = Preferences.activeBrand == .volvo
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .secondary)
+                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: isVolvo ? .blue : .secondary)
 
                 Text(isVolvo
-                     ? L10n.text("Volvo Connected Vehicle telemetry is active. Write commands depend on your vehicle connected package and developer account tier.")
+                     ? L10n.text("Volvo Connected Vehicle write commands are active. Toggle the individual controls you wish to display in the Controls tab.")
                      : L10n.text("Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -403,8 +403,8 @@ struct SettingsView: View {
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn")
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration")
                 }
-                .disabled(true)
-                .opacity(0.5)
+                .disabled(!isVolvo)
+                .opacity(isVolvo ? 1.0 : 0.5)
             }
         }
     }
