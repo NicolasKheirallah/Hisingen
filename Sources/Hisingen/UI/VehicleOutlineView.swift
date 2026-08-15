@@ -144,65 +144,73 @@ struct VehicleSideProfileDoorsView: View {
                     taillightsGlow(og: og, active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen, hovered: tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered)
                 }
 
-                // 3. Hood Zone (Front Bonnet: SVG X≈1380, Y≈340)
+                // 3. Hood Zone (Front Bonnet: SVG X=[1122..1541], Y=[275..407])
                 openingZone(
-                    u: 0.835, v: 0.440,
-                    wFraction: 0.20, hFraction: 0.18,
+                    kind: .hood,
+                    u: 0.8095, v: 0.4388,
+                    wFraction: 0.2547, hFraction: 0.1624,
                     open: hoodOpen, hovered: hoodHovered,
                     label: "Hood", og: og
                 )
 
-                // 4. Tailgate Zone (Rear Boot: SVG X≈230, Y≈320)
+                // 4. Tailgate Zone (Rear Boot: SVG X=[45..381], Y=[156..479])
                 openingZone(
-                    u: 0.145, v: 0.420,
-                    wFraction: 0.15, hFraction: 0.22,
+                    kind: .tailgate,
+                    u: 0.1350, v: 0.3900,
+                    wFraction: 0.2000, hFraction: 0.3800,
                     open: tailgateOpen, hovered: tailgateHovered,
                     label: "Tailgate", og: og
                 )
 
-                // 5. Front Door Zone (SVG X≈880, Y≈380)
+                // 5. Front Door Zone (SVG X=[762..1149], Y=[288..545])
                 openingZone(
-                    u: 0.535, v: 0.490,
-                    wFraction: 0.19, hFraction: 0.26,
+                    kind: .frontDoor,
+                    u: 0.5830, v: 0.5234,
+                    wFraction: 0.2346, hFraction: 0.2978,
                     open: frontDoorOpen, hovered: frontDoorHovered,
                     label: "Front Door", og: og
                 )
 
-                // 6. Rear Door Zone (SVG X≈565, Y≈380)
+                // 6. Rear Door Zone (SVG X=[414..789], Y=[276..539])
                 openingZone(
-                    u: 0.350, v: 0.490,
-                    wFraction: 0.17, hFraction: 0.26,
+                    kind: .rearDoor,
+                    u: 0.3632, v: 0.4584,
+                    wFraction: 0.2231, hFraction: 0.1990,
                     open: rearDoorOpen, hovered: rearDoorHovered,
                     label: "Rear Door", og: og
                 )
 
-                // 7. Front Window Zone (SVG X≈865, Y≈245)
+                // 7. Front Window Zone (SVG X=[730..1125], Y=[153..293])
                 openingZone(
-                    u: 0.525, v: 0.320,
-                    wFraction: 0.17, hFraction: 0.14,
+                    kind: .frontWindow,
+                    u: 0.5638, v: 0.2900,
+                    wFraction: 0.2401, hFraction: 0.1820,
                     open: frontWindowOpen, hovered: frontWindowHovered,
                     label: "Front Window", og: og
                 )
 
-                // 8. Rear Window Zone (SVG X≈585, Y≈245)
+                // 8. Rear Window Zone (SVG X=[414..759], Y=[152..275])
                 openingZone(
-                    u: 0.360, v: 0.320,
-                    wFraction: 0.15, hFraction: 0.14,
+                    kind: .rearWindow,
+                    u: 0.3565, v: 0.2776,
+                    wFraction: 0.2097, hFraction: 0.1599,
                     open: rearWindowOpen, hovered: rearWindowHovered,
                     label: "Rear Window", og: og
                 )
 
-                // 9. Sunroof Zone (Roofline: SVG X≈780, Y≈175)
+                // 9. Sunroof Zone (Roofline: SVG X=[432..965], Y=[124..160])
                 openingZone(
-                    u: 0.475, v: 0.228,
-                    wFraction: 0.24, hFraction: 0.08,
+                    kind: .sunroof,
+                    u: 0.4246, v: 0.1850,
+                    wFraction: 0.3240, hFraction: 0.0600,
                     open: sunroofOpen, hovered: sunroofHovered,
                     label: "Sunroof", og: og
                 )
 
-                // 10. Charge Lid / Fuel Flap Indicator (SVG X≈340, Y≈310)
+                // 10. Charge Lid / Fuel Flap Indicator (SVG X=[290..381], Y=[281..331])
                 chargeLidIndicator(
-                    u: 0.210, v: 0.410,
+                    u: 0.2040, v: 0.3979,
+                    wFraction: 0.0553, hFraction: 0.0650,
                     open: chargeLidOpen || fuelFlapOpen,
                     hovered: chargeLidHovered || fuelFlapHovered,
                     og: og
@@ -213,8 +221,13 @@ struct VehicleSideProfileDoorsView: View {
         .accessibilityHidden(true)
     }
 
+    enum OpeningZoneKind {
+        case hood, tailgate, frontDoor, rearDoor, frontWindow, rearWindow, sunroof, chargeLid
+    }
+
     @ViewBuilder
     private func openingZone(
+        kind: OpeningZoneKind,
         u: CGFloat, v: CGFloat,
         wFraction: CGFloat, hFraction: CGFloat,
         open: Bool, hovered: Bool,
@@ -225,24 +238,37 @@ struct VehicleSideProfileDoorsView: View {
             let pos = og.point(u: u, v: v)
             let size = og.size(wFraction: wFraction, hFraction: hFraction)
 
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            zoneShape(kind: kind)
                 .fill(
                     RadialGradient(
-                        colors: [activeColor.opacity(open ? 0.55 : 0.40), activeColor.opacity(0.05)],
+                        colors: [activeColor.opacity(open ? 0.55 : 0.40), activeColor.opacity(0.08)],
                         center: .center,
                         startRadius: 2,
                         endRadius: max(size.width, size.height) * 0.75
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(activeColor.opacity(open ? 0.9 : 0.7), lineWidth: open ? 1.5 : 1.0)
+                    zoneShape(kind: kind)
+                        .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
                 )
                 .frame(width: size.width, height: size.height)
-                .shadow(color: activeColor.opacity(open ? 0.6 : 0.35), radius: open ? 6 : 4)
-                .scaleEffect(hovered || open ? 1.06 : 1.0)
+                .shadow(color: activeColor.opacity(open ? 0.65 : 0.35), radius: open ? 6 : 4)
+                .scaleEffect(hovered || open ? 1.05 : 1.0)
                 .position(pos)
                 .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
+        }
+    }
+
+    private func zoneShape(kind: OpeningZoneKind) -> OutlineAnyShape {
+        switch kind {
+        case .frontWindow: return OutlineAnyShape(FrontWindowContourShape())
+        case .rearWindow: return OutlineAnyShape(RearWindowContourShape())
+        case .frontDoor: return OutlineAnyShape(FrontDoorContourShape())
+        case .rearDoor: return OutlineAnyShape(RearDoorContourShape())
+        case .hood: return OutlineAnyShape(HoodContourShape())
+        case .tailgate: return OutlineAnyShape(TailgateContourShape())
+        case .sunroof: return OutlineAnyShape(SunroofContourShape())
+        case .chargeLid: return OutlineAnyShape(ChargeLidContourShape())
         }
     }
 
@@ -287,27 +313,168 @@ struct VehicleSideProfileDoorsView: View {
     }
 
     @ViewBuilder
-    private func chargeLidIndicator(u: CGFloat, v: CGFloat, open: Bool, hovered: Bool, og: OutlineGeometry) -> some View {
+    private func chargeLidIndicator(
+        u: CGFloat, v: CGFloat,
+        wFraction: CGFloat, hFraction: CGFloat,
+        open: Bool, hovered: Bool,
+        og: OutlineGeometry
+    ) -> some View {
         if open || hovered {
             let color = open ? HisingenTheme.semanticWarning : HisingenTheme.accent
             let pos = og.point(u: u, v: v)
+            let size = og.size(wFraction: wFraction, hFraction: hFraction)
 
             ZStack {
+                ChargeLidContourShape()
+                    .fill(color.opacity(open ? 0.60 : 0.40))
+                    .frame(width: size.width, height: size.height)
+                ChargeLidContourShape()
+                    .stroke(color, lineWidth: open ? 1.5 : 1.0)
+                    .frame(width: size.width, height: size.height)
                 Circle()
-                    .fill(color.opacity(0.35))
-                    .frame(width: 14, height: 14)
-                Circle()
-                    .fill(color)
-                    .frame(width: 8, height: 8)
-                Circle()
-                    .stroke(Color.white, lineWidth: 1)
-                    .frame(width: 8, height: 8)
+                    .fill(Color.white)
+                    .frame(width: 4, height: 4)
             }
             .shadow(color: color.opacity(0.6), radius: 3)
-            .scaleEffect(hovered || open ? 1.25 : 1.0)
+            .scaleEffect(hovered || open ? 1.18 : 1.0)
             .position(pos)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
         }
+    }
+}
+
+struct OutlineAnyShape: Shape, @unchecked Sendable {
+    private let _path: @Sendable (CGRect) -> Path
+
+    init<S: Shape>(_ shape: S) {
+        self._path = { shape.path(in: $0) }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        _path(rect)
+    }
+}
+
+// MARK: - Exact SVG Contour Shapes
+
+struct FrontWindowContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.05))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.58, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY),
+            control: CGPoint(x: rect.minX + rect.width * 0.88, y: rect.minY + rect.height * 0.45)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct RearWindowContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.72))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY + rect.height * 0.04),
+            control: CGPoint(x: rect.minX + rect.width * 0.12, y: rect.minY + rect.height * 0.28)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct FrontDoorContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.12))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - rect.width * 0.18, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.08, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.10),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct RearDoorContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.10))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - rect.width * 0.10, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.22, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.35),
+            control: CGPoint(x: rect.minX + rect.width * 0.08, y: rect.maxY - rect.height * 0.15)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct HoodContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.58),
+            control: CGPoint(x: rect.minX + rect.width * 0.65, y: rect.minY + rect.height * 0.15)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct TailgateContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.20, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.55),
+            control: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.20)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - rect.width * 0.25, y: rect.minY),
+            control: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY + rect.height * 0.15)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct SunroofContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 4, height: 4))
+        return path
+    }
+}
+
+struct ChargeLidContourShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 3, height: 3))
+        return path
     }
 }
 
@@ -359,9 +526,9 @@ struct VehicleSideProfileTiresView: View {
                     og: og
                 )
 
-                // Front Wheel (SVG X=1324, Y=516 -> u=0.8049, v=0.6710)
+                // Front Wheel (SVG X=1322, Y=516 -> u=0.8036, v=0.6710)
                 tireWheelGlow(
-                    u: 0.8049, v: 0.6710,
+                    u: 0.8036, v: 0.6710,
                     warning: frontWarning, hovered: frontHovered,
                     positionName: hoveredPosition == .frontRight ? "FR" : "FL",
                     og: og
@@ -380,8 +547,8 @@ struct VehicleSideProfileTiresView: View {
         og: OutlineGeometry
     ) -> some View {
         let activeColor = warning ? HisingenTheme.semanticWarning : (hovered ? HisingenTheme.accent : HisingenTheme.semanticGood)
-        // Scaled wheel rim ring proportional to the vehicle height (200px in 769px SVG = 0.26 * imageHeight)
-        let ringSize: CGFloat = max(22, og.imageHeight * 0.26)
+        // Scaled wheel rim ring proportional to the vehicle height (202px in 769px SVG = 0.2627 * imageHeight)
+        let ringSize: CGFloat = max(22, og.imageHeight * 0.2627)
         let pos = og.point(u: u, v: v)
 
         ZStack {

@@ -89,12 +89,24 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(og.imageHeight, 96.0)
 
         let rearWheel = og.point(u: 0.2304, v: 0.6710)
-        let frontWheel = og.point(u: 0.8049, v: 0.6710)
+        let frontWheel = og.point(u: 0.8036, v: 0.6710)
 
         XCTAssertTrue(rearWheel.x < frontWheel.x)
         XCTAssertEqual(round(rearWheel.y), round(frontWheel.y))
         XCTAssertTrue(rearWheel.x > og.originX)
         XCTAssertTrue(frontWheel.x < og.originX + og.imageWidth)
+
+        // Validate SVG-mapped opening points
+        let frontDoor = og.point(u: 0.5830, v: 0.5234)
+        let rearDoor = og.point(u: 0.3632, v: 0.4584)
+        let hood = og.point(u: 0.8095, v: 0.4388)
+        let tailgate = og.point(u: 0.1350, v: 0.3900)
+        let chargeLid = og.point(u: 0.2040, v: 0.3979)
+
+        XCTAssertTrue(tailgate.x < rearDoor.x)
+        XCTAssertTrue(rearDoor.x < frontDoor.x)
+        XCTAssertTrue(frontDoor.x < hood.x)
+        XCTAssertTrue(chargeLid.x < rearDoor.x)
     }
 
     @Test
