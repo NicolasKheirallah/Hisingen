@@ -144,10 +144,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if clientSecret.isEmpty, vccApiKey.isEmpty, trimmedClientID == Preferences.volvoClientID,
-           let storedSecret = (try? Keychain.readVolvoClientSecret()) ?? nil, !storedSecret.isEmpty,
-           let storedApiKey = (try? Keychain.readVolvoApiKey()) ?? nil, !storedApiKey.isEmpty,
-           let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil, !sessionToken.isEmpty {
+        let effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
+        let effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
+        let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
+
+        if !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
+           trimmedClientID == Preferences.volvoClientID, clientSecret.isEmpty, vccApiKey.isEmpty {
             switchActiveBrand(to: .volvo, force: true)
             Task { [weak self] in
                 guard let self else { return }
@@ -159,29 +161,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusController.dismissSettings()
             return
         }
-        guard !clientSecret.isEmpty, !vccApiKey.isEmpty else {
+
+        guard !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty else {
             showRemoteResult(
                 title: L10n.text("Volvo sign-in unavailable"),
                 message: VolvoError.appNotConfigured.localizedDescription, success: false
             )
             return
         }
+
         Task { [weak self] in
             guard let self else { return }
             do {
-                await volvoAPI.configure(clientID: trimmedClientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
+                await volvoAPI.configure(clientID: trimmedClientID, clientSecret: effectiveSecret, vccApiKey: effectiveApiKey)
                 let authorizeURL = try await volvoAPI.beginSignIn()
                 let callbackURL = try await volvoSignInPresenter.signIn(
                     authorizeURL: authorizeURL, callbackScheme: "hisingen"
                 )
                 try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil, features: Preferences.features)
                 Preferences.volvoClientID = trimmedClientID
-                try Keychain.saveVolvoClientSecret(clientSecret)
-                try Keychain.saveVolvoApiKey(vccApiKey)
+                try Keychain.saveVolvoClientSecret(effectiveSecret)
+                try Keychain.saveVolvoApiKey(effectiveApiKey)
                 if !trimmedNickname.isEmpty, let vin = await volvoAPI.resolvedVIN(preferred: nil) {
                     Preferences.setVehicleNickname(trimmedNickname, for: vin)
                 }
-                switchActiveBrand(to: .volvo)
+                switchActiveBrand(to: .volvo, force: true)
                 resumeStoredSession()
                 statusController.dismissSettings()
                 showRemoteResult(
