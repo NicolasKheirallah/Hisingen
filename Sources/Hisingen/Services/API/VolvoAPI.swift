@@ -432,18 +432,19 @@ actor VolvoAPI {
     }
 
     private func refreshTokenIfNeeded() async throws {
-        guard let expiry = tokenExpiry else { throw VolvoError.authenticationRequired(.expiredSession) }
-        if expiry.timeIntervalSinceNow < 300 { try await refreshAccessToken(force: false) }
+        if accessToken == nil || tokenExpiry == nil || (tokenExpiry?.timeIntervalSinceNow ?? 0) < 300 {
+            try await refreshAccessToken(force: true)
+        }
     }
 
     private func refreshAccessToken(force: Bool) async throws {
-        if !force, let expiry = tokenExpiry, expiry.timeIntervalSinceNow >= 300 { return }
+        if !force, let expiry = tokenExpiry, accessToken != nil, expiry.timeIntervalSinceNow >= 300 { return }
         if let refreshTask {
             try apply(try await refreshTask.value)
             return
         }
-        guard let clientID, let clientSecret, let refreshToken else {
-            throw VolvoError.authenticationRequired(.expiredSession)
+        guard let clientID, let clientSecret, let refreshToken, !refreshToken.isEmpty else {
+            throw VolvoError.authenticationRequired(.noStoredSession)
         }
         var request = URLRequest(url: identityURL(path: tokenPath))
         request.httpMethod = "POST"
