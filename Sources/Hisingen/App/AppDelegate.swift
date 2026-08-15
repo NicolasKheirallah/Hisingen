@@ -145,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             resumeStoredSession()
+            statusController.dismissSettings()
             return
         }
         guard !clientSecret.isEmpty, !vccApiKey.isEmpty else {
@@ -171,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 switchActiveBrand(to: .volvo)
                 resumeStoredSession()
+                statusController.dismissSettings()
                 showRemoteResult(
                     title: L10n.text("Volvo sign-in successful"),
                     message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
@@ -390,15 +392,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .switchToBrand(let brand):
-
-
             switch brand {
             case .polestar:
                 switchActiveBrand(to: .polestar)
                 resumeStoredSession()
+                statusController.dismissSettings()
             case .volvo:
                 beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
             }
+        case .closeSettings:
+            statusController.dismissSettings()
         case .features:
             notifier.featureSelectionDidChange()
             updateNotificationAuthorizationIfNeeded()

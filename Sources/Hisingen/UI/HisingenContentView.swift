@@ -294,12 +294,12 @@ struct HisingenContentView: View {
             .disabled(!authenticated)
 
             Button {
-                selectedTab = .settings
+                onSettings()
             } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: settingsMode ? "car.fill" : "gearshape")
             }
             .controlSize(.small)
-            .help(L10n.text("Settings…"))
+            .help(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

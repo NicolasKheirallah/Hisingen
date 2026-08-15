@@ -297,6 +297,22 @@ final class StatusItemController: NSObject {
         }
     }
 
+    func toggleSettings() {
+        settingsMode.toggle()
+        if popover.isShown {
+            refreshPopoverIfNeeded()
+        } else {
+            showPopover()
+        }
+    }
+
+    func dismissSettings() {
+        settingsMode = false
+        if popover.isShown {
+            refreshPopoverIfNeeded()
+        }
+    }
+
     func updateCars(_ newCars: [CarSummary], activeVin: String?) {
         cars = newCars
         self.activeVin = activeVin
@@ -337,7 +353,7 @@ final class StatusItemController: NSObject {
             checkingForUpdates: checkingForUpdates,
             notificationPermission: notificationPermission,
             onRefresh: { [weak self] in self?.onRefresh() },
-            onSettings: { [weak self] in self?.onSettings() },
+            onSettings: { [weak self] in self?.toggleSettings() },
             onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
             onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
