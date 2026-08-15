@@ -24,7 +24,6 @@ struct AccountCredentialsForm: View {
     @State private var isTestingConnection = false
     @State private var testConnectionResult: (success: Bool, message: String)?
     @State private var showUpdateFields = false
-    @State private var draftSaveTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -39,8 +38,6 @@ struct AccountCredentialsForm: View {
                 volvoFields
             }
         }
-        .onAppear(perform: restoreDrafts)
-        .onDisappear { draftSaveTask?.cancel() }
     }
 
     @ViewBuilder
@@ -171,26 +168,22 @@ struct AccountCredentialsForm: View {
                 TextField("name@example.com", text: $email)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.username)
-                    .onChange(of: email) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("Password")) {
                 SecureField(L10n.text("•••••••• (only to update credentials)"), text: $password)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
-                    .onChange(of: password) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
                 TextField("e.g. My Polestar, Midnight", text: $vehicleNickname)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vehicleNickname) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
                 TextField("YSM...", text: $vin)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vin) { _ in scheduleDraftSave() }
             }
 
             Button {
@@ -240,7 +233,6 @@ struct AccountCredentialsForm: View {
             labeledField(L10n.text("Client ID")) {
                 TextField("Client ID", text: $volvoClientID)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoClientID) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("Client Secret")) {
@@ -248,7 +240,6 @@ struct AccountCredentialsForm: View {
                             ? L10n.text("•••••••• (Saved in Keychain)")
                             : L10n.text("Client Secret"), text: $volvoClientSecret)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoClientSecret) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("VCC API Key")) {
@@ -256,13 +247,11 @@ struct AccountCredentialsForm: View {
                             ? L10n.text("•••••••• (Saved in Keychain)")
                             : L10n.text("VCC API Key"), text: $volvoApiKey)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoApiKey) { _ in scheduleDraftSave() }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
                 TextField("e.g. My Volvo, Family car", text: $vehicleNickname)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vehicleNickname) { _ in scheduleDraftSave() }
             }
 
             Button {
@@ -315,7 +304,6 @@ struct AccountCredentialsForm: View {
         if !password.isEmpty {
             try? Keychain.savePassword(password)
         }
-        try? Keychain.deletePasswordDraft()
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.7)) {
             showSavedFeedback = true
         }
@@ -337,52 +325,7 @@ struct AccountCredentialsForm: View {
         ))
         volvoClientSecret = ""
         volvoApiKey = ""
-        try? Keychain.deleteVolvoClientSecretDraft()
-        try? Keychain.deleteVolvoApiKeyDraft()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { volvoSigningIn = false }
-    }
-
-    private func restoreDrafts() {
-        if password.isEmpty, let draft = (try? Keychain.readPasswordDraft()) ?? nil, !draft.isEmpty {
-            password = draft
-        }
-        if volvoClientSecret.isEmpty, let draft = (try? Keychain.readVolvoClientSecretDraft()) ?? nil, !draft.isEmpty {
-            volvoClientSecret = draft
-        }
-        if volvoApiKey.isEmpty, let draft = (try? Keychain.readVolvoApiKeyDraft()) ?? nil, !draft.isEmpty {
-            volvoApiKey = draft
-        }
-    }
-
-    private func scheduleDraftSave() {
-        draftSaveTask?.cancel()
-        draftSaveTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            persistDrafts()
-        }
-    }
-
-    private func persistDrafts() {
-        switch selectedBrand {
-        case .polestar:
-            Preferences.email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-            let upperVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            Preferences.vin = upperVIN
-            let nicknameVIN = upperVIN.isEmpty ? Preferences.vin : upperVIN
-            if !nicknameVIN.isEmpty {
-                Preferences.setVehicleNickname(vehicleNickname, for: nicknameVIN)
-            }
-            if !password.isEmpty { try? Keychain.savePasswordDraft(password) }
-        case .volvo:
-            Preferences.volvoClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-            let nicknameVIN = Preferences.activeBrand == .volvo ? Preferences.vin : ""
-            if !nicknameVIN.isEmpty {
-                Preferences.setVehicleNickname(vehicleNickname, for: nicknameVIN)
-            }
-            if !volvoClientSecret.isEmpty { try? Keychain.saveVolvoClientSecretDraft(volvoClientSecret) }
-            if !volvoApiKey.isEmpty { try? Keychain.saveVolvoApiKeyDraft(volvoApiKey) }
-        }
     }
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {
