@@ -101,8 +101,14 @@ actor VolvoAPI {
         }
         pendingVerifier = nil
         pendingState = nil
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-              components.queryItems?.first(where: { $0.name == "state" })?.value == expectedState,
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+            throw VolvoError.authenticationRequired(.callbackRejected)
+        }
+        if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
+            let desc = components.queryItems?.first(where: { $0.name == "error_description" })?.value ?? error
+            throw VolvoError.permissionDenied(operation: desc)
+        }
+        guard components.queryItems?.first(where: { $0.name == "state" })?.value == expectedState,
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
             throw VolvoError.authenticationRequired(.callbackRejected)
         }
@@ -569,10 +575,16 @@ actor VolvoAPI {
     }
 
     private static func formBody(_ fields: [String: String]) -> Data? {
-        var components = URLComponents()
-        components.queryItems = fields.sorted(by: { $0.key < $1.key })
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
-        return components.percentEncodedQuery.map { Data($0.utf8) }
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._*")
+        let encoded = fields.sorted(by: { $0.key < $1.key })
+            .compactMap { key, value in
+                guard let k = key.addingPercentEncoding(withAllowedCharacters: allowed),
+                      let v = value.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+                return "\(k)=\(v)"
+            }
+            .joined(separator: "&")
+        return Data(encoded.utf8)
     }
 
     private static func makeSession() -> URLSession {
