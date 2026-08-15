@@ -44,7 +44,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.updateNotificationPermission(notifier.permission)
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
         connectCoordinator()
-        statusController.render(data: nil, error: nil, authenticated: false)
+        let initialAuthenticated = Preferences.hasResumableSession(for: Preferences.activeBrand)
+        let initialVIN = Preferences.vin(for: Preferences.activeBrand)
+        let initialNickname = Preferences.vehicleNickname(for: initialVIN)
+        let initialCar = initialVIN.isEmpty ? nil : CarSummary(vin: initialVIN, title: initialNickname.isEmpty ? Preferences.activeBrand.displayName : initialNickname)
+        if let initialCar {
+            statusController.cars = [initialCar]
+            statusController.activeVin = initialVIN
+        }
+        let initialSnapshot = initialVIN.isEmpty ? nil : stateStore.snapshot(for: initialVIN)
+        sessionValid = initialAuthenticated
+        latest = initialSnapshot
+        statusController.render(data: initialSnapshot, error: nil, authenticated: initialAuthenticated)
         applyLaunchAtLogin(userInitiated: false)
         checkForUpdatesIfEnabled()
         resumeStoredSession()
@@ -74,9 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resumeStoredSession() {
         switch Preferences.activeBrand {
         case .polestar:
+            guard !Preferences.email.isEmpty else { return }
             let sessionToken = (try? Keychain.readSessionToken()) ?? nil
             let password = sessionToken?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
-            guard sessionToken?.isEmpty == false || (!Preferences.email.isEmpty && password?.isEmpty == false) else { return }
+            guard sessionToken != nil || password != nil else { return }
             refreshCoordinator.start(
                 email: Preferences.email, password: password, sessionToken: sessionToken,
                 preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
@@ -107,11 +119,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Preferences.activeBrand != brand else { return }
         refreshCoordinator?.stop()
         Preferences.activeBrand = brand
-        latest = nil
+        let hasSession = Preferences.hasResumableSession(for: brand)
+        sessionValid = hasSession
+        let vin = Preferences.vin(for: brand)
+        let nick = Preferences.vehicleNickname(for: vin)
+        latest = vin.isEmpty ? nil : (statusController.cachedSnapshots[vin] ?? stateStore.snapshot(for: vin))
         lastError = nil
-        sessionValid = false
-        statusController.cars = []
-        statusController.activeVin = nil
+        statusController.cars = vin.isEmpty ? [] : [CarSummary(vin: vin, title: nick.isEmpty ? brand.displayName : nick)]
+        statusController.activeVin = vin.isEmpty ? nil : vin
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
         connectCoordinator()
         render()

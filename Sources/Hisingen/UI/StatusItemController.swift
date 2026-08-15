@@ -446,7 +446,7 @@ final class StatusItemController: NSObject {
             checkingForUpdates: checkingForUpdates,
             notificationPermission: notificationPermission,
             onRefresh: { [weak self] in self?.onRefresh() },
-            onSettings: { [weak self] in self?.onSettings() },
+            onSettings: { [weak self] in self?.toggleSettings() },
             onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
             onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
