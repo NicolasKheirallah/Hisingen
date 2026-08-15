@@ -3,13 +3,16 @@ import SwiftUI
 @MainActor
 final class AccountDraftState {
     static let shared = AccountDraftState()
-    var email: String = Preferences.email
-    var password: String = ""
-    var vin: String = Preferences.vin
-    var vehicleNickname: String = Preferences.vehicleNickname(for: Preferences.vin)
+    var polestarEmail: String = Preferences.email
+    var polestarPassword: String = ""
+    var polestarVIN: String = Preferences.vin(for: .polestar)
+    var polestarNickname: String = Preferences.vehicleNickname(for: Preferences.vin(for: .polestar))
+
     var volvoClientID: String = Preferences.volvoClientID
     var volvoClientSecret: String = ""
     var volvoApiKey: String = ""
+    var volvoVIN: String = Preferences.vin(for: .volvo)
+    var volvoNickname: String = Preferences.vehicleNickname(for: Preferences.vin(for: .volvo))
 }
 
 @MainActor
@@ -23,13 +26,17 @@ struct AccountCredentialsForm: View {
     let onSettingsChanged: (SettingsChange) -> Void
 
     @State private var selectedBrand = Preferences.activeBrand
-    @State private var email = AccountDraftState.shared.email
-    @State private var password = AccountDraftState.shared.password
-    @State private var vin = AccountDraftState.shared.vin
-    @State private var vehicleNickname = AccountDraftState.shared.vehicleNickname
+    @State private var polestarEmail = AccountDraftState.shared.polestarEmail
+    @State private var polestarPassword = AccountDraftState.shared.polestarPassword
+    @State private var polestarVIN = AccountDraftState.shared.polestarVIN
+    @State private var polestarNickname = AccountDraftState.shared.polestarNickname
+
     @State private var volvoClientID = AccountDraftState.shared.volvoClientID
     @State private var volvoClientSecret = AccountDraftState.shared.volvoClientSecret
     @State private var volvoApiKey = AccountDraftState.shared.volvoApiKey
+    @State private var volvoVIN = AccountDraftState.shared.volvoVIN
+    @State private var volvoNickname = AccountDraftState.shared.volvoNickname
+
     @State private var volvoSigningIn = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
@@ -113,58 +120,72 @@ struct AccountCredentialsForm: View {
 
     @ViewBuilder
     private var accountStatusBanner: some View {
+        let isBrandConnected = isCurrentlyConnected
+        let brandName = selectedBrand.displayName
+        let activeLabel = Preferences.lastVehicleLabel(for: selectedBrand)
+
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Circle()
-                    .fill(isCurrentlyConnected ? Color.green : Color.secondary.opacity(0.4))
+                    .fill(isBrandConnected ? Color.green : Color.orange.opacity(0.6))
                     .frame(width: 8, height: 8)
 
-                Text(isCurrentlyConnected
-                     ? L10n.format("Connected to %@ Account", selectedBrand.displayName)
-                     : L10n.format("Not Connected to %@", selectedBrand.displayName))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isCurrentlyConnected ? Color.primary : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isBrandConnected
+                         ? L10n.format("Connected to %@ Account", brandName)
+                         : L10n.format("Not Connected to %@", brandName))
+                        .font(.system(size: 12, weight: .semibold))
 
+                    if isBrandConnected {
+                        Text(L10n.format("Active Vehicle: %@", activeLabel))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(L10n.text("Enter your credentials below to establish a live connection."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
 
-                if isCurrentlyConnected {
+                if isBrandConnected && style != .welcoming {
                     Button {
                         testCurrentConnection()
                     } label: {
-                        HStack(spacing: 4) {
-                            if isTestingConnection {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                            }
-                            Text(L10n.text("Test Connection"))
+                        if isTestingConnection {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text(L10n.text("Test"))
+                                .font(.system(size: 10, weight: .medium))
                         }
-                        .font(.system(size: 10, weight: .medium))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .controlSize(.mini)
                     .disabled(isTestingConnection)
                 }
             }
 
-            if let result = testConnectionResult {
+            if let test = testConnectionResult {
                 HStack(spacing: 6) {
-                    Image(systemName: result.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(result.success ? Color.green : Color.orange)
-                    Text(result.message)
+                    Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(test.success ? .green : .red)
+                        .font(.system(size: 10))
+                    Text(test.message)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                .padding(6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    (result.success ? Color.green : Color.orange).opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                )
+                .padding(.horizontal, 4)
+                .transition(.opacity)
             }
         }
         .padding(10)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            (isBrandConnected ? Color.green : Color.orange).opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke((isBrandConnected ? Color.green : Color.orange).opacity(0.25), lineWidth: 0.5)
+        )
     }
 
     private var polestarFields: some View {
@@ -176,29 +197,29 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Polestar ID (Email)")) {
-                TextField("name@example.com", text: $email)
+                TextField("name@example.com", text: $polestarEmail)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.username)
-                    .onChange(of: email) { AccountDraftState.shared.email = $0 }
+                    .onChange(of: polestarEmail) { AccountDraftState.shared.polestarEmail = $0 }
             }
 
             labeledField(L10n.text("Password")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $password)
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
-                    .onChange(of: password) { AccountDraftState.shared.password = $0 }
+                    .onChange(of: polestarPassword) { AccountDraftState.shared.polestarPassword = $0 }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField("e.g. My Polestar, Midnight", text: $vehicleNickname)
+                TextField("e.g. My Polestar, Midnight", text: $polestarNickname)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vehicleNickname) { AccountDraftState.shared.vehicleNickname = $0 }
+                    .onChange(of: polestarNickname) { AccountDraftState.shared.polestarNickname = $0 }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YSM...", text: $vin)
+                TextField("YSM...", text: $polestarVIN)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vin) { AccountDraftState.shared.vin = $0 }
+                    .onChange(of: polestarVIN) { AccountDraftState.shared.polestarVIN = $0 }
             }
 
             Button {
@@ -219,7 +240,7 @@ struct AccountCredentialsForm: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
@@ -266,15 +287,15 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField("e.g. My Volvo, Family car", text: $vehicleNickname)
+                TextField("e.g. My Volvo, Family car", text: $volvoNickname)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vehicleNickname) { AccountDraftState.shared.vehicleNickname = $0 }
+                    .onChange(of: volvoNickname) { AccountDraftState.shared.volvoNickname = $0 }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YV1...", text: $vin)
+                TextField("YV1...", text: $volvoVIN)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: vin) { AccountDraftState.shared.vin = $0 }
+                    .onChange(of: volvoVIN) { AccountDraftState.shared.volvoVIN = $0 }
             }
 
             Button {
@@ -317,15 +338,18 @@ struct AccountCredentialsForm: View {
     }
 
     private func savePolestarCredentials() {
-        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let upperVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let nicknameVIN = upperVIN.isEmpty ? Preferences.vin : upperVIN
-        let credentialsChanged = normalizedEmail != Preferences.email || upperVIN != Preferences.vin || !password.isEmpty
+        let normalizedEmail = polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let oldVIN = Preferences.vin(for: .polestar)
+        let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
+        let credentialsChanged = normalizedEmail != Preferences.email || upperVIN != oldVIN || !polestarPassword.isEmpty
         Preferences.email = normalizedEmail
-        Preferences.vin = upperVIN
-        Preferences.setVehicleNickname(vehicleNickname, for: nicknameVIN)
-        if !password.isEmpty {
-            try? Keychain.savePassword(password)
+        Preferences.setVin(upperVIN, for: .polestar)
+        if !nicknameVIN.isEmpty {
+            Preferences.setVehicleNickname(polestarNickname, for: nicknameVIN)
+        }
+        if !polestarPassword.isEmpty {
+            try? Keychain.savePassword(polestarPassword)
         }
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.7)) {
             showSavedFeedback = true
@@ -340,21 +364,23 @@ struct AccountCredentialsForm: View {
 
     private func beginVolvoSignIn() {
         volvoSigningIn = true
-        let upperVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upperVIN = volvoVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         Preferences.volvoClientID = trimmedClientID
+        Preferences.setVin(upperVIN, for: .volvo)
         if !upperVIN.isEmpty {
-            Preferences.vin = upperVIN
-        }
-        if !vehicleNickname.isEmpty {
-            let nickVIN = upperVIN.isEmpty ? Preferences.vin(for: .volvo) : upperVIN
-            Preferences.setVehicleNickname(vehicleNickname, for: nickVIN)
+            Preferences.setVehicleNickname(volvoNickname, for: upperVIN)
+        } else {
+            let existingVIN = Preferences.vin(for: .volvo)
+            if !existingVIN.isEmpty {
+                Preferences.setVehicleNickname(volvoNickname, for: existingVIN)
+            }
         }
         onSettingsChanged(.volvoSignIn(
             clientID: trimmedClientID,
             clientSecret: volvoClientSecret,
             vccApiKey: volvoApiKey,
-            nickname: vehicleNickname
+            nickname: volvoNickname
         ))
         volvoClientSecret = ""
         volvoApiKey = ""
@@ -370,5 +396,4 @@ struct AccountCredentialsForm: View {
         }
     }
 }
-
 
