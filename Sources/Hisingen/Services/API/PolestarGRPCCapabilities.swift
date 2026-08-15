@@ -345,11 +345,11 @@ extension PolestarGRPC {
         let positions = TyrePosition.allCases
         var tyres: [TyrePressure] = []
         for index in positions.indices {
-            let warning = tyreWarning(varint(fields, warningFields[index]))
+            let warningRaw = varint(fields, warningFields[index])
+            let warning = tyreWarning(warningRaw)
             let pressure = numeric(fields, pressureFields[index]).flatMap { $0 > 0 ? $0 : nil }
-            if warning != .unknown || pressure != nil {
-                tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
-            }
+            let effectiveWarning: TyrePressureWarning = (warning == .unknown && warningRaw == nil) ? .none : warning
+            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: effectiveWarning))
         }
         var warnings: [VehicleWarning] = []
         if let value = varint(fields, 5), value > 1 { warnings.append(.service) }
