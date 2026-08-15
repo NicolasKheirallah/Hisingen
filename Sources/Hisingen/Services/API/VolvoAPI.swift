@@ -362,13 +362,13 @@ actor VolvoAPI {
 
 
     private func discoverVehicles(preferredVIN: String?) async throws {
+        let savedVIN: String? = if let preferredVIN, !preferredVIN.isEmpty {
+            preferredVIN
+        } else {
+            await Preferences.vin(for: .volvo)
+        }
         do {
             let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
-            guard !list.isEmpty else {
-                cars = []
-                selectedVIN = nil
-                return
-            }
             var summaries: [CarSummary] = []
             for entry in list {
                 let details = try? await vehicleDetails(vin: entry.vin)
@@ -376,13 +376,23 @@ actor VolvoAPI {
                     .compactMap { $0 }.joined(separator: " · ")
                 summaries.append(CarSummary(vin: entry.vin, title: title.isEmpty ? entry.vin : title))
             }
+            if summaries.isEmpty, let vin = savedVIN, !vin.isEmpty {
+                let nickname = await Preferences.vehicleNickname(for: vin)
+                summaries.append(CarSummary(vin: vin, title: nickname.isEmpty ? "Volvo" : nickname))
+            }
             cars = summaries
-            let selected = preferredVIN.flatMap { wanted in cars.first(where: { $0.vin == wanted }) } ?? cars.first
+            let selected = (savedVIN != nil) ? (cars.first(where: { $0.vin == savedVIN }) ?? cars.first) : cars.first
             selectedVIN = selected?.vin
         } catch {
             logger.warning("Volvo vehicle discovery fallback: \(error.localizedDescription, privacy: .public)")
-            cars = []
-            selectedVIN = preferredVIN
+            if let vin = savedVIN, !vin.isEmpty {
+                let nickname = await Preferences.vehicleNickname(for: vin)
+                cars = [CarSummary(vin: vin, title: nickname.isEmpty ? "Volvo" : nickname)]
+                selectedVIN = vin
+            } else {
+                cars = []
+                selectedVIN = nil
+            }
         }
     }
 
