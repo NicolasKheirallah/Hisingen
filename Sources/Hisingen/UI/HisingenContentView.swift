@@ -1073,6 +1073,8 @@ struct VehicleTabView: View {
                     rows.append(KVRow(L10n.text("Climate Target"),
                                       String(format: "%.1f °C", target), symbol: "target"))
                 }
+            } else if features.contains(.remoteClimate) {
+                rows.append(KVRow(L10n.text("Cabin Climate"), L10n.text("Off"), symbol: "fan"))
             } else if state.climateStatus == nil {
                 climateUnavailable = true
             }

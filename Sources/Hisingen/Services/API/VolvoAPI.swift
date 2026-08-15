@@ -274,25 +274,40 @@ actor VolvoAPI {
 
         let climate: VehicleClimateStatus? = {
             guard features.contains(.climateStatus) else { return nil }
-            guard let climatization else { return nil }
-            let rawStatus = climatization.status?.value ?? climatization.preconditioning?.value
-            guard let raw = rawStatus?.uppercased(), !raw.isEmpty else { return nil }
-            let activity: ClimateActivity
-            switch raw {
-            case "HEATING", "WARMING": activity = .heating
-            case "COOLING": activity = .cooling
-            case "VENTILATING", "VENTILATION": activity = .ventilating
-            case "RUNNING", "ACTIVE", "ON": activity = .active
-            case "OFF", "IDLE", "STOPPED": activity = .idle
-            default: activity = .idle
+            if let climatization {
+                let rawStatus = climatization.status?.value ?? climatization.preconditioning?.value
+                let raw = rawStatus?.uppercased().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let activity: ClimateActivity
+                if raw.contains("HEAT") || raw.contains("WARM") {
+                    activity = .heating
+                } else if raw.contains("COOL") {
+                    activity = .cooling
+                } else if raw.contains("VENT") {
+                    activity = .ventilating
+                } else if raw.contains("ON") || raw.contains("RUNNING") || raw.contains("ACTIVE") {
+                    activity = .active
+                } else {
+                    activity = .idle
+                }
+                return VehicleClimateStatus(
+                    activity: activity,
+                    timeRemainingMinutes: climatization.timeRemainingMinutes?.value,
+                    timerTriggered: false,
+                    interiorTemperatureCelsius: climatization.interiorTemperatureCelsius?.value,
+                    requestedTemperatureCelsius: climatization.targetTemperatureCelsius?.value ?? 22.0
+                )
+            } else if features.contains(.remoteClimate) {
+                // If telemetry endpoint is 404/not supported on this model, but remote climate commands work,
+                // present a clean Idle/Standby state rather than a broken unavailable badge
+                return VehicleClimateStatus(
+                    activity: .idle,
+                    timeRemainingMinutes: nil,
+                    timerTriggered: false,
+                    interiorTemperatureCelsius: nil,
+                    requestedTemperatureCelsius: 22.0
+                )
             }
-            return VehicleClimateStatus(
-                activity: activity,
-                timeRemainingMinutes: climatization.timeRemainingMinutes?.value,
-                timerTriggered: false,
-                interiorTemperatureCelsius: climatization.interiorTemperatureCelsius?.value,
-                requestedTemperatureCelsius: climatization.targetTemperatureCelsius?.value ?? 22.0
-            )
+            return nil
         }()
 
         let software: VehicleSoftwareInfo? = features.contains(.softwareUpdates)
