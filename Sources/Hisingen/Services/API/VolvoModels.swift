@@ -89,14 +89,29 @@ enum VolvoPowertrain {
 
 struct VolvoEnergyStateDTO: Decodable {
     let batteryChargeLevel: VolvoField<Double>?
-    let electricRange: VolvoField<Int>?
+    let electricRange: VolvoField<Double>?
     let chargingStatus: VolvoField<String>?
     let chargerConnectionStatus: VolvoField<String>?
     let chargingPower: VolvoField<Double>?
     let chargingCurrent: VolvoField<Double>?
     let chargingVoltage: VolvoField<Double>?
-    let estimatedChargingTimeToFull: VolvoField<Int>?
-    let targetBatteryLevel: VolvoField<Int>?
+    let chargingCurrentLimit: VolvoField<Double>?
+    let estimatedChargingTimeToFull: VolvoField<Double>?
+    let estimatedChargingTimeToTargetBatteryChargeLevel: VolvoField<Double>?
+    let targetBatteryLevel: VolvoField<Double>?
+    let targetBatteryChargeLevel: VolvoField<Double>?
+
+    var rangeKm: Int? {
+        electricRange?.value.map { Int($0.rounded()) }
+    }
+
+    var targetPercent: Int? {
+        (targetBatteryChargeLevel?.value ?? targetBatteryLevel?.value).map { Int($0.rounded()) }
+    }
+
+    var estTimeToTargetMinutes: Int? {
+        (estimatedChargingTimeToTargetBatteryChargeLevel?.value ?? estimatedChargingTimeToFull?.value).map { Int($0.rounded()) }
+    }
 }
 
 struct VolvoEnergyCapabilitiesDTO: Decodable {
