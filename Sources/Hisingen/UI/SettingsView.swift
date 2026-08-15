@@ -390,28 +390,28 @@ struct SettingsView: View {
                 CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: isVolvo ? .blue : .secondary)
 
                 Text(isVolvo
-                     ? L10n.text("Volvo Connected Vehicle write commands are active. Toggle the individual controls you wish to display in the Controls tab.")
-                     : L10n.text("Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices."))
+                     ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
+                     : L10n.text("Remote vehicle commands are unavailable because Polestar restricts write operations to paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
-                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
-                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release")
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now")
-                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows")
-                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn")
-                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration")
+                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: isVolvo, badgeText: isVolvo ? nil : "Mobile Only")
+                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
+                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Mobile Only")
+                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
+                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
+                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
                 }
-                .disabled(!isVolvo)
-                .opacity(isVolvo ? 1.0 : 0.5)
             }
         }
     }
 
 
     private var vehicleDataCard: some View {
-        let brandName = Preferences.activeBrand.displayName
+        let brand = Preferences.activeBrand
+        let isVolvo = brand == .volvo
+        let brandName = brand.displayName
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
@@ -419,15 +419,15 @@ struct SettingsView: View {
                 subsectionHeader("Vehicle & Identity")
                 VStack(spacing: 4) {
                     featureToggleRow(.vehicleIdentity, symbol: "car.side", title: "Vehicle Identity", detail: "Model, year, license plate & VIN")
-                    featureToggleRow(.ownerGreeting, symbol: "person.text.rectangle", title: "Owner Greeting", detail: L10n.format("Show the %@ ID first name", brandName))
+                    featureToggleRow(.ownerGreeting, symbol: "person.text.rectangle", title: "Owner Greeting", detail: L10n.format("Show the %@ ID first name", brandName), isSupported: !isVolvo, badgeText: isVolvo ? "N/A on Volvo" : nil)
                     featureToggleRow(.vehicleImage, symbol: "photo.artframe", title: "Studio Vehicle Image", detail: L10n.format("Render high-resolution %@ visual", brandName))
-                    featureToggleRow(.vehicleAvailability, symbol: "antenna.radiowaves.left.and.right", title: "Vehicle Availability", detail: "Show online state and unavailable reason")
+                    featureToggleRow(.vehicleAvailability, symbol: "antenna.radiowaves.left.and.right", title: "Vehicle Availability", detail: "Show online state and command availability")
                 }
 
                 subsectionHeader("Charging & Energy")
                 VStack(spacing: 4) {
                     featureToggleRow(.chargingDetails, symbol: "powerplug.fill", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
-                    featureToggleRow(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times")
+                    featureToggleRow(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times", isSupported: !isVolvo, badgeText: isVolvo ? "Deprecated in API v2" : nil)
                     featureToggleRow(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Battery state, module health & energy usage")
                 }
 
@@ -441,7 +441,7 @@ struct SettingsView: View {
                 subsectionHeader("Climate & Air")
                 VStack(spacing: 4) {
                     featureToggleRow(.climateStatus, symbol: "thermometer.medium", title: "Climate Status & Timers", detail: "Live interior status and scheduled timers")
-                    featureToggleRow(.airQuality, symbol: "wind", title: "Cabin Air Quality", detail: "AQI & particulate matter sensors")
+                    featureToggleRow(.airQuality, symbol: "wind", title: "Cabin Air Quality", detail: "AQI & particulate matter sensors", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
                 }
 
                 subsectionHeader("Location & Weather")
@@ -453,7 +453,7 @@ struct SettingsView: View {
                 subsectionHeader("Advanced Diagnostics")
                 VStack(spacing: 4) {
                     featureToggleRow(.tripMeters, symbol: "chart.xyaxis.line", title: "Trip Meters", detail: "Manual and automatic trip computers")
-                    featureToggleRow(.connectivityDiagnostics, symbol: "antenna.radiowaves.left.and.right", title: "Connectivity", detail: "Vehicle network & signal diagnostics")
+                    featureToggleRow(.connectivityDiagnostics, symbol: "antenna.radiowaves.left.and.right", title: "Connectivity", detail: "Vehicle network & signal diagnostics", isSupported: !isVolvo, badgeText: isVolvo ? "Enterprise Only" : nil)
                     featureToggleRow(.softwareUpdates, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software & OTA", detail: L10n.format("%@ software version and update status", brandName))
                 }
             }
@@ -469,24 +469,43 @@ struct SettingsView: View {
             .padding(.top, 6)
     }
 
-    private func featureToggleRow(_ feature: AppFeature, symbol: String, title: String, detail: String) -> some View {
+    private func featureToggleRow(
+        _ feature: AppFeature,
+        symbol: String,
+        title: String,
+        detail: String,
+        isSupported: Bool = true,
+        badgeText: String? = nil
+    ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSupported ? .secondary : .tertiary)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.text(title))
-                    .font(.system(size: 11, weight: .medium))
+                HStack(spacing: 4) {
+                    Text(L10n.text(title))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(isSupported ? .primary : .secondary)
+                    if let badgeText {
+                        Text(L10n.text(badgeText))
+                            .font(.system(size: 8, weight: .semibold))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Text(L10n.text(detail))
                     .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary.opacity(isSupported ? 1.0 : 0.7))
             }
             Spacer()
             Toggle("", isOn: Binding(
-                get: { features.contains(feature) },
+                get: { isSupported && features.contains(feature) },
                 set: { enabled in
+                    guard isSupported else { return }
                     features.set(feature, enabled: enabled)
                     Preferences.features = features
                     onSettingsChanged(.features)
@@ -495,8 +514,10 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
             .labelsHidden()
+            .disabled(!isSupported)
         }
         .padding(.vertical, 3)
+        .opacity(isSupported ? 1.0 : 0.55)
     }
 
 
