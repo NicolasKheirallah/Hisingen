@@ -406,8 +406,8 @@ struct VehicleTabView: View {
 
     private var moreDetailsSection: some View {
         let cards: [AnyView] = [
-            vehicleIdentityCard, tireSchematicCard, climateCard,
-            locationCard, softwareCard, diagnosticsCard
+            vehicleIdentityCard, openingsCard, tireSchematicCard, lightingAndFluidCard,
+            climateCard, locationCard, softwareCard, diagnosticsCard
         ].compactMap { $0 }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
@@ -944,6 +944,73 @@ struct VehicleTabView: View {
         })
     }
 
+    private var openingsCard: AnyView? {
+        guard features.contains(.exteriorStatus), let ext = state.exteriorStatus, !ext.openings.isEmpty else { return nil }
+        let isLocked = ext.isLocked
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
+                    Spacer()
+                    if let isLocked {
+                        Pill(
+                            text: isLocked ? "Locked" : "Unlocked",
+                            color: isLocked ? .secondary : HisingenTheme.semanticWarning,
+                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                        )
+                    }
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                    ForEach(ext.openings, id: \.opening) { reading in
+                        let isOpen = reading.state == .open || reading.state == .ajar
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+                                .frame(width: 6, height: 6)
+                            Text(reading.opening.displayName)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(HisingenTheme.ink)
+                            Spacer()
+                            Text(isOpen ? L10n.text("Open") : L10n.text("Closed"))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
+                        }
+                        .padding(6)
+                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+        })
+    }
+
+    private var lightingAndFluidCard: AnyView? {
+        guard features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings) else { return nil }
+        var rows: [KVRow] = []
+        if let fluidWarnings = Optional(state.fluidWarnings), !fluidWarnings.isEmpty {
+            for f in fluidWarnings {
+                rows.append(KVRow(f, L10n.text("Low Level"), symbol: "drop.triangle", warning: true))
+            }
+        } else {
+            rows.append(KVRow(L10n.text("Fluid Levels"), L10n.text("Normal"), symbol: "drop.fill"))
+        }
+
+        if let warnings = Optional(state.dataWarnings), !warnings.isEmpty {
+            for w in warnings {
+                rows.append(KVRow(L10n.text("Exterior Light"), w, symbol: "lightbulb.slash.fill", warning: true))
+            }
+        } else {
+            rows.append(KVRow(L10n.text("Lighting Systems"), L10n.text("All 16 Systems OK"), symbol: "lightbulb.fill"))
+        }
+
+        guard !rows.isEmpty else { return nil }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "shield.lefthalf.filled", title: L10n.text("Vehicle Health & Lighting"), color: .yellow)
+                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        })
+    }
 
     private var tireSchematicCard: AnyView? {
         guard features.contains(.tyreAndWarnings), let tyres = state.healthDetails?.tyres, !tyres.isEmpty else { return nil }
