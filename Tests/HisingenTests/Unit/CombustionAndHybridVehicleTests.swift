@@ -156,7 +156,7 @@ struct CombustionAndHybridVehicleTests {
 
         XCTAssertEqual(Format.icon(for: iceState), "fuelpump.fill")
         XCTAssertEqual(Format.barTitle(for: iceState, style: .battery, unit: .kilometers), "74%")
-        XCTAssertEqual(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers), "74% · 650 km")
+        XCTAssertEqual(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers), "74% · 650km")
 
         let phevState = VehicleState(
             batteryPercentage: 85.0,
@@ -190,7 +190,7 @@ struct CombustionAndHybridVehicleTests {
         )
 
         XCTAssertEqual(Format.icon(for: phevState), "bolt.car.fill")
-        XCTAssertEqual(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers), "85% · 545 km")
+        XCTAssertEqual(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers), "85% · 545km")
     }
 
     @Test
