@@ -75,7 +75,6 @@
 "Est. Charge Cost" = "Est. Charge Cost";
 "Estimated Range" = "Estimated Range";
 "License Plate" = "License Plate";
-"Low Level" = "Low Level";
 "Manual Trip Meter" = "Manual Trip Meter";
 "Normal" = "Normal";
 "Open Settings & Sign In" = "Open Settings & Sign In";
@@ -118,7 +117,6 @@
 "Steering Wheel" = "Steering Wheel";
 "ON" = "ON";
 "OFF" = "OFF";
-"Start Climate" = "Start Climate";
 "Stop" = "Stop";
 "Stop Air Cleaning" = "Stop Air Cleaning";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Clean Cabin Air (PM2.5 Pre-Clean)";
@@ -372,7 +370,6 @@
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
 "12 V battery low" = "12 V battery low";
-"Active" = "Active";
 "Air quality" = "Air quality";
 "Air quality index" = "Air quality index";
 "Automatic trip" = "Automatic trip";
@@ -422,7 +419,6 @@
 "Manual trip" = "Manual trip";
 "Network type" = "Network type";
 "No power" = "No power";
-"Off" = "Off";
 "Oil level" = "Oil level";
 "Pending" = "Pending";
 "Poor" = "Poor";
@@ -730,3 +726,43 @@
 "Cost" = "Cost";
 "Projected" = "Projected";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "All Normal";
+"Check Pressure" = "Check Pressure";
+"Parked" = "Parked";
+"Moving" = "Moving";
+"Copy Coordinates" = "Copy Coordinates";
+"Copied" = "Copied";
+"Google Maps" = "Google Maps";
+"Speed" = "Speed";
+"Doors & Openings" = "Doors & Openings";
+"Vehicle Health & Lighting" = "Vehicle Health & Lighting";
+"Fluid Levels" = "Fluid Levels";
+"Lighting Systems" = "Lighting Systems";
+"All 16 Systems OK" = "All 16 Systems OK";
+"Exterior Light" = "Exterior Light";
+"Low Level" = "Low Level";
+"Open" = "Open";
+"Closed" = "Closed";
+"All Closed & Locked" = "All Closed & Locked";
+"All Closed" = "All Closed";
+"%d Open" = "%d Open";
+"FL Window" = "FL Window";
+"FR Window" = "FR Window";
+"RL Window" = "RL Window";
+"RR Window" = "RR Window";
+"Charge Lid" = "Charge Lid";
+"Start Climate" = "Start Climate";
+"Stop Climate" = "Stop Climate";
+"Active" = "Active";
+"Off" = "Off";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Appearance Mode";
+"Mode" = "Mode";
+"System (Automatic)" = "System (Automatic)";
+"Light" = "Light";
+"Dark" = "Dark";
+"Liquid Glass" = "Liquid Glass";
+

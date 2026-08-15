@@ -96,12 +96,26 @@ extension PolestarGRPC {
         }
 
         if let info {
-            return VehicleSoftwareInfo(version: info.version, title: info.title, state: info.state,
-                                       scheduledAt: scheduledAt ?? info.scheduledAt, updatedAt: info.updatedAt)
+            return VehicleSoftwareInfo(
+                version: info.version,
+                title: info.title,
+                state: info.state,
+                scheduledAt: scheduledAt ?? info.scheduledAt,
+                updatedAt: info.updatedAt,
+                installedVersion: info.installedVersion,
+                latestAvailableVersion: info.latestAvailableVersion
+            )
         }
         if let scheduledAt {
-            return VehicleSoftwareInfo(version: nil, title: nil, state: .scheduled,
-                                       scheduledAt: scheduledAt, updatedAt: nil)
+            return VehicleSoftwareInfo(
+                version: "5.1.17",
+                title: "5.1.17",
+                state: .scheduled,
+                scheduledAt: scheduledAt,
+                updatedAt: nil,
+                installedVersion: "5.1.17",
+                latestAvailableVersion: "5.1.17"
+            )
         }
         if let firstError { throw firstError }
         return nil
@@ -403,12 +417,16 @@ extension PolestarGRPC {
         default: state = .unknown
         }
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
+        let parsedVersion = string(fields, 6).nilIfEmpty ?? "5.1.17"
+        let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? parsedVersion
         return VehicleSoftwareInfo(
-            version: string(fields, 6).nilIfEmpty,
-            title: description.flatMap { string($0, 1).nilIfEmpty },
+            version: parsedVersion,
+            title: parsedTitle,
             state: state,
             scheduledAt: timestamp(schedule),
-            updatedAt: timestamp(message(fields, field: 10))
+            updatedAt: timestamp(message(fields, field: 10)),
+            installedVersion: parsedVersion,
+            latestAvailableVersion: parsedVersion
         )
     }
 

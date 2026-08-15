@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !force && Preferences.activeBrand == brand { return }
         refreshCoordinator?.stop()
         Preferences.activeBrand = brand
+        Preferences.syncAppThemeStorageKey()
         let hasSession = Preferences.hasResumableSession(for: brand)
         sessionValid = hasSession
         let vin = Preferences.vin(for: brand)
@@ -324,6 +325,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let result = try await activeProvider.executeRemoteCommand(command, vin: state.vin)
+                if case .startClimate(let temp, _, _, _, _, _) = command {
+                    if var current = self.latest {
+                        current.climateStatus = VehicleClimateStatus(
+                            activity: .heating,
+                            timeRemainingMinutes: 30,
+                            timerTriggered: false,
+                            interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                            requestedTemperatureCelsius: Double(temp > 0 ? temp : 22.0)
+                        )
+                        self.latest = current
+                        self.stateStore.save(current)
+                        self.render()
+                    }
+                } else if case .stopClimate = command {
+                    if var current = self.latest {
+                        current.climateStatus = VehicleClimateStatus(
+                            activity: .idle,
+                            timeRemainingMinutes: nil,
+                            timerTriggered: false,
+                            interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                            requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+                        )
+                        self.latest = current
+                        self.stateStore.save(current)
+                        self.render()
+                    }
+                } else if case .lock = command {
+                    if var current = self.latest, var ext = current.exteriorStatus {
+                        ext.isLocked = true
+                        current.exteriorStatus = ext
+                        self.latest = current
+                        self.stateStore.save(current)
+                        self.render()
+                    }
+                } else if case .unlock = command {
+                    if var current = self.latest, var ext = current.exteriorStatus {
+                        ext.isLocked = false
+                        current.exteriorStatus = ext
+                        self.latest = current
+                        self.stateStore.save(current)
+                        self.render()
+                    }
+                }
                 let message: String
                 if let backendMessage = result.message, !backendMessage.isEmpty {
                     message = backendMessage

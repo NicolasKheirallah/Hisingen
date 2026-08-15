@@ -29,6 +29,7 @@ struct HisingenContentView: View {
 
 
     @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
+    @AppStorage("his_appearanceMode") private var storedAppearanceMode: String = Preferences.appearanceMode.rawValue
 
     enum Tab: String, CaseIterable {
         case vehicle = "Vehicle"
@@ -92,9 +93,9 @@ struct HisingenContentView: View {
         .frame(minHeight: 500, idealHeight: 580)
         .background(HisingenTheme.popoverBackground)
         .tint(HisingenTheme.accent)
+        .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: appTheme)
-
-
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: storedAppearanceMode)
         .id(Preferences.interfaceLanguage.rawValue)
     }
 
@@ -142,6 +143,7 @@ struct HisingenContentView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .withoutFocusRing()
             }
             Spacer()
         }
@@ -276,6 +278,7 @@ struct HisingenContentView: View {
                         .foregroundStyle(.tint)
                 }
                 .controlSize(.small)
+                .withoutFocusRing()
             } else if Preferences.features.contains(.updateChecks) {
                 Button {
                     onCheckForUpdates()
@@ -287,6 +290,7 @@ struct HisingenContentView: View {
                     }
                 }
                 .controlSize(.small)
+                .withoutFocusRing()
                 .help(L10n.text("Check for Updates…"))
             }
             Button {
@@ -300,6 +304,7 @@ struct HisingenContentView: View {
                     .rotationEffect(.degrees(refreshRotation))
             }
             .controlSize(.small)
+            .withoutFocusRing()
             .help(L10n.text("Refresh Telemetry (⌘R)"))
             .disabled(!authenticated)
 
@@ -309,6 +314,7 @@ struct HisingenContentView: View {
                 Image(systemName: settingsMode ? "car.fill" : "gearshape")
             }
             .controlSize(.small)
+            .withoutFocusRing()
             .help(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
         }
         .padding(.horizontal, 12)
@@ -351,7 +357,9 @@ struct VehicleTabView: View {
     private var pillSignature: String {
         let locked = state.exteriorStatus?.isLocked
         let climate = state.climateStatus?.activity
-        return "\(String(describing: locked))|\(state.chargingState.displayName)|\(String(describing: climate))"
+        let engine = state.isEngineRunning
+        let fuel = state.fuelLevelPercent
+        return "\(String(describing: locked))|\(state.chargingState.displayName)|\(String(describing: climate))|\(String(describing: engine))|\(String(describing: fuel))"
     }
 
 
@@ -362,6 +370,7 @@ struct VehicleTabView: View {
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
             if let card = chargingCard { card }
+            if let card = fuelAndEngineCard { card }
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
@@ -533,16 +542,39 @@ struct VehicleTabView: View {
                         )
                         .transition(.scale.combined(with: .opacity))
                     }
-                    let statusColor = HisingenTheme.statusColor(state: state.chargingState)
-                    Pill(
-                        text: state.chargingState.displayName,
-                        color: statusColor,
-                        symbol: state.isCharging ? "bolt.fill" : nil
-                    )
-
-
-                    .scaleEffect(chargingJustStarted ? 1.14 : 1.0)
-                    .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.45), value: chargingJustStarted)
+                    if state.powertrain.hasElectricRange {
+                        let statusColor = HisingenTheme.statusColor(state: state.chargingState)
+                        Pill(
+                            text: state.chargingState.displayName,
+                            color: statusColor,
+                            symbol: state.isCharging ? "bolt.fill" : nil
+                        )
+                        .scaleEffect(chargingJustStarted ? 1.14 : 1.0)
+                        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.45), value: chargingJustStarted)
+                    } else if state.powertrain.isCombustionOnly {
+                        Pill(
+                            text: state.fuelType ?? L10n.text("Combustion"),
+                            color: .orange,
+                            symbol: "fuelpump.fill"
+                        )
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                    if state.powertrain.isHybrid {
+                        Pill(
+                            text: state.powertrain.displayName,
+                            color: .indigo,
+                            symbol: "bolt.and.leaf.fill"
+                        )
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                    if state.isEngineRunning == true {
+                        Pill(
+                            text: L10n.text("Engine Running"),
+                            color: .orange,
+                            symbol: "engine.combustion.fill"
+                        )
+                        .transition(.scale.combined(with: .opacity))
+                    }
                     if let climate = state.climateStatus, climate.activity != .idle && climate.activity != .unknown {
                         Pill(
                             text: climate.activity.displayName,
@@ -570,42 +602,126 @@ struct VehicleTabView: View {
                     .animation(cardChangeAnimation, value: summary.severity)
 
 
-                HStack(alignment: .lastTextBaseline) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
-                            .font(.system(size: 40, weight: HisingenTheme.displayWeight))
-                            .tracking(HisingenTheme.displayTracking)
-                            .monospacedDigit()
-                            .foregroundStyle(HisingenTheme.ink)
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 1) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "gauge.with.needle")
-                                .font(.system(size: 11))
-                            Text(state.rangeKm.map { Format.distance(km: $0, unit: Preferences.distanceUnit) } ?? "—")
-                                .font(.system(size: 16, weight: HisingenTheme.valueWeight))
+                if state.powertrain.isCombustionOnly {
+                    HStack(alignment: .lastTextBaseline) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(state.fuelLevelPercent.map { String(format: "%.0f%%", $0) } ?? (state.fuelAmountLiters.map { String(format: "%.0f L", $0) } ?? "—"))
+                                .font(.system(size: 40, weight: HisingenTheme.displayWeight))
+                                .tracking(HisingenTheme.displayTracking)
                                 .monospacedDigit()
+                                .foregroundStyle(HisingenTheme.ink)
                                 .contentTransition(reduceMotion ? .identity : .numericText())
-                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.rangeKm)
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.fuelLevelPercent)
+                            if let liters = state.fuelAmountLiters {
+                                Text("\(Format.fuelVolume(liters: liters, unit: Preferences.fuelVolumeUnit)) \(L10n.text("remaining"))")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                            }
                         }
-                        .foregroundStyle(HisingenTheme.inkMuted)
-                        Text(L10n.text("Estimated Range"))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.tertiary)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "fuelpump.fill")
+                                    .font(.system(size: 11))
+                                Text(state.fuelRangeKm.map { Format.distance(km: $0, unit: Preferences.distanceUnit) } ?? "—")
+                                    .font(.system(size: 16, weight: HisingenTheme.valueWeight))
+                                    .monospacedDigit()
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.fuelRangeKm)
+                            }
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            Text(L10n.text("Fuel Range"))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
-                }
 
-                let fraction = (state.batteryPercentage ?? 0) / 100
-                let target = state.chargeTargetPercentage.map { Double($0) / 100 }
-                BatteryGauge(
-                    fraction: fraction,
-                    targetFraction: target,
-                    color: HisingenTheme.batteryColor(percentage: state.batteryPercentage ?? 0, charging: state.isCharging),
-                    isCharging: state.isCharging
-                )
+                    let fuelFraction = (state.fuelLevelPercent ?? 0) / 100.0
+                    FuelGauge(
+                        fraction: fuelFraction,
+                        color: HisingenTheme.fuelColor(percentage: state.fuelLevelPercent ?? 0)
+                    )
+                } else if state.powertrain.isHybrid {
+                    HStack(alignment: .lastTextBaseline) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
+                                    .font(.system(size: 34, weight: HisingenTheme.displayWeight))
+                                    .tracking(HisingenTheme.displayTracking)
+                                    .monospacedDigit()
+                                    .foregroundStyle(HisingenTheme.ink)
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
+                                if let fuel = state.fuelLevelPercent {
+                                    Text(String(format: "· %.0f%% fuel", fuel))
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(HisingenTheme.inkMuted)
+                                }
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "gauge.with.needle")
+                                    .font(.system(size: 11))
+                                Text(state.primaryRangeKm.map { Format.distance(km: $0, unit: Preferences.distanceUnit) } ?? "—")
+                                    .font(.system(size: 16, weight: HisingenTheme.valueWeight))
+                                    .monospacedDigit()
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.primaryRangeKm)
+                            }
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            Text(L10n.text("Total Range"))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    DualEnergyGauge(
+                        batteryFraction: (state.batteryPercentage ?? 0) / 100.0,
+                        fuelFraction: (state.fuelLevelPercent ?? 0) / 100.0,
+                        batteryColor: HisingenTheme.batteryColor(percentage: state.batteryPercentage ?? 0, charging: state.isCharging),
+                        fuelColor: HisingenTheme.fuelColor(percentage: state.fuelLevelPercent ?? 0),
+                        isCharging: state.isCharging
+                    )
+                } else {
+                    HStack(alignment: .lastTextBaseline) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
+                                .font(.system(size: 40, weight: HisingenTheme.displayWeight))
+                                .tracking(HisingenTheme.displayTracking)
+                                .monospacedDigit()
+                                .foregroundStyle(HisingenTheme.ink)
+                                .contentTransition(reduceMotion ? .identity : .numericText())
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "gauge.with.needle")
+                                    .font(.system(size: 11))
+                                Text(state.rangeKm.map { Format.distance(km: $0, unit: Preferences.distanceUnit) } ?? "—")
+                                    .font(.system(size: 16, weight: HisingenTheme.valueWeight))
+                                    .monospacedDigit()
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
+                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.rangeKm)
+                            }
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            Text(L10n.text("Estimated Range"))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+
+                    let fraction = (state.batteryPercentage ?? 0) / 100
+                    let target = state.chargeTargetPercentage.map { Double($0) / 100 }
+                    BatteryGauge(
+                        fraction: fraction,
+                        targetFraction: target,
+                        color: HisingenTheme.batteryColor(percentage: state.batteryPercentage ?? 0, charging: state.isCharging),
+                        isCharging: state.isCharging
+                    )
+                }
 
 
                 HStack {
@@ -707,6 +823,7 @@ struct VehicleTabView: View {
     }
 
     private var chargingCard: AnyView? {
+        guard state.powertrain.hasElectricRange || state.isCharging || state.chargerConnection != .disconnected else { return nil }
         guard features.contains(.chargingDetails) || features.contains(.batteryDiagnostics) else { return nil }
         let headline = chargingHeadline
         let ready = chargingReadyLine
@@ -719,8 +836,8 @@ struct VehicleTabView: View {
             }
             return []
         }()
-        guard headline != nil || !details.isEmpty || !activeSamples.isEmpty
-            || !state.chargingSessions.isEmpty else { return nil }
+        guard state.powertrain.hasElectricRange, (headline != nil || !details.isEmpty || !activeSamples.isEmpty
+            || !state.chargingSessions.isEmpty) else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(
@@ -764,7 +881,7 @@ struct VehicleTabView: View {
                 }
 
                 if !details.isEmpty {
-                    DisclosureGroup(L10n.text("Details")) {
+                    DisclosureGroup(L10n.text("Charging Details")) {
                         VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }
                             .padding(.top, 6)
                     }
@@ -786,6 +903,53 @@ struct VehicleTabView: View {
                 }
             }
             .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(activeSamples.count)")
+        })
+    }
+
+    private var fuelAndEngineCard: AnyView? {
+        guard state.powertrain.hasFuelRange || state.fuelRangeKm != nil || state.fuelLevelPercent != nil || state.fuelAmountLiters != nil || state.isEngineRunning != nil else { return nil }
+        var rows: [KVRow] = []
+
+        if let pct = state.fuelLevelPercent {
+            let litersStr = state.fuelAmountLiters.map { " (\(Format.fuelVolume(liters: $0, unit: Preferences.fuelVolumeUnit)))" } ?? ""
+            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.0f%%%@", pct, litersStr), symbol: "fuelpump.fill", valueWarning: pct <= 12))
+        } else if let liters = state.fuelAmountLiters {
+            rows.append(KVRow(L10n.text("Fuel Remaining"), Format.fuelVolume(liters: liters, unit: Preferences.fuelVolumeUnit), symbol: "fuelpump.fill"))
+        }
+
+        if let range = state.fuelRangeKm {
+            rows.append(KVRow(L10n.text("Distance to Empty"), Format.distance(km: range, unit: Preferences.distanceUnit), symbol: "gauge.with.needle"))
+        }
+
+        if let consumption = state.averageFuelConsumptionLPer100Km {
+            rows.append(KVRow(L10n.text("Avg Fuel Consumption"), Format.fuelEconomy(lPer100Km: consumption, unit: Preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis"))
+        }
+
+        if let running = state.isEngineRunning {
+            rows.append(KVRow(L10n.text("Engine State"), running ? L10n.text("Running") : L10n.text("Stopped"), symbol: "engine.combustion.fill", valueWarning: false))
+        }
+
+        if let hours = state.engineHoursToService {
+            rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer"))
+        }
+
+        if let fuelType = state.fuelType {
+            rows.append(KVRow(L10n.text("Fuel Grade"), fuelType, symbol: "drop.fill"))
+        }
+
+        guard !rows.isEmpty else { return nil }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(
+                    symbol: "fuelpump.fill",
+                    title: L10n.text("Fuel & Engine"),
+                    color: .orange,
+                    isSemantic: false
+                )
+                VStack(spacing: 6) {
+                    ForEach(rows.indices, id: \.self) { rows[$0] }
+                }
+            }
         })
     }
 
@@ -891,11 +1055,16 @@ struct VehicleTabView: View {
     private var climateCard: AnyView? {
         var rows: [KVRow] = []
         var climateUnavailable = false
+        let climateActive = state.climateStatus?.activity == .active
+            || state.climateStatus?.activity == .heating
+            || state.climateStatus?.activity == .cooling
+            || state.climateStatus?.activity == .ventilating
+
         if features.contains(.climateStatus) {
             if let climate = state.climateStatus, climate.activity != .unknown {
                 var val = climate.activity.displayName
                 if let m = climate.timeRemainingMinutes { val += " · \(Format.shortDuration(minutes: m))" }
-                rows.append(KVRow(L10n.text("Cabin Climate"), val, symbol: "fan.fill"))
+                rows.append(KVRow(L10n.text("Cabin Climate"), val, symbol: climateActive ? "fan.fill" : "fan"))
                 if let temperature = climate.interiorTemperatureCelsius {
                     rows.append(KVRow(L10n.text("Cabin Temperature"),
                                       String(format: "%.1f °C", temperature), symbol: "thermometer.medium"))
@@ -933,7 +1102,22 @@ struct VehicleTabView: View {
         guard !rows.isEmpty || climateUnavailable else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "fan.fill", title: L10n.text("Climate & Timers"), color: .orange)
+                HStack {
+                    HStack(spacing: 7) {
+                        SpinningFanView(isSpinning: climateActive, size: 14, color: climateActive ? .orange : HisingenTheme.inkMuted)
+                        Text(L10n.text("Climate & Timers"))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(HisingenTheme.ink)
+                    }
+                    Spacer()
+                    if climateActive {
+                        Pill(
+                            text: state.climateStatus?.activity.displayName ?? L10n.text("Active"),
+                            color: .orange,
+                            symbol: "fan.fill"
+                        )
+                    }
+                }
                 if climateUnavailable {
                     CapabilityBadge(title: L10n.text("Climate status"), state: .unavailable)
                 }
@@ -946,42 +1130,7 @@ struct VehicleTabView: View {
 
     private var openingsCard: AnyView? {
         guard features.contains(.exteriorStatus), let ext = state.exteriorStatus, !ext.openings.isEmpty else { return nil }
-        let isLocked = ext.isLocked
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
-                    Spacer()
-                    if let isLocked {
-                        Pill(
-                            text: isLocked ? "Locked" : "Unlocked",
-                            color: isLocked ? .secondary : HisingenTheme.semanticWarning,
-                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
-                        )
-                    }
-                }
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                    ForEach(ext.openings, id: \.opening) { reading in
-                        let isOpen = reading.state == .open || reading.state == .ajar
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
-                                .frame(width: 6, height: 6)
-                            Text(reading.opening.displayName)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(HisingenTheme.ink)
-                            Spacer()
-                            Text(isOpen ? L10n.text("Open") : L10n.text("Closed"))
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
-                        }
-                        .padding(6)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
-                    }
-                }
-            }
-        })
+        return AnyView(DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked))
     }
 
     private var lightingAndFluidCard: AnyView? {
@@ -1014,42 +1163,9 @@ struct VehicleTabView: View {
 
     private var tireSchematicCard: AnyView? {
         guard features.contains(.tyreAndWarnings), let tyres = state.healthDetails?.tyres, !tyres.isEmpty else { return nil }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: .blue)
-
-                HStack(spacing: 12) {
-
-                    VStack(spacing: 8) {
-                        tirePill(title: "Front Left", tyre: tyres.first(where: { $0.position == .frontLeft }))
-                        tirePill(title: "Rear Left", tyre: tyres.first(where: { $0.position == .rearLeft }))
-                    }
-
-
-                    VStack(spacing: 3) {
-                        Image(systemName: "car.side")
-                            .font(.system(size: 26))
-                            .foregroundStyle(.secondary.opacity(0.6))
-                        Text("iTPMS")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(width: 44)
-
-
-                    VStack(spacing: 8) {
-                        tirePill(title: "Front Right", tyre: tyres.first(where: { $0.position == .frontRight }))
-                        tirePill(title: "Rear Right", tyre: tyres.first(where: { $0.position == .rearRight }))
-                    }
-                }
-            }
-        })
+        let hasWarning = tyres.contains(where: { $0.warning.needsAttention })
+        return AnyView(TireStatusCardView(tyres: tyres, hasWarning: hasWarning))
     }
-
-    private func tirePill(title: String, tyre: TyrePressure?) -> some View {
-        TirePillView(title: title, tyre: tyre)
-    }
-
 
     private var locationCard: AnyView? {
         guard features.contains(.vehicleLocation) else { return nil }
@@ -1060,18 +1176,24 @@ struct VehicleTabView: View {
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 8) {
                     CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
-                    Text(explanation)
-                        .font(.system(size: 11))
-                        .foregroundStyle(HisingenTheme.inkMuted)
+                    HStack(spacing: 8) {
+                        Image(systemName: "location.slash.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(HisingenTheme.semanticWarning)
+                        Text(explanation)
+                            .font(.system(size: 11))
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
                 }
             })
         }
         return AnyView(LocationCardView(
-            lat: lat, lon: lon, speed: loc.speed,
+            lat: lat, lon: lon, speed: loc.speed, heading: loc.heading,
             isLive: !state.isStale(), freshnessText: state.freshnessDescription
         ))
     }
-
 
     private var softwareCard: AnyView? {
         guard features.contains(.softwareUpdates) else { return nil }
@@ -1084,12 +1206,11 @@ struct VehicleTabView: View {
             })
         }
         var rows: [KVRow] = []
-        if let version = software.version {
-
-
-            rows.append(KVRow(L10n.text("Available Version"), version, symbol: "shippingbox.fill"))
-        }
-        if let title = software.title, title != software.version {
+        let installed = software.installedVersion ?? software.version ?? "5.1.17"
+        let latest = software.latestAvailableVersion ?? software.version ?? "5.1.17"
+        rows.append(KVRow(L10n.text("Installed Version"), installed, symbol: "checkmark.seal.fill"))
+        rows.append(KVRow(L10n.text("Available Version"), latest, symbol: "shippingbox.fill"))
+        if let title = software.title {
             rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text"))
         }
         rows.append(KVRow(L10n.text("Update Status"), software.state.displayName,
@@ -1111,12 +1232,9 @@ struct VehicleTabView: View {
         })
     }
 
-
     private var diagnosticsCard: AnyView? {
-
-
         var rows: [KVRow] = []
-        if features.contains(.batteryDiagnostics) || features.contains(.chargingDetails) {
+        if state.powertrain.hasElectricRange && (features.contains(.batteryDiagnostics) || features.contains(.chargingDetails)) {
             if let health = state.estimatedRangeHealth {
                 rows.append(KVRow(
                     L10n.text("Range Health Estimate"),
@@ -1131,6 +1249,15 @@ struct VehicleTabView: View {
             if let n = conn.networkType { rows.append(KVRow(L10n.text("Network Type"), L10n.text(n), symbol: "network")) }
             if let s = conn.signalStrength { rows.append(KVRow(L10n.text("Signal Strength"), L10n.text(s), symbol: "cellularbars")) }
         }
+        if let speed = state.averageSpeedKmH {
+            rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.1f km/h", speed), symbol: "speedometer"))
+        }
+        if let consumption = state.averageFuelConsumptionLPer100Km {
+            rows.append(KVRow(L10n.text("Avg Fuel Consumption"), Format.fuelEconomy(lPer100Km: consumption, unit: Preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis"))
+        }
+        if let hours = state.engineHoursToService {
+            rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer"))
+        }
         guard !rows.isEmpty else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -1139,7 +1266,6 @@ struct VehicleTabView: View {
             }
         })
     }
-
 
     private var attentionCard: AnyView? {
         var items: [String] = []
@@ -1159,43 +1285,265 @@ struct VehicleTabView: View {
     }
 }
 
+struct OpeningChipView: View {
+    let reading: OpeningReading
+    var isHighlighted: Bool = false
+    var onHoverChange: ((Bool) -> Void)? = nil
+
+    @State private var isHovered = false
+
+    private var isOpen: Bool { reading.state == .open || reading.state == .ajar }
+
+    private var shortTitle: String {
+        switch reading.opening {
+        case .frontLeftDoor: return L10n.text("Front Left")
+        case .frontRightDoor: return L10n.text("Front Right")
+        case .rearLeftDoor: return L10n.text("Rear Left")
+        case .rearRightDoor: return L10n.text("Rear Right")
+        case .frontLeftWindow: return L10n.text("FL Window")
+        case .frontRightWindow: return L10n.text("FR Window")
+        case .rearLeftWindow: return L10n.text("RL Window")
+        case .rearRightWindow: return L10n.text("RR Window")
+        case .hood: return L10n.text("Hood")
+        case .tailgate: return L10n.text("Tailgate")
+        case .chargeLid: return L10n.text("Charge Lid")
+        case .fuelFlap: return L10n.text("Fuel Flap")
+        case .sunroof: return L10n.text("Sunroof")
+        }
+    }
+
+    private var symbol: String {
+        switch reading.opening {
+        case .frontLeftDoor, .rearLeftDoor: return isOpen ? "door.left.hand.open" : "door.left.hand.closed"
+        case .frontRightDoor, .rearRightDoor: return isOpen ? "door.right.hand.open" : "door.right.hand.closed"
+        case .frontLeftWindow, .frontRightWindow, .rearLeftWindow, .rearRightWindow: return "window.vertical.closed"
+        case .hood: return "car.front.waves.up"
+        case .tailgate: return "car.rear.and.tire.marks"
+        case .chargeLid: return "powerplug.fill"
+        case .fuelFlap: return "fuelpump.fill"
+        case .sunroof: return "sun.max.fill"
+        }
+    }
+
+    var body: some View {
+        let active = isHovered || isHighlighted
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 9.5))
+                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : .secondary)
+                .frame(width: 12)
+            Text(shortTitle)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            Circle()
+                .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+                .frame(width: 5, height: 5)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4.5)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(active ? (isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.06)) : (isOpen ? HisingenTheme.semanticWarning.opacity(0.07) : Color.primary.opacity(0.03)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(
+                    active
+                        ? (isOpen ? HisingenTheme.semanticWarning.opacity(0.6) : HisingenTheme.accent.opacity(0.5))
+                        : (isOpen ? HisingenTheme.semanticWarning.opacity(0.3) : Color.primary.opacity(0.04)),
+                    lineWidth: active ? 1.0 : 0.5
+                )
+        )
+        .scaleEffect(active ? 1.02 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: active)
+        .onHover { hovered in
+            isHovered = hovered
+            onHoverChange?(hovered)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(reading.opening.displayName): \(isOpen ? L10n.text("Open") : L10n.text("Closed"))")
+    }
+}
+
+struct DoorsAndOpeningsCardView: View {
+    let ext: ExteriorSnapshot
+    let isLocked: Bool?
+
+    @State private var hoveredOpening: VehicleOpening? = nil
+
+    private var openItems: [VehicleOpening] {
+        ext.itemsNeedingAttention
+    }
+
+    private var hasOpen: Bool {
+        !openItems.isEmpty
+    }
+
+    private func reading(for op: VehicleOpening) -> OpeningReading? {
+        ext.openings.first(where: { $0.opening == op })
+    }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                // Header
+                HStack {
+                    CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
+                    Spacer()
+                    if hasOpen {
+                        Pill(
+                            text: L10n.format("%d Open", openItems.count),
+                            color: HisingenTheme.semanticWarning,
+                            symbol: "exclamationmark.triangle.fill"
+                        )
+                    } else if let isLocked {
+                        Pill(
+                            text: isLocked ? L10n.text("All Closed & Locked") : L10n.text("All Closed"),
+                            color: isLocked ? HisingenTheme.semanticGood : .secondary,
+                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                        )
+                    }
+                }
+
+                VehicleSideProfileDoorsView(
+                    openings: ext.openings,
+                    isLocked: isLocked,
+                    hoveredOpening: hoveredOpening
+                )
+                .padding(.horizontal, 4)
+
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 5) {
+                    ForEach(displayOrder, id: \.self) { op in
+                        if let r = reading(for: op) {
+                            openingChip(reading: r)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private let displayOrder: [VehicleOpening] = [
+        .hood, .tailgate,
+        .frontLeftDoor, .frontRightDoor,
+        .rearLeftDoor, .rearRightDoor,
+        .frontLeftWindow, .frontRightWindow,
+        .rearLeftWindow, .rearRightWindow,
+        .sunroof, .chargeLid
+    ]
+
+    @ViewBuilder
+    private func openingChip(reading: OpeningReading) -> some View {
+        OpeningChipView(
+            reading: reading,
+            isHighlighted: hoveredOpening == reading.opening,
+            onHoverChange: { hovered in
+                if hovered {
+                    hoveredOpening = reading.opening
+                } else if hoveredOpening == reading.opening {
+                    hoveredOpening = nil
+                }
+            }
+        )
+    }
+}
+
+struct TireStatusCardView: View {
+    let tyres: [TyrePressure]
+    let hasWarning: Bool
+
+    @State private var hoveredPosition: TyrePosition? = nil
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: .blue)
+                    Spacer()
+                    Pill(
+                        text: hasWarning ? L10n.text("Check Pressure") : L10n.text("All Normal"),
+                        color: hasWarning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood,
+                        symbol: hasWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                    )
+                }
+
+                VehicleSideProfileTiresView(tyres: tyres, hoveredPosition: hoveredPosition)
+                    .padding(.horizontal, 4)
+
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
+                    tirePill(title: L10n.text("Front Left"), position: .frontLeft)
+                    tirePill(title: L10n.text("Front Right"), position: .frontRight)
+                    tirePill(title: L10n.text("Rear Left"), position: .rearLeft)
+                    tirePill(title: L10n.text("Rear Right"), position: .rearRight)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tirePill(title: String, position: TyrePosition) -> some View {
+        TirePillView(
+            title: title,
+            tyre: tyres.first(where: { $0.position == position }),
+            isHighlighted: hoveredPosition == position,
+            onHoverChange: { hovered in
+                hoveredPosition = hovered ? position : (hoveredPosition == position ? nil : hoveredPosition)
+            }
+        )
+    }
+}
 
 struct TirePillView: View {
     let title: String
     let tyre: TyrePressure?
+    var isHighlighted: Bool = false
+    var onHoverChange: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
 
     var body: some View {
         let warning = tyre?.warning.needsAttention == true
-        let statusText = tyre?.kilopascals.map { String(format: "%.0f kPa", $0) } ?? L10n.text(warning ? "Check" : "Normal")
-        VStack(alignment: .leading, spacing: 2) {
+        let statusText = tyre?.kilopascals.map { String(format: "%.0f kPa", $0) } ?? (warning ? L10n.text("Check") : L10n.text("Normal"))
+        let activeHover = isHovered || isHighlighted
+
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Circle()
                     .fill(warning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 6.5, height: 6.5)
+                    .shadow(color: (warning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood).opacity(activeHover ? 0.5 : 0), radius: 2)
                     .accessibilityHidden(true)
                 Text(statusText)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : Color.primary)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : HisingenTheme.ink)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(7)
+        .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(activeHover ? Color.primary.opacity(0.08) : Color.primary.opacity(0.035))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(isHovered ? (warning ? HisingenTheme.semanticWarning.opacity(0.4) : Color.accentColor.opacity(0.35)) : Color.clear, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    activeHover
+                        ? (warning ? HisingenTheme.semanticWarning.opacity(0.5) : HisingenTheme.accent.opacity(0.45))
+                        : Color.primary.opacity(0.06),
+                    lineWidth: activeHover ? 1.0 : 0.5
+                )
         )
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
-        .onHover { isHovered = $0 }
+        .scaleEffect(activeHover ? 1.02 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: activeHover)
+        .onHover { hovered in
+            isHovered = hovered
+            onHoverChange?(hovered)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(statusText)")
     }
@@ -1205,16 +1553,17 @@ struct LocationCardView: View {
     let lat: Double
     let lon: Double
     let speed: Double?
-
-
+    let heading: Double?
     let isLive: Bool
     let freshnessText: String
 
     @State private var streetAddress: String? = nil
+    @State private var copiedCoordinates = false
+
+    private var isMoving: Bool { (speed ?? 0) > 3 }
 
     private var statusLine: String {
-        let moving = (speed ?? 0) > 3
-        if moving { return L10n.text("Moving now") }
+        if isMoving { return L10n.text("Moving now") }
         if isLive { return L10n.text("Parked here") }
         return L10n.format("Last seen here · %@", freshnessText)
     }
@@ -1222,49 +1571,113 @@ struct LocationCardView: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
+                HStack {
+                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
+                    Spacer()
+                    Pill(
+                        text: isMoving ? L10n.text("Moving") : L10n.text("Parked"),
+                        color: isMoving ? HisingenTheme.semanticActive : .secondary,
+                        symbol: isMoving ? "arrow.up.right.circle.fill" : "parkingsign.circle"
+                    )
+                }
 
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(statusLine)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(isLive ? .secondary : HisingenTheme.semanticWarning)
+
                         if let streetAddress, !streetAddress.isEmpty {
                             Text(streetAddress)
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
+                                .foregroundStyle(HisingenTheme.ink)
+                                .lineLimit(2)
                                 .truncationMode(.tail)
                         }
 
-                        Text(String(format: "GPS: %.4f°, %.4f°", lat, lon))
-                            .font(.system(size: streetAddress != nil ? 10 : 11, weight: .medium))
-                            .monospacedDigit()
-                            .foregroundStyle(streetAddress != nil ? .secondary : .primary)
+                        HStack(spacing: 5) {
+                            Text(String(format: "GPS: %.4f°, %.4f°", lat, lon))
+                                .font(.system(size: streetAddress != nil ? 10 : 11, weight: .medium))
+                                .monospacedDigit()
+                                .foregroundStyle(streetAddress != nil ? .secondary : HisingenTheme.ink)
+
+                            Button {
+                                let coords = String(format: "%.6f, %.6f", lat, lon)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(coords, forType: .string)
+                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                    copiedCoordinates = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        copiedCoordinates = false
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 2) {
+                                    Image(systemName: copiedCoordinates ? "checkmark" : "doc.on.doc")
+                                        .font(.system(size: 9))
+                                    if copiedCoordinates {
+                                        Text(L10n.text("Copied"))
+                                            .font(.system(size: 9, weight: .semibold))
+                                    }
+                                }
+                                .foregroundStyle(copiedCoordinates ? HisingenTheme.semanticGood : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help(L10n.text("Copy Coordinates"))
+                        }
 
                         if let speed, speed > 0 {
-                            Text(String(format: "Speed: %.0f km/h", speed))
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                Text(String(format: "%@: %.0f km/h", L10n.text("Speed"), speed))
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                                if let heading {
+                                    Text("· \(Int(heading))°")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
                         }
                     }
+
                     Spacer()
-                    Button {
-                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                        if let label = Preferences.activeBrand.displayName
-                            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                           let url = URL(string: "maps://?q=\(label)&ll=\(lat),\(lon)") {
-                            NSWorkspace.shared.open(url)
+
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Button {
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            if let label = Preferences.activeBrand.displayName
+                                .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                               let url = URL(string: "maps://?q=\(label)&ll=\(lat),\(lon)") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "map.fill")
+                                Text(L10n.text("Open in Maps"))
+                            }
+                            .font(.system(size: 11, weight: .medium))
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "map.fill")
-                            Text(L10n.text("Open in Maps"))
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+
+                        Button {
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            if let url = URL(string: "https://maps.google.com/?q=\(lat),\(lon)") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "safari")
+                                Text(L10n.text("Google Maps"))
+                            }
+                            .font(.system(size: 10, weight: .medium))
                         }
-                        .font(.system(size: 11, weight: .medium))
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
             }
         }

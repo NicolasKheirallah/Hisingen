@@ -13,6 +13,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint-workflows-and-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint (via Go module proxy, checksum-verified)
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Lint GitHub Actions workflows
+        run: |
+          GOPATH="$(go env GOPATH)"
+          "$GOPATH/bin/actionlint" -color
+
+      - name: Lint shell scripts
+        run: shellcheck Scripts/*.sh
+
+  check-localization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check localization keys
+        run: python3 Scripts/check-localization.py
+
+  check-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Check documentation links and fences
+        run: python3 Scripts/check-docs-links.py
+
   build-and-test:
     strategy:
       matrix:
@@ -40,16 +84,28 @@ jobs:
           swift --version
           make doctor
 
+      - name: Warn if release-pinned Xcode is missing from this runner
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          if [ ! -d /Applications/Xcode_16.2.app ]; then
+            echo "::warning::release.yml pins DEVELOPER_DIR=/Applications/Xcode_16.2.app, but that Xcode is not present on this macos-15 runner image. The release build may fail even though CI passed. Update the pin in release.yml to an Xcode version available on the runner image."
+          fi
+
       - name: Build with complete concurrency checks
         run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
-      - name: Test
-        run: swift test --disable-xctest --enable-swift-testing -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+      - name: Test (deterministic suite only — live/remote-command tests excluded)
+        run: >-
+          swift test --disable-xctest --enable-swift-testing
+          --skip Live
+          -Xswiftc -strict-concurrency=complete
+          -Xswiftc -warn-concurrency
 
-      - name: Bundle app
-        run: make app SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+      - name: Build app bundle and DMG installer
+        run: make all SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
 
-      - name: Validate bundle
+      - name: Validate bundle and disk image
         run: |
           set -euo pipefail
           test -x Hisingen.app/Contents/MacOS/Hisingen
@@ -57,3 +113,17 @@ jobs:
           lipo Hisingen.app/Contents/MacOS/Hisingen -verify_arch arm64
           codesign --verify --deep --strict --verbose=2 Hisingen.app
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' Hisingen.app/Contents/Info.plist)" = "true"
+          ICON_FILE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' Hisingen.app/Contents/Info.plist)
+          test -f "Hisingen.app/Contents/Resources/${ICON_FILE}.icns" || test -f "Hisingen.app/Contents/Resources/${ICON_FILE}"
+          test -s Hisingen.dmg
+          hdiutil verify Hisingen.dmg
+
+      - name: Upload build artifacts (App & DMG)
+        if: matrix.os == 'macos-15'
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.6.1
+        with:
+          name: Hisingen-macos-build
+          path: |
+            Hisingen.dmg
+            Hisingen.app
+          if-no-files-found: error

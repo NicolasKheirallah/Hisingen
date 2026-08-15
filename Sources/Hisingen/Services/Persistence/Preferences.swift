@@ -1,6 +1,7 @@
 
 
 import Foundation
+import SwiftUI
 
 
 enum InterfaceLanguage: String, CaseIterable {
@@ -62,29 +63,143 @@ enum MenuBarStyle: String, CaseIterable, Codable {
 }
 
 
+enum AppearanceMode: String, CaseIterable, Codable, Sendable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+
+    var title: String {
+        switch self {
+        case .system: return L10n.text("System (Automatic)")
+        case .light: return L10n.text("Light")
+        case .dark: return L10n.text("Dark")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.stars.fill"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
+enum ThemeCategory: String, CaseIterable, Sendable {
+    case all = "all"
+    case brand = "brand"
+    case dark = "dark"
+    case sport = "sport"
+    case nature = "nature"
+
+    var title: String {
+        switch self {
+        case .all: return L10n.text("All")
+        case .brand: return L10n.text("Brand")
+        case .dark: return L10n.text("OLED & Dark")
+        case .sport: return L10n.text("Performance")
+        case .nature: return L10n.text("Nature")
+        }
+    }
+}
+
 enum AppTheme: String, CaseIterable, Codable, Sendable {
     case hisingen
     case polestar
     case volvo
+    case nordicNight
+    case aurora
+    case swedishGold
+    case cyanRacing
+    case forest
+    case sandDune
 
     var title: String {
         switch self {
-        case .hisingen: return L10n.text("Hisingen (Default)")
-        case .polestar: return L10n.text("Polestar")
-        case .volvo: return L10n.text("Volvo")
+        case .hisingen: return L10n.text("Hisingen Glass")
+        case .polestar: return L10n.text("Polestar Minimal")
+        case .volvo: return L10n.text("Volvo Iron")
+        case .nordicNight: return L10n.text("Nordic Night")
+        case .aurora: return L10n.text("Aurora Borealis")
+        case .swedishGold: return L10n.text("Swedish Gold")
+        case .cyanRacing: return L10n.text("Cyan Racing")
+        case .forest: return L10n.text("Gothenburg Forest")
+        case .sandDune: return L10n.text("Sand Dune")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .hisingen: return L10n.text("Rounded cards, translucent materials, system accent color")
-        case .polestar: return L10n.text("Unofficial — monochrome panels, sharp corners, no color accent")
-        case .volvo: return L10n.text("Unofficial — Volvo's blue accent, soft panels, light/bold type contrast")
+        case .hisingen: return L10n.text("Rounded cards, translucent materials, amber accents")
+        case .polestar: return L10n.text("Monochrome panels, sharp corners, Scandinavian minimalism")
+        case .volvo: return L10n.text("Volvo iron blue accent, soft panels, light/bold contrast")
+        case .nordicNight: return L10n.text("Pitch OLED black, electric cyan glow, modern dark style")
+        case .aurora: return L10n.text("Deep midnight slate with radiant northern lights emerald")
+        case .swedishGold: return L10n.text("Polestar BST Öhlins Swedish Gold, dark charcoal luxury")
+        case .cyanRacing: return L10n.text("Cyan Racing championship blue, crisp track geometry")
+        case .forest: return L10n.text("Swedish pine and eucalyptus earth tones, organic soft feel")
+        case .sandDune: return L10n.text("Warm desert sand and titanium champagne minimalism")
+        }
+    }
+
+    var category: ThemeCategory {
+        switch self {
+        case .hisingen, .polestar, .volvo: return .brand
+        case .nordicNight: return .dark
+        case .aurora: return .nature
+        case .swedishGold, .cyanRacing: return .sport
+        case .forest: return .nature
+        case .sandDune: return .brand
+        }
+    }
+
+    var accentColorHex: String {
+        switch self {
+        case .hisingen: return "#E56E23"
+        case .polestar: return "#FFFFFF"
+        case .volvo: return "#1C6BBA"
+        case .nordicNight: return "#00E5FF"
+        case .aurora: return "#00E676"
+        case .swedishGold: return "#D4AF37"
+        case .cyanRacing: return "#0090D0"
+        case .forest: return "#4CAF50"
+        case .sandDune: return "#C5A059"
+        }
+    }
+
+    var previewHexColors: [String] {
+        switch self {
+        case .hisingen:
+            return ["#E56E23", "#FFA726", "#424242"]
+        case .polestar:
+            return ["#FFFFFF", "#888888", "#1A1A1A"]
+        case .volvo:
+            return ["#1C6BBA", "#284E80", "#333333"]
+        case .nordicNight:
+            return ["#00E5FF", "#0A192F", "#000000"]
+        case .aurora:
+            return ["#00E676", "#1DE9B6", "#0B132B"]
+        case .swedishGold:
+            return ["#D4AF37", "#E5A93C", "#1E1E24"]
+        case .cyanRacing:
+            return ["#0090D0", "#00B4D8", "#0A0F1A"]
+        case .forest:
+            return ["#2E7D32", "#4CAF50", "#0D1F0F"]
+        case .sandDune:
+            return ["#C5A059", "#E0C097", "#1E1B18"]
         }
     }
 }
 
-enum DistanceUnit: String, CaseIterable {
+enum DistanceUnit: String, CaseIterable, Codable, Sendable {
     case kilometers = "kilometers"
     case miles = "miles"
 
@@ -94,9 +209,80 @@ enum DistanceUnit: String, CaseIterable {
 
     var suffix: String { self == .kilometers ? "km" : "mi" }
 
-
     func convert(km: Int) -> Int {
         self == .kilometers ? km : Int((Double(km) * 0.621371).rounded())
+    }
+}
+
+enum FuelVolumeUnit: String, CaseIterable, Codable, Sendable {
+    case liters = "liters"
+    case gallonsUS = "gallons_us"
+    case gallonsUK = "gallons_uk"
+
+    var title: String {
+        switch self {
+        case .liters: return L10n.text("Liters (L)")
+        case .gallonsUS: return L10n.text("Gallons US (gal)")
+        case .gallonsUK: return L10n.text("Gallons Imperial (UK gal)")
+        }
+    }
+
+    var suffix: String {
+        switch self {
+        case .liters: return "L"
+        case .gallonsUS: return "gal"
+        case .gallonsUK: return "UK gal"
+        }
+    }
+
+    func convert(liters: Double) -> Double {
+        switch self {
+        case .liters: return liters
+        case .gallonsUS: return liters * 0.264172052
+        case .gallonsUK: return liters * 0.219969248
+        }
+    }
+}
+
+enum FuelEconomyUnit: String, CaseIterable, Codable, Sendable {
+    case litersPer100Km = "l_per_100km"
+    case milesPerGallonUS = "mpg_us"
+    case milesPerGallonUK = "mpg_uk"
+    case kmPerLiter = "km_per_l"
+
+    var title: String {
+        switch self {
+        case .litersPer100Km: return L10n.text("L/100 km")
+        case .milesPerGallonUS: return L10n.text("MPG (US)")
+        case .milesPerGallonUK: return L10n.text("MPG (UK)")
+        case .kmPerLiter: return L10n.text("km/L")
+        }
+    }
+
+    var suffix: String {
+        switch self {
+        case .litersPer100Km: return "L/100km"
+        case .milesPerGallonUS: return "mpg"
+        case .milesPerGallonUK: return "mpg (UK)"
+        case .kmPerLiter: return "km/L"
+        }
+    }
+
+    func format(lPer100Km: Double) -> String {
+        guard lPer100Km > 0 else { return "— \(suffix)" }
+        switch self {
+        case .litersPer100Km:
+            return String(format: "%.1f L/100km", lPer100Km)
+        case .milesPerGallonUS:
+            let mpg = 235.214583 / lPer100Km
+            return String(format: "%.1f mpg", mpg)
+        case .milesPerGallonUK:
+            let mpg = 282.481 / lPer100Km
+            return String(format: "%.1f mpg (UK)", mpg)
+        case .kmPerLiter:
+            let kml = 100.0 / lPer100Km
+            return String(format: "%.1f km/L", kml)
+        }
     }
 }
 
@@ -112,7 +298,10 @@ enum Preferences {
 
     static var activeBrand: VehicleBrand {
         get { VehicleBrand(rawValue: d.string(forKey: "active_vehicle_brand") ?? "") ?? .polestar }
-        set { d.set(newValue.rawValue, forKey: "active_vehicle_brand") }
+        set {
+            d.set(newValue.rawValue, forKey: "active_vehicle_brand")
+            syncAppThemeStorageKey()
+        }
     }
 
 
@@ -124,7 +313,10 @@ enum Preferences {
 
     static var vin: String {
         get { d.string(forKey: vinKey) ?? "" }
-        set { d.set(newValue, forKey: vinKey) }
+        set {
+            d.set(newValue, forKey: vinKey)
+            syncAppThemeStorageKey()
+        }
     }
 
     private static var vinKey: String {
@@ -142,6 +334,9 @@ enum Preferences {
 
     static func setVin(_ newVin: String, for brand: VehicleBrand) {
         d.set(newVin, forKey: vinKey(for: brand))
+        if brand == activeBrand {
+            syncAppThemeStorageKey()
+        }
     }
 
 
@@ -218,9 +413,89 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "distance_unit") }
     }
 
+    static var fuelVolumeUnit: FuelVolumeUnit {
+        get {
+            let raw = d.string(forKey: "fuel_volume_unit") ?? ""
+            return FuelVolumeUnit(rawValue: raw) ?? .liters
+        }
+        set { d.set(newValue.rawValue, forKey: "fuel_volume_unit") }
+    }
+
+    static var fuelEconomyUnit: FuelEconomyUnit {
+        get {
+            let raw = d.string(forKey: "fuel_economy_unit") ?? ""
+            return FuelEconomyUnit(rawValue: raw) ?? .litersPer100Km
+        }
+        set { d.set(newValue.rawValue, forKey: "fuel_economy_unit") }
+    }
+
+    static func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {
+        let normalizedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !normalizedVIN.isEmpty,
+           let themes = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String],
+           let raw = themes[normalizedVIN],
+           let theme = AppTheme(rawValue: raw) {
+            return theme
+        }
+        let resolvedBrand = brand ?? (normalizedVIN.isEmpty ? activeBrand : (normalizedVIN.hasPrefix("YV") ? .volvo : activeBrand))
+        if let brandRaw = d.string(forKey: "theme_for_\(resolvedBrand.rawValue)"),
+           let theme = AppTheme(rawValue: brandRaw) {
+            return theme
+        }
+        switch resolvedBrand {
+        case .volvo: return .volvo
+        case .polestar: return .polestar
+        }
+    }
+
+    static func setTheme(_ theme: AppTheme, for vin: String, brand: VehicleBrand? = nil) {
+        let normalizedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !normalizedVIN.isEmpty {
+            var themes = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]
+            themes[normalizedVIN] = theme.rawValue
+            d.set(themes, forKey: "vehicle_themes_v1")
+        }
+        let targetBrand = brand ?? activeBrand
+        d.set(theme.rawValue, forKey: "theme_for_\(targetBrand.rawValue)")
+        d.set(theme.rawValue, forKey: "app_theme")
+    }
+
     static var appTheme: AppTheme {
-        get { AppTheme(rawValue: d.string(forKey: "app_theme") ?? "") ?? .hisingen }
-        set { d.set(newValue.rawValue, forKey: "app_theme") }
+        get {
+            let currentVin = vin
+            if !currentVin.isEmpty {
+                return theme(for: currentVin, brand: activeBrand)
+            }
+            if let brandTheme = d.string(forKey: "theme_for_\(activeBrand.rawValue)"),
+               let theme = AppTheme(rawValue: brandTheme) {
+                return theme
+            }
+            return AppTheme(rawValue: d.string(forKey: "app_theme") ?? "") ?? (activeBrand == .volvo ? .volvo : .polestar)
+        }
+        set {
+            setTheme(newValue, for: vin, brand: activeBrand)
+        }
+    }
+
+    /// Re-derives the resolved theme for the currently active vehicle and writes it into the
+    /// legacy `"app_theme"` key, which `@AppStorage("app_theme")` observers watch for redraws.
+    /// Call this after switching the active vehicle/brand so those views pick up that car's
+    /// stored theme without waiting for the user to reselect it in Settings.
+    static func syncAppThemeStorageKey() {
+        d.set(appTheme.rawValue, forKey: "app_theme")
+    }
+
+    static var appearanceMode: AppearanceMode {
+        get {
+            guard let raw = d.string(forKey: "his_appearanceMode"),
+                  let mode = AppearanceMode(rawValue: raw) else {
+                return .system
+            }
+            return mode
+        }
+        set {
+            d.set(newValue.rawValue, forKey: "his_appearanceMode")
+        }
     }
 
     static var interfaceLanguage: InterfaceLanguage {

@@ -151,6 +151,40 @@ struct VehicleCapabilityTests {
         XCTAssertFalse(status.isVisible)
         XCTAssertFalse(status.isUsable)
     }
+
+    @Test
+    func volvoXC40AndEX40HideSelectableTemperatureAndSeatHeating() {
+        let xc40Profile = VehicleCapabilityProfile(modelName: "XC40 Recharge")
+        XCTAssertFalse(xc40Profile.hasSelectableClimateTemperature)
+        XCTAssertFalse(xc40Profile.hasSelectableSeatHeating)
+        XCTAssertFalse(xc40Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertTrue(xc40Profile.permits(.climateStartStop))
+        XCTAssertTrue(xc40Profile.permits(.locks))
+        XCTAssertTrue(xc40Profile.permits(.honkAndFlash))
+        XCTAssertFalse(xc40Profile.permits(.chargeTarget))
+        XCTAssertFalse(xc40Profile.permits(.chargingCurrentLimit))
+
+        let ex40Profile = VehicleCapabilityProfile(modelName: "EX40 Single Motor")
+        XCTAssertFalse(ex40Profile.hasSelectableClimateTemperature)
+        XCTAssertFalse(ex40Profile.hasSelectableSeatHeating)
+        XCTAssertFalse(ex40Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertTrue(ex40Profile.permits(.climateStartStop))
+    }
+
+    @Test
+    func volvoEX30AndEX90ShowSelectableTemperatureAndSeatHeating() {
+        let ex30Profile = VehicleCapabilityProfile(modelName: "EX30 Ultra")
+        XCTAssertTrue(ex30Profile.hasSelectableClimateTemperature)
+        XCTAssertTrue(ex30Profile.hasSelectableSeatHeating)
+        XCTAssertTrue(ex30Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertTrue(ex30Profile.permits(.climateStartStop))
+
+        let ex90Profile = VehicleCapabilityProfile(modelName: "EX90 Twin Motor")
+        XCTAssertTrue(ex90Profile.hasSelectableClimateTemperature)
+        XCTAssertTrue(ex90Profile.hasSelectableSeatHeating)
+        XCTAssertTrue(ex90Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertTrue(ex90Profile.permits(.climateStartStop))
+    }
 }
 
 

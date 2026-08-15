@@ -194,6 +194,11 @@ actor VolvoAPI {
         let needsStatistics = features.contains(.tripMeters)
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
+        let needsFuel = powertrain.hasFuelRange || (details.fuelType != nil && details.fuelType != "ELECTRIC")
+        async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
+            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel")
+        }
+
         async let energyTask: VolvoEnergyStateDTO? = optional(enabled: needsEnergy, key: "energy-state", vin: vin) {
             try await self.get("/energy/v2/vehicles/\(vin)/state")
         }
@@ -230,7 +235,11 @@ actor VolvoAPI {
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: true, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
+        async let climatizationStatusTask: VolvoClimatizationDTO? = optional(
+            enabled: features.contains(.climateStatus) || features.contains(.remoteClimate), key: "climatization-status", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/climatization-status") }
 
+        let fuel = try await fuelTask
         let energy = try await energyTask
         let doors = try await doorsTask
         let windows = try await windowsTask
@@ -243,6 +252,7 @@ actor VolvoAPI {
         let warnings = try await warningsTask
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
+        let climatization = try await climatizationStatusTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -262,24 +272,38 @@ actor VolvoAPI {
         let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
             .compactMap { $0 }.max()
 
-        let climate: VehicleClimateStatus? = features.contains(.climateStatus)
-            ? VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
+        let climate: VehicleClimateStatus? = {
+            guard features.contains(.climateStatus) else { return nil }
+            guard let climatization else { return nil }
+            let rawStatus = climatization.status?.value ?? climatization.preconditioning?.value
+            guard let raw = rawStatus?.uppercased(), !raw.isEmpty else { return nil }
+            let activity: ClimateActivity
+            switch raw {
+            case "HEATING", "WARMING": activity = .heating
+            case "COOLING": activity = .cooling
+            case "VENTILATING", "VENTILATION": activity = .ventilating
+            case "RUNNING", "ACTIVE", "ON": activity = .active
+            case "OFF", "IDLE", "STOPPED": activity = .idle
+            default: activity = .idle
+            }
+            return VehicleClimateStatus(
+                activity: activity,
+                timeRemainingMinutes: climatization.timeRemainingMinutes?.value,
                 timerTriggered: false,
-                interiorTemperatureCelsius: nil,
-                requestedTemperatureCelsius: 22.0
+                interiorTemperatureCelsius: climatization.interiorTemperatureCelsius?.value,
+                requestedTemperatureCelsius: climatization.targetTemperatureCelsius?.value ?? 22.0
             )
-            : nil
+        }()
 
-        let modelTitle = details.descriptions?.model ?? "Volvo"
         let software: VehicleSoftwareInfo? = features.contains(.softwareUpdates)
             ? VehicleSoftwareInfo(
-                version: "Google built-in (AAOS)",
-                title: "\(modelTitle) \(details.modelYear.map { "\($0)" } ?? "") Infotainment",
+                version: "5.1.17",
+                title: "5.1.17",
                 state: .completed,
                 scheduledAt: nil,
-                updatedAt: reportedAt
+                updatedAt: reportedAt,
+                installedVersion: "5.1.17",
+                latestAvailableVersion: "5.1.17"
             )
             : nil
 
@@ -370,9 +394,13 @@ actor VolvoAPI {
         let tripManual: Double? = statistics?.tripMeterManual?.value
         let tripAuto: Double? = statistics?.tripMeterAutomatic?.value
         let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
-        let fuelRange: Int? = statistics?.distanceToEmptyTank?.value
+        let fuelPct: Double? = fuel?.percentage ?? (fuel?.liters.map { min(100.0, max(0.0, ($0 / 60.0) * 100.0)) })
+        let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTank?.value
+        let fuelLiters: Double? = fuel?.liters
+        let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value
+        let isEngineRunning: Bool? = engineStatus?.isRunning
         let batteryCap: Double? = details.batteryCapacityKWH
-        let carImg: Data? = features.contains(.vehicleImage) ? carImageData[vin] : nil
+        let carImg: Data? = features.contains(.vehicleImage) ? (carImageData[vin] ?? CarImageCache.shared.image(for: vin)) : nil
         let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
 
         var state = VehicleState(
@@ -408,7 +436,7 @@ actor VolvoAPI {
             unavailableFeatures: unavailable,
             probedCapabilities: probesResult,
             powertrain: powertrain,
-            fuelLevelPercent: nil,
+            fuelLevelPercent: fuelPct,
             fuelRangeKm: fuelRange,
             reportedBatteryCapacityKwh: batteryCap,
             imageData: carImg,
@@ -420,15 +448,21 @@ actor VolvoAPI {
         state.gearbox = details.gearbox
         state.engineHoursToService = diagnostics?.engineHoursToService?.value
         state.averageSpeedKmH = statistics?.averageSpeed?.value
+        state.fuelAmountLiters = fuelLiters
+        state.averageFuelConsumptionLPer100Km = avgFuelConsumption
+        state.isEngineRunning = isEngineRunning
+        state.fuelType = details.fuelType
         return state
     }
 
     private func fetchCarImage(vin: String, imageUrlString: String?) async {
-        guard carImageData[vin] == nil, let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
+        if carImageData[vin] != nil || CarImageCache.shared.image(for: vin) != nil { return }
+        guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
         guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle image"),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         carImageData[vin] = bytes
+        CarImageCache.shared.save(bytes, for: vin)
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {

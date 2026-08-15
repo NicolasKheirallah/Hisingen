@@ -75,7 +75,6 @@
 "Est. Charge Cost" = "Est. ladekostnad";
 "Estimated Range" = "Estimert rekkevidde";
 "License Plate" = "Registreringsnummer";
-"Low Level" = "Lavt nivå";
 "Manual Trip Meter" = "Manuell turteller";
 "Normal" = "Normal";
 "Open Settings & Sign In" = "Åpne innstillinger og logg inn";
@@ -118,7 +117,6 @@
 "Steering Wheel" = "Ratt";
 "ON" = "PÅ";
 "OFF" = "AV";
-"Start Climate" = "Start klima";
 "Stop" = "Stopp";
 "Stop Air Cleaning" = "Stopp luftrensing";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Rens kupéluft (PM2,5-forhåndsrens)";
@@ -372,7 +370,6 @@
 "⚠︎ Service warning" = "⚠︎ Servicevarsel";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Kjøretøydata kan være utdatert";
 "12 V battery low" = "12 V-batteri lavt";
-"Active" = "Aktiv";
 "Air quality" = "Luftkvalitet";
 "Air quality index" = "Luftkvalitetsindeks";
 "Automatic trip" = "Automatisk tur";
@@ -422,7 +419,6 @@
 "Manual trip" = "Manuell tur";
 "Network type" = "Nettverkstype";
 "No power" = "Ingen effekt";
-"Off" = "Av";
 "Oil level" = "Oljenivå";
 "Pending" = "Venter";
 "Poor" = "Svakt";
@@ -728,3 +724,43 @@
 "Cost" = "Kostnad";
 "Projected" = "Prognose";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "Alle normale";
+"Check Pressure" = "Sjekk trykk";
+"Parked" = "Parkert";
+"Moving" = "I bevegelse";
+"Copy Coordinates" = "Kopier koordinater";
+"Copied" = "Kopiert";
+"Google Maps" = "Google Maps";
+"Speed" = "Fart";
+"Doors & Openings" = "Dører og luker";
+"Vehicle Health & Lighting" = "Kjøretøyhelse og belysning";
+"Fluid Levels" = "Væskenivåer";
+"Lighting Systems" = "Belysningssystemer";
+"All 16 Systems OK" = "Alle 16 systemer OK";
+"Exterior Light" = "Utvendig lys";
+"Low Level" = "Lavt nivå";
+"Open" = "Åpen";
+"Closed" = "Lukket";
+"All Closed & Locked" = "Alle lukket og låst";
+"All Closed" = "Alle lukket";
+"%d Open" = "%d åpne";
+"FL Window" = "FV vindu";
+"FR Window" = "FH vindu";
+"RL Window" = "BV vindu";
+"RR Window" = "BH vindu";
+"Charge Lid" = "Ladeluke";
+"Start Climate" = "Start klima";
+"Stop Climate" = "Stopp klima";
+"Active" = "Aktiv";
+"Off" = "Av";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Utseendemodus";
+"Mode" = "Modus";
+"System (Automatic)" = "System (Automatisk)";
+"Light" = "Lyst";
+"Dark" = "Mørkt";
+"Liquid Glass" = "Flytende glass";
+

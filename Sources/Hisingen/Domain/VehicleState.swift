@@ -158,6 +158,39 @@ struct VehicleState: Codable, Equatable, Sendable {
     var powertrain: PowertrainType = .bev
     var fuelLevelPercent: Double? = nil
     var fuelRangeKm: Int? = nil
+    var fuelAmountLiters: Double? = nil
+    var averageFuelConsumptionLPer100Km: Double? = nil
+    var isEngineRunning: Bool? = nil
+    var fuelType: String? = nil
+
+    var totalCombinedRangeKm: Int? {
+        switch powertrain {
+        case .bev:
+            return rangeKm
+        case .ice:
+            return fuelRangeKm
+        case .phev, .mildHybrid:
+            if let e = rangeKm, let f = fuelRangeKm { return e + f }
+            return rangeKm ?? fuelRangeKm
+        case .unknown:
+            if let e = rangeKm, let f = fuelRangeKm { return e + f }
+            return rangeKm ?? fuelRangeKm
+        }
+    }
+
+    var primaryRangeKm: Int? {
+        totalCombinedRangeKm ?? rangeKm ?? fuelRangeKm
+    }
+
+    var primaryEnergyFraction: Double? {
+        if powertrain == .ice {
+            return fuelLevelPercent.map { $0 / 100.0 }
+        }
+        if let b = batteryPercentage {
+            return b / 100.0
+        }
+        return fuelLevelPercent.map { $0 / 100.0 }
+    }
 
 
     var reportedBatteryCapacityKwh: Double? = nil
@@ -256,6 +289,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
         case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH
+        case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
     }
 
     init(from decoder: Decoder) throws {
@@ -312,6 +346,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
         self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
         self.averageSpeedKmH = try values.decodeIfPresent(Double.self, forKey: .averageSpeedKmH)
+        self.fuelAmountLiters = try values.decodeIfPresent(Double.self, forKey: .fuelAmountLiters)
+        self.averageFuelConsumptionLPer100Km = try values.decodeIfPresent(Double.self, forKey: .averageFuelConsumptionLPer100Km)
+        self.isEngineRunning = try values.decodeIfPresent(Bool.self, forKey: .isEngineRunning)
+        self.fuelType = try values.decodeIfPresent(String.self, forKey: .fuelType)
     }
 
     var isCharging: Bool { chargingState.isActivelyCharging }
@@ -321,8 +359,11 @@ struct VehicleState: Codable, Equatable, Sendable {
         if exteriorStatus?.alarmTriggered == true {
             return VehicleStateSummary(message: L10n.text("Alarm triggered"), severity: .critical)
         }
-        if let battery = batteryPercentage, battery <= 15, !isCharging {
+        if let battery = batteryPercentage, battery <= 15, !isCharging, powertrain.hasElectricRange {
             return VehicleStateSummary(message: L10n.text("Low battery"), severity: .critical)
+        }
+        if let fuel = fuelLevelPercent, fuel <= 12, powertrain.hasFuelRange {
+            return VehicleStateSummary(message: L10n.text("Low fuel"), severity: .critical)
         }
         if let openings = exteriorStatus?.itemsNeedingAttention, !openings.isEmpty {
             if openings.count == 1, let only = openings.first {
@@ -353,6 +394,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         }
         if case .unavailable = availability {
             return VehicleStateSummary(message: availability.displayName, severity: .warning)
+        }
+        if isEngineRunning == true {
+            return VehicleStateSummary(message: L10n.text("Engine running"), severity: .good)
         }
         if exteriorStatus?.isLocked == true {
             return VehicleStateSummary(message: L10n.text("Vehicle secured"), severity: .good)
@@ -443,7 +487,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var cacheableCopy: VehicleState {
-        VehicleState(
+        var copy = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: rangeKm,
             chargingState: chargingState,
@@ -479,6 +523,11 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: vehicleReportedAt,
             dataWarnings: dataWarnings
         )
+        copy.fuelAmountLiters = fuelAmountLiters
+        copy.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km
+        copy.isEngineRunning = isEngineRunning
+        copy.fuelType = fuelType
+        return copy
     }
 
     func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection) -> VehicleState {
@@ -530,7 +579,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             softwareInfo: softwareInfo ?? (keep(.softwareUpdates) ? previous.softwareInfo : nil),
             chargingSchedules: chargingSchedules.isEmpty && keep(.chargingSchedule)
                 ? previous.chargingSchedules : chargingSchedules,
-            climateStatus: climateStatus ?? (keep(.climateStatus) ? previous.climateStatus : nil),
+            climateStatus: climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil),
             climateTimers: climateTimers.isEmpty && keep(.climateStatus) ? previous.climateTimers : climateTimers,
             tripMeterManualKm: tripMeterManualKm ?? (keep(.tripMeters) ? previous.tripMeterManualKm : nil),
             tripMeterAutomaticKm: tripMeterAutomaticKm ?? (keep(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
@@ -547,11 +596,20 @@ struct VehicleState: Codable, Equatable, Sendable {
             fuelLevelPercent: fuelLevelPercent ?? previous.fuelLevelPercent,
             fuelRangeKm: fuelRangeKm ?? previous.fuelRangeKm,
             reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? previous.reportedBatteryCapacityKwh,
-            imageData: imageData ?? (features.contains(.vehicleImage) ? previous.imageData : nil),
+            imageData: imageData ?? (features.contains(.vehicleImage) ? (previous.imageData ?? CarImageCache.shared.image(for: vin)) : nil),
             fetchedAt: fetchedAt,
             vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
             dataWarnings: dataWarnings
         )
+        merged.externalColour = externalColour ?? previous.externalColour
+        merged.gearbox = gearbox ?? previous.gearbox
+        merged.engineHoursToService = engineHoursToService ?? previous.engineHoursToService
+        merged.averageSpeedKmH = averageSpeedKmH ?? previous.averageSpeedKmH
+        merged.fuelAmountLiters = fuelAmountLiters ?? previous.fuelAmountLiters
+        merged.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km ?? previous.averageFuelConsumptionLPer100Km
+        merged.isEngineRunning = isEngineRunning ?? previous.isEngineRunning
+        merged.fuelType = fuelType ?? previous.fuelType
+
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {
             let sample = ChargingSample(timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts)

@@ -75,7 +75,6 @@
 "Est. Charge Cost" = "Gesch. Ladekosten";
 "Estimated Range" = "Geschätzte Reichweite";
 "License Plate" = "Kennzeichen";
-"Low Level" = "Niedriger Stand";
 "Manual Trip Meter" = "Manueller Tageskilometerzähler";
 "Normal" = "Normal";
 "Open Settings & Sign In" = "Einstellungen öffnen & anmelden";
@@ -118,7 +117,6 @@
 "Steering Wheel" = "Lenkrad";
 "ON" = "EIN";
 "OFF" = "AUS";
-"Start Climate" = "Klima starten";
 "Stop" = "Stopp";
 "Stop Air Cleaning" = "Luftreinigung stoppen";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Innenraumluft reinigen (PM2.5-Vorreinigung)";
@@ -372,7 +370,6 @@
 "⚠︎ Service warning" = "⚠︎ Servicewarnung";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Fahrzeugdaten könnten veraltet sein";
 "12 V battery low" = "12-V-Batterie schwach";
-"Active" = "Aktiv";
 "Air quality" = "Luftqualität";
 "Air quality index" = "Luftqualitätsindex";
 "Automatic trip" = "Automatischer Tageskilometerzähler";
@@ -422,7 +419,6 @@
 "Manual trip" = "Manueller Tageskilometerzähler";
 "Network type" = "Netzwerktyp";
 "No power" = "Keine Leistung";
-"Off" = "Aus";
 "Oil level" = "Ölstand";
 "Pending" = "Ausstehend";
 "Poor" = "Schwach";
@@ -728,3 +724,43 @@
 "Cost" = "Kosten";
 "Projected" = "Prognose";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "Alle normal";
+"Check Pressure" = "Druck prüfen";
+"Parked" = "Geparkt";
+"Moving" = "In Bewegung";
+"Copy Coordinates" = "Koordinaten kopieren";
+"Copied" = "Kopiert";
+"Google Maps" = "Google Maps";
+"Speed" = "Geschwindigkeit";
+"Doors & Openings" = "Türen & Klappen";
+"Vehicle Health & Lighting" = "Fahrzeugzustand & Beleuchtung";
+"Fluid Levels" = "Flüssigkeitsstände";
+"Lighting Systems" = "Beleuchtungssysteme";
+"All 16 Systems OK" = "Alle 16 Systeme OK";
+"Exterior Light" = "Außenbeleuchtung";
+"Low Level" = "Niedriger Stand";
+"Open" = "Offen";
+"Closed" = "Geschlossen";
+"All Closed & Locked" = "Alle geschlossen & verriegelt";
+"All Closed" = "Alle geschlossen";
+"%d Open" = "%d offen";
+"FL Window" = "VL Fenster";
+"FR Window" = "VR Fenster";
+"RL Window" = "HL Fenster";
+"RR Window" = "HR Fenster";
+"Charge Lid" = "Ladeklappe";
+"Start Climate" = "Klima starten";
+"Stop Climate" = "Klima stoppen";
+"Active" = "Aktiv";
+"Off" = "Aus";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Erscheinungsbild-Modus";
+"Mode" = "Modus";
+"System (Automatic)" = "System (Automatisch)";
+"Light" = "Hell";
+"Dark" = "Dunkel";
+"Liquid Glass" = "Liquid Glass";
+
