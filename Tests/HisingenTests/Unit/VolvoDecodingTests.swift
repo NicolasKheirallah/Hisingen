@@ -107,9 +107,10 @@ struct VolvoDecodingTests {
         let readings = tyres.readings
         XCTAssertEqual(readings.count, 4)
         XCTAssertNil(readings.first(where: { $0.position == .frontLeft })?.kilopascals)
-        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .low)
+        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .unknown)
         XCTAssertEqual(readings.first(where: { $0.position == .frontRight })?.warning, TyrePressureWarning.none)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .veryLow)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearLeft })?.warning, .low)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .high)
     }
 
     @Test

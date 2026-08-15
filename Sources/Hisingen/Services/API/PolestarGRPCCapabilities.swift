@@ -487,7 +487,7 @@ extension PolestarGRPC {
                     activity = active ? .active : .starting
                 }
             } else {
-                activity = running > 0 ? .idle : .unknown
+                activity = .idle
             }
         } else {
             let actionValue = varint(fields, 4) ?? 0
