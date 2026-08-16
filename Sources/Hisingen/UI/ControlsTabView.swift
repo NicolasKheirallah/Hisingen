@@ -875,9 +875,9 @@ struct ControlsTabView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Picker("", selection: $engineRuntimeMinutes) {
-                        Text("5 min").tag(5)
-                        Text("10 min").tag(10)
-                        Text("15 min").tag(15)
+                        Text(L10n.format("%d min", 5)).tag(5)
+                        Text(L10n.format("%d min", 10)).tag(10)
+                        Text(L10n.format("%d min", 15)).tag(15)
                     }
                     .pickerStyle(.segmented)
                     .controlSize(.small)

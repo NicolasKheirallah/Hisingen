@@ -620,48 +620,48 @@ struct VehicleState: Codable, Equatable, Sendable {
         switch model {
         case .polestar2:
             if nominal >= 80.0 {
-                return "82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)"
+                return L10n.text("82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)")
             } else if nominal >= 75.0 {
-                return "78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)"
+                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)")
             } else {
-                return "69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)"
+                return L10n.text("69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)")
             }
         case .polestar3:
-            return "111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)"
+            return L10n.text("111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)")
         case .polestar4:
-            return "100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)"
+            return L10n.text("100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)")
         case .polestar1:
-            return "34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)"
+            return L10n.text("34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)")
         case .volvoEX30:
             if nominal >= 65.0 {
-                return "69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)"
+                return L10n.text("69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)")
             } else {
-                return "51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)"
+                return L10n.text("51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)")
             }
         case .volvoEX90, .volvoES90:
-            return "111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)"
+            return L10n.text("111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)")
         case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
             if nominal >= 80.0 {
-                return "82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)"
+                return L10n.text("82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)")
             } else if nominal >= 75.0 {
-                return "78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)"
+                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)")
             } else {
-                return "69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)"
+                return L10n.text("69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)")
             }
         case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
             if powertrain == .phev {
                 if nominal >= 16.0 {
-                    return "18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)"
+                    return L10n.text("18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)")
                 } else {
-                    return "11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)"
+                    return L10n.text("11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)")
                 }
             }
-            return "\(String(format: "%.1f", nominal)) kWh High-Voltage Pack"
+            return L10n.format("%.1f kWh High-Voltage Pack", nominal)
         default:
             if nominal > 0 {
-                return "\(String(format: "%.1f", nominal)) kWh Lithium-ion Pack"
+                return L10n.format("%.1f kWh Lithium-ion Pack", nominal)
             }
-            return "High-Voltage Traction Battery"
+            return L10n.text("High-Voltage Traction Battery")
         }
     }
 

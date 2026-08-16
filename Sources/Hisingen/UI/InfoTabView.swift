@@ -224,7 +224,7 @@ struct InfoTabView: View {
 
         let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? "N" : "S")
         let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? "E" : "W")
-        let modelTitle = state.modelName ?? "Vehicle"
+        let modelTitle = state.modelName ?? L10n.text("Vehicle")
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -574,7 +574,7 @@ struct InfoTabView: View {
 
                     KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
                     KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
-                    KVRow(L10n.text("Warranty Threshold"), "70% / 160,000 km (8 Years)", symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
+                    KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
                 }
             }
         })

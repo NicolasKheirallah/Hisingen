@@ -709,7 +709,7 @@ struct VehicleTabView: View {
                 HStack(spacing: 6) {
                     if let ext = state.exteriorStatus, let locked = ext.isLocked {
                         Pill(
-                            text: locked ? "Locked" : "Unlocked",
+                            text: locked ? L10n.text("Locked") : L10n.text("Unlocked"),
                             color: locked ? .secondary : HisingenTheme.semanticWarning,
                             symbol: locked ? "lock.fill" : "lock.open.fill"
                         )
@@ -826,7 +826,7 @@ struct VehicleTabView: View {
                                     .contentTransition(reduceMotion ? .identity : .numericText())
                                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
                                 if let fuel = state.fuelLevelPercent {
-                                    Text(String(format: "· %.0f%% fuel", fuel))
+                                    Text(String(format: "· %.0f%% %@", fuel, L10n.text("fuel")))
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundStyle(HisingenTheme.inkMuted)
                                 }
@@ -1143,7 +1143,7 @@ struct VehicleTabView: View {
         }
 
         if let hours = state.engineHoursToService {
-            rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer"))
+            rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer"))
         }
 
         if let fuelType = state.fuelType {
@@ -1325,9 +1325,9 @@ struct VehicleTabView: View {
         if features.contains(.vehicleWeather), let weather = state.weather {
             if let t = weather.temperatureCelsius {
                 var val = String(format: "%.0f °C", t)
-                if let cond = weather.condition { val += " · \(cond)" }
+                if let cond = weather.condition { val += " · \(L10n.text(cond))" }
                 if let hum = weather.relativeHumidity { val += " · \(hum)% " + L10n.text("humidity") }
-                if let feels = weather.apparentTemperatureCelsius { val += " (feels like \(String(format: "%.0f °C", feels)))" }
+                if let feels = weather.apparentTemperatureCelsius { val += " (" + L10n.format("feels like %@", String(format: "%.0f °C", feels)) + ")" }
                 rows.append(KVRow(L10n.text("Ambient Weather"), val, symbol: "cloud.sun.fill"))
             }
         }
@@ -2121,6 +2121,14 @@ enum CurveMode: String, CaseIterable, Identifiable {
     case power = "Power kW"
     case dual = "Dual"
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .soc: return L10n.text("SoC %")
+        case .power: return L10n.text("Power kW")
+        case .dual: return L10n.text("Dual")
+        }
+    }
 }
 
 @MainActor
@@ -2248,7 +2256,7 @@ struct ChargingCurveView: View {
                     if hasPowerData {
                         Picker("", selection: $curveMode) {
                             ForEach(CurveMode.allCases) { mode in
-                                Text(mode.rawValue).tag(mode)
+                                Text(mode.title).tag(mode)
                             }
                         }
                         .pickerStyle(.segmented)
