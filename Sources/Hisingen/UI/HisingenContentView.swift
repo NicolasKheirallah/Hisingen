@@ -505,19 +505,20 @@ struct VehicleTabView: View {
                                 HStack {
                                     if badgePosition == .topRightOverlay { Spacer() }
                                     Text(modelIdentity)
-                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(HisingenTheme.ink)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 4.5)
                                         .background(.ultraThinMaterial, in: Capsule())
                                         .overlay(
                                             Capsule()
-                                                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                                                .stroke(Color.primary.opacity(0.14), lineWidth: 0.6)
                                         )
                                         .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
                                     if badgePosition == .topLeftOverlay { Spacer() }
                                 }
-                                .padding(8)
+                                .padding(.horizontal, HisingenTheme.cardPadding + 8)
+                                .padding(.top, HisingenTheme.cardPadding + 8)
                                 Spacer()
                             }
                         }
