@@ -201,30 +201,47 @@ struct KeychainStore: Sendable {
         "\(service)|\(account)"
     }
 
-    private func baseQuery(account: String) -> [String: Any] {
-        [
+    private func baseQuery(account: String, useDataProtection: Bool = true) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        if useDataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
+    }
+
+    private func createTrustedAccess(label: String) -> SecAccess? {
+        var trustedApp: SecTrustedApplication?
+        let status = SecTrustedApplicationCreateFromPath(nil, &trustedApp)
+        guard status == errSecSuccess, let trustedApp else { return nil }
+        var access: SecAccess?
+        let accessStatus = SecAccessCreate(label as CFString, [trustedApp] as CFArray, &access)
+        guard accessStatus == errSecSuccess else { return nil }
+        return access
     }
 
     private func save(_ value: String, account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: value)
-        let attributes: [String: Any] = [
+        var attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        let updateStatus = SecItemUpdate(
-            baseQuery(account: account) as CFDictionary,
-            attributes as CFDictionary
-        )
+        if let access = createTrustedAccess(label: "Hisingen (\(account))") {
+            attributes[kSecAttrAccess as String] = access
+        }
+
+        // Try standard query with trusted access
+        let query = baseQuery(account: account, useDataProtection: false)
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess { return }
         guard updateStatus == errSecItemNotFound else {
             throw KeychainError.status(updateStatus)
         }
 
-        var add = baseQuery(account: account)
+        var add = query
         attributes.forEach { add[$0.key] = $0.value }
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else { throw KeychainError.status(addStatus) }
@@ -234,7 +251,7 @@ struct KeychainStore: Sendable {
         if let cached = InMemorySecretCache.shared.get(cacheKey(account: account)) {
             return cached
         }
-        var query = baseQuery(account: account)
+        var query = baseQuery(account: account, useDataProtection: false)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -251,7 +268,7 @@ struct KeychainStore: Sendable {
 
     private func delete(account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: nil)
-        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
+        let status = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)
         }
