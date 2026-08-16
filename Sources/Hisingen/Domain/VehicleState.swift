@@ -247,7 +247,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     /// instead of silently disappearing.
     var isCachedSnapshot: Bool = false
     let imageData: Data?
-    let fetchedAt: Date
+    var fetchedAt: Date
     let vehicleReportedAt: Date?
     let dataWarnings: [String]
 
@@ -750,15 +750,51 @@ struct VehicleState: Codable, Equatable, Sendable {
             }
             return current
         }()
+
+        let isRecentlyUpdated = Date().timeIntervalSince(previous.fetchedAt) < 90
+        let mergedClimate: VehicleClimateStatus? = {
+            guard let prevClimate = previous.climateStatus else {
+                return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
+            }
+            if isRecentlyUpdated {
+                if prevClimate.activity == .heating || prevClimate.activity == .cooling || prevClimate.activity == .ventilating || prevClimate.activity == .active {
+                    if let incoming = climateStatus, incoming.activity != .idle && incoming.activity != .unknown {
+                        return incoming
+                    }
+                    return prevClimate
+                } else if prevClimate.activity == .idle {
+                    if let incoming = climateStatus, incoming.activity == .idle {
+                        return incoming
+                    }
+                    return prevClimate
+                }
+            }
+            return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
+        }()
+
+        let mergedChargeTarget: Int? = {
+            if isRecentlyUpdated, let prevTarget = previous.chargeTargetPercentage {
+                return prevTarget
+            }
+            return chargeTargetPercentage ?? previous.chargeTargetPercentage
+        }()
+
+        let mergedCurrentAmps: Int? = {
+            if isRecentlyUpdated, let prevAmps = previous.chargingCurrentAmps {
+                return prevAmps
+            }
+            return chargingCurrentAmps ?? previous.chargingCurrentAmps
+        }()
+
         var merged = VehicleState(
             batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
             rangeKm: rangeKm ?? previous.rangeKm,
             chargingState: previousChargingState ?? chargingState,
             estimatedChargingTimeToFullMinutes: estimatedChargingTimeToFullMinutes
                 ?? previous.estimatedChargingTimeToFullMinutes,
-            chargeTargetPercentage: chargeTargetPercentage ?? previous.chargeTargetPercentage,
+            chargeTargetPercentage: mergedChargeTarget,
             chargingPowerWatts: chargingPowerWatts ?? previous.chargingPowerWatts,
-            chargingCurrentAmps: chargingCurrentAmps ?? previous.chargingCurrentAmps,
+            chargingCurrentAmps: mergedCurrentAmps,
             chargingVoltageVolts: chargingVoltageVolts ?? previous.chargingVoltageVolts,
             chargingType: chargingType == .unknown ? previous.chargingType : chargingType,
             chargerConnection: chargerConnection == .unknown ? previous.chargerConnection : chargerConnection,
@@ -781,7 +817,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             softwareInfo: mergedSoftware,
             chargingSchedules: !chargingSchedules.isEmpty ? chargingSchedules
                 : (features.contains(.chargingSchedule) ? previous.chargingSchedules : []),
-            climateStatus: climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil),
+            climateStatus: mergedClimate,
             climateTimers: !climateTimers.isEmpty ? climateTimers
                 : (features.contains(.climateStatus) ? previous.climateTimers : []),
             tripMeterManualKm: tripMeterManualKm ?? (features.contains(.tripMeters) ? previous.tripMeterManualKm : nil),

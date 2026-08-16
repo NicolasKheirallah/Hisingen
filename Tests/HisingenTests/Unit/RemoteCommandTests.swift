@@ -406,6 +406,92 @@ struct RemoteCommandTests {
         XCTAssertTrue(msg16?.contains("mobile app") == true)
     }
 
+    @Test
+    func testOptimisticStateLockDuringCommandGracePeriod() {
+        var previous = VehicleState(
+            batteryPercentage: 80.0,
+            rangeKm: 350,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 70,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: 16,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2023",
+            registrationNo: "ZCJ06G",
+            vin: "YSMVSEDE6PL147228",
+            ownerFirstName: "Nico",
+            odometerKm: 30000,
+            daysToService: 100,
+            distanceToServiceKm: 15000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            climateStatus: VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: 18.0,
+                requestedTemperatureCelsius: 22.0
+            ),
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+
+        // Incoming fresh state from stale cloud cache reporting idle climate and old 90% target
+        let staleIncoming = VehicleState(
+            batteryPercentage: 80.0,
+            rangeKm: 350,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 90,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: 32,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2023",
+            registrationNo: "ZCJ06G",
+            vin: "YSMVSEDE6PL147228",
+            ownerFirstName: "Nico",
+            odometerKm: 30000,
+            daysToService: 100,
+            distanceToServiceKm: 15000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            climateStatus: VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: 18.0,
+                requestedTemperatureCelsius: nil
+            ),
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+
+        var features = FeatureSelection.default
+        features.set(.climateStatus, enabled: true)
+        features.set(.remoteClimate, enabled: true)
+        features.set(.remoteCharging, enabled: true)
+
+        let merged = staleIncoming.mergingLastKnown(from: previous, features: features)
+
+        // Should preserve optimistic active climate and charge target during the 90s grace window
+        XCTAssertEqual(merged.climateStatus?.activity, .heating)
+        XCTAssertEqual(merged.chargeTargetPercentage, 70)
+        XCTAssertEqual(merged.chargingCurrentAmps, 16)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))

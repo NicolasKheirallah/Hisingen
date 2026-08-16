@@ -427,6 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         default:
             return
         }
+        current.fetchedAt = Date()
         latest = current
         stateStore.save(current)
         render()

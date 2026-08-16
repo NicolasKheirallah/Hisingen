@@ -109,11 +109,13 @@ struct ControlsTabView: View {
             }
         }
         .onChange(of: state.chargeTargetPercentage) { newTarget in
+            guard !remoteCommandInProgress else { return }
             if let newTarget {
                 chargeTarget = newTarget
             }
         }
         .onChange(of: state.chargingCurrentAmps) { newAmps in
+            guard !remoteCommandInProgress else { return }
             if let newAmps, newAmps > 0 {
                 ampLimit = newAmps
             }

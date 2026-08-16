@@ -572,6 +572,9 @@ actor PolestarAPI {
             commandToken: await validCommandToken()
         )
         if case .setChargeTarget(let target) = adaptedCommand { targetCache[vin] = (target, Date()) }
+        if case .setAmpLimit(let amps) = adaptedCommand {
+            capabilityCache["\(vin)|amp-limit"] = CapabilityCacheEntry(value: amps, expiresAt: Date().addingTimeInterval(90))
+        }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }
@@ -1201,7 +1204,7 @@ actor PolestarAPI {
 
     private func targetSOC(enabled: Bool, vin: String, token: String) async throws -> Int? {
         guard enabled else { return nil }
-        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 10 {
+        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
             return cached.value
         }
         let value: Int?
