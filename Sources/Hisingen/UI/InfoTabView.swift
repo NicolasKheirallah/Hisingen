@@ -70,7 +70,7 @@ struct InfoTabView: View {
                     } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
                         Pill(
                             text: upholstery,
-                            color: .purple,
+                            color: HisingenTheme.accent,
                             symbol: "carseat.left.fill"
                         )
                     }
@@ -532,6 +532,8 @@ struct InfoTabView: View {
         let warranty = state.effectiveWarrantyInfo
         let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
         let planTitle = warranty.planName ?? (isVolvo ? "Care by Volvo" : "Polestar Care")
+        let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
+        let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -539,13 +541,13 @@ struct InfoTabView: View {
                     CardHeader(
                         symbol: "shield.lefthalf.filled.badge.checkmark",
                         title: L10n.text("Warranty & Protection"),
-                        color: .indigo
+                        color: brandColor
                     )
                     Spacer()
                     Pill(
                         text: planTitle,
-                        color: .indigo,
-                        symbol: "checkmark.seal.fill"
+                        color: brandColor,
+                        symbol: brandIcon
                     )
                 }
 
