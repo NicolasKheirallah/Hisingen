@@ -99,4 +99,4 @@ clean:
 ## Bumps Info.plist, commits, tags, pushes — GitHub Actions then
 ## builds, packages and publishes the DMG/zip.
 release:
-	sh Scripts/bump-version.sh $(VERSION)
+	sh Scripts/release.sh $(VERSION)
