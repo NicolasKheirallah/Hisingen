@@ -728,14 +728,15 @@ struct SettingsView: View {
 
                 Text(isVolvo
                      ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
-                     : L10n.text("Climate, locks, windows and cabin cleaning are dispatched through Polestar's command service, and software installation through its OTA scheduler. Charging commands are not yet verified against the backend."))
+                     : L10n.text("Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
                     featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
                     featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Unverified")
+                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo, badgeText: isVolvo ? "Read-Only in API" : nil)
+                    featureToggleRow(.remoteSchedules, symbol: "calendar.badge.clock", title: "Charging & Climate Timers", detail: "Create and edit charge windows and departure timers", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)

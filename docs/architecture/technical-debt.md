@@ -84,7 +84,16 @@ Charge-target/amp-limit/schedule/pre-cleaning/OTA commands all fall through to `
 
 **Severity: Medium (user-facing, but currently fails safe)**
 
-`ControlsTabView` shows/hides sections based on `VehicleCapabilityProfile.permits(_:)`, but *enables* them based on a separate, hardcoded `isBrandVolvo` check — Polestar's lock/window/climate/charging controls are always `.disabled(true)` regardless of capability state, and Volvo's charging controls (charge target, amp limit, charge-now override) are hardcoded `.disabled(true)` for every brand because they aren't wired to a working backend call yet. The OTA card is now the exception: its buttons follow only `remoteCommandInProgress`. This currently fails safe (nothing un-implemented is reachable from the UI), but it means the capability system and the actual UI affordance can silently drift apart as new capabilities are added to the profile without the corresponding UI wiring catching up.
+**Status: RESOLVED.** Every control now gates through `ControlsTabView.isDisabled(_:)` /
+`cardOpacity(_:)`, which combine `RemoteCommand.isImplemented(by:)`,
+`VehicleCapabilityProfile.permits(_:)`, and `remoteCommandInProgress`. No `.disabled(true)`
+literal remains in the file. Polestar's climate/locks/windows/honk/charging/timer controls are
+live (invocation via C3 + command token, chronos via PCCS + web token; both paths verified
+against a real vehicle — see [api/polestar-backend-map.md](../api/polestar-backend-map.md)).
+
+The original problem, for the record: the UI used to *enable* controls on a hardcoded
+`isBrandVolvo` check independent of the capability system, so the two could drift apart. They no
+longer can — a control is enabled iff all three layers agree.
 
 **Status: RESOLVED.** Resolved. `ControlsTabView.isDisabled(_:)`/`cardOpacity(_:)` gate on implementation + capability + in-flight state; the `isBrandVolvo` overrides are gone.
 

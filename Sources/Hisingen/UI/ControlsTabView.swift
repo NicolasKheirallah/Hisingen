@@ -122,7 +122,7 @@ struct ControlsTabView: View {
                     .foregroundStyle(.primary)
                 Text(isBrandVolvo
                      ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
-                     : L10n.text("Climate, locks, windows and software installation are active. Charging commands are not yet verified."))
+                     : L10n.text("Remote climate, locks, windows, charging, timers and software installation are active."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -366,7 +366,7 @@ struct ControlsTabView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(true)
+                    .disabled(isDisabled(.startPreCleaning))
                 }
             }
         }
@@ -398,7 +398,7 @@ struct ControlsTabView: View {
                         }
                         .pickerStyle(.segmented)
                         .controlSize(.small)
-                        .disabled(true)
+                        .disabled(isDisabled(.setChargeTarget(chargeTarget)))
                         .onChange(of: chargeTarget) { [old = chargeTarget] _ in
                             guard isInitialized, chargeTarget != old else { return }
                             onRemoteCommand(.setChargeTarget(chargeTarget))
@@ -426,7 +426,7 @@ struct ControlsTabView: View {
                         }
                         .pickerStyle(.segmented)
                         .controlSize(.small)
-                        .disabled(true)
+                        .disabled(isDisabled(.setAmpLimit(ampLimit)))
                         .onChange(of: ampLimit) { [old = ampLimit] _ in
                             guard isInitialized, ampLimit != old else { return }
                             onRemoteCommand(.setAmpLimit(ampLimit))
@@ -450,7 +450,7 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
-                        .disabled(true)
+                        .disabled(isDisabled(.startChargingOverride))
 
                         Button {
                             onRemoteCommand(.stopChargingOverride)
@@ -463,7 +463,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 30)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.stopChargingOverride))
                     }
                 }
 
@@ -484,7 +484,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(0.65)
+        .opacity(cardOpacity(.setChargeTarget(80)))
     }
 
     private var accessControlCard: some View {
@@ -550,7 +550,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 46)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.unlockTrunk))
                     }
                 }
             }
@@ -584,7 +584,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.closeWindows))
 
                         Button {
                             onRemoteCommand(.openWindows)
@@ -598,7 +598,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.openWindows))
                     }
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
