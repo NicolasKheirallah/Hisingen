@@ -94,16 +94,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
             )
         case .volvo:
-            guard !Preferences.volvoClientID.isEmpty,
-                  let clientSecret = (try? Keychain.readVolvoClientSecret()) ?? nil, !clientSecret.isEmpty,
-                  let vccApiKey = (try? Keychain.readVolvoApiKey()) ?? nil, !vccApiKey.isEmpty,
-                  let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil, !sessionToken.isEmpty
+            let clientID = !Preferences.volvoClientID.isEmpty ? Preferences.volvoClientID : BuiltinVolvoSecrets.clientID
+            let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil) ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
+            let vccApiKey = ((try? Keychain.readVolvoApiKey()) ?? nil) ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
+            let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
+
+            guard !clientID.isEmpty,
+                  let clientSecret, !clientSecret.isEmpty,
+                  let vccApiKey, !vccApiKey.isEmpty,
+                  let sessionToken, !sessionToken.isEmpty
             else { return }
-            let clientID = Preferences.volvoClientID
             Task { [weak self] in
                 guard let self else { return }
                 await volvoAPI.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
-
 
                 guard Preferences.activeBrand == .volvo else { return }
                 refreshCoordinator.start(
@@ -135,7 +138,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {
-        let trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedClientID.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            trimmedClientID = BuiltinVolvoSecrets.clientID
+        }
         let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedClientID.isEmpty else {
             showRemoteResult(
@@ -145,8 +151,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
-        let effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
+        var effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
+        if effectiveSecret.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            effectiveSecret = BuiltinVolvoSecrets.clientSecret
+        }
+
+        var effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
+        if effectiveApiKey.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            effectiveApiKey = BuiltinVolvoSecrets.vccApiKey
+        }
+
         let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         if !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,

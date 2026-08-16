@@ -680,7 +680,7 @@ struct SettingsView: View {
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
-                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : "Experimental — dev build only")
+                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install a pending software update", isSupported: false, badgeText: isVolvo ? "Not in API" : "Rejected by Backend")
                 }
             }
         }
