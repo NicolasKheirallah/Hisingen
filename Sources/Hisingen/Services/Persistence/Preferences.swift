@@ -63,6 +63,31 @@ enum MenuBarStyle: String, CaseIterable, Codable {
 }
 
 
+enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
+    case frontThreeQuarter = 0
+    case rearThreeQuarter = 1
+    case sideProfile = 2
+    case overhead = 3
+
+    var title: String {
+        switch self {
+        case .frontThreeQuarter: return L10n.text("Front Three-Quarter")
+        case .rearThreeQuarter: return L10n.text("Rear Three-Quarter")
+        case .sideProfile: return L10n.text("Side Profile")
+        case .overhead: return L10n.text("Overhead")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .frontThreeQuarter: return "car.side.front.open.fill"
+        case .rearThreeQuarter: return "car.side.rear.open.fill"
+        case .sideProfile: return "car.side.fill"
+        case .overhead: return "car.top.door.front.left.open.fill"
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
     case light = "light"
@@ -402,6 +427,14 @@ enum Preferences {
             }
         }
         set { d.set(newValue.rawValue, forKey: "statusbar_display_option") }
+    }
+
+    static var carRenderAngle: CarRenderAngle {
+        get {
+            let raw = d.object(forKey: "car_render_angle") as? Int ?? 0
+            return CarRenderAngle(rawValue: raw) ?? .frontThreeQuarter
+        }
+        set { d.set(newValue.rawValue, forKey: "car_render_angle") }
     }
 
     static var distanceUnit: DistanceUnit {

@@ -398,6 +398,8 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    var displayName: String { title }
+
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
@@ -430,6 +432,17 @@ struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
 
     var isStale: Bool {
         Date().timeIntervalSince(probedAt) > Self.stalenessInterval
+    }
+
+    var resultsMap: [VehicleCapability: VehicleCapabilitySupport] {
+        results
+    }
+
+    var allResults: [(capability: VehicleCapability, support: VehicleCapabilitySupport)] {
+        let list = results.map { (capability: $0.key, support: $0.value) }
+        return list.sorted { (a: (capability: VehicleCapability, support: VehicleCapabilitySupport), b: (capability: VehicleCapability, support: VehicleCapabilitySupport)) in
+            a.capability.title < b.capability.title
+        }
     }
 
     func merging(newerProbe: VehicleProbedCapabilities) -> VehicleProbedCapabilities {

@@ -198,6 +198,15 @@ struct VehicleState: Codable, Equatable, Sendable {
     var gearbox: String? = nil
     var engineHoursToService: Int? = nil
     var averageSpeedKmH: Double? = nil
+    var structureWeek: String? = nil
+    var internalVehicleIdentifier: String? = nil
+    var pno34: String? = nil
+    var accountMarket: String? = nil
+    var upholstery: String? = nil
+    var steeringOrientation: String? = nil
+    var serviceTrigger: String? = nil
+    var tripComputerElectricRangeKm: Int? = nil
+    var chargingCurrentLimitAmps: Int? = nil
     let imageData: Data?
     let fetchedAt: Date
     let vehicleReportedAt: Date?
@@ -290,6 +299,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH
         case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
+        case structureWeek, internalVehicleIdentifier, pno34, accountMarket
+        case upholstery, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
     }
 
     init(from decoder: Decoder) throws {
@@ -350,6 +361,51 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.averageFuelConsumptionLPer100Km = try values.decodeIfPresent(Double.self, forKey: .averageFuelConsumptionLPer100Km)
         self.isEngineRunning = try values.decodeIfPresent(Bool.self, forKey: .isEngineRunning)
         self.fuelType = try values.decodeIfPresent(String.self, forKey: .fuelType)
+        self.structureWeek = try values.decodeIfPresent(String.self, forKey: .structureWeek)
+        self.internalVehicleIdentifier = try values.decodeIfPresent(String.self, forKey: .internalVehicleIdentifier)
+        self.pno34 = try values.decodeIfPresent(String.self, forKey: .pno34)
+        self.accountMarket = try values.decodeIfPresent(String.self, forKey: .accountMarket)
+        self.upholstery = try values.decodeIfPresent(String.self, forKey: .upholstery)
+        self.steeringOrientation = try values.decodeIfPresent(String.self, forKey: .steeringOrientation)
+        self.serviceTrigger = try values.decodeIfPresent(String.self, forKey: .serviceTrigger)
+        self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
+        self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
+    }
+
+    var formattedBuildWeek: String? {
+        guard let raw = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines), raw.count >= 6 else {
+            return structureWeek
+        }
+        let year = raw.prefix(4)
+        let week = raw.suffix(2)
+        return "\(year) · W\(week)"
+    }
+
+    var formattedServiceTrigger: String? {
+        guard let raw = serviceTrigger?.uppercased().trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        if raw.contains("CALENDAR") || raw.contains("TIME") {
+            return L10n.text("Time")
+        } else if raw.contains("DISTANCE") || raw.contains("MILE") || raw.contains("KM") {
+            return L10n.text("Distance")
+        } else if raw.contains("HOUR") || raw.contains("ENGINE") {
+            return L10n.text("Operating hours")
+        }
+        return raw.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var formattedSteeringOrientation: String? {
+        guard let raw = steeringOrientation?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let upper = raw.uppercased()
+        if upper == "LEFT" || upper.contains("LHD") {
+            return L10n.text("Left-hand drive")
+        } else if upper == "RIGHT" || upper.contains("RHD") {
+            return L10n.text("Right-hand drive")
+        }
+        return raw.capitalized
     }
 
     var isCharging: Bool { chargingState.isActivelyCharging }
@@ -609,6 +665,15 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km ?? previous.averageFuelConsumptionLPer100Km
         merged.isEngineRunning = isEngineRunning ?? previous.isEngineRunning
         merged.fuelType = fuelType ?? previous.fuelType
+        merged.structureWeek = structureWeek ?? previous.structureWeek
+        merged.internalVehicleIdentifier = internalVehicleIdentifier ?? previous.internalVehicleIdentifier
+        merged.pno34 = pno34 ?? previous.pno34
+        merged.accountMarket = accountMarket ?? previous.accountMarket
+        merged.upholstery = upholstery ?? previous.upholstery
+        merged.steeringOrientation = steeringOrientation ?? previous.steeringOrientation
+        merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
+        merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
+        merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

@@ -14,11 +14,13 @@ enum SettingsChange {
 @MainActor
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
+    var state: VehicleState? = nil
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
 
     @State private var appTheme: AppTheme = Preferences.appTheme
     @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
+    @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
     @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
@@ -53,6 +55,7 @@ struct SettingsView: View {
                 featureQuickActions
                 vehicleDataCard
                 remoteControlsCard
+                capabilitiesCard
                 notificationsCard
                 actionsCard
                 versionFooter
@@ -169,6 +172,48 @@ struct SettingsView: View {
                                         .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
                                 )
                                 .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                            }
+                            .buttonStyle(.plain)
+                            .withoutFocusRing()
+                        }
+                    }
+                }
+
+                // Vehicle Image Perspective
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("Vehicle Perspective"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(HisingenTheme.ink)
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(CarRenderAngle.allCases, id: \.self) { angle in
+                            let isAngleSelected = carRenderAngle == angle
+                            Button {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                    carRenderAngle = angle
+                                    Preferences.carRenderAngle = angle
+                                }
+                                onSettingsChanged(.presentation)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: angle.symbol)
+                                        .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                    Text(angle.title)
+                                        .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 4)
+                                .background(
+                                    isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                )
+                                .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
                             }
                             .buttonStyle(.plain)
                             .withoutFocusRing()
@@ -709,6 +754,42 @@ struct SettingsView: View {
         .opacity(isSupported ? 1.0 : 0.55)
     }
 
+    private var capabilitiesCard: AnyView {
+        guard let state else { return AnyView(EmptyView()) }
+        let profile = state.capabilityProfile
+        let items = VehicleCapability.displayed
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
+                Text(L10n.format("Probed capabilities for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+
+                VStack(spacing: 6) {
+                    ForEach(items, id: \.self) { cap in
+                        let support = profile.support(for: cap)
+                        HStack {
+                            Text(cap.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(HisingenTheme.ink)
+                            Spacer()
+                            let color: Color = {
+                                switch support {
+                                case .supported: return HisingenTheme.semanticGood
+                                case .vehicleManaged: return .blue
+                                case .unavailable: return HisingenTheme.semanticWarning
+                                case .backendDependent: return .secondary
+                                }
+                            }()
+                            Pill(text: support.displayName, color: color, symbol: support.symbolName)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        })
+    }
 
     private var notificationsCard: some View {
         Card {

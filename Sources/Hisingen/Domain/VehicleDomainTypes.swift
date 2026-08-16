@@ -40,6 +40,7 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
     let endMinute: Int?
     let weekdays: [VehicleWeekday]
     let isActive: Bool
+    var locationName: String?
 
     init(
         backendID: String? = nil,
@@ -50,7 +51,8 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         endHour: Int?,
         endMinute: Int?,
         weekdays: [VehicleWeekday] = [],
-        isActive: Bool
+        isActive: Bool,
+        locationName: String? = nil
     ) {
         self.backendID = backendID
         self.index = index
@@ -61,11 +63,12 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         self.endMinute = endMinute
         self.weekdays = weekdays
         self.isActive = isActive
+        self.locationName = locationName
     }
 
     private enum CodingKeys: String, CodingKey {
         case backendID, index, kind, startHour, startMinute, endHour, endMinute
-        case weekdays, isActive
+        case weekdays, isActive, locationName
     }
 
     init(from decoder: Decoder) throws {
@@ -79,6 +82,7 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         endMinute = try c.decodeIfPresent(Int.self, forKey: .endMinute)
         weekdays = try c.decodeIfPresent([VehicleWeekday].self, forKey: .weekdays) ?? []
         isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        locationName = try c.decodeIfPresent(String.self, forKey: .locationName)
     }
 }
 
@@ -221,6 +225,24 @@ enum VehicleWarning: String, Codable, CaseIterable, Sendable {
 struct VehicleHealthDetails: Codable, Equatable, Sendable {
     let tyres: [TyrePressure]
     let warnings: [VehicleWarning]
+    var lightFailures: [String]
+
+    init(tyres: [TyrePressure], warnings: [VehicleWarning], lightFailures: [String] = []) {
+        self.tyres = tyres
+        self.warnings = warnings
+        self.lightFailures = lightFailures
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case tyres, warnings, lightFailures
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tyres = try c.decode([TyrePressure].self, forKey: .tyres)
+        warnings = try c.decode([VehicleWarning].self, forKey: .warnings)
+        lightFailures = try c.decodeIfPresent([String].self, forKey: .lightFailures) ?? []
+    }
 }
 
 
@@ -307,19 +329,46 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     let timerTriggered: Bool
     let interiorTemperatureCelsius: Double?
     let requestedTemperatureCelsius: Double?
+    let driverSeatHeatingLevel: Int?
+    let passengerSeatHeatingLevel: Int?
+    let steeringWheelHeatingLevel: Int?
 
     init(
         activity: ClimateActivity,
         timeRemainingMinutes: Int?,
         timerTriggered: Bool,
         interiorTemperatureCelsius: Double? = nil,
-        requestedTemperatureCelsius: Double? = nil
+        requestedTemperatureCelsius: Double? = nil,
+        driverSeatHeatingLevel: Int? = nil,
+        passengerSeatHeatingLevel: Int? = nil,
+        steeringWheelHeatingLevel: Int? = nil
     ) {
         self.activity = activity
         self.timeRemainingMinutes = timeRemainingMinutes
         self.timerTriggered = timerTriggered
         self.interiorTemperatureCelsius = interiorTemperatureCelsius
         self.requestedTemperatureCelsius = requestedTemperatureCelsius
+        self.driverSeatHeatingLevel = driverSeatHeatingLevel
+        self.passengerSeatHeatingLevel = passengerSeatHeatingLevel
+        self.steeringWheelHeatingLevel = steeringWheelHeatingLevel
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case activity, timeRemainingMinutes, timerTriggered
+        case interiorTemperatureCelsius, requestedTemperatureCelsius
+        case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        activity = try c.decode(ClimateActivity.self, forKey: .activity)
+        timeRemainingMinutes = try c.decodeIfPresent(Int.self, forKey: .timeRemainingMinutes)
+        timerTriggered = try c.decodeIfPresent(Bool.self, forKey: .timerTriggered) ?? false
+        interiorTemperatureCelsius = try c.decodeIfPresent(Double.self, forKey: .interiorTemperatureCelsius)
+        requestedTemperatureCelsius = try c.decodeIfPresent(Double.self, forKey: .requestedTemperatureCelsius)
+        driverSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .driverSeatHeatingLevel)
+        passengerSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .passengerSeatHeatingLevel)
+        steeringWheelHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .steeringWheelHeatingLevel)
     }
 }
 

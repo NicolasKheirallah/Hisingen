@@ -45,6 +45,7 @@ actor PolestarAPI {
 
     private(set) var cars: [CarSummary] = []
     private var selectedVIN: String?
+    private var internalVehicleIdentifier: String?
     private var modelName: String?
     private var modelYear: String?
     private var registrationNo: String?
@@ -348,7 +349,7 @@ actor PolestarAPI {
         if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
         if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
 
-        return VehicleState(
+        var state = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: range,
             chargingState: chargingState,
@@ -397,6 +398,11 @@ actor PolestarAPI {
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
         )
+        state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
+        state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
+        state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil
+        state.accountMarket = market
+        return state
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
@@ -863,6 +869,7 @@ actor PolestarAPI {
         }
         if selectedVIN != vin { carImageData = nil }
         selectedVIN = vin
+        internalVehicleIdentifier = car.internalVehicleIdentifier
         modelName = car.modelName
         modelYear = car.modelYear?.value
         registrationNo = car.registrationNo
@@ -883,11 +890,12 @@ actor PolestarAPI {
     }
 
     private func fetchCarImage() async {
-        if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin) {
+        let requestedAngle = await MainActor.run { Preferences.carRenderAngle.rawValue }
+        if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin, angle: requestedAngle) {
             carImageData = cached
             return
         }
-        guard carImageData == nil, let pno34, let structureWeek, let modelYear else { return }
+        guard let pno34, let structureWeek, let modelYear else { return }
         let query = """
         query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String!) {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
@@ -913,7 +921,8 @@ actor PolestarAPI {
         let transparent = images["transparent"] as? [[String: Any]] ?? []
         let opaque = images["opaque"] as? [[String: Any]] ?? []
         let pool = transparent.isEmpty ? opaque : transparent
-        let pick = pool.first(where: { ($0["angle"] as? Int) == 0 })
+        let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
+            ?? pool.first(where: { ($0["angle"] as? Int) == 0 })
             ?? pool.first(where: { ($0["angle"] as? Int) == 1 }) ?? pool.first
         guard let string = pick?["url"] as? String, let url = URL(string: string),
               url.scheme == "https" else { return }
@@ -925,7 +934,8 @@ actor PolestarAPI {
               bytes.count <= 5_000_000 else { return }
         carImageData = bytes
         if let vin = selectedVIN {
-            CarImageCache.shared.save(bytes, for: vin)
+            let angle = (pick?["angle"] as? Int) ?? requestedAngle
+            CarImageCache.shared.save(bytes, for: vin, angle: angle)
         }
     }
 
@@ -1042,6 +1052,7 @@ actor PolestarAPI {
         if !keepRefreshToken { refreshToken = nil }
         cars = []
         selectedVIN = nil
+        internalVehicleIdentifier = nil
         modelName = nil
         modelYear = nil
         registrationNo = nil
