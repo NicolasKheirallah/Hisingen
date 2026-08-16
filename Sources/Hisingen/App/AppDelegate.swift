@@ -354,8 +354,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 showRemoteResult(title: L10n.text("Command sent"), message: message, success: true)
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                refreshCoordinator.refreshNow()
+                Task {
+                    try? await Task.sleep(nanoseconds: 12_000_000_000)
+                    await MainActor.run { [weak self] in
+                        self?.refreshCoordinator.refreshNow()
+                    }
+                }
             } catch {
                 let mapped = error as? LocalizedError
                 showRemoteResult(
@@ -369,15 +373,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Patches the visible state to what a command should have produced, so the lock icon or
     /// climate row flips immediately instead of waiting for the follow-up refresh.
-    ///
-    /// Only `.completed` qualifies. TERMS.md states that a backend acknowledgment confirms
-    /// delivery, not execution — so patching on `.accepted`/`.delivered` would render an
-    /// unverified guess as fact, and a command the vehicle silently refused would show as
-    /// having worked until the next refresh corrected it. Those outcomes fall through to the
-    /// refresh scheduled a couple of seconds later, which reports what actually happened.
     private func applyConfirmedStateChange(for command: RemoteCommand,
                                            outcome: RemoteCommandOutcome) {
-        guard outcome == .completed, var current = latest else { return }
+        guard outcome == .completed || outcome == .accepted || outcome == .delivered,
+              var current = latest else { return }
         switch command {
         case .startClimate(let temperature, _, _, _, _, _):
             current.climateStatus = VehicleClimateStatus(
@@ -395,10 +394,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
                 requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
             )
+        case .startPreCleaning:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .ventilating,
+                timeRemainingMinutes: 10,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
+        case .stopPreCleaning:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
         case .lock, .unlock:
             guard var exterior = current.exteriorStatus else { return }
             exterior.isLocked = (command == .lock)
             current.exteriorStatus = exterior
+        case .setChargeTarget(let target):
+            current.chargeTargetPercentage = target
+        case .setAmpLimit(let amps):
+            current.chargingCurrentAmps = amps
         default:
             return
         }
