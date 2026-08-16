@@ -635,9 +635,17 @@ actor VolvoAPI {
             var summaries: [CarSummary] = []
             for entry in list {
                 let details = try? await vehicleDetails(vin: entry.vin)
-                let title = [details?.descriptions?.model, details?.modelYear.map(String.init)]
+                let model = details?.descriptions?.model
+                let year = details?.modelYear.map(String.init)
+                let title = [model, year]
                     .compactMap { $0 }.joined(separator: " · ")
-                summaries.append(CarSummary(vin: entry.vin, title: title.isEmpty ? entry.vin : title))
+                summaries.append(CarSummary(
+                    vin: entry.vin,
+                    title: title.isEmpty ? entry.vin : title,
+                    modelName: model,
+                    modelYear: year,
+                    registrationNo: nil
+                ))
             }
             if summaries.isEmpty, let vin = savedVIN, !vin.isEmpty {
                 let nickname = await Preferences.vehicleNickname(for: vin)
@@ -723,6 +731,11 @@ actor VolvoAPI {
     private func requestToken(_ request: URLRequest) async throws -> VolvoTokenResponseDTO {
         let (data, response) = try await perform(request, operation: "Volvo token request")
         if response.statusCode == 400 || response.statusCode == 401 {
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let err = json["error"] as? String ?? "auth_error"
+                let desc = json["error_description"] as? String ?? ""
+                logger.error("Volvo token request rejected: \(err, privacy: .public) - \(desc, privacy: .public)")
+            }
             throw VolvoError.authenticationRequired(.invalidCredentials)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: "token request") {

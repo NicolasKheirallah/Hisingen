@@ -46,8 +46,11 @@ struct InfoTabView: View {
                 ?? (selectedAngleIndex == Preferences.carRenderAngle.rawValue ? state.imageData : nil)
         }()
 
-        let hasInterior = (state.interiorImageData != nil) || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
         let supportsMultipleAngles = Preferences.activeBrand == .polestar
+        let hasInterior = (state.interiorImageData != nil)
+            || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
+            || supportsMultipleAngles
+            || (state.upholstery != nil)
 
         return Card {
             VStack(spacing: 12) {
@@ -120,10 +123,37 @@ struct InfoTabView: View {
                     .allowsHitTesting(false)
                 }
 
+                let primaryTitle = Preferences.formattedVehicleTitle(
+                    vin: state.vin,
+                    modelName: state.modelName,
+                    modelYear: state.modelYear,
+                    registrationNo: state.registrationNo
+                )
+                let showRegBadge: Bool = {
+                    guard let reg = state.registrationNo, !reg.isEmpty else { return false }
+                    return Preferences.vehicleLabelFormat != .registration
+                        && Preferences.vehicleLabelFormat != .nicknameAndRegistration
+                        && Preferences.vehicleLabelFormat != .registrationAndModel
+                }()
+                let subtitleText: String? = {
+                    switch Preferences.vehicleLabelFormat {
+                    case .registration, .nickname, .nicknameAndRegistration:
+                        let model = state.modelName
+                        let year = state.modelYear.map { L10n.format("Model Year %@", $0) }
+                        let combined = [model, year].compactMap { $0 }.joined(separator: " · ")
+                        return combined.isEmpty ? nil : combined
+                    case .modelAndYear, .modelOnly, .registrationAndModel:
+                        if let year = state.modelYear {
+                            return L10n.format("Model Year %@", year)
+                        }
+                        return nil
+                    }
+                }()
+
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(state.modelName ?? "Vehicle")
+                            Text(primaryTitle)
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(HisingenTheme.ink)
                             if let color = state.externalColour, !color.isEmpty && !isInterior {
@@ -140,14 +170,14 @@ struct InfoTabView: View {
                                 )
                             }
                         }
-                        if let year = state.modelYear {
-                            Text(L10n.format("Model Year %@", year))
+                        if let subtitleText, !subtitleText.isEmpty {
+                            Text(subtitleText)
                                 .font(.system(size: 11))
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
                     }
                     Spacer()
-                    if let reg = state.registrationNo, !reg.isEmpty {
+                    if showRegBadge, let reg = state.registrationNo, !reg.isEmpty {
                         Text(reg)
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .padding(.horizontal, 8)

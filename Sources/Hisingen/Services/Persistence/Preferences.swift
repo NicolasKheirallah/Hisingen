@@ -160,6 +160,26 @@ enum RegistrationNumberBadgePosition: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum VehicleLabelFormat: String, CaseIterable, Codable, Sendable {
+    case registration = "registration"
+    case nickname = "nickname"
+    case modelAndYear = "model-and-year"
+    case modelOnly = "model-only"
+    case nicknameAndRegistration = "nickname-and-registration"
+    case registrationAndModel = "registration-and-model"
+
+    var title: String {
+        switch self {
+        case .registration: return L10n.text("Registration / License Plate")
+        case .nickname: return L10n.text("Nickname")
+        case .modelAndYear: return L10n.text("Model Name & Year")
+        case .modelOnly: return L10n.text("Model Name Only")
+        case .nicknameAndRegistration: return L10n.text("Nickname & Registration")
+        case .registrationAndModel: return L10n.text("Registration & Model")
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
     case light = "light"
@@ -535,6 +555,72 @@ enum Preferences {
             return RegistrationNumberBadgePosition(rawValue: raw) ?? .belowGreeting
         }
         set { d.set(newValue.rawValue, forKey: "registration_badge_position") }
+    }
+
+    static var vehicleLabelFormat: VehicleLabelFormat {
+        get {
+            let raw = d.string(forKey: "vehicle_label_format") ?? ""
+            return VehicleLabelFormat(rawValue: raw) ?? .modelAndYear
+        }
+        set { d.set(newValue.rawValue, forKey: "vehicle_label_format") }
+    }
+
+    static func formattedVehicleTitle(
+        vin: String,
+        modelName: String?,
+        modelYear: String?,
+        registrationNo: String?,
+        fallbackBrand: VehicleBrand? = nil,
+        format: VehicleLabelFormat? = nil
+    ) -> String {
+        let selectedFormat = format ?? vehicleLabelFormat
+        let brand = fallbackBrand ?? activeBrand
+        let nickname = vehicleNickname(for: vin).trimmingCharacters(in: .whitespacesAndNewlines)
+        let reg = registrationNo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = modelName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let year = modelYear?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let modelAndYr = [model.isEmpty ? nil : model, year.isEmpty ? nil : year].compactMap { $0 }.joined(separator: " · ")
+
+        switch selectedFormat {
+        case .registration:
+            if !reg.isEmpty { return reg }
+            if !nickname.isEmpty { return nickname }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !model.isEmpty ? model : brand.displayName
+
+        case .nickname:
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !model.isEmpty ? model : brand.displayName
+
+        case .modelAndYear:
+            if !modelAndYr.isEmpty { return modelAndYr }
+            if !model.isEmpty { return model }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            return brand.displayName
+
+        case .modelOnly:
+            if !model.isEmpty { return model }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            return brand.displayName
+
+        case .nicknameAndRegistration:
+            if !nickname.isEmpty && !reg.isEmpty { return "\(nickname) (\(reg))" }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return brand.displayName
+
+        case .registrationAndModel:
+            if !reg.isEmpty && !model.isEmpty { return "\(reg) · \(model)" }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !nickname.isEmpty ? nickname : brand.displayName
+        }
     }
 
     static var distanceUnit: DistanceUnit {

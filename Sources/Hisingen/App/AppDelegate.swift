@@ -27,6 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
+        Preferences.applyAppearance()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(systemAppearanceDidChange),
+            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil
+        )
         Preferences.migrateLegacyPassword()
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.refreshCoordinator.refreshNow() },
@@ -512,11 +519,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
         case .presentation:
+            Preferences.applyAppearance()
             refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
         }
         render()
+    }
+
+    @objc private func systemAppearanceDidChange() {
+        guard Preferences.appearanceMode == .system else { return }
+        render()
+        statusController?.refreshPopoverIfNeeded()
     }
 
     private func updateNotificationAuthorizationIfNeeded() {

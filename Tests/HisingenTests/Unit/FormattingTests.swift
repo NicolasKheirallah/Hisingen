@@ -74,6 +74,102 @@ struct FormattingTests {
     }
 
     @Test
+    func testVehicleLabelFormatPreference() {
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelAndYear)
+        Preferences.vehicleLabelFormat = .registration
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .registration)
+        Preferences.vehicleLabelFormat = .nickname
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .nickname)
+        Preferences.vehicleLabelFormat = .modelOnly
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelOnly)
+        Preferences.vehicleLabelFormat = .nicknameAndRegistration
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .nicknameAndRegistration)
+        Preferences.vehicleLabelFormat = .registrationAndModel
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .registrationAndModel)
+        Preferences.vehicleLabelFormat = .modelAndYear
+        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelAndYear)
+    }
+
+    @Test
+    func testFormattedVehicleTitle() {
+        let testVIN = "YS2TEST1234567890"
+        Preferences.setVehicleNickname("Silver Comet", for: testVIN)
+        defer {
+            Preferences.setVehicleNickname("", for: testVIN)
+        }
+
+        // Test Registration Format
+        let regTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .registration
+        )
+        XCTAssertEqual(regTitle, "ZCJ 06G")
+
+        // Test Nickname Format
+        let nickTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .nickname
+        )
+        XCTAssertEqual(nickTitle, "Silver Comet")
+
+        // Test Model & Year Format
+        let modelYrTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .modelAndYear
+        )
+        XCTAssertEqual(modelYrTitle, "Polestar 2 · 2024")
+
+        // Test Model Only Format
+        let modelOnlyTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .modelOnly
+        )
+        XCTAssertEqual(modelOnlyTitle, "Polestar 2")
+
+        // Test Nickname & Registration Format
+        let nickAndRegTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .nicknameAndRegistration
+        )
+        XCTAssertEqual(nickAndRegTitle, "Silver Comet (ZCJ 06G)")
+
+        // Test Registration & Model Format
+        let regAndModelTitle = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "ZCJ 06G",
+            format: .registrationAndModel
+        )
+        XCTAssertEqual(regAndModelTitle, "ZCJ 06G · Polestar 2")
+
+        // Test fallback when registration is empty
+        let regFallback = Preferences.formattedVehicleTitle(
+            vin: testVIN,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: nil,
+            format: .registration
+        )
+        XCTAssertEqual(regFallback, "Silver Comet")
+    }
+
+    @Test
     func testFeatureSelectionCanDisableOptionalCapabilities() {
         var features = FeatureSelection.default
         XCTAssertTrue(features.contains(.vehicleImage))

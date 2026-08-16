@@ -547,6 +547,7 @@ actor PolestarAPI {
         state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
         state.packages = features.contains(.vehicleIdentity) ? packageNames : []
         state.accountMarket = market
+        state.interiorImageData = features.contains(.vehicleImage) ? CarImageCache.shared.interiorImage(for: vin) : nil
         return state
     }
 
@@ -1102,6 +1103,7 @@ actor PolestarAPI {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
             transparent { url angle }
             opaque { url angle }
+            interior { url angle }
           }
         }
         """
@@ -1157,6 +1159,21 @@ actor PolestarAPI {
                         (otherResp as? HTTPURLResponse)?.statusCode == 200,
                         otherBytes.count <= 5_000_000 else { return }
                     CarImageCache.shared.save(otherBytes, for: vin, angle: otherAngle)
+                }
+            }
+
+            if let interiorPool = images["interior"] as? [[String: Any]],
+               let interiorPick = interiorPool.first,
+               let interiorUrlStr = interiorPick["url"] as? String,
+               let interiorUrl = URL(string: interiorUrlStr),
+               interiorUrl.scheme == "https",
+               CarImageCache.shared.interiorImage(for: vin) == nil {
+                Task.detached { [session] in
+                    guard let (intBytes, intResp) = try? await HTTPBodyReader.data(
+                        for: URLRequest(url: interiorUrl), using: session, limit: 5_000_000, operation: "vehicle interior image"),
+                        (intResp as? HTTPURLResponse)?.statusCode == 200,
+                        intBytes.count <= 5_000_000 else { return }
+                    CarImageCache.shared.saveInterior(intBytes, for: vin)
                 }
             }
         }
