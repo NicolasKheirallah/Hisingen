@@ -122,7 +122,7 @@ struct ControlsTabView: View {
                     .foregroundStyle(.primary)
                 Text(isBrandVolvo
                      ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
-                     : L10n.text("Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices."))
+                     : L10n.text("Climate, locks, windows and software installation are active. Charging commands are not yet verified."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -673,7 +673,11 @@ struct ControlsTabView: View {
     private func otaStatusLine(_ software: VehicleSoftwareInfo) -> some View {
         let pending = software.latestAvailableVersion ?? software.version
         switch software.state {
-        case .available, .downloaded, .deferred:
+        case .available:
+            otaStatusRow(symbol: "arrow.down.circle", tint: .blue,
+                         text: pending.map { L10n.format("Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.", $0) }
+                            ?? L10n.text("A software update is available. The vehicle downloads it automatically."))
+        case .downloaded, .deferred:
             otaStatusRow(symbol: "arrow.down.circle.fill", tint: .blue,
                          text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
                             ?? L10n.text("A software update is ready to install."))
@@ -704,7 +708,7 @@ struct ControlsTabView: View {
     @ViewBuilder
     private func otaActions(_ software: VehicleSoftwareInfo) -> some View {
         switch software.state {
-        case .available, .downloaded, .deferred, .failed:
+        case .downloaded, .deferred:
             otaButton(title: L10n.text("Install Update Now"), symbol: "arrow.down.circle.fill",
                       prominent: true) { onRemoteCommand(.installOTANow) }
         case .scheduled:
@@ -714,7 +718,9 @@ struct ControlsTabView: View {
                 otaButton(title: L10n.text("Cancel Scheduled Installation"), symbol: "xmark.circle",
                           prominent: false) { onRemoteCommand(.cancelOTA) }
             }
-        case .downloading, .installing, .completed, .unknown:
+        // `available` offers no button: the scheduler rejects an update the car has not
+        // downloaded yet, so a live-looking button would only ever produce an error.
+        case .available, .downloading, .installing, .failed, .completed, .unknown:
             EmptyView()
         }
     }

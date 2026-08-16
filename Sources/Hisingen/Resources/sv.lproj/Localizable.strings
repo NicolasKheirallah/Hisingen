@@ -871,5 +871,30 @@
 "Corrosion Protection (12 yr)" = "Rostskyddsgaranti (12 år)";
 "Polestar Assistance" = "Polestar Assistance";
 "Volvo Assistance" = "Volvo Assistance";
+"Model badge position" = "Placering av modellmärke";
+"Placement of model & year label" = "Placering av bilmodell och årsmodell";
+"Inline with Greeting (Top Right)" = "I linje med hälsning (uppe till höger)";
+"Over Vehicle Image (Top Right)" = "Över bilbild (uppe till höger)";
+"Over Vehicle Image (Top Left)" = "Över bilbild (uppe till vänster)";
+"Below Greeting" = "Under hälsning";
+"Hidden" = "Dold";
 
 
+
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "Den här uppdateringen har erbjudits fordonet men ännu inte laddats ned. Bilen hämtar den själv när förhållandena tillåter; installationen kan startas först därefter.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "Uppdateringen laddas fortfarande ned till fordonet. Försök igen när den är klar.";
+"The vehicle is already installing this update." = "Fordonet installerar redan den här uppdateringen.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "Det senaste uppdateringsförsöket misslyckades och fordonet har inte gjort den tillgänglig för installation igen.";
+"There is no software update waiting to be installed on this vehicle." = "Det finns ingen programvaruuppdatering som väntar på installation på det här fordonet.";
+"The vehicle cannot install a software update right now." = "Fordonet kan inte installera en programvaruuppdatering just nu.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "En programvaruinstallation kan endast schemaläggas mellan %d minuter och %d dagar från nu.";
+"The vehicle service rejected the request as invalid." = "Fordonstjänsten avvisade begäran som ogiltig.";
+"The vehicle service has no such update to act on." = "Fordonstjänsten har ingen sådan uppdatering att agera på.";
+"Your Polestar account is not permitted to run this command." = "Ditt Polestar-konto har inte behörighet att köra det här kommandot.";
+"The vehicle is not in a state where this command can run right now." = "Fordonet är just nu inte i ett tillstånd där det här kommandot kan köras.";
+"The vehicle service refused the command (gRPC status %@)." = "Fordonstjänsten avvisade kommandot (gRPC-status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "Fordonstjänsten avvisade kommandot utan att ange någon orsak. Det betyder oftast att fordonet inte kan utföra det just nu.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Programvaruuppdatering %@ är tillgänglig. Fordonet laddar ned den automatiskt; den kan installeras när det är klart.";
+"A software update is available. The vehicle downloads it automatically." = "En programvaruuppdatering är tillgänglig. Fordonet laddar ned den automatiskt.";

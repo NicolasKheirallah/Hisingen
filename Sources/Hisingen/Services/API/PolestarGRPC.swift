@@ -22,8 +22,8 @@ actor PolestarGRPC {
     private let discoveryURL = URL(string: "https://cnepmob.volvocars.com")!
     private let batteryPath = "/services.vehiclestates.battery.BatteryService/GetLatestBattery"
     private let availabilityPath = "/services.vehiclestates.availability.AvailabilityService/GetLatestAvailability"
-    private let targetSocPath = "/chronos.services.v1.TargetSocService/GetTargetSoc"
-    private let ampLimitReadPath = "/chronos.services.v1.AmpLimitService/GetAmpLimit"
+    private let targetSocPath = "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc"
+    private let ampLimitReadPath = "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit"
 
 
     private let pccsURL = URL(string: "https://api.pccs-prod.plstr.io:443")!
@@ -36,6 +36,8 @@ actor PolestarGRPC {
     /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
     /// checked here instead of being discovered as an unexplained refusal.
     var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
+    /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
+    var activeCommandToken: String?
     let session: URLSession
 
     init() {

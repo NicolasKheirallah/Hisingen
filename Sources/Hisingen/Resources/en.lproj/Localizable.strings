@@ -878,5 +878,30 @@
 "Corrosion Protection (12 yr)" = "Corrosion Protection (12 yr)";
 "Polestar Assistance" = "Polestar Assistance";
 "Volvo Assistance" = "Volvo Assistance";
+"Model badge position" = "Model badge position";
+"Placement of model & year label" = "Placement of model & year label";
+"Inline with Greeting (Top Right)" = "Inline with Greeting (Top Right)";
+"Over Vehicle Image (Top Right)" = "Over Vehicle Image (Top Right)";
+"Over Vehicle Image (Top Left)" = "Over Vehicle Image (Top Left)";
+"Below Greeting" = "Below Greeting";
+"Hidden" = "Hidden";
 
 
+
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "The update is still downloading to the vehicle. Try again once it has finished.";
+"The vehicle is already installing this update." = "The vehicle is already installing this update.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "The last update attempt failed, and the vehicle has not made it available to install again.";
+"There is no software update waiting to be installed on this vehicle." = "There is no software update waiting to be installed on this vehicle.";
+"The vehicle cannot install a software update right now." = "The vehicle cannot install a software update right now.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "A software installation can only be scheduled between %d minutes and %d days from now.";
+"The vehicle service rejected the request as invalid." = "The vehicle service rejected the request as invalid.";
+"The vehicle service has no such update to act on." = "The vehicle service has no such update to act on.";
+"Your Polestar account is not permitted to run this command." = "Your Polestar account is not permitted to run this command.";
+"The vehicle is not in a state where this command can run right now." = "The vehicle is not in a state where this command can run right now.";
+"The vehicle service refused the command (gRPC status %@)." = "The vehicle service refused the command (gRPC status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.";
+"A software update is available. The vehicle downloads it automatically." = "A software update is available. The vehicle downloads it automatically.";

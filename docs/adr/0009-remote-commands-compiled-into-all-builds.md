@@ -10,14 +10,18 @@ ADR-0005 gated every Polestar remote-command dispatch behind the
 authorization for these commands." That premise turned out to be a
 consequence of how Hisingen authenticated, not a property of the backend.
 
-Hisingen was signing in as the polestar.com **web** OIDC client
-(`l3oopkc_10`) with the read-only scope `openid profile email
-customer:attributes`. The Polestar **mobile-app** client (`lp8dyrd_10`,
-redirect `polestar-explore://explore.polestar.com`) additionally holds
-`customer:attributes:write`. Software-update dispatch —
-`ota_mobcache.SchedulerService/{Schedule,InstallNow,CancelSchedule}` on C3 —
-is a normal owner-authorized operation for that client, so the blanket
-"unpaired clients are rejected" reading no longer holds.
+Hisingen was requesting only the read scope `openid profile email
+customer:attributes`. Adding `customer:attributes:write` to the same
+polestar.com web client (`l3oopkc_10`) is accepted by the authorization
+server and does not disturb vehicle discovery — verified live. Software-update
+dispatch (`ota_mobcache.SchedulerService/{Schedule,InstallNow,CancelSchedule}`
+on C3) then reaches the backend and is answered on its merits rather than
+refused, so the blanket "unpaired clients are rejected" reading no longer
+holds.
+
+(The Polestar mobile-app client `lp8dyrd_10` was evaluated and rejected: its
+token is not accepted by `mystar-v2`, which breaks vehicle discovery entirely.
+See [api/polestar.md](../api/polestar.md#remote-commands).)
 
 Keeping the flag meant the OTA install control could never work in a build
 anyone actually runs: `PolestarAPI.executeRemoteCommand` threw

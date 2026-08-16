@@ -73,6 +73,14 @@ gRPC `OtaDiscoveryService/GetSoftwareInfo` and `SchedulerService` (`GetSchedule`
 
 The three writes all answer with `{1 Scheduler}` = `{1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by}`, where `status` is `0 UNKNOWN, 1 IDLE, 2 SCHEDULED, 3 INSTALL`. `GetSchedule` is a second source of `software_id`, which is what keeps "cancel a scheduled installation" reachable when `GetSoftwareInfo` has nothing to report.
 
+### Verified against a live Polestar 2
+
+- **`state = 15`** is real and means *available*. It is outside the 0–14 range of the enum this was modelled on, and arrives with a populated description and no `schedule_info`.
+- **`relative_time` on `Schedule` is in MINUTES, bounded 2…10080** (7 days). The backend rejects anything else with `grpc-status 3: relativeTime should be between 2 to 10080!`. Sending seconds — as this client used to — put every request out of range.
+- **"Available" does not mean installable.** With the update in state 15, both `Schedule` and `InstallNow` answer `grpc-status 3: The software with software id <id> is not ready to be scheduled!`. The car downloads the payload on its own schedule; only after that does the scheduler accept a request. `PolestarGRPC.installableStates` therefore excludes `.available`.
+- **Errors arrive as Trailers-Only**, i.e. `HTTP 200` with `grpc-status`/`grpc-message` in the *initial* headers and `Content-Length: 0`. Those are readable. A status delivered in genuine HTTP/2 trailers is not — `URLSession` exposes no trailer API — which is why `lastMessage` treats "200 with no frame" as a refusal rather than a malformed response.
+- **`GetSoftwareInfo` and `GetSchedule` are server-streaming**: the server writes one frame and holds the stream open. They must be read incrementally (`firstMessage`); `URLSession.data(for:)` simply times out.
+
 ## Connectivity, trip meters, odometer
 
 `OdometerService/GetOdometer` is the primary source (C3); if it fails, `DashboardService/GetLatestDashboard` is used as a fallback for odometer/trip data and legacy connectivity fields — the primary odometer call is wrapped in an empty `catch {}` before falling back, suggesting it's known to be unreliable on some vehicles.
@@ -118,9 +126,37 @@ See [architecture/capabilities.md](../architecture/capabilities.md) for the gene
 
 Dispatched through `invocation.InvocationService/<Method>` (generic write RPC — `ClimatizationStart/Stop`, `PreCleaning`, `Lock`, `Unlock`, `WindowControl`, `HonkFlash`), plus dedicated `chronos.services.*` RPCs for charging/schedule/OTA writes. Every request is hand-built protobuf with validated bounds (e.g. charge target 40–100%, amp limit 1–64A, temperature 16–30°C in 0.5° steps) rejected client-side before any network call.
 
-**Write scope is what makes these work.** Hisingen signs in as the Polestar mobile-app OIDC client (`lp8dyrd_10`, redirect `polestar-explore://explore.polestar.com`) requesting `openid profile email customer:attributes customer:attributes:write`. It previously used the polestar.com **web** client (`l3oopkc_10`) with only `customer:attributes`, which holds no write scope — that, rather than any device-pairing requirement, is why writes came back rejected and why the app's own docs described remote control as impossible. A write RPC answering gRPC status `16` (`UNAUTHENTICATED`) still maps to *"Polestar cloud backend requires official mobile app pairing for remote commands."*
+**Client and scope.** Hisingen signs in as the polestar.com **web** OIDC client (`l3oopkc_10`, redirect `https://www.polestar.com/sign-in-callback`) and requests `openid profile email customer:attributes customer:attributes:write`.
 
-Dispatch is compiled into every build ([ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md) removed the former `HISINGEN_EXPERIMENTAL_REMOTE` flag). Of the Polestar commands, only the OTA scheduler ones are reachable from the UI today; `ControlsTabView` still hardcodes locks, windows, climate, and charging to `.disabled(true)` — see [architecture/technical-debt.md](../architecture/technical-debt.md) and [security/threat-model.md](../security/threat-model.md).
+The mobile-app client (`lp8dyrd_10`, `polestar-explore://explore.polestar.com`) was tried and **does not work for this app**: it authenticates and returns a token, but `pc-api.polestar.com/eu-north-1/mystar-v2` rejects that token with `UnauthorizedException`, so `getConsumerCarsV2` returns nothing and vehicle discovery fails outright. Verified live against a real account — the web client returns the vehicle, the app client returns 401. The web client accepts `customer:attributes:write` on request without disturbing discovery, so it is the only combination that gives both.
+
+`GetVDMSCars` on the app-backend host answers **HTTP 428** for both clients (a force-update-version precondition), so `getConsumerCarsV2` is currently the only working discovery query.
+
+### Two OAuth clients are required
+
+Remote commands are gated on a **client-id allowlist**, which is separate from OAuth scope. C3 states the rule when it refuses:
+
+```
+Client id l3oopkc_10 is not a required client id:
+[h4Yf0b, ahP7e4, polxplore, addpolestarcnhere, caraccessmonitorunner,
+ polmonrunnereuprod, lp8dyrd_10, micwkvi_20, r7p9qtm_10, 9jahaga_10,
+ vhujyni_10, mo2qy9h_10, nxpwptn_10, 3nyjn7a_10, d0v7mnk_10]
+```
+
+Neither client is sufficient alone:
+
+| | `l3oopkc_10` (web) | `lp8dyrd_10` (app) |
+| --- | --- | --- |
+| `getConsumerCarsV2` (vehicle discovery) | ✅ | ❌ `UnauthorizedException` |
+| C3 `invocation.InvocationService` | ❌ not on allowlist | ✅ accepted |
+
+So `PolestarAPI` signs in twice and holds a token from each, using the command token only for invocation-backed commands. The command sign-in is best-effort — if it fails, reads and OTA still work and only those commands become unavailable. Both callbacks must be recognised by `OAuthRedirectDelegate`, since the app client's is a custom scheme `URLSession` cannot load.
+
+**Invocation lives on C3, not PCCS.** `pccs.invocation.v1.InvocationService` exists but answers every write with `Unauthenticated: Access denied` regardless of client. Verified live: `Lock` via C3 with the command token returns `outcome = completed`.
+
+PCCS is still correct for chronos *reads* (`GetTargetSoc` returns real data); chronos *writes* are unverified.
+
+Dispatch is compiled into every build ([ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md) removed the former `HISINGEN_EXPERIMENTAL_REMOTE` flag).
 
 Outcome parsing reads a numeric status field from the response: `1`→accepted, `4`→delivered, `6`→completed; `9`/`10`/`12` map to specific rejection reasons (privacy setting, vehicle mode, conflicting command); anything else surfaces the raw message field.
 

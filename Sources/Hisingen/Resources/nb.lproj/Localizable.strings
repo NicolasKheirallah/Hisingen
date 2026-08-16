@@ -847,3 +847,20 @@
 "The last software update failed." = "Den siste programvareoppdateringen mislyktes.";
 "Software is up to date (%@)." = "Programvaren er oppdatert (%@).";
 "Cancel Scheduled Installation" = "Avbryt planlagt installasjon";
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "Denne oppdateringen er tilbudt kjøretøyet, men ennå ikke lastet ned. Bilen henter den selv når forholdene tillater det; installasjonen kan først startes etterpå.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "Oppdateringen lastes fortsatt ned til kjøretøyet. Prøv igjen når den er ferdig.";
+"The vehicle is already installing this update." = "Kjøretøyet installerer allerede denne oppdateringen.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "Det siste oppdateringsforsøket mislyktes, og kjøretøyet har ikke gjort den tilgjengelig for installasjon igjen.";
+"There is no software update waiting to be installed on this vehicle." = "Det venter ingen programvareoppdatering på installasjon på dette kjøretøyet.";
+"The vehicle cannot install a software update right now." = "Kjøretøyet kan ikke installere en programvareoppdatering akkurat nå.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "En programvareinstallasjon kan bare planlegges mellom %d minutter og %d dager fra nå.";
+"The vehicle service rejected the request as invalid." = "Kjøretøytjenesten avviste forespørselen som ugyldig.";
+"The vehicle service has no such update to act on." = "Kjøretøytjenesten har ingen slik oppdatering å handle på.";
+"Your Polestar account is not permitted to run this command." = "Polestar-kontoen din har ikke tillatelse til å kjøre denne kommandoen.";
+"The vehicle is not in a state where this command can run right now." = "Kjøretøyet er ikke i en tilstand der denne kommandoen kan kjøres akkurat nå.";
+"The vehicle service refused the command (gRPC status %@)." = "Kjøretøytjenesten avviste kommandoen (gRPC-status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "Kjøretøytjenesten avviste kommandoen uten å oppgi en grunn. Det betyr vanligvis at kjøretøyet ikke kan utføre den nå.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Programvareoppdatering %@ er tilgjengelig. Kjøretøyet laster den ned automatisk; den kan installeres når det er ferdig.";
+"A software update is available. The vehicle downloads it automatically." = "En programvareoppdatering er tilgjengelig. Kjøretøyet laster den ned automatisk.";

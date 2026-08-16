@@ -847,3 +847,20 @@
 "The last software update failed." = "Das letzte Software-Update ist fehlgeschlagen.";
 "Software is up to date (%@)." = "Die Software ist aktuell (%@).";
 "Cancel Scheduled Installation" = "Geplante Installation abbrechen";
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "Dieses Update wurde dem Fahrzeug angeboten, aber noch nicht heruntergeladen. Das Auto lädt es selbstständig herunter, sobald die Bedingungen es zulassen; die Installation kann erst danach gestartet werden.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "Das Update wird noch auf das Fahrzeug heruntergeladen. Versuchen Sie es erneut, sobald es abgeschlossen ist.";
+"The vehicle is already installing this update." = "Das Fahrzeug installiert dieses Update bereits.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "Der letzte Update-Versuch ist fehlgeschlagen, und das Fahrzeug bietet die Installation nicht erneut an.";
+"There is no software update waiting to be installed on this vehicle." = "Auf diesem Fahrzeug wartet kein Software-Update auf die Installation.";
+"The vehicle cannot install a software update right now." = "Das Fahrzeug kann derzeit kein Software-Update installieren.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "Eine Software-Installation kann nur zwischen %d Minuten und %d Tagen ab jetzt geplant werden.";
+"The vehicle service rejected the request as invalid." = "Der Fahrzeugdienst hat die Anfrage als ungültig abgelehnt.";
+"The vehicle service has no such update to act on." = "Der Fahrzeugdienst kennt kein solches Update.";
+"Your Polestar account is not permitted to run this command." = "Ihr Polestar-Konto darf diesen Befehl nicht ausführen.";
+"The vehicle is not in a state where this command can run right now." = "Das Fahrzeug befindet sich derzeit nicht in einem Zustand, in dem dieser Befehl ausgeführt werden kann.";
+"The vehicle service refused the command (gRPC status %@)." = "Der Fahrzeugdienst hat den Befehl abgelehnt (gRPC-Status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "Der Fahrzeugdienst hat den Befehl ohne Angabe eines Grundes abgelehnt. Das bedeutet meist, dass das Fahrzeug ihn derzeit nicht ausführen kann.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Software-Update %@ ist verfügbar. Das Fahrzeug lädt es automatisch herunter; danach kann es installiert werden.";
+"A software update is available. The vehicle downloads it automatically." = "Ein Software-Update ist verfügbar. Das Fahrzeug lädt es automatisch herunter.";

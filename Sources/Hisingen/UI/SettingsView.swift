@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var appTheme: AppTheme = Preferences.appTheme
     @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
     @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
+    @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
     @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
@@ -399,6 +400,31 @@ struct SettingsView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Model badge position"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Placement of model & year label"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $vehicleModelBadgePosition) {
+                            ForEach(VehicleModelBadgePosition.allCases, id: \.self) { pos in
+                                Text(pos.title).tag(pos)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: vehicleModelBadgePosition) { _ in
+                            Preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Session History"))
                                 .font(.system(size: 12, weight: .medium))
                             Text(L10n.text("Keep up to 20 local per-vehicle charging summaries"))
@@ -676,17 +702,17 @@ struct SettingsView: View {
 
                 Text(isVolvo
                      ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
-                     : L10n.text("Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices."))
+                     : L10n.text("Climate, locks, windows and cabin cleaning are dispatched through Polestar's command service, and software installation through its OTA scheduler. Charging commands are not yet verified against the backend."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
-                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: isVolvo, badgeText: isVolvo ? nil : "Mobile Only")
-                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Mobile Only")
-                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
-                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
-                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
+                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
+                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Unverified")
+                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
+                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
                     featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install or cancel a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                 }
             }
