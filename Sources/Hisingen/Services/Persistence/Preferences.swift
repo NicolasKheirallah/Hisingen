@@ -12,6 +12,14 @@ enum InterfaceLanguage: String, CaseIterable {
     case norwegian
     case danish
     case dutch
+    case french
+    case spanish
+    case italian
+    case finnish
+    case portuguese
+    case polish
+    case chinese
+    case korean
 
     var languageCode: String? {
         switch self {
@@ -22,6 +30,14 @@ enum InterfaceLanguage: String, CaseIterable {
         case .norwegian: return "nb"
         case .danish: return "da"
         case .dutch: return "nl"
+        case .french: return "fr"
+        case .spanish: return "es"
+        case .italian: return "it"
+        case .finnish: return "fi"
+        case .portuguese: return "pt"
+        case .polish: return "pl"
+        case .chinese: return "zh"
+        case .korean: return "ko"
         }
     }
 
@@ -34,6 +50,14 @@ enum InterfaceLanguage: String, CaseIterable {
         case .norwegian: return L10n.text("Norwegian")
         case .danish: return L10n.text("Danish")
         case .dutch: return L10n.text("Dutch")
+        case .french: return L10n.text("French")
+        case .spanish: return L10n.text("Spanish")
+        case .italian: return L10n.text("Italian")
+        case .finnish: return L10n.text("Finnish")
+        case .portuguese: return L10n.text("Portuguese")
+        case .polish: return L10n.text("Polish")
+        case .chinese: return L10n.text("Chinese (Simplified)")
+        case .korean: return L10n.text("Korean")
         }
     }
 
