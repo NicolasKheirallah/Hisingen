@@ -787,7 +787,6 @@
 "Lock Doors" = "Lock Doors";
 "Unlock Doors" = "Unlock Doors";
 "Start Climate (%@)" = "Start Climate (%@)";
-"Flash Lights" = "Flash Lights";
 "Honk Horn" = "Honk Horn";
 "Honk and Flash" = "Honk and Flash";
 "Modem Wake Reason" = "Modem Wake Reason";
@@ -809,9 +808,7 @@
 "Engaged" = "Engaged";
 "Released" = "Released";
 "Cabin Seating Matrix" = "Cabin Seating Matrix";
-"Rear Left" = "Rear Left";
 "Rear Center" = "Rear Center";
-"Rear Right" = "Rear Right";
 "Interior & Cabin" = "Interior & Cabin";
 "Steering Orientation" = "Steering Orientation";
 "Comfort Target" = "Comfort Target";
@@ -827,7 +824,6 @@
 "Max DC Fast Charge" = "Max DC Fast Charge";
 "Max AC Charge" = "Max AC Charge";
 "Fuel Level" = "Fuel Level";
-"Avg Consumption" = "Avg Consumption";
 "Service & Health" = "Service & Health";
 "Total Odometer" = "Total Odometer";
 "Factory Build & Identity" = "Factory Build & Identity";

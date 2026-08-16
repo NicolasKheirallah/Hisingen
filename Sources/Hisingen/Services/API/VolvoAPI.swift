@@ -765,7 +765,7 @@ actor VolvoAPI {
         throw VolvoError.authenticationRequired(.expiredSession)
     }
 
-    private func get<T: Decodable>(_ path: String) async throws -> T {
+    private func get<T: Decodable & Sendable>(_ path: String) async throws -> T {
         let (data, response) = try await authenticatedGET(path)
         if response.statusCode == 403 {
             // Only per-vehicle telemetry GETs route through this helper, and for those a 403
@@ -784,7 +784,7 @@ actor VolvoAPI {
         return direct
     }
 
-    private func getList<T: Decodable>(_ path: String) async throws -> [T] {
+    private func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
         let (data, response) = try await authenticatedGET(path)
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {

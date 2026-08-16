@@ -103,6 +103,13 @@ jobs:
             echo "::warning::release.yml pins DEVELOPER_DIR=/Applications/Xcode_16.2.app, but that Xcode is not present on this macos-15 runner image. The release build may fail even though CI passed. Update the pin in release.yml to an Xcode version available on the runner image."
           fi
 
+      - name: Inject Volvo secrets or fallback template
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+        run: sh Scripts/inject-secrets.sh
+
       - name: Build with complete concurrency checks
         run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 

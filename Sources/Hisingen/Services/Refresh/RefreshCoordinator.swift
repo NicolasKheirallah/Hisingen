@@ -419,7 +419,7 @@ final class RefreshCoordinator {
     /// main actor could miss.
     private func addMainActorObserver(
         for name: Notification.Name,
-        handler: @escaping @MainActor (RefreshCoordinator) -> Void
+        handler: @escaping @MainActor @Sendable (RefreshCoordinator) -> Void
     ) -> any NSObjectProtocol {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: name, object: nil, queue: .main

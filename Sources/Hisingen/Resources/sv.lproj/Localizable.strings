@@ -786,7 +786,6 @@
 "Lock Doors" = "Lås dörrar";
 "Unlock Doors" = "Lås upp dörrar";
 "Start Climate (%@)" = "Starta klimat (%@)";
-"Flash Lights" = "Blinka med ljus";
 "Honk Horn" = "Tuta";
 "Honk and Flash" = "Tuta och blinka";
 "Modem Wake Reason" = "Modemets väckningsorsak";
@@ -822,7 +821,6 @@
 "Max DC Fast Charge" = "Max DC-snabbladdning";
 "Max AC Charge" = "Max AC-laddning";
 "Fuel Level" = "Bränslenivå";
-"Avg Consumption" = "Snittförbrukning";
 "Service & Health" = "Service & hälsa";
 "Total Odometer" = "Total mätarställning";
 "Factory Build & Identity" = "Fabriksbygge & identitet";
