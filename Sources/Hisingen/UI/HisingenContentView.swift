@@ -1572,10 +1572,10 @@ struct VehicleTabView: View {
         if state.powertrain.hasElectricRange && (features.contains(.batteryDiagnostics) || features.contains(.chargingDetails)) {
             if let health = state.estimatedRangeHealth {
                 rows.append(KVRow(
-                    L10n.text("Range Health Estimate"),
+                    L10n.text("Range Efficiency (vs WLTP)"),
                     String(format: "%.1f%% · %@", health.percentage, health.rating),
                     symbol: "gauge.with.dots.needle.67percent",
-                    info: L10n.text("Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading.")
+                    info: L10n.text("Dynamic driving efficiency based on recent speed, weather, and climate heating compared to standard WLTP. For physical battery pack health (SoH), see the Info tab.")
                 ))
             }
         }
