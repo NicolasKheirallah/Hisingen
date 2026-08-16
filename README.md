@@ -469,6 +469,24 @@ open Hisingen.app
 
 `make app` produces an ad-hoc-signed local build. Rebuilding changes its identity and can cause Keychain or Accessibility approval to be requested again. Stable trust across rebuilds requires a Developer ID-signed release.
 
+### Production Release & Deployment
+
+The project features a fully automated, zero-secret-leakage release pipeline (`.github/workflows/release.yml`):
+
+1. **Automated Release via Git Tag**:
+   ```bash
+   # Run pre-flight checks, bump version, build universal app/dmg, checksum, and tag
+   make release VERSION=1.2.0    # or patch / minor / major
+
+   # Push to trigger GitHub Actions automated signing, Apple notarization, and DMG release
+   git push origin main --tags
+   ```
+
+2. **Secret Isolation & Security**:
+   - **User Volvo Developer API Keys & Tokens**: Stored only on the user's Mac in the hardware-encrypted **Secure Enclave Keychain** (`kSecClassGenericPassword`), never checked into git or bundled in binaries.
+   - **Polestar OAuth**: Public client IDs are PKCE-secured (`RFC 7636`), requiring dynamic runtime challenge verifiers.
+   - **Code Signing Certificates & Notary Credentials**: Managed via encrypted **GitHub Actions Repository Secrets** (`MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_APP_PASSWORD`), never exposed in logs or build outputs.
+
 ## Documentation & Terms
 
 - [Changelog](changelog.md) — Release notes, historical fixes, and new features.
