@@ -1,7 +1,7 @@
 import Foundation
 
 
-struct VolvoField<Value: Decodable>: Decodable {
+struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
     let updatedAt: Date?
     let status: String?
@@ -30,12 +30,12 @@ struct VolvoField<Value: Decodable>: Decodable {
     }
 }
 
-private struct VolvoEnvelopeWrapper<Payload: Decodable>: Decodable {
+private struct VolvoEnvelopeWrapper<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload
 }
 
 
-struct VolvoEnvelope<Payload: Decodable>: Decodable {
+struct VolvoEnvelope<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload?
 
     init(from decoder: Decoder) throws {
@@ -48,11 +48,11 @@ struct VolvoEnvelope<Payload: Decodable>: Decodable {
 }
 
 
-struct VolvoVehicleSummaryDTO: Decodable {
+struct VolvoVehicleSummaryDTO: Decodable, Sendable {
     let vin: String
 }
 
-struct VolvoVehicleDetailsDTO: Decodable {
+struct VolvoVehicleDetailsDTO: Decodable, Sendable {
     let vin: String?
     let modelYear: Int?
     let descriptions: Descriptions?
@@ -62,15 +62,31 @@ struct VolvoVehicleDetailsDTO: Decodable {
     let batteryCapacityKWH: Double?
     let images: Images?
 
-    struct Descriptions: Decodable {
+    struct Descriptions: Decodable, Sendable {
         let model: String?
         let upholstery: String?
         let steering: String?
     }
 
-    struct Images: Decodable {
+    struct Images: Decodable, Sendable {
         let exteriorImageUrl: String?
-        let internalImageUrl: String?
+        let interiorImageUrl: String?
+
+        // Volvo's own docs disagree with themselves on this key: the Connected Vehicle API v2
+        // OpenAPI schema names it "internalImageUrl", but the endpoint reference page's example
+        // response uses "interiorImageUrl" with a real (non-placeholder) CDN URL. Decode either.
+        private enum CodingKeys: String, CodingKey {
+            case exteriorImageUrl
+            case interiorImageUrl
+            case internalImageUrl
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            exteriorImageUrl = try container.decodeIfPresent(String.self, forKey: .exteriorImageUrl)
+            interiorImageUrl = try container.decodeIfPresent(String.self, forKey: .interiorImageUrl)
+                ?? (try container.decodeIfPresent(String.self, forKey: .internalImageUrl))
+        }
     }
 }
 
@@ -93,7 +109,7 @@ enum VolvoPowertrain {
 }
 
 
-struct VolvoEnergyStateDTO: Decodable {
+struct VolvoEnergyStateDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoField<Double>?
     let electricRange: VolvoField<Double>?
     let chargingStatus: VolvoField<String>?
@@ -120,7 +136,7 @@ struct VolvoEnergyStateDTO: Decodable {
     }
 }
 
-struct VolvoEnergyCapabilitiesDTO: Decodable {
+struct VolvoEnergyCapabilitiesDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoCapabilityFlag?
     let electricRange: VolvoCapabilityFlag?
     let chargingStatus: VolvoCapabilityFlag?
@@ -128,7 +144,7 @@ struct VolvoEnergyCapabilitiesDTO: Decodable {
     let targetBatteryLevel: VolvoCapabilityFlag?
 }
 
-struct VolvoCapabilityFlag: Decodable {
+struct VolvoCapabilityFlag: Decodable, Sendable {
     let isSupported: Bool?
 }
 
@@ -164,7 +180,7 @@ extension ChargerConnection {
 }
 
 
-struct VolvoDoorsDTO: Decodable {
+struct VolvoDoorsDTO: Decodable, Sendable {
     let centralLock: VolvoField<String>?
     let frontLeftDoor: VolvoField<String>?
     let frontRightDoor: VolvoField<String>?
@@ -184,7 +200,7 @@ struct VolvoDoorsDTO: Decodable {
     }
 }
 
-struct VolvoWindowsDTO: Decodable {
+struct VolvoWindowsDTO: Decodable, Sendable {
     let frontLeftWindow: VolvoField<String>?
     let frontRightWindow: VolvoField<String>?
     let rearLeftWindow: VolvoField<String>?
@@ -204,7 +220,7 @@ extension OpeningState {
 }
 
 
-struct VolvoTyresDTO: Decodable {
+struct VolvoTyresDTO: Decodable, Sendable {
     let frontLeft: VolvoField<String>?
     let frontRight: VolvoField<String>?
     let rearLeft: VolvoField<String>?
@@ -230,8 +246,9 @@ struct VolvoTyresDTO: Decodable {
 }
 
 
-struct VolvoDiagnosticsDTO: Decodable {
+struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let serviceWarning: VolvoField<String>?
+    let serviceTrigger: VolvoField<String>?
     let timeToService: VolvoField<Int>?
     let distanceToService: VolvoField<Int>?
     let engineHoursToService: VolvoField<Int>?
@@ -280,12 +297,12 @@ struct VolvoDiagnosticsDTO: Decodable {
 }
 
 
-struct VolvoOdometerDTO: Decodable {
+struct VolvoOdometerDTO: Decodable, Sendable {
     let odometer: VolvoField<Int>?
 }
 
 
-struct VolvoStatisticsDTO: Decodable {
+struct VolvoStatisticsDTO: Decodable, Sendable {
     let tripMeterManual: VolvoField<Double>?
     let tripMeterAutomatic: VolvoField<Double>?
     let distanceToEmptyTank: VolvoField<Int>?
@@ -296,7 +313,7 @@ struct VolvoStatisticsDTO: Decodable {
 }
 
 
-struct VolvoFuelDTO: Decodable {
+struct VolvoFuelDTO: Decodable, Sendable {
     let fuelAmount: VolvoField<Double>?
     let fuelAmountLiters: VolvoField<Double>?
     let fuelLevelPercent: VolvoField<Double>?
@@ -317,29 +334,29 @@ struct VolvoFuelDTO: Decodable {
 }
 
 
-struct VolvoCommandDTO: Decodable {
+struct VolvoCommandDTO: Decodable, Sendable {
     let command: String?
     let href: String?
 }
 
-struct VolvoCommandsListDTO: Decodable {
+struct VolvoCommandsListDTO: Decodable, Sendable {
     let commands: [VolvoCommandDTO]?
 }
 
 
-struct VolvoLocationDTO: Decodable {
-    struct Properties: Decodable {
+struct VolvoLocationDTO: Decodable, Sendable {
+    struct Properties: Decodable, Sendable {
         let heading: String?
         let timestamp: Date?
     }
-    struct Geometry: Decodable {
+    struct Geometry: Decodable, Sendable {
         let coordinates: [Double]?
     }
     let properties: Properties?
     let geometry: Geometry?
 }
 
-struct VolvoEngineStatusDTO: Decodable {
+struct VolvoEngineStatusDTO: Decodable, Sendable {
     let engineStatus: VolvoField<String>?
 
     var isRunning: Bool {
@@ -347,11 +364,11 @@ struct VolvoEngineStatusDTO: Decodable {
     }
 }
 
-struct VolvoBrakesDTO: Decodable {
+struct VolvoBrakesDTO: Decodable, Sendable {
     let brakeFluidLevelWarning: VolvoField<String>?
 }
 
-struct VolvoCommandAccessibilityDTO: Decodable {
+struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
     let availabilityStatus: VolvoField<String>?
 
     var isAvailable: Bool {
@@ -359,7 +376,7 @@ struct VolvoCommandAccessibilityDTO: Decodable {
     }
 }
 
-struct VolvoWarningsDTO: Decodable {
+struct VolvoWarningsDTO: Decodable, Sendable {
     let brakeLightCenterWarning: VolvoField<String>?
     let brakeLightLeftWarning: VolvoField<String>?
     let brakeLightRightWarning: VolvoField<String>?
@@ -406,7 +423,9 @@ struct VolvoWarningsDTO: Decodable {
             (turnIndicationRearLeftWarning, L10n.text("Rear left turn indicator")),
             (turnIndicationRearRightWarning, L10n.text("Rear right turn indicator")),
             (registrationPlateLightWarning, L10n.text("License plate light")),
-            (sideMarkLightsWarning, L10n.text("Side marker lights"))
+            (sideMarkLightsWarning, L10n.text("Side marker lights")),
+            (hazardLightsWarning, L10n.text("Hazard warning lights")),
+            (reverseLightsWarning, L10n.text("Reverse light"))
         ]
         return list.compactMap { field, name in
             guard let val = field?.value?.uppercased(), !val.contains("NO_WARNING"), val != "UNSPECIFIED", !val.isEmpty else { return nil }
@@ -416,15 +435,87 @@ struct VolvoWarningsDTO: Decodable {
 }
 
 
-struct VolvoClimatizationDTO: Decodable {
+struct VolvoClimatizationDTO: Decodable, Sendable {
     let status: VolvoField<String>?
     let timeRemainingMinutes: VolvoField<Int>?
     let interiorTemperatureCelsius: VolvoField<Double>?
     let targetTemperatureCelsius: VolvoField<Double>?
     let preconditioning: VolvoField<String>?
+
+    private enum CodingKeys: String, CodingKey {
+        case status
+        case climatizationStatus
+        case parkedClimatization
+        case parkingClimateStatus
+        case preconditioning
+        case preConditioningStatus
+        case state
+
+        case timeRemaining
+        case timeRemainingMinutes
+        case timeRemainingInMinutes
+        case durationMinutes
+
+        case interiorTemperature
+        case interiorTemperatureCelsius
+        case cabinTemperature
+        case temperature
+
+        case targetTemperature
+        case targetTemperatureCelsius
+        case setTemperature
+        case requestedTemperature
+    }
+
+    init(
+        status: VolvoField<String>? = nil,
+        timeRemainingMinutes: VolvoField<Int>? = nil,
+        interiorTemperatureCelsius: VolvoField<Double>? = nil,
+        targetTemperatureCelsius: VolvoField<Double>? = nil,
+        preconditioning: VolvoField<String>? = nil
+    ) {
+        self.status = status
+        self.timeRemainingMinutes = timeRemainingMinutes
+        self.interiorTemperatureCelsius = interiorTemperatureCelsius
+        self.targetTemperatureCelsius = targetTemperatureCelsius
+        self.preconditioning = preconditioning
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Status field fallback cascade
+        self.status = try container.decodeIfPresent(VolvoField<String>.self, forKey: .status)
+            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .climatizationStatus)
+            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .parkedClimatization)
+            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .parkingClimateStatus)
+            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .state)
+
+        // Preconditioning fallback
+        self.preconditioning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .preconditioning)
+            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .preConditioningStatus)
+
+        // Time remaining fallback
+        self.timeRemainingMinutes = try container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemaining)
+            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemainingMinutes)
+            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemainingInMinutes)
+            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .durationMinutes)
+
+        // Interior temperature fallback
+        self.interiorTemperatureCelsius = try container.decodeIfPresent(VolvoField<Double>.self, forKey: .interiorTemperature)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .interiorTemperatureCelsius)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .cabinTemperature)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .temperature)
+
+        // Target temperature fallback
+        self.targetTemperatureCelsius = try container.decodeIfPresent(VolvoField<Double>.self, forKey: .targetTemperature)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .targetTemperatureCelsius)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .setTemperature)
+            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .requestedTemperature)
+    }
 }
 
-struct VolvoTokenResponseDTO: Decodable {
+struct VolvoTokenResponseDTO: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String?
     let expiresIn: Int
@@ -439,3 +530,64 @@ struct VolvoTokenResponseDTO: Decodable {
 }
 
 
+
+/// Response body of `POST /connected-vehicle/v2/vehicles/{vin}/commands/{name}` and of the
+/// `GET .../commands/{commandId}` status poll — both return the same shape.
+///
+/// Previously parsed with untyped `JSONSerialization` dictionary lookups while every read-path
+/// DTO was `Decodable`, which meant a shape change on Volvo's side degraded silently to a
+/// generic `.accepted` instead of surfacing a decode error.
+struct VolvoCommandResponseDTO: Decodable, Sendable {
+    let invokeStatus: String?
+    let message: String?
+    let commandId: String?
+
+    /// Blank-normalised accessors — the API returns `""` as often as it omits the key, and
+    /// an empty string surfaced to the UI reads as a missing message rather than no message.
+    var text: String? { message?.blankAsNil }
+    var pendingCommandId: String? { commandId?.blankAsNil }
+
+    /// Volvo's documented `invokeStatus` values, upper-cased before comparison because the
+    /// API has been observed returning both cases.
+    var outcome: RemoteCommandOutcome? {
+        switch invokeStatus?.uppercased() {
+        case "COMPLETED", "SUCCESS": return .completed
+        case "DELIVERED": return .delivered
+        case "RUNNING", "WAITING", "ACCEPTED": return .accepted
+        default: return nil
+        }
+    }
+
+    var isFailure: Bool {
+        switch invokeStatus?.uppercased() {
+        case "FAILED", "REJECTED", "TIMEOUT", "CONNECTION_FAILURE",
+             "VEHICLE_IN_SLEEP", "UNLOCK_TIME_FRAME_PASSED", "NOT_ALLOWED":
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// Error envelope returned alongside a non-2xx command response.
+struct VolvoCommandErrorDTO: Decodable, Sendable {
+    struct Detail: Decodable, Sendable {
+        let message: String?
+        let description: String?
+    }
+    let error: Detail?
+
+    var text: String? {
+        let value = error?.description ?? error?.message
+        return value?.isEmpty == false ? value : nil
+    }
+}
+
+extension String {
+    /// Treats a whitespace-only string as absent, so `""` from the API and a missing key
+    /// reach the UI the same way.
+    var blankAsNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

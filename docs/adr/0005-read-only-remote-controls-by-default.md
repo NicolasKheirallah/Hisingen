@@ -1,6 +1,11 @@
 # ADR-0005: Read-only by default; remote control gated behind an experimental compile flag
 
-Status: Accepted
+Status: Superseded by [ADR-0009](0009-remote-commands-compiled-into-all-builds.md)
+
+> The premise below — that Polestar requires paired-mobile authorization for
+> remote commands — was an artefact of authenticating as the polestar.com web
+> OIDC client, which only holds read scopes. The flag described here has been
+> removed; see ADR-0009 for what replaced it.
 
 ## Context
 

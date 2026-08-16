@@ -73,4 +73,4 @@ Production releases are Developer ID signed, hardened-runtime enabled, notarized
 
 ## Remote control posture
 
-Standard, distributed builds cannot dispatch a vehicle command — the code path is compiled out entirely (`HISINGEN_EXPERIMENTAL_REMOTE`, never set in CI or release builds). Where the experimental path exists for local owner-authorized experimentation, every non-routine command requires local device-owner authentication (Touch ID or Mac password) in addition to an explicit confirmation dialog. See [threat-model.md](threat-model.md#remote-control-surface).
+Remote-command dispatch is compiled into every build ([ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md) removed the `HISINGEN_EXPERIMENTAL_REMOTE` flag that previously excluded it). The guard is now runtime rather than compile-time: no remote capability is enabled by default, each is an explicit Settings opt-in, and every non-routine command requires local device-owner authentication (Touch ID or Mac password) in addition to an explicit confirmation dialog. See [threat-model.md](threat-model.md#remote-control-surface).

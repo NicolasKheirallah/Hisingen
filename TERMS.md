@@ -24,7 +24,7 @@ Hisingen is independent software and is **not affiliated with, endorsed by, or m
 
 Hisingen has no analytics, advertising, telemetry, or relay backend of its own. Specifically:
 
-- Credentials and session tokens are stored **locally on your Mac**, in the macOS Keychain, protected with `WhenUnlockedThisDeviceOnly` accessibility. Polestar and Volvo credentials are kept in entirely separate Keychain entries and are never sent to each other's services.
+- Credentials and session tokens are stored **locally on your Mac**, in the macOS Keychain, protected with `AfterFirstUnlockThisDeviceOnly` accessibility — they never sync to iCloud and never leave the device. This level (rather than `WhenUnlockedThisDeviceOnly`) is required so the app can refresh vehicle state while your screen is locked; it means an item is readable once the Mac has been unlocked at least once since it was last restarted. Polestar and Volvo credentials are kept in entirely separate Keychain entries and are never sent to each other's services.
 - Vehicle data is fetched directly from Polestar's or Volvo's own services and cached locally for offline display. Cached snapshots deliberately omit registration numbers, owner names, image data, raw coordinates, detailed health records, and schedule locations.
 - Optional features send limited data to third parties only when you enable them:
   - **Vehicle Location** — coordinates to Apple's CoreLocation/Maps for reverse geocoding, if enabled.

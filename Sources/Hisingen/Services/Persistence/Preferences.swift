@@ -49,6 +49,8 @@ enum MenuBarStyle: String, CaseIterable, Codable {
     case compactCharging = "compact-charging"
     case batteryAndPower = "battery-and-power"
     case range = "range"
+    case iconOnly = "icon-only"
+    case lockAndBattery = "lock-and-battery"
 
     var title: String {
         switch self {
@@ -58,10 +60,75 @@ enum MenuBarStyle: String, CaseIterable, Codable {
         case .compactCharging: return L10n.text("Compact Charging")
         case .batteryAndPower: return L10n.text("Battery and Power")
         case .range: return L10n.text("Range")
+        case .iconOnly: return L10n.text("Icon Only (Minimal)")
+        case .lockAndBattery: return L10n.text("Lock Status and Battery")
         }
     }
 }
 
+
+enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
+    case frontThreeQuarter = 0
+    case rearThreeQuarter = 1
+    case sideProfile = 2
+    case overhead = 3
+
+    var title: String {
+        switch self {
+        case .frontThreeQuarter: return L10n.text("Front Three-Quarter")
+        case .rearThreeQuarter: return L10n.text("Rear Three-Quarter")
+        case .sideProfile: return L10n.text("Side Profile")
+        case .overhead: return L10n.text("Overhead")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .frontThreeQuarter: return "car.side.front.open.fill"
+        case .rearThreeQuarter: return "car.side.rear.open.fill"
+        case .sideProfile: return "car.side.fill"
+        case .overhead: return "car.top.door.front.left.open.fill"
+        }
+    }
+}
+
+enum VehicleModelBadgePosition: String, CaseIterable, Codable, Sendable {
+    case inlineHeader = "inline-header"
+    case topRightOverlay = "top-right-overlay"
+    case topLeftOverlay = "top-left-overlay"
+    case subheadline = "subheadline"
+    case hidden = "hidden"
+
+    var title: String {
+        switch self {
+        case .inlineHeader: return L10n.text("Inline with Greeting (Top Right)")
+        case .topRightOverlay: return L10n.text("Over Vehicle Image (Top Right)")
+        case .topLeftOverlay: return L10n.text("Over Vehicle Image (Top Left)")
+        case .subheadline: return L10n.text("Below Greeting")
+        case .hidden: return L10n.text("Hidden")
+        }
+    }
+}
+
+enum RegistrationNumberBadgePosition: String, CaseIterable, Codable, Sendable {
+    case belowGreeting = "below-greeting"
+    case platePill = "plate-pill"
+    case inlineHeader = "inline-header"
+    case topRightOverlay = "top-right-overlay"
+    case topLeftOverlay = "top-left-overlay"
+    case hidden = "hidden"
+
+    var title: String {
+        switch self {
+        case .belowGreeting: return L10n.text("Below Greeting")
+        case .platePill: return L10n.text("License Plate Style (Below Greeting)")
+        case .inlineHeader: return L10n.text("Inline with Greeting (Top Right)")
+        case .topRightOverlay: return L10n.text("Over Vehicle Image (Top Right)")
+        case .topLeftOverlay: return L10n.text("Over Vehicle Image (Top Left)")
+        case .hidden: return L10n.text("Hidden")
+        }
+    }
+}
 
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
@@ -164,8 +231,8 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     var accentColorHex: String {
         switch self {
         case .hisingen: return "#E56E23"
-        case .polestar: return "#FFFFFF"
-        case .volvo: return "#1C6BBA"
+        case .polestar: return "#E56E23"
+        case .volvo: return "#005B94"
         case .nordicNight: return "#00E5FF"
         case .aurora: return "#00E676"
         case .swedishGold: return "#D4AF37"
@@ -180,9 +247,9 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         case .hisingen:
             return ["#E56E23", "#FFA726", "#424242"]
         case .polestar:
-            return ["#FFFFFF", "#888888", "#1A1A1A"]
+            return ["#E56E23", "#FFFFFF", "#141416"]
         case .volvo:
-            return ["#1C6BBA", "#284E80", "#333333"]
+            return ["#005B94", "#003057", "#F4F6F9"]
         case .nordicNight:
             return ["#00E5FF", "#0A192F", "#000000"]
         case .aurora:
@@ -306,7 +373,11 @@ enum Preferences {
 
 
     static var volvoClientID: String {
-        get { d.string(forKey: "volvo_client_id") ?? "" }
+        get {
+            let saved = d.string(forKey: "volvo_client_id") ?? ""
+            if !saved.isEmpty { return saved }
+            return BuiltinVolvoSecrets.clientID
+        }
         set { d.set(newValue, forKey: "volvo_client_id") }
     }
 
@@ -402,6 +473,30 @@ enum Preferences {
             }
         }
         set { d.set(newValue.rawValue, forKey: "statusbar_display_option") }
+    }
+
+    static var carRenderAngle: CarRenderAngle {
+        get {
+            let raw = d.object(forKey: "car_render_angle") as? Int ?? 0
+            return CarRenderAngle(rawValue: raw) ?? .frontThreeQuarter
+        }
+        set { d.set(newValue.rawValue, forKey: "car_render_angle") }
+    }
+
+    static var vehicleModelBadgePosition: VehicleModelBadgePosition {
+        get {
+            let raw = d.string(forKey: "vehicle_model_badge_position") ?? ""
+            return VehicleModelBadgePosition(rawValue: raw) ?? .inlineHeader
+        }
+        set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") }
+    }
+
+    static var registrationBadgePosition: RegistrationNumberBadgePosition {
+        get {
+            let raw = d.string(forKey: "registration_badge_position") ?? ""
+            return RegistrationNumberBadgePosition(rawValue: raw) ?? .belowGreeting
+        }
+        set { d.set(newValue.rawValue, forKey: "registration_badge_position") }
     }
 
     static var distanceUnit: DistanceUnit {
@@ -668,6 +763,11 @@ enum Preferences {
     static var privateNotificationDetails: Bool {
         get { d.object(forKey: "private_notification_details") == nil ? true : d.bool(forKey: "private_notification_details") }
         set { d.set(newValue, forKey: "private_notification_details") }
+    }
+
+    static var requireBiometricsForRemoteControls: Bool {
+        get { d.bool(forKey: "require_biometrics_for_remote_controls") }
+        set { d.set(newValue, forKey: "require_biometrics_for_remote_controls") }
     }
 
 

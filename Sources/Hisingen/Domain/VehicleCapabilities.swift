@@ -371,6 +371,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case connectivity
     case softwareStatus
     case softwareInstallControl
+    case engineStart
 
     var title: String {
         switch self {
@@ -395,15 +396,18 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .connectivity: return L10n.text("Connectivity diagnostics")
         case .softwareStatus: return L10n.text("Vehicle software status")
         case .softwareInstallControl: return L10n.text("Software installation control")
+        case .engineStart: return L10n.text("Remote engine start (RES)")
         }
     }
+
+    var displayName: String { title }
 
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
         .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
-        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl
+        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
 }
 
@@ -430,6 +434,17 @@ struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
 
     var isStale: Bool {
         Date().timeIntervalSince(probedAt) > Self.stalenessInterval
+    }
+
+    var resultsMap: [VehicleCapability: VehicleCapabilitySupport] {
+        results
+    }
+
+    var allResults: [(capability: VehicleCapability, support: VehicleCapabilitySupport)] {
+        let list = results.map { (capability: $0.key, support: $0.value) }
+        return list.sorted { (a: (capability: VehicleCapability, support: VehicleCapabilitySupport), b: (capability: VehicleCapability, support: VehicleCapabilitySupport)) in
+            a.capability.title < b.capability.title
+        }
     }
 
     func merging(newerProbe: VehicleProbedCapabilities) -> VehicleProbedCapabilities {
@@ -500,6 +515,10 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .unavailable
             case .preCleaning, .softwareInstallControl, .windows, .trunk:
                 return .unavailable
+            // Volvo's public APIs expose no software/OTA resource at all — not a backend
+            // that might answer on some vehicles, but an endpoint that does not exist.
+            case .softwareStatus:
+                return .unavailable
             case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
                 return .unavailable
             default:
@@ -511,7 +530,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .softwareInstallControl:
+            case .softwareInstallControl, .softwareStatus:
                 return .unavailable
             default:
                 return .backendDependent
@@ -537,10 +556,14 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
         support(for: .steeringWheelHeating) == .supported
     }
 
+    var hasEngineStart: Bool {
+        support(for: .engineStart) == .supported
+    }
+
     func supportsAnyCommand(in feature: AppFeature) -> Bool {
         let capabilities: [VehicleCapability]
         switch feature {
-        case .remoteClimate: capabilities = [.climateStartStop]
+        case .remoteClimate: capabilities = [.climateStartStop, .engineStart]
         case .remotePreCleaning: capabilities = [.preCleaning]
         case .remoteCharging:
             capabilities = [.chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride]
@@ -572,7 +595,7 @@ private extension VehicleCapability {
     var associatedFeature: AppFeature {
         switch self {
         case .climateStartStop, .climateTemperature, .seatHeating,
-             .steeringWheelHeating, .climateTimers:
+             .steeringWheelHeating, .climateTimers, .engineStart:
             return .climateStatus
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
