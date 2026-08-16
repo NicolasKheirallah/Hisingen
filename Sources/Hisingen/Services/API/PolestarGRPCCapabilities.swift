@@ -242,22 +242,36 @@ extension PolestarGRPC {
 
 
     func fetchLocation(vin: String, accessToken: String) async throws -> VehicleLocation? {
-        let body = try await firstMessage(path: Self.locationPath,
-                                          message: Self.vehicleRequest(vin),
-                                          vin: vin, accessToken: accessToken)
+        let paths: [(String, GRPCHost)] = [
+            (Self.locationPath, .c3),
+            ("/services.vehiclestates.location.LocationService/GetLatestLocation", .c3),
+            ("/dtlinternet.DtlInternetService/GetLocation", .c3),
+            ("/pccs.chronos.services.v1.LocationService/GetLocation", .pccs),
+            ("/services.vehiclestates.location.LocationService/GetLocation", .c3)
+        ]
 
-        let candidates = [
-            Self.message(body, field: 3),
-            Self.message(body, field: 1),
-            Self.message(body, field: 5),
-            Self.message(body, field: 2),
-            Self.message(body, field: 4),
-            body
-        ].compactMap { $0 }
+        for (path, host) in paths {
+            do {
+                let body = try await firstMessage(path: path,
+                                                  message: Self.vehicleRequest(vin),
+                                                  vin: vin, accessToken: accessToken, host: host)
 
-        for candidate in candidates {
-            if let loc = Self.parseLocation(candidate) {
-                return loc
+                let candidates = [
+                    Self.message(body, field: 3),
+                    Self.message(body, field: 1),
+                    Self.message(body, field: 5),
+                    Self.message(body, field: 2),
+                    Self.message(body, field: 4),
+                    body
+                ].compactMap { $0 }
+
+                for candidate in candidates {
+                    if let loc = Self.parseLocation(candidate) {
+                        return loc
+                    }
+                }
+            } catch {
+                continue
             }
         }
         return nil
@@ -265,25 +279,41 @@ extension PolestarGRPC {
 
 
     func fetchWeather(vin: String, accessToken: String) async throws -> VehicleWeather? {
-
         if let location = try? await fetchLocation(vin: vin, accessToken: accessToken),
            let lat = location.latitude, let lon = location.longitude,
-           lat != 0.0, lon != 0.0 {
+           abs(lat) > 0.001, abs(lon) > 0.001 {
             if let weather = await fetchOpenMeteoWeather(latitude: lat, longitude: lon) {
                 return weather
             }
         }
 
+        let weatherPaths: [(String, GRPCHost)] = [
+            (Self.weatherPath, .c3),
+            ("/services.vehiclestates.weather.WeatherService/GetLatestWeather", .c3),
+            ("/weather.WeatherService/GetWeatherReport", .pccs)
+        ]
 
-        do {
-            let body = try await firstMessage(path: Self.weatherPath,
-                                              message: Self.vehicleRequest(vin),
-                                              vin: vin, accessToken: accessToken)
-            guard let report = Self.message(body, field: 1) else { return nil }
-            return Self.parseWeather(report)
-        } catch {
-            return nil
+        for (path, host) in weatherPaths {
+            do {
+                let body = try await firstMessage(path: path,
+                                                  message: Self.vehicleRequest(vin),
+                                                  vin: vin, accessToken: accessToken, host: host)
+                let candidates = [
+                    Self.message(body, field: 1),
+                    Self.message(body, field: 3),
+                    Self.message(body, field: 2),
+                    body
+                ].compactMap { $0 }
+                for candidate in candidates {
+                    if let weather = Self.parseWeather(candidate) {
+                        return weather
+                    }
+                }
+            } catch {
+                continue
+            }
         }
+        return nil
     }
 
     private func fetchOpenMeteoWeather(latitude: Double, longitude: Double) async -> VehicleWeather? {
