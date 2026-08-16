@@ -78,6 +78,17 @@ jobs:
           restore-keys: |
             ${{ matrix.os }}-spm-
 
+      - name: Select Xcode toolchain
+        run: |
+          set -euo pipefail
+          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app; do
+            if [ -d "$xcode/Contents/Developer" ]; then
+              echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+              echo "Selected $xcode"
+              break
+            fi
+          done
+
       - name: Verify toolchain
         run: |
           set -euo pipefail
