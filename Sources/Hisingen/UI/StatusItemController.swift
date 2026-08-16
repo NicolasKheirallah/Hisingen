@@ -62,14 +62,13 @@ final class StatusItemController: NSObject {
     }
 
     private func installGlobalHotKey() {
-
-
         installLocalHotKey()
-        guard AXIsProcessTrusted() else {
-            _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-            return
-        }
+        guard AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
+    }
+
+    func requestAccessibilityPermission() {
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
     func refreshGlobalHotKeyAccess() {
