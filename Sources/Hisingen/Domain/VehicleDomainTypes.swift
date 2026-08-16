@@ -28,6 +28,15 @@ enum ScheduleKind: String, Codable, Sendable {
     case locationCharging
     case departure
     case climate
+
+    var title: String {
+        switch self {
+        case .globalCharging: return L10n.text("Charging Window")
+        case .locationCharging: return L10n.text("Location Charge")
+        case .departure: return L10n.text("Departure")
+        case .climate: return L10n.text("Cabin Climate")
+        }
+    }
 }
 
 struct VehicleSchedule: Codable, Equatable, Sendable {

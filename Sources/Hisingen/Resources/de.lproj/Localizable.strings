@@ -764,3 +764,32 @@
 "Dark" = "Dunkel";
 "Liquid Glass" = "Liquid Glass";
 
+/* Hinzugefügt: Neue Telemetrie, Studioperspektiven & Steuerungen */
+"Icon Only (Minimal)" = "Nur Symbol (minimal)";
+"Lock Status and Battery" = "Schlossstatus und Batterie";
+"Front Three-Quarter" = "Vorne Dreiviertel";
+"Rear Three-Quarter" = "Hinten Dreiviertel";
+"Side Profile" = "Seitenprofil";
+"Overhead" = "Vogelperspektive";
+"Wheels" = "Felgen";
+"Factory Packages" = "Ausstattungspakete";
+"Outside PM2.5" = "Außen-PM2,5";
+"Air Filter Life" = "Luftfilter-Lebensdauer";
+"Cabin" = "Innenraum";
+"elevation" = "Höhe";
+"Brake Set" = "Feststellbremse aktiv";
+"Export CSV" = "CSV exportieren";
+"Export History (.csv)" = "Verlauf exportieren (.csv)";
+"Quick Controls" = "Schnellsteuerung";
+"Lock Doors" = "Türen verriegeln";
+"Unlock Doors" = "Türen entriegeln";
+"Start Climate (%@)" = "Klimatisierung starten (%@)";
+"Flash Lights" = "Lichthupe / Blinker";
+"Honk Horn" = "Hupe betätigen";
+"Honk and Flash" = "Hupen und Blinken";
+"Modem Wake Reason" = "Modem-Weckursache";
+"Modem Synced" = "Modem synchronisiert";
+"Remote controls restricted to paired mobile devices" = "Fernsteuerungen sind auf gekoppelte Mobilgeräte beschränkt";
+"Command Restricted" = "Befehl eingeschränkt";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar beschränkt Schreib-Fernbefehle auf gekoppelte Mobilgeräte.";
+

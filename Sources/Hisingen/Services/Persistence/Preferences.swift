@@ -707,6 +707,11 @@ enum Preferences {
         set { d.set(newValue, forKey: "private_notification_details") }
     }
 
+    static var requireBiometricsForRemoteControls: Bool {
+        get { d.bool(forKey: "require_biometrics_for_remote_controls") }
+        set { d.set(newValue, forKey: "require_biometrics_for_remote_controls") }
+    }
+
 
     static func migrateLegacyPassword() {
         guard let legacy = d.string(forKey: "polestar_password"), !legacy.isEmpty else { return }

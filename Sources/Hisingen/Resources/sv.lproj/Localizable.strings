@@ -766,3 +766,32 @@
 "Dark" = "Mörkt";
 "Liquid Glass" = "Flytande glas";
 
+/* Tillagt: Ny telemetri, studiovinklar & reglage */
+"Icon Only (Minimal)" = "Endast ikon (minimal)";
+"Lock Status and Battery" = "Låsstatus och batteri";
+"Front Three-Quarter" = "Framifrån trekvart";
+"Rear Three-Quarter" = "Bakifrån trekvart";
+"Side Profile" = "Sidoprofil";
+"Overhead" = "Fågelperspektiv";
+"Wheels" = "Fälgar";
+"Factory Packages" = "Fabrikspaket";
+"Outside PM2.5" = "Utomhus PM2.5";
+"Air Filter Life" = "Luftfilterlivslängd";
+"Cabin" = "Kupé";
+"elevation" = "höjd";
+"Brake Set" = "P-broms aktiverad";
+"Export CSV" = "Exportera CSV";
+"Export History (.csv)" = "Exportera historik (.csv)";
+"Quick Controls" = "Snabbstyrning";
+"Lock Doors" = "Lås dörrar";
+"Unlock Doors" = "Lås upp dörrar";
+"Start Climate (%@)" = "Starta klimat (%@)";
+"Flash Lights" = "Blinka med ljus";
+"Honk Horn" = "Tuta";
+"Honk and Flash" = "Tuta och blinka";
+"Modem Wake Reason" = "Modemets väckningsorsak";
+"Modem Synced" = "Modem synkroniserat";
+"Remote controls restricted to paired mobile devices" = "Fjärrkommandon är begränsade till parkopplade mobila enheter";
+"Command Restricted" = "Kommando begränsat";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar begränsar fjärrkommandon till parkopplade mobila enheter.";
+

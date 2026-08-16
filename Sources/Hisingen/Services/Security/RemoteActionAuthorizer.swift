@@ -14,7 +14,7 @@ final class RemoteActionAuthorizer {
         alert.addButton(withTitle: L10n.text("Send Command"))
         alert.addButton(withTitle: L10n.text("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
-        guard command.risk.requiresDeviceOwnerAuthentication else { return true }
+        guard Preferences.requireBiometricsForRemoteControls || command.risk.requiresDeviceOwnerAuthentication else { return true }
 
         let context = LAContext()
         var error: NSError?

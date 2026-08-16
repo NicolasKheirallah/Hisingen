@@ -764,3 +764,32 @@
 "Dark" = "Mørkt";
 "Liquid Glass" = "Flytende glass";
 
+/* Lagt til: Ny telemetri, studiovinkler og kontroller */
+"Icon Only (Minimal)" = "Kun ikon (minimal)";
+"Lock Status and Battery" = "Låsestatus og batteri";
+"Front Three-Quarter" = "Forfra trekvart";
+"Rear Three-Quarter" = "Bakfra trekvart";
+"Side Profile" = "Sideprofil";
+"Overhead" = "Fugleperspektiv";
+"Wheels" = "Felger";
+"Factory Packages" = "Fabrikkpakker";
+"Outside PM2.5" = "Utendørs PM2.5";
+"Air Filter Life" = "Luftfilterlevetid";
+"Cabin" = "Kupé";
+"elevation" = "høyde";
+"Brake Set" = "Parkbrems på";
+"Export CSV" = "Eksporter CSV";
+"Export History (.csv)" = "Eksporter historikk (.csv)";
+"Quick Controls" = "Hurtigkontroller";
+"Lock Doors" = "Lås dører";
+"Unlock Doors" = "Lås opp dører";
+"Start Climate (%@)" = "Start klima (%@)";
+"Flash Lights" = "Blink med lys";
+"Honk Horn" = "Tut";
+"Honk and Flash" = "Tut og blink";
+"Modem Wake Reason" = "Modemets vekkeårsak";
+"Modem Synced" = "Modem synkronisert";
+"Remote controls restricted to paired mobile devices" = "Fjernkontroll er begrenset til parede mobile enheter";
+"Command Restricted" = "Kommando begrenset";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar begrenser fjernkommandoer til parede mobile enheter.";
+

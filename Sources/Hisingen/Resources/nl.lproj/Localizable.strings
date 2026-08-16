@@ -764,3 +764,31 @@
 "Dark" = "Donker";
 "Liquid Glass" = "Vloeibaar glas";
 
+/* Toegevoegd: Nieuwe telemetrie, studiocamerahoeken & bediening */
+"Icon Only (Minimal)" = "Alleen pictogram (minimaal)";
+"Lock Status and Battery" = "Vergrendelingsstatus en batterij";
+"Front Three-Quarter" = "Driekwart vooraanzicht";
+"Rear Three-Quarter" = "Driekwart achteraanzicht";
+"Side Profile" = "Zijprofiel";
+"Overhead" = "Bovenaanzicht";
+"Wheels" = "Velgen";
+"Factory Packages" = "Fabriekspakketten";
+"Outside PM2.5" = "PM2.5 buiten";
+"Air Filter Life" = "Levensduur luchtfilter";
+"Cabin" = "Interieur";
+"elevation" = "hoogte";
+"Brake Set" = "Handrem actief";
+"Export CSV" = "Exporteer CSV";
+"Export History (.csv)" = "Exporteer geschiedenis (.csv)";
+"Quick Controls" = "Snelle bediening";
+"Lock Doors" = "Deuren vergrendelen";
+"Unlock Doors" = "Deuren ontgrendelen";
+"Start Climate (%@)" = "Klimaatregeling starten (%@)";
+"Flash Lights" = "Knipperen met lichten";
+"Honk Horn" = "Toeteren";
+"Honk and Flash" = "Toeteren en knipperen";
+"Modem Wake Reason" = "Modem-ontwaakreden";
+"Modem Synced" = "Modem gesynchroniseerd";
+"Remote controls restricted to paired mobile devices" = "Afstandsbediening is beperkt tot gekoppelde mobiele apparaten";
+"Command Restricted" = "Opdracht beperkt";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar beperkt externe opdrachten tot gekoppelde mobiele apparaten.";

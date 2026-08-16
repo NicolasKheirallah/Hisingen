@@ -12,6 +12,7 @@ struct ControlsTabView: View {
     @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
     @State private var chargeTarget: Int = 80
     @State private var ampLimit: Int = 16
+    @State private var showScheduleEditor = false
     @State private var isInitialized = false
 
     private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
@@ -62,6 +63,9 @@ struct ControlsTabView: View {
             } else {
                 noControlsEnabledCard
             }
+        }
+        .sheet(isPresented: $showScheduleEditor) {
+            ScheduleEditorSheet(state: state, onRemoteCommand: onRemoteCommand)
         }
         .onAppear {
             if let currentTarget = state.chargeTargetPercentage {
@@ -431,6 +435,22 @@ struct ControlsTabView: View {
                         .buttonStyle(.bordered)
                         .disabled(true)
                     }
+                }
+
+                if features.contains(.remoteSchedules) || features.contains(.remoteCharging) {
+                    Divider().opacity(0.5)
+
+                    Button {
+                        showScheduleEditor = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar.badge.clock")
+                            Text(L10n.text("Manage Timers & Schedules…"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }
