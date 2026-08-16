@@ -391,7 +391,14 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.primary)
                         }
 
-                        Picker("", selection: $chargeTarget) {
+                        Picker("", selection: Binding(
+                            get: { chargeTarget },
+                            set: { newValue in
+                                guard newValue != chargeTarget else { return }
+                                chargeTarget = newValue
+                                onRemoteCommand(.setChargeTarget(newValue))
+                            }
+                        )) {
                             ForEach([50, 60, 70, 80, 90, 100], id: \.self) { v in
                                 Text("\(v)%").tag(v)
                             }
@@ -399,10 +406,6 @@ struct ControlsTabView: View {
                         .pickerStyle(.segmented)
                         .controlSize(.small)
                         .disabled(isDisabled(.setChargeTarget(chargeTarget)))
-                        .onChange(of: chargeTarget) { [old = chargeTarget] _ in
-                            guard isInitialized, chargeTarget != old else { return }
-                            onRemoteCommand(.setChargeTarget(chargeTarget))
-                        }
                     }
                 }
 
@@ -419,7 +422,14 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.primary)
                         }
 
-                        Picker("", selection: $ampLimit) {
+                        Picker("", selection: Binding(
+                            get: { ampLimit },
+                            set: { newValue in
+                                guard newValue != ampLimit else { return }
+                                ampLimit = newValue
+                                onRemoteCommand(.setAmpLimit(newValue))
+                            }
+                        )) {
                             ForEach([6, 8, 10, 13, 16, 20, 25, 32], id: \.self) { v in
                                 Text("\(v)A").tag(v)
                             }
@@ -427,10 +437,6 @@ struct ControlsTabView: View {
                         .pickerStyle(.segmented)
                         .controlSize(.small)
                         .disabled(isDisabled(.setAmpLimit(ampLimit)))
-                        .onChange(of: ampLimit) { [old = ampLimit] _ in
-                            guard isInitialized, ampLimit != old else { return }
-                            onRemoteCommand(.setAmpLimit(ampLimit))
-                        }
                     }
                 }
 

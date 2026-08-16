@@ -427,9 +427,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
+        guard !success else { return }
         Task { @MainActor in
             let alert = NSAlert()
-            alert.alertStyle = success ? .informational : .warning
+            alert.alertStyle = .warning
             alert.messageText = title
             alert.informativeText = message
             alert.addButton(withTitle: L10n.text("OK"))

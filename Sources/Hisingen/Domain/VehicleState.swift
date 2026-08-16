@@ -119,9 +119,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     let rangeKm: Int?
     let chargingState: ChargingState
     let estimatedChargingTimeToFullMinutes: Int?
-    let chargeTargetPercentage: Int?
+    var chargeTargetPercentage: Int?
     let chargingPowerWatts: Int?
-    let chargingCurrentAmps: Int?
+    var chargingCurrentAmps: Int?
     let chargingVoltageVolts: Int?
     let chargingType: ChargingType
     let chargerConnection: ChargerConnection
