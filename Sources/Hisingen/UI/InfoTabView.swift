@@ -491,10 +491,10 @@ struct InfoTabView: View {
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
         if let capacity = state.reportedBatteryCapacityKwh ?? (state.powertrain.hasElectricRange ? Double(state.model.nominalUsableCapacityKwh) : nil), capacity > 0 {
-            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt"))
+            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt", info: L10n.text("Manufacturer Specification. Usable high-voltage pack capacity configured for this vehicle variant.")))
         }
         if state.powertrain.hasElectricRange && state.model.nominalWltpRangeKm > 0 {
-            rows.append(KVRow(L10n.text("WLTP Range (Est.)"), String(format: "%.0f km", state.model.nominalWltpRangeKm), symbol: "road.lanes"))
+            rows.append(KVRow(L10n.text("WLTP Range (Est.)"), String(format: "%.0f km", state.model.nominalWltpRangeKm), symbol: "road.lanes", info: L10n.text("Official Rating (Not Live Estimate). Standardized laboratory Worldwide Harmonised Light Vehicles Test Procedure benchmark for this model at 100% charge.")))
         }
         if let gearbox = state.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
@@ -503,10 +503,10 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Fuel Type"), fuel, symbol: "fuelpump.fill"))
         }
         if let liters = state.fuelAmountLiters, liters > 0 {
-            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill"))
+            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
         }
         if let avgFuel = state.averageFuelConsumptionLPer100Km, avgFuel > 0 {
-            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis"))
+            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
         }
 
         return Card {
@@ -543,7 +543,7 @@ struct InfoTabView: View {
                 }
 
                 VStack(spacing: 6) {
-                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill")
+                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill", info: L10n.text("Manufacturer Specification. Architecture, chemical composition, and gross capacity of the high-voltage battery."))
 
                     HStack {
                         HStack(spacing: 6) {
@@ -557,7 +557,7 @@ struct InfoTabView: View {
                             Image(systemName: "info.circle")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.tertiary)
-                                .help(L10n.text("Physical battery pack capacity retention based on calendar and cycle aging. 70% threshold is covered under the 8-year / 160,000 km factory warranty."))
+                                .help(L10n.text("Estimated. Physical battery pack capacity retention derived from empirical EV degradation models (calendar aging from build week + cycle wear from total odometer distance). The factory warranty guarantees at least 70% retention over 8 years / 160,000 km."))
                         }
                         Spacer()
                         HStack(spacing: 6) {
@@ -572,9 +572,9 @@ struct InfoTabView: View {
                     }
                     .padding(.vertical, 2)
 
-                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0)
-                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100")
-                    KVRow(L10n.text("Warranty Threshold"), "70% / 160,000 km (8 Years)", symbol: "shield.lefthalf.filled")
+                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
+                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
+                    KVRow(L10n.text("Warranty Threshold"), "70% / 160,000 km (8 Years)", symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
                 }
             }
         })
