@@ -19,4 +19,6 @@ DerivedData/
 *.secret
 
 Hisingen.dmg.sha256
+# Reverse-engineering deep-dives — internal only, never upload
+docs/api/polestar-backend-map.md
 docs/api/polestar-probe-transcripts.md

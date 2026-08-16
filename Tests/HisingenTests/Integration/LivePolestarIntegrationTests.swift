@@ -2223,6 +2223,330 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("========================================================\n")
     }
 
+    /// mystar-v2 filters `__type`, so the type-namespace oracle does not work there. This uses
+    /// the field oracle instead — `FieldUndefined` vs. anything else — across a large dictionary,
+    /// and crucially walks *into* `VehicleInformation` and the telematics types, where a software
+    /// version would plausibly be a field rather than a root query.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testMystarFieldOracleDeepSweep() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let token = try XCTUnwrap(tokens["access_token"] as? String)
+
+        func gql(_ body: String) async -> String {
+            var request = URLRequest(url: URL(string:
+                "https://pc-api.polestar.com/eu-north-1/mystar-v2/")!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": body])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+        /// Absent iff the validator says the field is undefined on the containing type.
+        func absent(_ body: String, field: String) -> Bool {
+            body.contains("FieldUndefined") || body.contains("Cannot query field")
+        }
+
+        let names = [
+            "software", "softwareInfo", "softwareStatus", "softwareUpdate", "softwareVersion",
+            "softwareRelease", "getSoftware", "getSoftwareInfo", "getSoftwareStatus",
+            "getSoftwareVersion", "getSoftwareUpdate", "getSoftwareUpdates",
+            "ota", "otaStatus", "otaInfo", "getOta", "getOtaStatus", "getOtaInfo",
+            "update", "updates", "updateStatus", "availableUpdate", "pendingUpdate",
+            "getUpdate", "getUpdates", "getUpdateStatus", "getAvailableUpdates",
+            "download", "downloadStatus", "getDownload", "getDownloadStatus",
+            "firmware", "firmwareVersion", "getFirmware", "getFirmwareVersion",
+            "install", "installation", "installStatus", "getInstallation",
+            "upgrade", "getUpgrade", "version", "versions", "getVersion",
+            "campaign", "campaigns", "getCampaign", "getCampaigns",
+            "consent", "getConsent", "preferences", "getPreferences", "settings", "getSettings"
+        ]
+
+        print("\n========================================================")
+        print("🔭 mystar-v2 FIELD ORACLE — DEEP SWEEP")
+
+        print("\n── root Query (control: getConsumerCarsV2)")
+        let control = await gql("{ getConsumerCarsV2 { __typename } }")
+        print("  control getConsumerCarsV2: \(absent(control, field: "x") ? "FAILED ⚠️" : "resolves ✅")")
+        var rootHits: [String] = []
+        for name in names where !absent(await gql("{ \(name) { __typename } }"), field: name) {
+            rootHits.append(name)
+        }
+        print("  ⭐️ root hits: \(rootHits.isEmpty ? "NONE" : rootHits.joined(separator: ", "))")
+
+        // Walk into the vehicle type — a software version is more plausibly a field on the car
+        // than a root query, and this level was never probed.
+        print("\n── inside getConsumerCarsV2 (type VehicleInformation)")
+        let vinControl = await gql("{ getConsumerCarsV2 { vin } }")
+        print("  control .vin: \(absent(vinControl, field: "vin") ? "FAILED ⚠️" : "resolves ✅")")
+        var carHits: [String] = []
+        for name in names where !absent(await gql("{ getConsumerCarsV2 { \(name) } }"), field: name) {
+            carHits.append(name)
+        }
+        print("  ⭐️ vehicle-level hits: \(carHits.isEmpty ? "NONE" : carHits.joined(separator: ", "))")
+
+        // And into the telematics payload Hisingen already queries.
+        print("\n── inside carTelematicsV2")
+        let telControl = await gql("query Q($v:[String!]!){ carTelematicsV2(vins:$v){ __typename } }")
+        print("  control: \(absent(telControl, field: "x") ? "shape differs — skipping" : "resolves ✅")")
+        if !absent(telControl, field: "x") {
+            var telHits: [String] = []
+            for name in names
+            where !absent(await gql("query Q($v:[String!]!){ carTelematicsV2(vins:$v){ \(name) { __typename } } }"), field: name) {
+                telHits.append(name)
+            }
+            print("  ⭐️ telematics-level hits: \(telHits.isEmpty ? "NONE" : telHits.joined(separator: ", "))")
+        }
+        print("========================================================\n")
+    }
+
+    /// `getPreferences` is a mystar-v2 root query nothing in Hisingen uses. Update/download
+    /// consent is exactly the kind of thing that would live behind it, so this walks it: what it
+    /// returns, what its type is, and whether any software/OTA field hangs off it.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testInspectGetPreferences() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let token = try XCTUnwrap(tokens["access_token"] as? String)
+
+        func gql(_ body: String) async -> String {
+            var request = URLRequest(url: URL(string:
+                "https://pc-api.polestar.com/eu-north-1/mystar-v2/")!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": body])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+
+        print("\n========================================================")
+        print("⚙️  getPreferences")
+        print("  __typename → \(await gql("{ getPreferences { __typename } }").prefix(300))")
+        // A scalar field errors with "must not have a selection"; an object errors with
+        // "must have a selection of subfields" and names its type. Either way the error is
+        // informative, which is what we want.
+        print("  bare       → \(await gql("{ getPreferences }").prefix(300))")
+        // It demands languageCode + countryCode — supply them and see what it actually is.
+        let withArgs = await gql("{ getPreferences(languageCode: \"en\", countryCode: \"SE\") { __typename } }")
+        print("  with args  → \(withArgs.prefix(500))")
+
+        // Now that the argument shape is known, probe PreferenceResponse's real subfields.
+        for field in ["software", "softwareUpdate", "ota", "update", "download", "consent",
+                      "autoUpdate", "notifications", "units", "language", "market",
+                      "id", "name", "value", "key", "type", "enabled", "preferences", "items"] {
+            let body = await gql("{ getPreferences(languageCode: \"en\", countryCode: \"SE\") { \(field) } }")
+            if !(body.contains("FieldUndefined") || body.contains("Cannot query field")) {
+                print("  ⭐️ PreferenceResponse.\(field) → \(body.prefix(240))")
+            }
+        }
+
+        print("  preferences[] → \(await gql("{ getPreferences(languageCode: \"en\", countryCode: \"SE\") { preferences { __typename } } }").prefix(300))")
+        for field in ["software", "softwareUpdate", "ota", "update", "download", "consent",
+                      "autoUpdate", "id", "name", "value", "key", "type", "enabled", "code", "title"] {
+            let body = await gql("{ getPreferences(languageCode: \"en\", countryCode: \"SE\") { preferences { \(field) } } }")
+            if !(body.contains("FieldUndefined") || body.contains("Cannot query field")) {
+                print("  ⭐️ preferences.\(field) → \(body.prefix(300))")
+            }
+        }
+
+        let subfields = ["software", "softwareUpdate", "ota", "otaConsent", "update",
+                         "updateConsent", "autoUpdate", "download", "downloadConsent",
+                         "downloadOverCellular", "install", "installation", "consent",
+                         "notifications", "language", "market", "units", "id", "name",
+                         "value", "key", "type", "enabled"]
+        var hits: [String] = []
+        for field in subfields {
+            let body = await gql("{ getPreferences { \(field) } }")
+            if !(body.contains("FieldUndefined") || body.contains("Cannot query field")) {
+                hits.append(field)
+                print("  ⭐️ .\(field) → \(body.prefix(220))")
+            }
+        }
+        if hits.isEmpty { print("  no probed subfield resolved") }
+        print("========================================================\n")
+    }
+
+    /// Never fully explored: the C3 discovery service. Hisingen extracts only `c3`/`c3Lbs`, but
+    /// the document may list other hosts (MQTT signalling, an OTA host), and a different Accept
+    /// version or resource path may return a fuller catalogue. This dumps everything.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testExploreC3DiscoverySurface() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let token = try XCTUnwrap(tokens["access_token"] as? String)
+
+        func get(_ urlString: String, accept: String) async -> (Int, String) {
+            guard let url = URL(string: urlString) else { return (-1, "bad url") }
+            var request = URLRequest(url: url)
+            request.setValue(accept, forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            guard let (data, response) = try? await URLSession.shared.data(for: request) else {
+                return (-1, "transport error")
+            }
+            return ((response as? HTTPURLResponse)?.statusCode ?? -1,
+                    String(decoding: data, as: UTF8.self))
+        }
+
+        print("\n========================================================")
+        print("🛰️  C3 DISCOVERY SURFACE")
+
+        // The full v1 document, verbatim (Hisingen only reads two keys of it).
+        let (baseCode, baseBody) = await get("https://cnepmob.volvocars.com",
+                                             accept: "application/volvo.cloud.cnepmob.v1+json")
+        print("\n── v1 full document (HTTP \(baseCode))\n\(baseBody)")
+
+        // Alternate Accept versions — a v2/v3 catalogue may list more services.
+        for (version, accept) in [("v2", "application/volvo.cloud.cnepmob.v2+json"),
+                                  ("plain-json", "application/json")] {
+            let (code, body) = await get("https://cnepmob.volvocars.com", accept: accept)
+            print("\n── Accept \(version) (HTTP \(code)) FULL:\n\(body)")
+            // Surface any host/key that is not c3/c3Lbs.
+            if let json = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any] {
+                let extra = json.keys.filter { $0 != "c3" && $0 != "c3Lbs" }.sorted()
+                print("  ⭐️ keys beyond c3/c3Lbs: \(extra.isEmpty ? "none" : extra.joined(separator: ", "))")
+                for key in extra { print("    \(key): \(json[key] ?? "")") }
+            }
+        }
+
+        // Sibling discovery resources on the same host.
+        for path in ["services", "discovery", "catalog", "ota", "software", "endpoints",
+                     "config", ".well-known/endpoints"] {
+            let (code, body) = await get("https://cnepmob.volvocars.com/\(path)",
+                                         accept: "application/json")
+            if code != 404 {
+                print("\n── /\(path) (HTTP \(code)): \(body.prefix(200))")
+            }
+        }
+        print("\n========================================================\n")
+    }
+
+    /// The v2 discovery document lists a **third** gRPC host that nothing uses:
+    /// `vca-api-gateway.weu-prod.ecpaz.volvocars.biz`. It may front OTA/software services the C3
+    /// host does not. Probes it with both tokens: reflection, the known OTA services, and a
+    /// download/consent/wake method dictionary. On this host the method-name oracle is valid iff
+    /// a known-real method answers with a business error rather than `Method not found`.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testProbeVcaApiGateway() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: .default)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let resolvedWeb = try await api.validAccessToken()
+        let webToken = try XCTUnwrap(resolvedWeb)
+        let vin = try XCTUnwrap(resolved)
+        let commandToken = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")["access_token"] as? String
+
+        let base = URL(string: "https://vca-api-gateway.weu-prod.ecpaz.volvocars.biz:443")!
+
+        /// Returns (grpc-status, decoded grpc-message, gotFrame).
+        func call(_ path: String, body: Data, token: String) async -> (String?, String, Bool) {
+            var request = URLRequest(url: base.appendingPathComponent(path))
+            request.httpMethod = "POST"
+            request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+            request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue(vin, forHTTPHeaderField: "vin")
+            request.httpBody = Protobuf.grpcFrame(body)
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 12
+            guard let (stream, response) = try? await URLSession(configuration: config).bytes(for: request),
+                  let http = response as? HTTPURLResponse else { return (nil, "transport error", false) }
+            let status = http.value(forHTTPHeaderField: "grpc-status")
+            let message = http.value(forHTTPHeaderField: "grpc-message")?.removingPercentEncoding ?? ""
+            var gotFrame = false
+            var header: [UInt8] = []; var expected: Int?
+            do {
+                for try await byte in stream {
+                    header.append(byte)
+                    if header.count == 5 { expected = Int(header[1]) << 24 | Int(header[2]) << 16
+                        | Int(header[3]) << 8 | Int(header[4]); gotFrame = (expected ?? 0) > 0; break }
+                }
+            } catch { }
+            return (status, message, gotFrame)
+        }
+
+        print("\n========================================================")
+        print("🌐 vca-api-gateway PROBE")
+
+        // Does it respond to gRPC at all, and is reflection open here?
+        for svc in ["/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+                    "/grpc.health.v1.Health/Check"] {
+            let (st, msg, _) = await call(svc, body: Data(), token: webToken)
+            print("  \(svc): grpc-status=\(st ?? "none") \(msg)")
+        }
+
+        // Is it a control-plane oracle? A known-real method establishes the baseline.
+        var softwareInfoReq = Data()
+        softwareInfoReq.append(Protobuf.stringField(1, vin))
+        softwareInfoReq.append(Protobuf.stringField(2, "en"))
+        let (ctlSt, ctlMsg, ctlFrame) = await call(
+            "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo", body: softwareInfoReq, token: webToken)
+        print("\n  [control] OtaDiscoveryService/GetSoftwareInfo → status=\(ctlSt ?? "none") frame=\(ctlFrame) \(ctlMsg)")
+        let oracleValid = !(ctlMsg.contains("Method not found") || ctlMsg.isEmpty && ctlSt == nil)
+        print("  method oracle valid here: \(oracleValid)")
+
+        // The download/consent/wake dictionary, across plausible services and both tokens.
+        let services = ["/ota_mobcache.OtaDiscoveryService", "/ota_mobcache.SchedulerService",
+                        "/ota_mobcache.ConsentService", "/ota_mobcache.DownloadService",
+                        "/invocation.InvocationService"]
+        let methods = ["Download", "StartDownload", "TriggerDownload", "RequestDownload",
+                       "DownloadNow", "SetConsent", "GiveConsent", "AcceptSoftware", "Approve",
+                       "WakeUp", "Wake", "CheckForUpdates", "Schedule", "InstallNow"]
+        _ = (services, methods)  // superseded below
+
+        // On this host bare `status 12` with an empty message means "package not routed here"
+        // (the known-real GetSoftwareInfo got exactly that). A ROUTED package answers
+        // differently — a business error, an auth error, or `Method not found` *with a message*.
+        // So discover what the gateway routes by looking for any non-bare-12 response.
+        print("\n  package routing discovery (probing /<pkg.Service>/Probe):")
+        let probePackages = [
+            "ota_mobcache.OtaDiscoveryService", "ota.OtaService", "software.SoftwareService",
+            "vca.ota.OtaService", "vca.software.SoftwareService", "vca.OtaService",
+            "connectivity.ConnectivityService", "wakeup.WakeupService", "vca.WakeupService",
+            "invocation.InvocationService", "vca.invocation.InvocationService",
+            "chronos.services.v1.TargetSocService", "services.vehiclestates.battery.BatteryService",
+            "com.volvocars.ota.OtaService", "vehicleupdate.VehicleUpdateService",
+            "campaign.CampaignService", "vca.campaign.CampaignService",
+            "remotecommand.RemoteCommandService", "vca.command.CommandService",
+            "grpc.health.v1.Health", "vca.gateway.GatewayService"
+        ]
+        for pkg in probePackages {
+            var b = Data(); b.append(Protobuf.stringField(1, vin))
+            let (st, msg, _) = await call("/\(pkg)/Probe", body: b, token: commandToken ?? webToken)
+            let bareUnimplemented = (st == "12" && msg.isEmpty)
+            if !bareUnimplemented && msg != "transport error" {
+                print("  ⭐️ ROUTED? /\(pkg) → status=\(st ?? "none") msg=\(msg.prefix(110))")
+            }
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
     /// Full OIDC flow returning the entire token response (so `id_token` is available too).
     private static func authorizeFull(email: String, password: String, clientID: String,
                                       redirect: String, scope: String) async throws -> [String: Any] {
@@ -2486,20 +2810,63 @@ struct LivePolestarRemoteCommandIntegrationTests {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         print("  HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        let outDir = URL(fileURLWithPath: "/Users/nicolaskheirallah/.gemini/antigravity/brain/ff023aac-6fe2-41f3-b104-7b2c92e9f722/scratch/vehicle_images")
+        try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let payload = json["data"] as? [String: Any],
            let images = payload["getCarImages"] as? [String: Any] {
-            let transparent = images["transparent"] as? [[String: Any]] ?? []
-            for item in transparent {
-                let angle = item["angle"] as? Int ?? -999
-                let url = item["url"] as? String ?? ""
-                print("  • Transparent Angle \(angle): URL = \(url)")
-            }
-            let opaque = images["opaque"] as? [[String: Any]] ?? []
-            for item in opaque {
-                let angle = item["angle"] as? Int ?? -999
-                let url = item["url"] as? String ?? ""
-                print("  • Opaque Angle \(angle): URL = \(url)")
+            let upholsteryCode = "RFA000"
+            let colorCode = "72900"
+            let wheelCode = "19"
+            let packCode = "XPLUSS"
+
+            let candidatePaths = [
+                // car-images.polestar.com variations
+                "https://car-images.polestar.com/534/2023/interior/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/0.jpg",
+                "https://car-images.polestar.com/534/2023/interior/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/1.jpg",
+                "https://car-images.polestar.com/534/2023/interior/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/0.png",
+                "https://car-images.polestar.com/534/2023/interior/\(upholsteryCode)/default/0.jpg",
+                "https://car-images.polestar.com/534/2023/interior/\(upholsteryCode)/default/1.jpg",
+                "https://car-images.polestar.com/534/2023/interior-summary/\(upholsteryCode)/0.jpg",
+                "https://car-images.polestar.com/534/2023/upholstery/\(upholsteryCode)/0.jpg",
+                "https://car-images.polestar.com/534/2023/summary/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/interior/0.jpg",
+                "https://car-images.polestar.com/534/2023/summary/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/interior/1.jpg",
+                "https://car-images.polestar.com/534/2023/summary-interior/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/0.jpg",
+                "https://car-images.polestar.com/534/2023/summary-interior/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/1.jpg",
+                "https://car-images.polestar.com/534/2023/cockpit/ED/\(colorCode)/\(upholsteryCode)/\(wheelCode)/_/_/\(packCode)/001257/1/_/default/0.jpg",
+                // Official Polestar Media CDN interior assets for Polestar 2
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/interior/polestar-2-interior-charcoal-embossed-textile-cockpit.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/interior/polestar-2-interior-cockpit-front.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/interior/polestar-2-cockpit.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/gallery/interior/polestar-2-interior-cockpit.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/my23/interior/polestar-2-my23-interior-charcoal-textile.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/gallery/polestar-2-interior-driver-seat.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/gallery/polestar-2-interior-steering-wheel.jpg",
+                "https://media.polestar.com/image/upload/f_auto,q_auto/v1/polestar-2/gallery/polestar-2-interior-center-display.jpg",
+                // Polestar DAM / Akamai static assets
+                "https://www.polestar.com/dato-assets/11286/1638274092-polestar-2-interior-cockpit.jpg",
+                "https://www.polestar.com/dato-assets/11286/1638274094-polestar-2-interior-seats.jpg",
+                "https://assets.polestar.com/media/polestar-2/interior-cockpit.jpg"
+            ]
+
+            print("🔍 PROBING CANDIDATE INTERIOR URLS...")
+            let outDir = URL(fileURLWithPath: "/Users/nicolaskheirallah/.gemini/antigravity/brain/ff023aac-6fe2-41f3-b104-7b2c92e9f722/scratch/vehicle_images")
+            for (idx, candidate) in candidatePaths.enumerated() {
+                guard let url = URL(string: candidate) else { continue }
+                var req = URLRequest(url: url)
+                req.httpMethod = "GET"
+                req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+                if let (bytes, resp) = try? await URLSession.shared.data(for: req),
+                   let http = resp as? HTTPURLResponse,
+                   http.statusCode == 200, bytes.count > 10_000 {
+                    print("  ✅ [HTTP 200] HIT! (\(bytes.count) bytes): \(candidate)")
+                    let fileURL = outDir.appendingPathComponent("interior_asset_\(idx).jpg")
+                    try? bytes.write(to: fileURL)
+                } else {
+                    let status = (try? await URLSession.shared.data(for: req).1 as? HTTPURLResponse)?.statusCode ?? 0
+                    print("  ✗ [HTTP \(status)] \(candidate)")
+                }
             }
         }
         print("========================================================\n")

@@ -12,6 +12,24 @@ private let liveVolvoCredentialsConfigured: Bool = {
         && environment["HISINGEN_TEST_VOLVO_REFRESH_TOKEN"]?.isEmpty == false
 }()
 
+// The probe tests below deliberately send credentials that Volvo's identity provider
+// rejects (client_credentials and ROPC grants this client is not entitled to, plus a
+// scripted Volvo ID form post). PingFederate counts every rejection towards a per-client
+// lockout — running them unattended on every `swift test` locked the production client
+// out of the token endpoint. They stay opt-in, and never carry a credential fallback.
+private let volvoProbesEnabled: Bool = {
+    let environment = ProcessInfo.processInfo.environment
+    return environment["HISINGEN_ENABLE_VOLVO_PROBES"]?.isEmpty == false
+        && environment["VOLVO_CLIENT_ID"]?.isEmpty == false
+        && environment["VOLVO_CLIENT_SECRET"]?.isEmpty == false
+        && environment["VOLVO_VCC_API_KEY"]?.isEmpty == false
+}()
+
+private let volvoProbeDisabledReason =
+    "Volvo probe tests are opt-in: set HISINGEN_ENABLE_VOLVO_PROBES plus VOLVO_CLIENT_ID, "
+    + "VOLVO_CLIENT_SECRET and VOLVO_VCC_API_KEY. They burn failed-login attempts against "
+    + "the shared OAuth client and can lock it out."
+
 @MainActor
 struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !liveVolvoCredentialsConfigured, "Live Volvo credentials are not configured"))
