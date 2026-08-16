@@ -110,6 +110,26 @@ enum VehicleModelBadgePosition: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum RegistrationNumberBadgePosition: String, CaseIterable, Codable, Sendable {
+    case belowGreeting = "below-greeting"
+    case platePill = "plate-pill"
+    case inlineHeader = "inline-header"
+    case topRightOverlay = "top-right-overlay"
+    case topLeftOverlay = "top-left-overlay"
+    case hidden = "hidden"
+
+    var title: String {
+        switch self {
+        case .belowGreeting: return L10n.text("Below Greeting")
+        case .platePill: return L10n.text("License Plate Style (Below Greeting)")
+        case .inlineHeader: return L10n.text("Inline with Greeting (Top Right)")
+        case .topRightOverlay: return L10n.text("Over Vehicle Image (Top Right)")
+        case .topLeftOverlay: return L10n.text("Over Vehicle Image (Top Left)")
+        case .hidden: return L10n.text("Hidden")
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
     case light = "light"
@@ -469,6 +489,14 @@ enum Preferences {
             return VehicleModelBadgePosition(rawValue: raw) ?? .inlineHeader
         }
         set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") }
+    }
+
+    static var registrationBadgePosition: RegistrationNumberBadgePosition {
+        get {
+            let raw = d.string(forKey: "registration_badge_position") ?? ""
+            return RegistrationNumberBadgePosition(rawValue: raw) ?? .belowGreeting
+        }
+        set { d.set(newValue.rawValue, forKey: "registration_badge_position") }
     }
 
     static var distanceUnit: DistanceUnit {
