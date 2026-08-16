@@ -856,3 +856,22 @@
 "Cancel Scheduled Installation" = "Cancel Scheduled Installation";
 "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
 "The last refresh could not read: %@" = "The last refresh could not read: %@";
+
+/* Remote Engine Start (RES) & Warranty */
+"Remote Engine Start (RES)" = "Remote Engine Start (RES)";
+"Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes." = "Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes.";
+"Start Engine (15 min)" = "Start Engine (15 min)";
+"Stop Engine" = "Stop Engine";
+"Engine Running" = "Engine Running";
+"Engine Stopped" = "Engine Stopped";
+"Start engine (%d min)" = "Start engine (%d min)";
+"Warranty & Protection" = "Warranty & Protection";
+"Manufacturer Warranty" = "Manufacturer Warranty";
+"EV Battery (8 yr / 160k km)" = "EV Battery (8 yr / 160k km)";
+"Roadside Assistance" = "Roadside Assistance";
+"Scheduled Maintenance" = "Scheduled Maintenance";
+"Included (3 Years / 50,000 km)" = "Included (3 Years / 50,000 km)";
+"Connected Services" = "Connected Services";
+"Active Unlimited" = "Active Unlimited";
+"Remote engine start (RES)" = "Remote engine start (RES)";
+
