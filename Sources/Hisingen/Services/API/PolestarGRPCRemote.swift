@@ -15,8 +15,14 @@ extension PolestarGRPC {
                               accessToken: String,
                               commandToken: String? = nil) async throws -> RemoteCommandResult {
         // Invocation-backed commands are gated on a client-id allowlist that the primary
-        // (web) client is not on, so they need the command client's token. Everything else
+        // (web) client is not on, so they need the command client's token (`lp8dyrd_10`). Everything else
         // — OTA and chronos — is happy with the primary token.
+        let isInvocation = isInvocationCommand(command)
+        if isInvocation && commandToken == nil {
+            throw RemoteCommandError.rejected(
+                L10n.text("Polestar mobile credentials required for remote controls. Please sign in with your email and password in Settings.")
+            )
+        }
         self.activeCommandToken = commandToken ?? accessToken
         switch command {
         case .startClimate(let temperature, let frontLeft, let frontRight,
@@ -381,6 +387,16 @@ extension PolestarGRPC {
     private static func string(_ data: Data, field: Int) -> String {
         guard let value = message(data, field: field) else { return "" }
         return String(data: value, encoding: .utf8) ?? ""
+    }
+    private func isInvocationCommand(_ command: RemoteCommand) -> Bool {
+        switch command {
+        case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
+             .lock, .unlock, .unlockTrunk, .openWindows, .closeWindows,
+             .flashLights, .honkAndFlash, .honkHorn:
+            return true
+        default:
+            return false
+        }
     }
 }
 

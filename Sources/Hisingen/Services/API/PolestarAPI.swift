@@ -131,24 +131,30 @@ actor PolestarAPI {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return token }
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        guard let refresh = stored, let tokenEndpoint else { return commandAccessToken }
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.formBody([
-            "grant_type": "refresh_token",
-            "client_id": commandClientID,
-            "refresh_token": refresh
-        ])
-        guard let token = try? await Self.requestToken(request: request, session: session,
-                                                       invalidReason: .expiredSession) else {
-            return nil
+        if let refresh = stored, let tokenEndpoint {
+            var request = URLRequest(url: tokenEndpoint)
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.formBody([
+                "grant_type": "refresh_token",
+                "client_id": commandClientID,
+                "refresh_token": refresh
+            ])
+            if let token = try? await Self.requestToken(request: request, session: session,
+                                                        invalidReason: .expiredSession) {
+                commandAccessToken = token.accessToken
+                commandRefreshToken = token.refreshToken ?? refresh
+                commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+                if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+                return token.accessToken
+            }
         }
-        commandAccessToken = token.accessToken
-        commandRefreshToken = token.refreshToken ?? refresh
-        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
-        return token.accessToken
+        let savedEmail = await MainActor.run { Preferences.email }
+        if !savedEmail.isEmpty, let savedPassword = (try? keychain.readPassword()) ?? nil, !savedPassword.isEmpty {
+            await acquireCommandToken(email: savedEmail, password: savedPassword)
+            return commandAccessToken
+        }
+        return nil
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -156,6 +162,9 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.noStoredSession)
         }
         clearAccountState(keepRefreshToken: true)
+        if let commandRefresh = (try? keychain.readCommandSessionToken()) ?? nil, !commandRefresh.isEmpty {
+            commandRefreshToken = commandRefresh
+        }
         try await discoverOIDCConfiguration()
         refreshToken = token
         do {
