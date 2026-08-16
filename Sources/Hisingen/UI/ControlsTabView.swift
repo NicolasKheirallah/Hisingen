@@ -12,6 +12,7 @@ struct ControlsTabView: View {
     @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
     @State private var chargeTarget: Int = 80
     @State private var ampLimit: Int = 16
+    @State private var engineRuntimeMinutes: Int = 15
     @State private var showScheduleEditor = false
     @State private var isInitialized = false
 
@@ -804,24 +805,40 @@ struct ControlsTabView: View {
                     }
                 }
 
-                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes."))
+                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
 
+                HStack {
+                    Text(L10n.text("Runtime"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("", selection: $engineRuntimeMinutes) {
+                        Text("5 min").tag(5)
+                        Text("10 min").tag(10)
+                        Text("15 min").tag(15)
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .frame(width: 170)
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: engineRuntimeMinutes)) || (state.isEngineRunning == true))
+                }
+
                 HStack(spacing: 10) {
                     Button {
-                        onRemoteCommand(.startEngine(runtimeMinutes: 15))
+                        onRemoteCommand(.startEngine(runtimeMinutes: engineRuntimeMinutes))
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "flame.fill")
-                            Text(L10n.text("Start Engine (15 min)"))
+                            Text(L10n.format("Start Engine (%d min)", engineRuntimeMinutes))
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
-                    .disabled(isDisabled(.startEngine(runtimeMinutes: 15)) || (state.isEngineRunning == true))
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: engineRuntimeMinutes)) || (state.isEngineRunning == true))
 
                     Button {
                         onRemoteCommand(.stopEngine)
@@ -838,7 +855,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(cardOpacity(.startEngine(runtimeMinutes: 15)))
+        .opacity(cardOpacity(.startEngine(runtimeMinutes: engineRuntimeMinutes)))
     }
 
     private var noControlsEnabledCard: some View {

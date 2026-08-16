@@ -338,6 +338,15 @@ struct InfoTabView: View {
         if let autoKm = state.tripMeterAutomaticKm {
             rows.append(KVRow(L10n.text("Auto Trip (TA)"), String(format: "%.1f km", autoKm), symbol: "a.circle.fill"))
         }
+        if let electricKm = state.electricDistanceKm, electricKm > 0 {
+            rows.append(KVRow(L10n.text("Electric Driving"), String(format: "%.1f km", electricKm), symbol: "bolt.car.fill"))
+        }
+        if let fuelKm = state.fuelDistanceKm, fuelKm > 0 {
+            rows.append(KVRow(L10n.text("Combustion Driving"), String(format: "%.1f km", fuelKm), symbol: "fuelpump.fill"))
+        }
+        if let regen = state.regeneratedEnergyKwh, regen > 0 {
+            rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
+        }
         if let speed = state.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle.fill"))
         }
@@ -362,6 +371,15 @@ struct InfoTabView: View {
             let hasBrake = health.warnings.contains(.brakeFluid)
             rows.append(KVRow(L10n.text("Brake Fluid"), hasBrake ? L10n.text("Low / Check Required") : L10n.text("Normal"), symbol: "circle.circle", valueWarning: hasBrake))
 
+            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+                let warn = frontPads.uppercased() != "NORMAL" && !frontPads.uppercased().contains("NO_WARNING")
+                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle", valueWarning: warn))
+            }
+            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+                let warn = rearPads.uppercased() != "NORMAL" && !rearPads.uppercased().contains("NO_WARNING")
+                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle", valueWarning: warn))
+            }
+
             let hasWasher = health.warnings.contains(.washerFluid)
             rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : L10n.text("Adequate"), symbol: "drop.triangle.fill", valueWarning: hasWasher))
 
@@ -377,6 +395,12 @@ struct InfoTabView: View {
             }
         } else {
             rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Normal"), symbol: "circle.circle"))
+            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle"))
+            }
+            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
+            }
             rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Adequate"), symbol: "drop.triangle.fill"))
             rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Optimal"), symbol: "thermometer.sun.fill"))
             rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill"))

@@ -211,4 +211,45 @@ struct CombustionAndHybridVehicleTests {
         XCTAssertEqual(fuel?.percentage, 78.0)
         XCTAssertEqual(fuel?.rangeKm, 710)
     }
+
+    @Test
+    func testVolvoStatisticsAndBrakesDecoding() throws {
+        let statsJson = """
+        {
+            "data": {
+                "tripMeterManual": { "value": 142.5 },
+                "tripMeterAutomatic": { "value": 38.2 },
+                "averageSpeed": { "value": 64.0 },
+                "averageEnergyConsumption": { "value": 18.5 },
+                "averageFuelConsumption": { "value": 2.1 },
+                "electricDistance": { "value": 25600.0 },
+                "fuelDistance": { "value": 12600.0 },
+                "regeneratedEnergy": { "value": 3.42 }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let decodedStats = try JSONDecoder().decode(VolvoEnvelope<VolvoStatisticsDTO>.self, from: statsJson)
+        let stats = decodedStats.data
+        XCTAssertEqual(stats?.electricDistance?.value, 25600.0)
+        XCTAssertEqual(stats?.fuelDistance?.value, 12600.0)
+        XCTAssertEqual(stats?.regeneratedEnergy?.value, 3.42)
+
+        let brakesJson = """
+        {
+            "data": {
+                "brakeFluidLevelWarning": { "value": "NO_WARNING" },
+                "frontBrakePadStatus": { "value": "NORMAL" },
+                "rearBrakePadStatus": { "value": "NORMAL" },
+                "parkingBrakeStatus": { "value": "ENGAGED" }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let decodedBrakes = try JSONDecoder().decode(VolvoEnvelope<VolvoBrakesDTO>.self, from: brakesJson)
+        let brakes = decodedBrakes.data
+        XCTAssertEqual(brakes?.frontBrakePadStatus?.value, "NORMAL")
+        XCTAssertEqual(brakes?.rearBrakePadStatus?.value, "NORMAL")
+        XCTAssertEqual(brakes?.parkingBrakeStatus?.value, "ENGAGED")
+    }
 }
