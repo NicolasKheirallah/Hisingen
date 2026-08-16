@@ -92,9 +92,9 @@ enum MenuBarStyle: String, CaseIterable, Codable {
 
 
 enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
-    case sideProfile = 0
     case frontThreeQuarter = 1
     case frontDirect = 2
+    case sideProfile = 0
     case rearThreeQuarter = 3
     case rearProfile = 4
     case overhead = 5
@@ -186,6 +186,14 @@ enum AppearanceMode: String, CaseIterable, Codable, Sendable {
         case .system: return nil
         case .light: return .light
         case .dark: return .dark
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
         }
     }
 }
@@ -620,7 +628,25 @@ enum Preferences {
         }
         set {
             d.set(newValue.rawValue, forKey: "his_appearanceMode")
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    applyAppearance()
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        applyAppearance()
+                    }
+                }
+            }
         }
+    }
+
+    /// Applies the configured appearance mode (system, light, or dark) across AppKit
+    @MainActor
+    static func applyAppearance() {
+        let appearance = appearanceMode.nsAppearance
+        NSApplication.shared.appearance = appearance
     }
 
     static var interfaceLanguage: InterfaceLanguage {

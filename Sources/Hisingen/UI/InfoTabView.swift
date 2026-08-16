@@ -44,47 +44,38 @@ struct InfoTabView: View {
             }
             return CarImageCache.shared.image(for: state.vin, angle: selectedAngleIndex)
                 ?? (selectedAngleIndex == Preferences.carRenderAngle.rawValue ? state.imageData : nil)
-                ?? CarImageCache.shared.image(for: state.vin)
-                ?? state.imageData
         }()
 
         let hasInterior = (state.interiorImageData != nil) || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
+        let supportsMultipleAngles = Preferences.activeBrand == .polestar
 
         return Card {
-            VStack(spacing: 10) {
+            VStack(spacing: 12) {
                 // Angle & Interior View Switcher
-                HStack(spacing: 4) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            angleButton(title: L10n.text("3/4 Front"), angle: 1, icon: "car.side.front.open.fill")
-                            angleButton(title: L10n.text("Front"), angle: 2, icon: "car.front.waves.up.fill")
-                            angleButton(title: L10n.text("Side"), angle: 0, icon: "car.side.fill")
-                            angleButton(title: L10n.text("3/4 Rear"), angle: 3, icon: "car.side.rear.open.fill")
-                            angleButton(title: L10n.text("Rear"), angle: 4, icon: "car.rear.and.tire.marks")
-                            angleButton(title: L10n.text("Top"), angle: 5, icon: "car.top.door.front.left.open.fill")
-                            if hasInterior {
-                                angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
+                if supportsMultipleAngles || hasInterior {
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 5) {
+                                if supportsMultipleAngles {
+                                    angleButton(title: L10n.text("3/4 Front"), angle: 1, icon: "car.side.front.open.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Front"), angle: 2, icon: "car.front.waves.up.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Side"), angle: 0, icon: "car.side.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("3/4 Rear"), angle: 3, icon: "car.side.rear.open.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Rear"), angle: 4, icon: "car.rear.and.tire.marks", proxy: proxy)
+                                    angleButton(title: L10n.text("Top"), angle: 5, icon: "car.top.door.front.left.open.fill", proxy: proxy)
+                                } else {
+                                    angleButton(title: L10n.text("Exterior"), angle: 0, icon: "car.side.fill", proxy: proxy)
+                                }
+                                if hasInterior {
+                                    angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill", proxy: proxy)
+                                }
                             }
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
                     }
-
-                    Spacer()
-                    if let color = state.externalColour, !color.isEmpty && !isInterior {
-                        Pill(
-                            text: color,
-                            color: HisingenTheme.accent,
-                            symbol: "paintpalette.fill"
-                        )
-                    } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
-                        Pill(
-                            text: upholstery,
-                            color: HisingenTheme.accent,
-                            symbol: "carseat.left.fill"
-                        )
-                    }
+                    .zIndex(10)
                 }
-                .padding(.horizontal, 2)
 
                 if let currentImageData, let nsImage = NSImage(data: currentImageData) {
                     ZStack {
@@ -111,6 +102,7 @@ struct InfoTabView: View {
                     .padding(.horizontal, -HisingenTheme.cardPadding)
                     .padding(.top, -4)
                     .clipped()
+                    .allowsHitTesting(false)
                 } else {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
@@ -125,13 +117,29 @@ struct InfoTabView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .allowsHitTesting(false)
                 }
 
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(state.modelName ?? "Vehicle")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(HisingenTheme.ink)
+                        HStack(spacing: 6) {
+                            Text(state.modelName ?? "Vehicle")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(HisingenTheme.ink)
+                            if let color = state.externalColour, !color.isEmpty && !isInterior {
+                                Pill(
+                                    text: color,
+                                    color: HisingenTheme.accent,
+                                    symbol: "paintpalette.fill"
+                                )
+                            } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
+                                Pill(
+                                    text: upholstery,
+                                    color: HisingenTheme.accent,
+                                    symbol: "carseat.left.fill"
+                                )
+                            }
+                        }
                         if let year = state.modelYear {
                             Text(L10n.format("Model Year %@", year))
                                 .font(.system(size: 11))
@@ -151,11 +159,12 @@ struct InfoTabView: View {
         }
     }
 
-    private func angleButton(title: String, angle: Int, icon: String) -> some View {
+    private func angleButton(title: String, angle: Int, icon: String, proxy: ScrollViewProxy? = nil) -> some View {
         let isSelected = selectedAngleIndex == angle
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedAngleIndex = angle
+                proxy?.scrollTo(angle, anchor: .center)
             }
         } label: {
             HStack(spacing: 4) {
@@ -164,12 +173,19 @@ struct InfoTabView: View {
                 Text(title)
                     .font(.system(size: 10, weight: isSelected ? .bold : .medium))
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.04), in: Capsule())
-            .foregroundStyle(isSelected ? HisingenTheme.accent : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? HisingenTheme.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+            )
+            .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .withoutFocusRing()
+        .id(angle)
     }
 
     private var parkingLocationCard: some View {

@@ -2394,6 +2394,118 @@ struct LivePolestarRemoteCommandIntegrationTests {
         }
     }
 
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testProbeExactCarImageAnglesFromGraphQL() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        features.set(.vehicleIdentity, enabled: true)
+        features.set(.vehicleImage, enabled: true)
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: features)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+        let state = try await api.fetchVehicleState(vin: vin, features: features)
+
+        print("\n========================================================")
+        print("📸 CAR IMAGE GRAPHQL ANGLES PROBE")
+        print("   VIN: \(vin)")
+        print("   PNO34: \(state.pno34 ?? "nil")")
+        print("   StructureWeek: \(state.structureWeek ?? "nil")")
+        print("   ModelYear: \(state.modelYear ?? "nil")")
+
+        guard let pno34 = state.pno34, let structureWeek = state.structureWeek, let modelYear = state.modelYear else {
+            print("  ✗ Missing vehicle identity data")
+            return
+        }
+
+        let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
+        let publicApiKey = "da2-js63uvc7c5hwpdudt657d5lyou"
+
+        // 1. Introspect CarImages type
+        let introQuery = """
+        query {
+          __type(name: "CarImages") {
+            name
+            fields {
+              name
+              type {
+                name
+                kind
+                ofType {
+                  name
+                  kind
+                  ofType {
+                    name
+                    kind
+                  }
+                }
+              }
+            }
+          }
+          __schema {
+            queryType {
+              fields {
+                name
+              }
+            }
+          }
+        }
+        """
+        var introReq = URLRequest(url: publicApiURL)
+        introReq.httpMethod = "POST"
+        introReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        introReq.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
+        introReq.httpBody = try? JSONSerialization.data(withJSONObject: ["query": introQuery])
+        let (introData, _) = try await URLSession.shared.data(for: introReq)
+        print("  Schema Introspection:")
+        print(String(decoding: introData, as: UTF8.self))
+
+        // 2. Query GetCarImages without invalid fields
+        let query = """
+        query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String) {
+          getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
+            transparent { url angle }
+            opaque { url angle }
+          }
+        }
+        """
+        let body: [String: Any] = ["query": query, "variables": [
+            "pno34": pno34, "structureWeek": structureWeek,
+            "modelYear": modelYear, "locale": "en-GB"
+        ]]
+        var request = URLRequest(url: publicApiURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        print("  HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let payload = json["data"] as? [String: Any],
+           let images = payload["getCarImages"] as? [String: Any] {
+            let transparent = images["transparent"] as? [[String: Any]] ?? []
+            for item in transparent {
+                let angle = item["angle"] as? Int ?? -999
+                let url = item["url"] as? String ?? ""
+                print("  • Transparent Angle \(angle): URL = \(url)")
+            }
+            let opaque = images["opaque"] as? [[String: Any]] ?? []
+            for item in opaque {
+                let angle = item["angle"] as? Int ?? -999
+                let url = item["url"] as? String ?? ""
+                print("  • Opaque Angle \(angle): URL = \(url)")
+            }
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
     private static func otaReadProbes(vin: String) -> [(String, String, Data)] {
         var softwareInfo = Data()
         softwareInfo.append(Protobuf.stringField(1, vin))
