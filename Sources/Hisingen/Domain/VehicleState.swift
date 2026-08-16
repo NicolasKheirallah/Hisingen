@@ -240,6 +240,11 @@ struct VehicleState: Codable, Equatable, Sendable {
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
     var optimisticCommandLockUntil: Date? = nil
+    var electricDistanceKm: Double? = nil
+    var fuelDistanceKm: Double? = nil
+    var regeneratedEnergyKwh: Double? = nil
+    var frontBrakePadStatus: String? = nil
+    var rearBrakePadStatus: String? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -342,6 +347,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
+        case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
     }
 
     init(from decoder: Decoder) throws {
@@ -415,6 +421,11 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
         self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
         self.warrantyInfo = try values.decodeIfPresent(VehicleWarrantyInfo.self, forKey: .warrantyInfo)
+        self.electricDistanceKm = try values.decodeIfPresent(Double.self, forKey: .electricDistanceKm)
+        self.fuelDistanceKm = try values.decodeIfPresent(Double.self, forKey: .fuelDistanceKm)
+        self.regeneratedEnergyKwh = try values.decodeIfPresent(Double.self, forKey: .regeneratedEnergyKwh)
+        self.frontBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .frontBrakePadStatus)
+        self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
     }
 
     var formattedBuildWeek: String? {
@@ -910,6 +921,11 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
         merged.optimisticCommandLockUntil = isCommandLocked ? previous.optimisticCommandLockUntil : nil
+        merged.electricDistanceKm = electricDistanceKm ?? previous.electricDistanceKm
+        merged.fuelDistanceKm = fuelDistanceKm ?? previous.fuelDistanceKm
+        merged.regeneratedEnergyKwh = regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh
+        merged.frontBrakePadStatus = frontBrakePadStatus ?? previous.frontBrakePadStatus
+        merged.rearBrakePadStatus = rearBrakePadStatus ?? previous.rearBrakePadStatus
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

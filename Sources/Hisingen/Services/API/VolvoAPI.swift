@@ -481,6 +481,11 @@ actor VolvoAPI {
         state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBattery?.value
         state.chargingCurrentLimitAmps = currentLimitAmps
         state.interiorImageData = interiorImg
+        state.electricDistanceKm = statistics?.electricDistance?.value.map { $0 / 1000.0 }
+        state.fuelDistanceKm = statistics?.fuelDistance?.value.map { $0 / 1000.0 }
+        state.regeneratedEnergyKwh = statistics?.regeneratedEnergy?.value
+        state.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
+        state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
         return state
     }
 

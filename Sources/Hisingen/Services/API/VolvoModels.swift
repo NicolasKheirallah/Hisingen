@@ -310,6 +310,9 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     let averageFuelConsumption: VolvoField<Double>?
     let averageEnergyConsumption: VolvoField<Double>?
     let averageSpeed: VolvoField<Double>?
+    let electricDistance: VolvoField<Double>?
+    let fuelDistance: VolvoField<Double>?
+    let regeneratedEnergy: VolvoField<Double>?
 }
 
 
@@ -366,6 +369,9 @@ struct VolvoEngineStatusDTO: Decodable, Sendable {
 
 struct VolvoBrakesDTO: Decodable, Sendable {
     let brakeFluidLevelWarning: VolvoField<String>?
+    let frontBrakePadStatus: VolvoField<String>?
+    let rearBrakePadStatus: VolvoField<String>?
+    let parkingBrakeStatus: VolvoField<String>?
 }
 
 struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
