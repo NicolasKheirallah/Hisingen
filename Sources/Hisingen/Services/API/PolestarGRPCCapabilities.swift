@@ -673,7 +673,14 @@ extension PolestarGRPC {
         if let f1 = fields.first(where: { $0.number == 1 }), f1.wire == 1 || f1.wire == 5 {
             lon = numeric(fields, 1)
             lat = numeric(fields, 2)
-            tsMillis = varint(fields, 3)
+            if let tsMsg = message(fields, field: 3) {
+                let tsFields = Protobuf.fields(tsMsg)
+                if let sec = varint(tsFields, 1) {
+                    tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
+                }
+            } else {
+                tsMillis = varint(fields, 3)
+            }
         } else {
             lon = numeric(fields, 2)
             lat = numeric(fields, 3)
@@ -714,7 +721,13 @@ extension PolestarGRPC {
 
         let heading = [numeric(fields, 4), numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
             .compactMap { $0 }
-            .first(where: { $0 >= 0 && $0 <= 360 && abs($0 - Double(tsMillis ?? 0)) > 1000 })
+            .first(where: { val in
+                guard val >= 0 && val <= 360 else { return false }
+                if let ts = tsMillis, ts > 10_000_000 {
+                    return abs(val - Double(ts)) > 1000
+                }
+                return true
+            })
         let speed = [numeric(fields, 5), numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
             .compactMap { $0 }
             .first(where: { $0 >= 0 && $0 <= 300 })
