@@ -849,3 +849,22 @@
 "The last software update failed." = "Den senaste programvaruuppdateringen misslyckades.";
 "Software is up to date (%@)." = "Programvaran är uppdaterad (%@).";
 "Cancel Scheduled Installation" = "Avbryt schemalagd installation";
+
+/* Remote Engine Start (RES) & Warranty */
+"Remote Engine Start (RES)" = "Fjärrstart av motor (RES)";
+"Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes." = "Startar förbränningsmotorn för att förvärma eller kyla kupén före avfärd. Körs automatiskt i 15 minuter.";
+"Start Engine (15 min)" = "Starta motor (15 min)";
+"Stop Engine" = "Stoppa motor";
+"Engine Running" = "Motorn igång";
+"Engine Stopped" = "Motorn avstängd";
+"Start engine (%d min)" = "Starta motor (%d min)";
+"Warranty & Protection" = "Garanti & skydd";
+"Manufacturer Warranty" = "Nybilsgaranti";
+"EV Battery (8 yr / 160k km)" = "EV-batteri (8 år / 160 000 km)";
+"Roadside Assistance" = "Vägassistans (Assistance)";
+"Scheduled Maintenance" = "Schemalagd service";
+"Included (3 Years / 50,000 km)" = "Ingår (3 år / 50 000 km)";
+"Connected Services" = "Uppkopplade tjänster";
+"Active Unlimited" = "Aktiv obegränsad";
+"Remote engine start (RES)" = "Fjärrstart av motor (RES)";
+
