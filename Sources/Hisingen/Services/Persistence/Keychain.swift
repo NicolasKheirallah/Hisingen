@@ -175,6 +175,9 @@ struct KeychainStore: Sendable {
            let bundle = try? JSONDecoder().decode(VolvoSecretBundle.self, from: data) {
             return bundle
         }
+        guard UserDefaults.standard.bool(forKey: "has_volvo_session") || isTestService else {
+            return VolvoSecretBundle(clientSecret: nil, apiKey: nil, sessionToken: nil)
+        }
         let legacySecret = try? read(account: "volvo-client-secret")
         let legacyApiKey = try? read(account: "volvo-vcc-api-key")
         let legacySession = try? read(account: "volvo-refresh-token")
@@ -197,44 +200,40 @@ struct KeychainStore: Sendable {
         try save(str, account: Self.volvoBundleAccount)
     }
 
+    private var isTestService: Bool {
+        service.hasPrefix("io.kheirallah.hisingen.tests.") || service != "io.kheirallah.hisingen"
+    }
+
+    private static var testStore: [String: String] = [:]
+    private static let testLock = NSLock()
+
     private func cacheKey(account: String) -> String {
         "\(service)|\(account)"
     }
 
-    private func baseQuery(account: String, useDataProtection: Bool = true) -> [String: Any] {
-        var query: [String: Any] = [
+    private func baseQuery(account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        if useDataProtection {
-            query[kSecUseDataProtectionKeychain as String] = true
-        }
-        return query
-    }
-
-    private func createTrustedAccess(label: String) -> SecAccess? {
-        var trustedApp: SecTrustedApplication?
-        let status = SecTrustedApplicationCreateFromPath(nil, &trustedApp)
-        guard status == errSecSuccess, let trustedApp else { return nil }
-        var access: SecAccess?
-        let accessStatus = SecAccessCreate(label as CFString, [trustedApp] as CFArray, &access)
-        guard accessStatus == errSecSuccess else { return nil }
-        return access
     }
 
     private func save(_ value: String, account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: value)
-        var attributes: [String: Any] = [
+        if isTestService {
+            Self.testLock.lock()
+            Self.testStore[cacheKey(account: account)] = value
+            Self.testLock.unlock()
+            return
+        }
+
+        let attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        if let access = createTrustedAccess(label: "Hisingen (\(account))") {
-            attributes[kSecAttrAccess as String] = access
-        }
 
-        // Try standard query with trusted access
-        let query = baseQuery(account: account, useDataProtection: false)
+        let query = baseQuery(account: account)
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess { return }
         guard updateStatus == errSecItemNotFound else {
@@ -251,7 +250,14 @@ struct KeychainStore: Sendable {
         if let cached = InMemorySecretCache.shared.get(cacheKey(account: account)) {
             return cached
         }
-        var query = baseQuery(account: account, useDataProtection: false)
+        if isTestService {
+            Self.testLock.lock()
+            let val = Self.testStore[cacheKey(account: account)]
+            Self.testLock.unlock()
+            return val
+        }
+
+        var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -268,7 +274,13 @@ struct KeychainStore: Sendable {
 
     private func delete(account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: nil)
-        let status = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+        if isTestService {
+            Self.testLock.lock()
+            Self.testStore.removeValue(forKey: cacheKey(account: account))
+            Self.testLock.unlock()
+            return
+        }
+        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.status(status)
         }

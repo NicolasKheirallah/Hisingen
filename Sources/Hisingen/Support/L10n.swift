@@ -9,14 +9,16 @@ enum L10n {
         if Bundle.main.path(forResource: "en", ofType: "lproj") != nil {
             return .main
         }
-        let buildCandidates = [
-            ".build/arm64-apple-macosx/debug/Hisingen_Hisingen.bundle",
-            ".build/arm64-apple-macosx/release/Hisingen_Hisingen.bundle",
-            ".build/x86_64-apple-macosx/debug/Hisingen_Hisingen.bundle",
-            ".build/x86_64-apple-macosx/release/Hisingen_Hisingen.bundle",
-            "Sources/Hisingen/Resources"
+        let currentDir = FileManager.default.currentDirectoryPath
+        let candidates = [
+            Bundle.main.bundlePath + "/Contents/Resources",
+            Bundle.main.bundlePath,
+            "Sources/Hisingen/Resources",
+            currentDir + "/Sources/Hisingen/Resources",
+            "../Sources/Hisingen/Resources",
+            "../../Sources/Hisingen/Resources"
         ]
-        for path in buildCandidates {
+        for path in candidates {
             if let bundle = Bundle(path: path), bundle.path(forResource: "en", ofType: "lproj") != nil {
                 return bundle
             }

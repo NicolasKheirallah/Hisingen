@@ -554,6 +554,10 @@ struct InfoTabView: View {
                             Text(L10n.text("State of Health (SoH)"))
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                                .help(L10n.text("Physical battery pack capacity retention based on calendar and cycle aging. 70% threshold is covered under the 8-year / 160,000 km factory warranty."))
                         }
                         Spacer()
                         HStack(spacing: 6) {
