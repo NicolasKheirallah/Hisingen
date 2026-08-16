@@ -248,12 +248,35 @@ Hisingen integrates with Apple's **App Intents** framework for native Siri voice
 - **`StartClimateIntent` & `StopClimateIntent`**: Starts or stops cabin climate preconditioning.
 - **`AppShortcutsProvider`**: Automatically registers shortcuts into macOS Shortcuts without manual setup.
 
+### macOS Desktop & Notification Center Widgets (`WidgetKit`)
+
+Hisingen provides native macOS desktop and Notification Center widgets:
+
+- **System Small Widget**: Circular battery gauge with live percentage, estimated range, charging wattage pulse, and vehicle lock state pill.
+- **System Medium Widget**: Multi-column vehicle dashboard featuring battery %, range, lock state, live cabin climate activity, charging speed, and odometer reading.
+
+### Touch ID & Biometric Protection
+
+Protect remote operations with macOS Touch ID or device-owner authentication:
+- **Automatic Protection for Sensitive Controls**: Critical and security-sensitive commands (e.g. remote unlock, window ventilation, OTA installation) automatically require biometric authentication.
+- **Optional Universal Touch ID Mode**: Enable *"Require Touch ID"* in Settings to mandate fingerprint verification for every remote command (including climate preconditioning and locking).
+
+### Interactive Charging & Departure Schedule Editor
+
+Configure departure and charging schedules directly from the Mac without needing the mobile app:
+- **Cabin Preconditioning (Departure Timers)**: Configure target departure time and select recurring days of the week (Mon–Sun).
+- **Charging Windows**: Set start and end times for off-peak charging schedules with recurring weekday selectors.
+- **Manage Timers Modal**: View, toggle, edit, or delete active timers with a single click.
+
 ### Keyboard And Context Menu
 
 - `Option + P` toggles the popover globally after macOS Accessibility approval.
 - `Option + [` and `Option + ]` move between vehicles.
 - `Option + 1` through `Option + 9` select a vehicle directly.
-- Right-click status bar icon opens instant actions: **Refresh Telemetry**, **Open in Apple Maps**, **Copy VIN**, **Quick Controls** (Lock/Unlock, Climate, Flash), vehicle switching, Settings, and Quit.
+- **Status Bar Right-Click Context Menu**:
+  - **Quick Controls**: Instant **Lock / Unlock Doors**, **Start / Stop Climate**, **Flash Lights**, **Honk Horn**, and **Honk & Flash**.
+  - **Export Charging History (CSV)…**: Exports session history to a CSV file.
+  - **Telemetry & Navigation**: Quick access to **Refresh Telemetry**, **Open in Apple Maps**, and **Copy VIN**.
 - Scrolling remains enabled while visual scroll indicators stay hidden.
 - Launch at login uses `SMAppService` and the normal Login Items approval flow.
 
@@ -262,13 +285,15 @@ Hisingen integrates with Apple's **App Intents** framework for native Siri voice
 - Per-vehicle local nicknames.
 - System, English, or Swedish interface language.
 - Kilometers or miles.
-- Electricity rate and currency.
+- Electricity rate and currency for dynamic charge cost estimation.
 - Configurable read-only feature groups and notifications.
-- Optional charging-session history.
+- Optional charging-session history with CSV and JSON export.
 
-## Multiple Vehicles
+## Multiple Vehicles & Dual-Brand Multi-Car Switcher
 
-Hisingen discovers all vehicles returned by the signed-in account and isolates state, charging baselines, capability observations, and nicknames per VIN. Vehicles can be switched from the footer, keyboard, or context menu. Guest or secondary accounts without an account vehicle list can provide a validated VIN manually. Only one brand is active at a time today. Switching from Volvo to Polestar (by saving Polestar credentials) or vice versa doesn't delete the other provider's stored session — but switching back through Settings currently re-runs that provider's full sign-in rather than silently resuming it, even though the stored token would still work on a fresh app launch.
+Hisingen discovers all vehicles returned by the signed-in account and isolates state, charging baselines, capability observations, and nicknames per VIN. Vehicles can be switched from the footer, keyboard, or context menu:
+- **Seamless Dual-Brand Switching**: If you own both a Polestar and a Volvo, Hisingen stores both provider sessions in the macOS Keychain. Switching between Polestar and Volvo instantly restores the stored credentials and active API provider without requiring manual re-authentication.
+- **Isolated Telemetry & Nicknames**: Each vehicle maintains independent cached snapshots, local nicknames, and charging history.
 
 ## Supported Vehicles
 
