@@ -246,9 +246,21 @@ extension PolestarGRPC {
                                           message: Self.vehicleRequest(vin),
                                           vin: vin, accessToken: accessToken)
 
-        let compact = Self.message(body, field: 5) ?? Self.message(body, field: 2)
-        guard let compact else { return nil }
-        return Self.parseLocation(compact)
+        let candidates = [
+            Self.message(body, field: 3),
+            Self.message(body, field: 1),
+            Self.message(body, field: 5),
+            Self.message(body, field: 2),
+            Self.message(body, field: 4),
+            body
+        ].compactMap { $0 }
+
+        for candidate in candidates {
+            if let loc = Self.parseLocation(candidate) {
+                return loc
+            }
+        }
+        return nil
     }
 
 
@@ -621,12 +633,31 @@ extension PolestarGRPC {
 
     static func parseLocation(_ data: Data) -> VehicleLocation? {
         let fields = Protobuf.fields(data)
-        let longitude = numeric(fields, 1)
-        let latitude = numeric(fields, 2)
-        guard latitude != nil || longitude != nil else { return nil }
+        var lon = numeric(fields, 1)
+        var lat = numeric(fields, 2)
+
+        if lat == nil && lon == nil {
+            if let sub = message(fields, field: 1) ?? message(fields, field: 2) ?? message(fields, field: 3) {
+                let subFields = Protobuf.fields(sub)
+                lon = numeric(subFields, 1) ?? numeric(subFields, 2)
+                lat = numeric(subFields, 2) ?? numeric(subFields, 1)
+            }
+        }
+
+        if let rawLat = lat, abs(rawLat) > 180 {
+            lat = rawLat > 1_000_000_000 ? rawLat / 10_000_000.0 : (rawLat > 100_000 ? rawLat / 1_000_000.0 : rawLat)
+        }
+        if let rawLon = lon, abs(rawLon) > 180 {
+            lon = rawLon > 1_000_000_000 ? rawLon / 10_000_000.0 : (rawLon > 100_000 ? rawLon / 1_000_000.0 : rawLon)
+        }
+
+        guard let validLat = lat, let validLon = lon, (abs(validLat) > 0.0001 || abs(validLon) > 0.0001) else {
+            return nil
+        }
+
         let heading = numeric(fields, 4).flatMap { $0 >= 0 ? $0 : nil }
         let speed = numeric(fields, 5).flatMap { $0 >= 0 ? $0 : nil }
-        let ts = timestamp(message(fields, field: 3))
+        let ts = timestamp(message(fields, field: 3)) ?? timestamp(message(fields, field: 1))
         let altitude = numeric(fields, 6)
         let accuracy = numeric(fields, 7)
         let parkingBrake = varint(fields, 8).map { $0 != 0 }
@@ -641,8 +672,8 @@ extension PolestarGRPC {
             }
         }()
         return VehicleLocation(
-            latitude: latitude,
-            longitude: longitude,
+            latitude: validLat,
+            longitude: validLon,
             heading: heading,
             speed: speed,
             timestamp: ts,

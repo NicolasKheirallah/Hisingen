@@ -417,6 +417,7 @@ struct VehicleTabView: View {
             if let card = fuelAndEngineCard { card }
             if let card = openingsCard { card }
             if let card = tireSchematicCard { card }
+            if let card = locationCard { card }
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
@@ -462,7 +463,7 @@ struct VehicleTabView: View {
     private var moreDetailsSection: some View {
         let cards: [AnyView] = [
             vehicleIdentityCard, lightingAndFluidCard,
-            climateCard, locationCard, softwareCard, diagnosticsCard
+            climateCard, softwareCard, diagnosticsCard
         ].compactMap { $0 }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
