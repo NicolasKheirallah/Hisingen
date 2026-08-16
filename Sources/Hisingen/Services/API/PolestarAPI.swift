@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 
@@ -126,6 +127,26 @@ actor PolestarAPI {
         }
     }
 
+    @MainActor
+    private static func promptForPassword(email: String) -> String? {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.text("Polestar ID Password Required")
+        alert.informativeText = L10n.format(
+            "Enter your Polestar ID password for %@ to authorize remote controls. Hisingen will securely save your remote session in macOS Keychain.",
+            email
+        )
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        input.placeholderString = L10n.text("Password")
+        alert.accessoryView = input
+        alert.addButton(withTitle: L10n.text("Authorize"))
+        alert.addButton(withTitle: L10n.text("Cancel"))
+        alert.window.initialFirstResponder = input
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let entered = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return entered.isEmpty ? nil : entered
+    }
+
     /// A valid token for invocation-backed commands, refreshed on demand.
     private func validCommandToken() async -> String? {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
@@ -150,8 +171,12 @@ actor PolestarAPI {
             }
         }
         let savedEmail = await MainActor.run { Preferences.email }
-        if !savedEmail.isEmpty, let savedPassword = (try? keychain.readPassword()) ?? nil, !savedPassword.isEmpty {
-            await acquireCommandToken(email: savedEmail, password: savedPassword)
+        var passwordToUse = (try? keychain.readPassword()) ?? nil
+        if (passwordToUse == nil || passwordToUse?.isEmpty == true) && !savedEmail.isEmpty {
+            passwordToUse = await MainActor.run { Self.promptForPassword(email: savedEmail) }
+        }
+        if !savedEmail.isEmpty, let password = passwordToUse, !password.isEmpty {
+            await acquireCommandToken(email: savedEmail, password: password)
             return commandAccessToken
         }
         return nil
