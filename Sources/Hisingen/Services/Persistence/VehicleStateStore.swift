@@ -12,24 +12,48 @@ final class VehicleStateStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(defaults: UserDefaults = .standard) {
+    private let database: VehicleDatabase
+
+    init(defaults: UserDefaults = .standard, database: VehicleDatabase = .shared) {
         self.defaults = defaults
+        self.database = database
     }
 
     func snapshot(for vin: String) -> VehicleState? {
+        if let sqliteSnapshot = database.loadSnapshot(for: vin) {
+            return sqliteSnapshot
+        }
         guard var snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
         guard Date().timeIntervalSince(snapshot.fetchedAt) <= 7 * 24 * 60 * 60 else {
             clear(vin: vin)
             return nil
         }
-        // Flagged on read rather than on write, so anything served from disk is marked
-        // regardless of which build wrote it. `cacheableCopy` strips most telemetry, and the
-        // UI must be able to tell "not fetched" apart from "not supported".
         snapshot.isCachedSnapshot = true
         return snapshot
     }
 
     func save(_ state: VehicleState) {
+        database.saveSnapshot(state)
+
+        if let odo = state.odometerKm, let _ = state.batteryPercentage {
+            let soh = state.batteryStateOfHealthPercent ?? 98.0
+            let deg = state.batteryDegradationPercent ?? (100.0 - soh)
+            let usable = state.effectiveUsableBatteryCapacityKwh
+            database.recordBatteryHealthMilestone(
+                vin: state.vin, odometerKm: Double(odo), sohPct: soh, degPct: deg, usableKwh: usable
+            )
+
+            database.recordTelemetry(
+                vin: state.vin, odometerKm: Double(odo),
+                tripManualKm: state.tripMeterManualKm,
+                tripAutoKm: state.tripMeterAutomaticKm,
+                avgConsumption: state.averageFuelConsumptionLPer100Km,
+                ambientTempC: state.weather?.temperatureCelsius,
+                latitude: state.location?.latitude,
+                longitude: state.location?.longitude
+            )
+        }
+
         var values = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
         values[state.vin] = state.cacheableCopy
         store(values, key: snapshotsKey)
@@ -54,6 +78,7 @@ final class VehicleStateStore {
     }
 
     func clear(vin: String? = nil) {
+        database.wipeAll(for: vin)
         if let vin {
             var snapshots = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
             var baselines = load([String: ChargingBaseline].self, key: baselinesKey) ?? [:]
