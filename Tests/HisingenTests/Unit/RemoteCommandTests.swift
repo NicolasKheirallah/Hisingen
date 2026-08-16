@@ -140,6 +140,54 @@ struct RemoteCommandTests {
         XCTAssertEqual(foFields.first { $0.number == 2 }?.varint, 2)
     }
 
+    @Test
+    @MainActor
+    func testRequireBiometricsPreference() {
+        let original = Preferences.requireBiometricsForRemoteControls
+        Preferences.requireBiometricsForRemoteControls = true
+        XCTAssertTrue(Preferences.requireBiometricsForRemoteControls)
+        Preferences.requireBiometricsForRemoteControls = false
+        XCTAssertFalse(Preferences.requireBiometricsForRemoteControls)
+        Preferences.requireBiometricsForRemoteControls = original
+    }
+
+    @Test
+    func testScheduleKindAndWeekdays() {
+        let climateSchedule = VehicleSchedule(
+            backendID: "timer-123",
+            index: 0,
+            kind: .climate,
+            startHour: 8,
+            startMinute: 15,
+            endHour: nil,
+            endMinute: nil,
+            weekdays: [.monday, .wednesday, .friday],
+            isActive: true
+        )
+        XCTAssertEqual(climateSchedule.kind, .climate)
+        XCTAssertEqual(climateSchedule.startHour, 8)
+        XCTAssertEqual(climateSchedule.startMinute, 15)
+        XCTAssertEqual(climateSchedule.weekdays.count, 3)
+        XCTAssertTrue(climateSchedule.isActive)
+        XCTAssertEqual(climateSchedule.backendID, "timer-123")
+
+        let chargeSchedule = VehicleSchedule(
+            backendID: nil,
+            index: 1,
+            kind: .globalCharging,
+            startHour: 23,
+            startMinute: 0,
+            endHour: 6,
+            endMinute: 30,
+            weekdays: [.saturday, .sunday],
+            isActive: true
+        )
+        XCTAssertEqual(chargeSchedule.kind, .globalCharging)
+        XCTAssertEqual(chargeSchedule.startHour, 23)
+        XCTAssertEqual(chargeSchedule.endHour, 6)
+        XCTAssertEqual(chargeSchedule.endMinute, 30)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))
