@@ -3,10 +3,9 @@ import Foundation
 
 @available(macOS 13.0, *)
 struct GetVehicleBatteryIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Vehicle Battery"
-    static var description = IntentDescription("Returns the battery level, range, and charging status of the active vehicle.")
-
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Get Vehicle Battery"
+    static let description = IntentDescription("Returns the battery level, range, and charging status of the active vehicle.")
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
@@ -38,9 +37,9 @@ struct GetVehicleBatteryIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct LockVehicleIntent: AppIntent {
-    static var title: LocalizedStringResource = "Lock Vehicle"
-    static var description = IntentDescription("Locks the vehicle doors.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Lock Vehicle"
+    static let description = IntentDescription("Locks the vehicle doors.")
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
@@ -54,9 +53,9 @@ struct LockVehicleIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct UnlockVehicleIntent: AppIntent {
-    static var title: LocalizedStringResource = "Unlock Vehicle"
-    static var description = IntentDescription("Unlocks the vehicle doors.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Unlock Vehicle"
+    static let description = IntentDescription("Unlocks the vehicle doors.")
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
@@ -70,9 +69,9 @@ struct UnlockVehicleIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct StartClimateIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start Cabin Climate"
-    static var description = IntentDescription("Starts cabin climate preconditioning.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Start Cabin Climate"
+    static let description = IntentDescription("Starts cabin climate preconditioning.")
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
@@ -86,9 +85,9 @@ struct StartClimateIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct StopClimateIntent: AppIntent {
-    static var title: LocalizedStringResource = "Stop Cabin Climate"
-    static var description = IntentDescription("Stops cabin climate preconditioning.")
-    static var openAppWhenRun: Bool = false
+    static let title: LocalizedStringResource = "Stop Cabin Climate"
+    static let description = IntentDescription("Stops cabin climate preconditioning.")
+    static let openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {

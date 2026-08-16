@@ -17,4 +17,4 @@ DerivedData/
 .env.*
 !.env.example
 *.secret
-Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift
+

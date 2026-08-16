@@ -784,7 +784,6 @@
 "Lock Doors" = "Deuren vergrendelen";
 "Unlock Doors" = "Deuren ontgrendelen";
 "Start Climate (%@)" = "Klimaatregeling starten (%@)";
-"Flash Lights" = "Knipperen met lichten";
 "Honk Horn" = "Toeteren";
 "Honk and Flash" = "Toeteren en knipperen";
 "Modem Wake Reason" = "Modem-ontwaakreden";
@@ -820,7 +819,6 @@
 "Max DC Fast Charge" = "Max DC-snelladen";
 "Max AC Charge" = "Max AC-laden";
 "Fuel Level" = "Brandstofniveau";
-"Avg Consumption" = "Gem. verbruik";
 "Service & Health" = "Onderhoud & gezondheid";
 "Total Odometer" = "Totale kilometerstand";
 "Factory Build & Identity" = "Fabrieksbouw & identiteit";

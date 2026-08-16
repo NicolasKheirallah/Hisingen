@@ -784,7 +784,6 @@
 "Lock Doors" = "Lås døre";
 "Unlock Doors" = "Lås døre op";
 "Start Climate (%@)" = "Start klimastyring (%@)";
-"Flash Lights" = "Blink med lygter";
 "Honk Horn" = "Dyt";
 "Honk and Flash" = "Dyt og blink";
 "Modem Wake Reason" = "Modemmets vækkeårsag";
@@ -820,7 +819,6 @@
 "Max DC Fast Charge" = "Maks DC-hurtigopladning";
 "Max AC Charge" = "Maks AC-opladning";
 "Fuel Level" = "Brændstofniveau";
-"Avg Consumption" = "Gns. forbrug";
 "Service & Health" = "Service & tilstand";
 "Total Odometer" = "Total kilometertal";
 "Factory Build & Identity" = "Fabriksbyg & identitet";

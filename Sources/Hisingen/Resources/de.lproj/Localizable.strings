@@ -784,7 +784,6 @@
 "Lock Doors" = "Türen verriegeln";
 "Unlock Doors" = "Türen entriegeln";
 "Start Climate (%@)" = "Klimatisierung starten (%@)";
-"Flash Lights" = "Lichthupe / Blinker";
 "Honk Horn" = "Hupe betätigen";
 "Honk and Flash" = "Hupen und Blinken";
 "Modem Wake Reason" = "Modem-Weckursache";
@@ -820,7 +819,6 @@
 "Max DC Fast Charge" = "Max. DC-Schnellladung";
 "Max AC Charge" = "Max. AC-Ladung";
 "Fuel Level" = "Kraftstoffstand";
-"Avg Consumption" = "Durchschnittsverbrauch";
 "Service & Health" = "Wartung & Zustand";
 "Total Odometer" = "Gesamtkilometerstand";
 "Factory Build & Identity" = "Werksbau & Identität";
