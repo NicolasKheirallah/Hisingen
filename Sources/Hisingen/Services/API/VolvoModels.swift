@@ -232,6 +232,7 @@ struct VolvoTyresDTO: Decodable, Sendable {
 
 struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let serviceWarning: VolvoField<String>?
+    let serviceTrigger: VolvoField<String>?
     let timeToService: VolvoField<Int>?
     let distanceToService: VolvoField<Int>?
     let engineHoursToService: VolvoField<Int>?
@@ -406,7 +407,9 @@ struct VolvoWarningsDTO: Decodable, Sendable {
             (turnIndicationRearLeftWarning, L10n.text("Rear left turn indicator")),
             (turnIndicationRearRightWarning, L10n.text("Rear right turn indicator")),
             (registrationPlateLightWarning, L10n.text("License plate light")),
-            (sideMarkLightsWarning, L10n.text("Side marker lights"))
+            (sideMarkLightsWarning, L10n.text("Side marker lights")),
+            (hazardLightsWarning, L10n.text("Hazard warning lights")),
+            (reverseLightsWarning, L10n.text("Reverse light"))
         ]
         return list.compactMap { field, name in
             guard let val = field?.value?.uppercased(), !val.contains("NO_WARNING"), val != "UNSPECIFIED", !val.isEmpty else { return nil }

@@ -248,6 +248,126 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(Protobuf.fields(parsedFrames[1]).first(where: { $0.number == 1 })?.varint, 99)
     }
 
+    @Test
+    func testHealthParsesSpecificLightFailures() {
+        var payload = Data()
+        payload.append(Protobuf.intField(14, 2)) // Left low beam
+        payload.append(Protobuf.intField(17, 2)) // Right high beam
+        payload.append(Protobuf.intField(26, 2)) // Left brake light
+        let report = PolestarGRPC.parseHealth(payload)
+        XCTAssertTrue(report.details.warnings.contains(.exteriorLight))
+        XCTAssertEqual(report.details.lightFailures.count, 3)
+        XCTAssertTrue(report.details.lightFailures.contains("Left low beam"))
+        XCTAssertTrue(report.details.lightFailures.contains("Right high beam"))
+        XCTAssertTrue(report.details.lightFailures.contains("Left brake light"))
+    }
+
+    @Test
+    func testVehicleStateMetadataAndBuildWeekFormatting() throws {
+        var state = VehicleState(
+            batteryPercentage: 80,
+            rangeKm: 350,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 90,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .none,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2023",
+            registrationNo: "ABC 123",
+            vin: "YS3E1234567890123",
+            ownerFirstName: "Test",
+            odometerKm: 25000,
+            daysToService: 120,
+            distanceToServiceKm: 5000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+        state.structureWeek = "202240"
+        state.internalVehicleIdentifier = "UUID-POL-12345"
+        state.pno34 = "PNO34-SPEC-2023"
+        state.accountMarket = "SE"
+
+        XCTAssertEqual(state.formattedBuildWeek, "2022 · W40")
+
+        let encoded = try JSONEncoder().encode(state)
+        let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
+
+        XCTAssertEqual(decoded.structureWeek, "202240")
+        XCTAssertEqual(decoded.formattedBuildWeek, "2022 · W40")
+        XCTAssertEqual(decoded.internalVehicleIdentifier, "UUID-POL-12345")
+        XCTAssertEqual(decoded.pno34, "PNO34-SPEC-2023")
+        XCTAssertEqual(decoded.accountMarket, "SE")
+    }
+
+    @Test
+    func testChargeLocationSchedulesDecodesLocationName() {
+        var timerData = Data()
+        timerData.append(Protobuf.intField(2, 1)) // isActive = true
+        timerData.append(Protobuf.messageField(3, dailyTime(hour: 22, minute: 0))) // start 22:00
+        timerData.append(Protobuf.messageField(4, dailyTime(hour: 6, minute: 0)))  // stop 06:00
+
+        var locationData = Data()
+        locationData.append(Protobuf.stringField(2, "Home Garage"))
+        locationData.append(Protobuf.messageField(10, timerData))
+
+        var payload = Data()
+        payload.append(Protobuf.messageField(3, locationData))
+
+        let schedules = PolestarGRPC.parseChargeLocationSchedules(payload)
+        XCTAssertEqual(schedules.count, 1)
+        XCTAssertEqual(schedules.first?.locationName, "Home Garage")
+        XCTAssertEqual(schedules.first?.startHour, 22)
+        XCTAssertEqual(schedules.first?.endHour, 6)
+        XCTAssertTrue(schedules.first?.isActive == true)
+    }
+
+    @Test
+    func testClimateParsesSeatAndSteeringWheelHeatingLevels() {
+        var payload = Data()
+        payload.append(Protobuf.intField(1, 1)) // running = 1
+        payload.append(Protobuf.intField(4, 2)) // action = heating
+        payload.append(Protobuf.intField(10, 3)) // driver seat level 3
+        payload.append(Protobuf.intField(11, 2)) // passenger seat level 2
+        payload.append(Protobuf.intField(12, 1)) // steering wheel heating active
+
+        let climate = PolestarGRPC.parseClimate(payload)
+        XCTAssertEqual(climate.activity, .heating)
+        XCTAssertEqual(climate.driverSeatHeatingLevel, 3)
+        XCTAssertEqual(climate.passengerSeatHeatingLevel, 2)
+        XCTAssertEqual(climate.steeringWheelHeatingLevel, 1)
+    }
+
+    @Test
+    func testVehicleProbedCapabilitiesInspector() {
+        var probed = VehicleProbedCapabilities()
+        probed.record(.climateStartStop, as: .supported)
+        probed.record(.windows, as: .unavailable)
+        probed.record(.softwareInstallControl, as: .supported)
+
+        XCTAssertEqual(probed.support(for: .climateStartStop), .supported)
+        XCTAssertEqual(probed.support(for: .windows), .unavailable)
+        XCTAssertEqual(probed.allResults.count, 3)
+        XCTAssertEqual(probed.resultsMap[.softwareInstallControl], .supported)
+    }
+
+    @Test
+    func testCarRenderAnglePreferences() {
+        XCTAssertEqual(CarRenderAngle.allCases.count, 4)
+        XCTAssertEqual(CarRenderAngle.frontThreeQuarter.rawValue, 0)
+        XCTAssertEqual(CarRenderAngle.rearThreeQuarter.rawValue, 1)
+        XCTAssertEqual(CarRenderAngle.sideProfile.rawValue, 2)
+        XCTAssertEqual(CarRenderAngle.overhead.rawValue, 3)
+    }
+
     private func dailyTime(hour: Int, minute: Int) -> Data {
         var data = Data()
         data.append(Protobuf.intField(1, hour))

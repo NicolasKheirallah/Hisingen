@@ -471,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
         case .presentation:
-            break
+            refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
         }

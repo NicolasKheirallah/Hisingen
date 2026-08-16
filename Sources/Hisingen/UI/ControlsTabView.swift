@@ -36,7 +36,8 @@ struct ControlsTabView: View {
         hasAnyVisibleChargingControls ||
         features.contains(.remoteLocks) ||
         (features.contains(.remoteWindows) && profile.permits(.windows)) ||
-        features.contains(.remoteHonkFlash)
+        features.contains(.remoteHonkFlash) ||
+        (features.contains(.remoteOTA) && profile.permits(.softwareInstallControl))
     }
 
     var body: some View {
@@ -54,6 +55,9 @@ struct ControlsTabView: View {
                 }
                 if (features.contains(.remoteWindows) && profile.permits(.windows)) || features.contains(.remoteHonkFlash) {
                     windowsLocateCard
+                }
+                if features.contains(.remoteOTA) && profile.permits(.softwareInstallControl) {
+                    otaControlCard
                 }
             } else {
                 noControlsEnabledCard
@@ -580,6 +584,42 @@ struct ControlsTabView: View {
             }
         }
         .opacity(isBrandVolvo ? 1.0 : 0.65)
+    }
+
+    private var otaControlCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "shippingbox.fill", title: L10n.text("Vehicle Software & OTA"), color: .blue)
+                if let software = state.softwareInfo, software.state == .available || software.state == .downloaded {
+                    let version = software.latestAvailableVersion ?? software.version ?? "Update"
+                    Text(L10n.format("Software update %@ is downloaded and ready to install.", version))
+                        .font(.system(size: 11))
+                        .foregroundStyle(HisingenTheme.ink)
+
+                    Button {
+                        onRemoteCommand(.installOTANow)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text(L10n.text("Install Update Now"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.regular)
+                    .disabled(remoteCommandInProgress)
+                } else {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(HisingenTheme.semanticGood)
+                        Text(L10n.text("Software is up to date"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(HisingenTheme.ink)
+                    }
+                }
+            }
+        }
     }
 
     private var noControlsEnabledCard: some View {

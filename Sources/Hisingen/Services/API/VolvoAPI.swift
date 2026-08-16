@@ -369,8 +369,9 @@ actor VolvoAPI {
         let estMinutes: Int? = energy?.estTimeToTargetMinutes
         let targetPct: Int? = energy?.targetPercent
         let chargingWatts: Int? = energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) }
-        let rawAmps = energy?.chargingCurrent?.value ?? energy?.chargingCurrentLimit?.value
-        let chargingAmps: Int? = rawAmps.map { Int($0.rounded()) }
+        let currentDrawAmps: Int? = energy?.chargingCurrent?.value.map { Int($0.rounded()) }
+        let currentLimitAmps: Int? = energy?.chargingCurrentLimit?.value.map { Int($0.rounded()) }
+        let chargingAmps: Int? = currentDrawAmps ?? currentLimitAmps
         let chargingVolts: Int? = energy?.chargingVoltage?.value.map { Int($0.rounded()) }
         let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStatus?.value)
         let chargerConn: ChargerConnection = ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value)
@@ -425,7 +426,7 @@ actor VolvoAPI {
             estimatedChargingTimeToFullMinutes: estMinutes,
             chargeTargetPercentage: targetPct,
             chargingPowerWatts: chargingWatts,
-            chargingCurrentAmps: chargingAmps,
+            chargingCurrentAmps: currentDrawAmps ?? chargingAmps,
             chargingVoltageVolts: chargingVolts,
             chargingType: .unknown,
             chargerConnection: chargerConn,
@@ -467,6 +468,11 @@ actor VolvoAPI {
         state.averageFuelConsumptionLPer100Km = avgFuelConsumption
         state.isEngineRunning = isEngineRunning
         state.fuelType = details.fuelType
+        state.upholstery = details.descriptions?.upholstery
+        state.steeringOrientation = details.descriptions?.steering
+        state.serviceTrigger = diagnostics?.serviceTrigger?.value
+        state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBattery?.value
+        state.chargingCurrentLimitAmps = currentLimitAmps
         return state
     }
 

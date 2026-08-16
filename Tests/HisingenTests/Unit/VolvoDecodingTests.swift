@@ -23,6 +23,8 @@ struct VolvoDecodingTests {
     func testBEVVehicleDetailsFixtureDecodes() throws {
         let details = try loadFixture("volvo-vehicle-details-bev", as: VolvoVehicleDetailsDTO.self)
         XCTAssertEqual(details.descriptions?.model, "EX30")
+        XCTAssertEqual(details.descriptions?.upholstery, "Fixture Textile")
+        XCTAssertEqual(details.descriptions?.steering, "Left")
         XCTAssertEqual(details.batteryCapacityKWH, 64.0)
         XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .bev)
     }
@@ -117,6 +119,7 @@ struct VolvoDecodingTests {
     func testDiagnosticsFixtureOnlyReportsActualWarnings() throws {
         let diagnostics = try loadFixture("volvo-diagnostics", as: VolvoDiagnosticsDTO.self)
         XCTAssertFalse(diagnostics.hasServiceWarning)
+        XCTAssertEqual(diagnostics.serviceTrigger?.value, "CALENDAR_TIME")
         XCTAssertEqual(diagnostics.fluidWarnings, ["Oil"])
         XCTAssertEqual(diagnostics.vehicleWarnings, [.oil])
 
@@ -246,15 +249,19 @@ struct VolvoDecodingTests {
                 "brakeLightCenterWarning": {"value": "NO_WARNING"},
                 "brakeLightLeftWarning": {"value": "BULB_FAILURE"},
                 "highBeamRightWarning": {"value": "FAILURE"},
-                "lowBeamLeftWarning": {"value": "NO_WARNING"}
+                "lowBeamLeftWarning": {"value": "NO_WARNING"},
+                "hazardLightsWarning": {"value": "FAULT"},
+                "reverseLightsWarning": {"value": "FAILURE"}
             }
         }
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoWarningsDTO>.self, from: Data(json.utf8))
         let warnings = try XCTUnwrap(envelope.data)
-        XCTAssertEqual(warnings.activeWarnings.count, 2)
+        XCTAssertEqual(warnings.activeWarnings.count, 4)
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Left brake light") }))
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
     }
 
     @Test
@@ -359,6 +366,31 @@ struct VolvoDecodingTests {
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
         let dto = try XCTUnwrap(envelope.data)
         XCTAssertTrue(dto.isAvailable)
+    }
+
+    @Test
+    func testVehicleStateFormattedHelpers() {
+        var state = VehicleState(
+            batteryPercentage: 80, rangeKm: 300, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "EX30", modelYear: "2024", registrationNo: nil, vin: "YV1TEST00001",
+            ownerFirstName: nil, odometerKm: 10000, daysToService: 150, distanceToServiceKm: 8500,
+            serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: Date(),
+            vehicleReportedAt: Date(), dataWarnings: []
+        )
+        state.serviceTrigger = "CALENDAR_TIME"
+        state.steeringOrientation = "Left"
+        state.upholstery = "Nordico"
+        state.tripComputerElectricRangeKm = 310
+        state.chargingCurrentLimitAmps = 32
+
+        XCTAssertEqual(state.formattedServiceTrigger, "Time")
+        XCTAssertEqual(state.formattedSteeringOrientation, "Left-hand drive")
+        XCTAssertEqual(state.upholstery, "Nordico")
+        XCTAssertEqual(state.tripComputerElectricRangeKm, 310)
+        XCTAssertEqual(state.chargingCurrentLimitAmps, 32)
     }
 }
 

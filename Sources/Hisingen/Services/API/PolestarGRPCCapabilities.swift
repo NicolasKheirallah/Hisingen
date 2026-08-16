@@ -371,10 +371,42 @@ extension PolestarGRPC {
         if let value = varint(fields, 7), value > 1 { warnings.append(.engineCoolant) }
         if let value = varint(fields, 8), value > 1 { warnings.append(.oil) }
         if let value = varint(fields, 13), value > 1 { warnings.append(.washerFluid) }
-        if (14...35).contains(where: { varint(fields, $0) == 2 }) { warnings.append(.exteriorLight) }
+        var lightFailures: [String] = []
+        let lightDescriptions: [Int: String] = [
+            14: L10n.text("Left low beam"),
+            15: L10n.text("Right low beam"),
+            16: L10n.text("Left high beam"),
+            17: L10n.text("Right high beam"),
+            18: L10n.text("Left front indicator"),
+            19: L10n.text("Right front indicator"),
+            20: L10n.text("Left rear indicator"),
+            21: L10n.text("Right rear indicator"),
+            22: L10n.text("Left daytime running light"),
+            23: L10n.text("Right daytime running light"),
+            24: L10n.text("Left position light"),
+            25: L10n.text("Right position light"),
+            26: L10n.text("Left brake light"),
+            27: L10n.text("Right brake light"),
+            28: L10n.text("Center brake light"),
+            29: L10n.text("Left reversing light"),
+            30: L10n.text("Right reversing light"),
+            31: L10n.text("Left fog light"),
+            32: L10n.text("Right fog light"),
+            33: L10n.text("Rear fog light"),
+            34: L10n.text("License plate light"),
+            35: L10n.text("Side marker light")
+        ]
+        for fieldNum in 14...35 {
+            if varint(fields, fieldNum) == 2, let desc = lightDescriptions[fieldNum] {
+                lightFailures.append(desc)
+            }
+        }
+        if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
+            warnings.append(.exteriorLight)
+        }
         if varint(fields, 38) == 2 { warnings.append(.lowVoltageBattery) }
         return GrpcHealthReport(
-            details: VehicleHealthDetails(tyres: tyres, warnings: warnings),
+            details: VehicleHealthDetails(tyres: tyres, warnings: warnings, lightFailures: lightFailures),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),
             serviceWarning: warnings.contains(.service)
@@ -442,6 +474,7 @@ extension PolestarGRPC {
     static func parseChargeLocationSchedules(_ data: Data) -> [VehicleSchedule] {
         Protobuf.fields(data).filter { $0.number == 3 && $0.wire == 2 }.flatMap { location -> [VehicleSchedule] in
             let fields = Protobuf.fields(location.data)
+            let locName = string(fields, 2).nilIfEmpty
             let chargeTimers = fields.filter { $0.number == 10 && $0.wire == 2 }.compactMap { timer -> VehicleSchedule? in
                 let values = Protobuf.fields(timer.data)
                 guard let start = dailyTime(message(values, field: 3)),
@@ -449,7 +482,8 @@ extension PolestarGRPC {
                 return VehicleSchedule(kind: .locationCharging, startHour: start.0, startMinute: start.1,
                                        endHour: stop.0, endMinute: stop.1,
                                        weekdays: weekdays(message(values, field: 5)),
-                                       isActive: varint(values, 2) == 1)
+                                       isActive: varint(values, 2) == 1,
+                                       locationName: locName)
             }
             let departures = fields.filter { $0.number == 11 && $0.wire == 2 }.compactMap { departure -> VehicleSchedule? in
                 let values = Protobuf.fields(departure.data)
@@ -457,7 +491,8 @@ extension PolestarGRPC {
                 return VehicleSchedule(kind: .departure, startHour: time.0, startMinute: time.1,
                                        endHour: nil, endMinute: nil,
                                        weekdays: weekdays(message(values, field: 4)),
-                                       isActive: varint(values, 2) == 1)
+                                       isActive: varint(values, 2) == 1,
+                                       locationName: locName)
             }
             return chargeTimers + departures
         }
@@ -471,6 +506,9 @@ extension PolestarGRPC {
         let remaining = positiveInt(varint(fields, 3))
         let interiorTemperature = digitalTwin ? numeric(fields, 7) : nil
         let requestedTemperature = digitalTwin ? numeric(fields, 8) : nil
+        let driverSeat = varint(fields, 10).flatMap { $0 > 0 ? Int($0) : nil }
+        let passengerSeat = varint(fields, 11).flatMap { $0 > 0 ? Int($0) : nil }
+        let steeringWheel = varint(fields, 12).flatMap { $0 > 0 ? Int($0) : nil }
         let activity: ClimateActivity
         if digitalTwin {
 
@@ -505,7 +543,10 @@ extension PolestarGRPC {
         return VehicleClimateStatus(activity: activity, timeRemainingMinutes: remaining,
                                     timerTriggered: timerTriggered,
                                     interiorTemperatureCelsius: interiorTemperature,
-                                    requestedTemperatureCelsius: requestedTemperature)
+                                    requestedTemperatureCelsius: requestedTemperature,
+                                    driverSeatHeatingLevel: driverSeat,
+                                    passengerSeatHeatingLevel: passengerSeat,
+                                    steeringWheelHeatingLevel: steeringWheel)
     }
 
     static func parseClimateTimers(_ data: Data) -> [VehicleSchedule] {

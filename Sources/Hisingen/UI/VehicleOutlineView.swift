@@ -135,48 +135,48 @@ struct VehicleSideProfileDoorsView: View {
 
                 // --- INTERACTIVE ANIMATED GLOW ZONES ---
 
-                // 1. Front Headlights Beam (SVG X≈1560, Y≈370)
+                // 1. Front Headlights Beam (traced lamp cluster: SVG X=[1419..1583], Y=[347..407])
                 if hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered {
                     headlightsGlow(og: og, active: hoodOpen || frontDoorOpen || frontWindowOpen, hovered: hoodHovered || frontDoorHovered || frontWindowHovered)
                 }
 
-                // 2. Rear Taillights Glow (SVG X≈120, Y≈330)
+                // 2. Rear Taillights Glow (traced lamp cluster: SVG X=[72..211], Y=[278..343])
                 if tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen || tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered {
                     taillightsGlow(og: og, active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen, hovered: tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered)
                 }
 
-                // 3. Hood Zone (Front Bonnet: SVG X=[1122..1541], Y=[275..407])
+                // 3. Hood Zone (traced bonnet sliver: SVG X=[1122..1541], Y=[275..361])
                 openingZone(
                     kind: .hood,
-                    u: 0.8095, v: 0.4388,
-                    wFraction: 0.2547, hFraction: 0.1624,
+                    u: 0.8094, v: 0.4135,
+                    wFraction: 0.2369, hFraction: 0.1040,
                     open: hoodOpen, hovered: hoodHovered,
                     label: "Hood", og: og
                 )
 
-                // 4. Tailgate Zone (Rear Boot: SVG X=[45..381], Y=[156..479])
+                // 4. Tailgate Zone (traced rear hatch cluster: SVG X=[45..410], Y=[156..479])
                 openingZone(
                     kind: .tailgate,
-                    u: 0.1350, v: 0.3900,
-                    wFraction: 0.2000, hFraction: 0.3800,
+                    u: 0.1383, v: 0.4129,
+                    wFraction: 0.2064, hFraction: 0.3906,
                     open: tailgateOpen, hovered: tailgateHovered,
                     label: "Tailgate", og: og
                 )
 
-                // 5. Front Door Zone (SVG X=[762..1149], Y=[288..545])
+                // 5. Front Door Zone (traced door skin + rocker sill: SVG X=[766..1152], Y=[288..545])
                 openingZone(
                     kind: .frontDoor,
-                    u: 0.5830, v: 0.5234,
-                    wFraction: 0.2346, hFraction: 0.2978,
+                    u: 0.5830, v: 0.5416,
+                    wFraction: 0.2183, hFraction: 0.3108,
                     open: frontDoorOpen, hovered: frontDoorHovered,
                     label: "Front Door", og: og
                 )
 
-                // 6. Rear Door Zone (SVG X=[414..789], Y=[276..539])
+                // 6. Rear Door Zone (traced door skin + rocker sill: SVG X=[414..781], Y=[276..539])
                 openingZone(
                     kind: .rearDoor,
-                    u: 0.3632, v: 0.4584,
-                    wFraction: 0.2231, hFraction: 0.1990,
+                    u: 0.3632, v: 0.5299,
+                    wFraction: 0.2075, hFraction: 0.3181,
                     open: rearDoorOpen, hovered: rearDoorHovered,
                     label: "Rear Door", og: og
                 )
@@ -242,10 +242,10 @@ struct VehicleSideProfileDoorsView: View {
             zoneShape(kind: kind)
                 .fill(
                     RadialGradient(
-                        colors: [activeColor.opacity(open ? 0.55 : 0.40), activeColor.opacity(0.08)],
+                        colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
                         center: .center,
                         startRadius: 2,
-                        endRadius: max(size.width, size.height) * 0.75
+                        endRadius: max(size.width, size.height) * 0.55
                     )
                 )
                 .overlay(
@@ -253,8 +253,8 @@ struct VehicleSideProfileDoorsView: View {
                         .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
                 )
                 .frame(width: size.width, height: size.height)
-                .shadow(color: activeColor.opacity(open ? 0.65 : 0.35), radius: open ? 6 : 4)
-                .scaleEffect(hovered || open ? 1.05 : 1.0)
+                .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
+                .scaleEffect(hovered || open ? 1.02 : 1.0)
                 .position(pos)
                 .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
         }
@@ -276,8 +276,9 @@ struct VehicleSideProfileDoorsView: View {
     @ViewBuilder
     private func headlightsGlow(og: OutlineGeometry, active: Bool, hovered: Bool) -> some View {
         let color = active ? HisingenTheme.semanticWarning : HisingenTheme.accent
-        let pos = og.point(u: 0.950, v: 0.485)
-        let size = og.size(wFraction: 0.12, hFraction: 0.16)
+        // Traced lamp cluster centroid: SVG X=[1419..1583], Y=[347..407]
+        let pos = og.point(u: 0.9125, v: 0.4902)
+        let size = og.size(wFraction: 0.13, hFraction: 0.11)
 
         Ellipse()
             .fill(
@@ -296,8 +297,9 @@ struct VehicleSideProfileDoorsView: View {
     @ViewBuilder
     private func taillightsGlow(og: OutlineGeometry, active: Bool, hovered: Bool) -> some View {
         let color = active ? HisingenTheme.semanticWarning : Color.red
-        let pos = og.point(u: 0.080, v: 0.435)
-        let size = og.size(wFraction: 0.10, hFraction: 0.14)
+        // Traced lamp cluster centroid: SVG X=[72..211], Y=[278..343]
+        let pos = og.point(u: 0.0860, v: 0.4038)
+        let size = og.size(wFraction: 0.11, hFraction: 0.12)
 
         Ellipse()
             .fill(
@@ -560,7 +562,6 @@ struct VehicleSideProfileTiresView: View {
                     .fill(activeColor.opacity(warning ? 0.35 : 0.22))
                     .frame(width: ringSize + 10, height: ringSize + 10)
                     .scaleEffect(hovered ? 1.15 : 1.0)
-                    .position(pos)
                     .blur(radius: 2)
             }
 
@@ -568,7 +569,6 @@ struct VehicleSideProfileTiresView: View {
             Circle()
                 .stroke(activeColor.opacity(warning ? 0.95 : 0.75), lineWidth: warning ? 2.0 : 1.5)
                 .frame(width: ringSize, height: ringSize)
-                .position(pos)
                 .shadow(color: activeColor.opacity(warning ? 0.6 : 0.3), radius: warning ? 4 : 2)
 
             // Inner hubcap dot
