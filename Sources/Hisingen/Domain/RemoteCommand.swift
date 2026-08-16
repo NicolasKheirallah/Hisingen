@@ -40,6 +40,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case closeWindows
     case flashLights
     case honkAndFlash
+    case honkHorn
     case setChargeTarget(Int)
     case setAmpLimit(Int)
     case startChargingOverride
@@ -57,7 +58,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startPreCleaning, .stopPreCleaning: return .remotePreCleaning
         case .lock, .unlock, .unlockTrunk: return .remoteLocks
         case .openWindows, .closeWindows: return .remoteWindows
-        case .flashLights, .honkAndFlash: return .remoteHonkFlash
+        case .flashLights, .honkAndFlash, .honkHorn: return .remoteHonkFlash
         case .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride:
             return .remoteCharging
         case .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer:
@@ -73,7 +74,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .lock, .unlock: return .locks
         case .unlockTrunk: return .trunk
         case .openWindows, .closeWindows: return .windows
-        case .flashLights, .honkAndFlash: return .honkAndFlash
+        case .flashLights, .honkAndFlash, .honkHorn: return .honkAndFlash
         case .setChargeTarget: return .chargeTarget
         case .setAmpLimit: return .chargingCurrentLimit
         case .startChargingOverride, .stopChargingOverride: return .chargingScheduleOverride
@@ -123,6 +124,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .closeWindows: return "close-windows"
         case .flashLights: return "flash-lights"
         case .honkAndFlash: return "honk-flash"
+        case .honkHorn: return "honk-horn"
         case .setChargeTarget: return "set-charge-target"
         case .setAmpLimit: return "set-amp-limit"
         case .startChargingOverride: return "start-charge-override"
@@ -155,6 +157,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .closeWindows: return L10n.text("Close all windows")
         case .flashLights: return L10n.text("Flash lights")
         case .honkAndFlash: return L10n.text("Honk and flash")
+        case .honkHorn: return L10n.text("Honk horn")
         case .setChargeTarget(let target): return L10n.format("Set charge target to %d%%", target)
         case .setAmpLimit(let amps): return L10n.format("Set charging current to %d A", amps)
         case .startChargingOverride: return L10n.text("Charge now (override schedule)")

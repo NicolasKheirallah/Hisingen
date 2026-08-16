@@ -198,10 +198,16 @@ struct ConsumerCarDTO: Decodable {
     let registrationNo: String?
     let pno34: String?
     let structureWeek: StringOrInt?
+    let exteriorColorName: String?
+    let upholsteryName: String?
+    let wheelsName: String?
+    let packageNames: [String]
 
     init(vin: String?, internalVehicleIdentifier: String? = nil,
          modelName: String?, modelYear: StringOrInt?, registrationNo: String?,
-            pno34: String?, structureWeek: StringOrInt?) {
+         pno34: String?, structureWeek: StringOrInt?,
+         exteriorColorName: String? = nil, upholsteryName: String? = nil,
+         wheelsName: String? = nil, packageNames: [String] = []) {
         self.vin = vin
         self.internalVehicleIdentifier = internalVehicleIdentifier
         self.modelName = modelName
@@ -209,11 +215,15 @@ struct ConsumerCarDTO: Decodable {
         self.registrationNo = registrationNo
         self.pno34 = pno34
         self.structureWeek = structureWeek
+        self.exteriorColorName = exteriorColorName
+        self.upholsteryName = upholsteryName
+        self.wheelsName = wheelsName
+        self.packageNames = packageNames
     }
 
     private enum CodingKeys: String, CodingKey {
         case vin, internalVehicleIdentifier, modelName, modelYear
-        case registrationNo, pno34, structureWeek
+        case registrationNo, pno34, structureWeek, exteriorColorName, upholsteryName, wheelsName, packageNames
     }
 
     init(from decoder: Decoder) throws {
@@ -225,6 +235,10 @@ struct ConsumerCarDTO: Decodable {
         registrationNo = try container.decodeIfPresent(String.self, forKey: .registrationNo)
         pno34 = try container.decodeIfPresent(String.self, forKey: .pno34)
         structureWeek = try container.decodeIfPresent(StringOrInt.self, forKey: .structureWeek)
+        exteriorColorName = try container.decodeIfPresent(String.self, forKey: .exteriorColorName)
+        upholsteryName = try container.decodeIfPresent(String.self, forKey: .upholsteryName)
+        wheelsName = try container.decodeIfPresent(String.self, forKey: .wheelsName)
+        packageNames = try container.decodeIfPresent([String].self, forKey: .packageNames) ?? []
     }
 }
 
@@ -245,6 +259,14 @@ struct AppBackendCarDTO: Decodable {
 
     struct Content: Decodable {
         let model: Model?
+        let exteriorColor: NamedOption?
+        let upholstery: NamedOption?
+        let wheels: NamedOption?
+        let packages: [NamedOption]?
+    }
+
+    struct NamedOption: Decodable {
+        let name: String?
     }
 
     struct Model: Decodable {
@@ -259,7 +281,11 @@ struct AppBackendCarDTO: Decodable {
             modelYear: modelYear,
             registrationNo: registrationNo,
             pno34: nil,
-            structureWeek: nil
+            structureWeek: nil,
+            exteriorColorName: content?.exteriorColor?.name,
+            upholsteryName: content?.upholstery?.name,
+            wheelsName: content?.wheels?.name,
+            packageNames: content?.packages?.compactMap(\.name) ?? []
         )
     }
 }

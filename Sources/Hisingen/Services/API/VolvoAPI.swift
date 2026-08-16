@@ -515,6 +515,7 @@ actor VolvoAPI {
         case .stopClimate: commandName = "climatization-stop"
         case .honkAndFlash: commandName = "honk-flash"
         case .flashLights: commandName = "flash"
+        case .honkHorn: commandName = "honk"
         default:
             throw RemoteCommandError.unsupported
         }
@@ -538,10 +539,51 @@ actor VolvoAPI {
         }
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let dataObj = json["data"] as? [String: Any] {
-            let status = dataObj["invokeStatus"] as? String
+            let status = (dataObj["invokeStatus"] as? String)?.uppercased()
             let msg = dataObj["message"] as? String
-            let outcome: RemoteCommandOutcome = (status == "COMPLETED" || status == "DELIVERED") ? .completed : .accepted
-            return RemoteCommandResult(outcome: outcome, message: msg?.isEmpty == false ? msg : nil)
+            if status == "COMPLETED" || status == "DELIVERED" {
+                return RemoteCommandResult(outcome: .completed, message: msg?.isEmpty == false ? msg : nil)
+            }
+            if let commandId = dataObj["commandId"] as? String, !commandId.isEmpty {
+                return await pollCommandStatus(vin: vin, commandId: commandId, commandName: commandName, accessToken: accessToken)
+            }
+            return RemoteCommandResult(outcome: .accepted, message: msg?.isEmpty == false ? msg : nil)
+        }
+        return RemoteCommandResult(outcome: .accepted, message: nil)
+    }
+
+    private func pollCommandStatus(
+        vin: String,
+        commandId: String,
+        commandName: String,
+        accessToken: String,
+        maxAttempts: Int = 6,
+        intervalSeconds: UInt64 = 2
+    ) async -> RemoteCommandResult {
+        guard let vccApiKey else { return RemoteCommandResult(outcome: .accepted, message: nil) }
+        var request = URLRequest(url: apiURL(
+            path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandId)"
+        ))
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
+
+        for _ in 0..<maxAttempts {
+            try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
+            guard let (data, response) = try? await perform(request, operation: "poll command: \(commandName)"),
+                  response.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let dataObj = json["data"] as? [String: Any] else {
+                continue
+            }
+            let status = (dataObj["invokeStatus"] as? String)?.uppercased()
+            let msg = dataObj["message"] as? String
+            if status == "COMPLETED" || status == "DELIVERED" {
+                return RemoteCommandResult(outcome: .completed, message: msg?.isEmpty == false ? msg : nil)
+            }
+            if status == "FAILED" || status == "REJECTED" {
+                return RemoteCommandResult(outcome: .accepted, message: msg ?? L10n.text("Vehicle reported command failed"))
+            }
         }
         return RemoteCommandResult(outcome: .accepted, message: nil)
     }

@@ -115,6 +115,31 @@ struct RemoteCommandTests {
         }
     }
 
+    @Test
+    func testHonkHornCommandProperties() {
+        let honk = RemoteCommand.honkHorn
+        XCTAssertEqual(honk.feature, .remoteHonkFlash)
+        XCTAssertEqual(honk.requiredCapability, .honkAndFlash)
+        XCTAssertEqual(honk.risk, .routine)
+        XCTAssertEqual(honk.identifier, "honk-horn")
+        XCTAssertFalse(honk.title.isEmpty)
+    }
+
+    @Test
+    func testHonkFlashWireRequests() {
+        let honkAndFlash = PolestarGRPC.honkFlashRequest("VIN123", action: 0)
+        let honkOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 1)
+        let flashOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 2)
+
+        let hfFields = Protobuf.fields(honkAndFlash)
+        let hoFields = Protobuf.fields(honkOnly)
+        let foFields = Protobuf.fields(flashOnly)
+
+        XCTAssertEqual(hfFields.first { $0.number == 2 }?.varint, 0)
+        XCTAssertEqual(hoFields.first { $0.number == 2 }?.varint, 1)
+        XCTAssertEqual(foFields.first { $0.number == 2 }?.varint, 2)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))

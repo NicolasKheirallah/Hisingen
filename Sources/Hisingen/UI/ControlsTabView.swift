@@ -567,6 +567,20 @@ struct ControlsTabView: View {
                         .disabled(isBrandVolvo ? remoteCommandInProgress : true)
 
                         Button {
+                            onRemoteCommand(.honkHorn)
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.system(size: 13))
+                                Text(L10n.text("Honk Horn"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+
+                        Button {
                             onRemoteCommand(.honkAndFlash)
                         } label: {
                             VStack(spacing: 3) {
