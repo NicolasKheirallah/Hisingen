@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 struct HisingenContentView: View {
@@ -903,13 +904,36 @@ struct VehicleTabView: View {
                 }
 
                 if !state.chargingSessions.isEmpty {
-                    DisclosureGroup(L10n.text("Charging History")) {
+                    DisclosureGroup {
                         VStack(spacing: 8) {
                             ForEach(state.chargingSessions.reversed(), id: \.id) { session in
                                 ChargingSessionRow(session: session)
                             }
+                            Divider().opacity(0.4)
+                            HStack {
+                                Spacer()
+                                Button {
+                                    exportChargingHistoryCSV(sessions: state.chargingSessions)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "square.and.arrow.up")
+                                        Text(L10n.text("Export CSV"))
+                                    }
+                                    .font(.system(size: 10, weight: .medium))
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.mini)
+                            }
                         }
                         .padding(.top, 6)
+                    } label: {
+                        HStack {
+                            Text(L10n.text("Charging History"))
+                            Spacer()
+                            Text(L10n.format("%d sessions", state.chargingSessions.count))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())
                     .font(.system(size: 12, weight: .medium))
@@ -1273,10 +1297,16 @@ struct VehicleTabView: View {
             })
         }
         var rows: [KVRow] = []
-        let installed = software.installedVersion ?? software.version ?? "5.1.17"
-        let latest = software.latestAvailableVersion ?? software.version ?? "5.1.17"
-        rows.append(KVRow(L10n.text("Installed Version"), installed, symbol: "checkmark.seal.fill"))
-        rows.append(KVRow(L10n.text("Available Version"), latest, symbol: "shippingbox.fill"))
+        // installedVersion and latestAvailableVersion are mutually exclusive: Polestar's backend
+        // only ever reports one version string at a time, either what's currently on the car or
+        // the pending update target, never both — so don't fall back to `version` for whichever
+        // one is nil, that would just re-duplicate the other row's value.
+        if let installed = software.installedVersion {
+            rows.append(KVRow(L10n.text("Installed Version"), installed, symbol: "checkmark.seal.fill"))
+        }
+        if let latest = software.latestAvailableVersion {
+            rows.append(KVRow(L10n.text("Available Version"), latest, symbol: "shippingbox.fill"))
+        }
         if let title = software.title {
             rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text"))
         }
@@ -1301,7 +1331,8 @@ struct VehicleTabView: View {
                     HStack {
                         Image(systemName: "arrow.down.circle.fill")
                             .foregroundStyle(Color.accentColor)
-                        Text(L10n.format("Version %@ is ready to install in Controls.", latest))
+                        Text(L10n.format("Version %@ is ready to install in Controls.",
+                                        software.latestAvailableVersion ?? software.version ?? "—"))
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(HisingenTheme.ink)
                     }
@@ -1366,6 +1397,26 @@ struct VehicleTabView: View {
                 }
             }
         })
+    }
+
+    private func exportChargingHistoryCSV(sessions: [ChargingSession]) {
+        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
+        let rows = sessions.map { s in
+            let dateStr = ISO8601DateFormatter().string(from: s.startDate)
+            let costStr = s.estimatedCost(tariff: Preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
+            let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
+            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(Preferences.currencySymbol)"
+        }.joined(separator: "\n")
+        let csvData = headers + rows
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "charging_history_\(state.vin.prefix(8)).csv"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? csvData.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
     }
 }
 
@@ -2210,8 +2261,8 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
-                    if let cost = session.cost {
-                        KVRow(L10n.text("Cost"), String(format: "%.2f %@", cost, Preferences.currencySymbol), symbol: "creditcard")
+                    if let cost = session.estimatedCost(tariff: Preferences.electricityPricePerKwh) {
+                        KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, Preferences.currencySymbol), symbol: "creditcard")
                     }
                 }
             }
@@ -2221,7 +2272,8 @@ struct ChargingSessionRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .font(.system(size: 11, weight: .medium))
-                    Text(String(format: "+%.0f%% · %.1f kWh", session.percentageAdded, session.kwhDelivered))
+                    let costStr = session.estimatedCost(tariff: Preferences.electricityPricePerKwh).map { String(format: " · %.2f %@", $0, Preferences.currencySymbol) } ?? ""
+                    Text(String(format: "+%.0f%% · %.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }

@@ -107,13 +107,15 @@ extension PolestarGRPC {
             )
         }
         if let scheduledAt {
+            // Only a schedule was found, with no accompanying GetSoftwareInfo payload; "5.1.17"
+            // here is a pending target version, not something known to be already installed.
             return VehicleSoftwareInfo(
                 version: "5.1.17",
                 title: "5.1.17",
                 state: .scheduled,
                 scheduledAt: scheduledAt,
                 updatedAt: nil,
-                installedVersion: "5.1.17",
+                installedVersion: nil,
                 latestAvailableVersion: "5.1.17"
             )
         }
@@ -451,14 +453,31 @@ extension PolestarGRPC {
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
         let parsedVersion = string(fields, 6).nilIfEmpty ?? "5.1.17"
         let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? parsedVersion
+
+        // GetSoftwareInfo only ever reports one version string. When an update is pending
+        // (available/downloading/downloaded/installing/scheduled/deferred), that string is the
+        // target version being offered, not what's currently running — Polestar's backend does
+        // not expose the installed version in that case, so leave it unknown rather than
+        // duplicating the target version into it. When nothing is pending, the string reflects
+        // whatever is already on the car.
+        let updatePending: Bool
+        switch state {
+        case .available, .downloading, .downloaded, .installing, .scheduled, .deferred:
+            updatePending = true
+        case .completed, .failed, .unknown:
+            updatePending = false
+        }
+        let installedVersion = updatePending ? nil : parsedVersion
+        let latestAvailableVersion = updatePending ? parsedVersion : nil
+
         return VehicleSoftwareInfo(
             version: parsedVersion,
             title: parsedTitle,
             state: state,
             scheduledAt: timestamp(schedule),
             updatedAt: timestamp(message(fields, field: 10)),
-            installedVersion: parsedVersion,
-            latestAvailableVersion: parsedVersion
+            installedVersion: installedVersion,
+            latestAvailableVersion: latestAvailableVersion
         )
     }
 

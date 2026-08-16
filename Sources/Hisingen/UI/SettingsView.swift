@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum SettingsChange {
@@ -556,8 +557,8 @@ struct SettingsView: View {
                                 .frame(width: 55)
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
-                                .onChange(of: electricityPrice) { newValue in
-                                    if let price = Double(newValue.replacingOccurrences(of: ",", with: ".")), price > 0 {
+                                .onChange(of: electricityPrice) { _ in
+                                    if let price = Double(electricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
                                         Preferences.electricityPricePerKwh = price
                                     }
                                 }
@@ -565,8 +566,8 @@ struct SettingsView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 45)
                                 .controlSize(.small)
-                                .onChange(of: currencySymbol) { newValue in
-                                    Preferences.currencySymbol = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .onChange(of: currencySymbol) { _ in
+                                    Preferences.currencySymbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
                                 }
                             Text("/kWh")
                                 .font(.system(size: 11))

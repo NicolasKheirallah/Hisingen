@@ -140,4 +140,47 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(polestarSoftware.state, .available)
         XCTAssertNotNil(polestarSoftware.scheduledAt)
     }
+
+    @Test
+    func testMenuBarStyleOptionsAndFormatting() {
+        XCTAssertEqual(MenuBarStyle.allCases.count, 8)
+        let sample = VehicleState(
+            batteryPercentage: 85, rangeKm: 350, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "Polestar 2", modelYear: "2024", registrationNo: nil, vin: "YSMTEST",
+            ownerFirstName: nil, odometerKm: 10000, daysToService: nil, distanceToServiceKm: nil,
+            serviceWarning: false, fluidWarnings: [], exteriorStatus: ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: false),
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+
+        XCTAssertEqual(Format.barTitle(for: sample, style: .battery, unit: .kilometers), "85%")
+        XCTAssertEqual(Format.barTitle(for: sample, style: .range, unit: .kilometers), "350km")
+        XCTAssertEqual(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers), "")
+        XCTAssertEqual(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers), "🔒 85%")
+    }
+
+    @Test
+    func testChargingSessionTariffCalculation() {
+        let session = ChargingSession(
+            id: UUID(), vin: "YSMTEST",
+            startDate: Date().addingTimeInterval(-3600), endDate: Date(),
+            startBatteryPercentage: 20, endBatteryPercentage: 80,
+            kwhDelivered: 45.0, peakPowerWatts: 150000, cost: nil
+        )
+
+        XCTAssertNil(session.cost)
+        XCTAssertEqual(session.estimatedCost(tariff: 0.20), 9.0)
+        XCTAssertEqual(session.estimatedCost(tariff: 1.50), 67.5)
+        XCTAssertNil(session.estimatedCost(tariff: nil))
+    }
+
+    @Test
+    func testRefreshPolicyAdaptiveInterval() {
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: false), 300)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: false), 60)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true), 60)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: true), 60)
+    }
 }

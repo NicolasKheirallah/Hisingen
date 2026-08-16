@@ -49,6 +49,8 @@ enum MenuBarStyle: String, CaseIterable, Codable {
     case compactCharging = "compact-charging"
     case batteryAndPower = "battery-and-power"
     case range = "range"
+    case iconOnly = "icon-only"
+    case lockAndBattery = "lock-and-battery"
 
     var title: String {
         switch self {
@@ -58,6 +60,8 @@ enum MenuBarStyle: String, CaseIterable, Codable {
         case .compactCharging: return L10n.text("Compact Charging")
         case .batteryAndPower: return L10n.text("Battery and Power")
         case .range: return L10n.text("Range")
+        case .iconOnly: return L10n.text("Icon Only (Minimal)")
+        case .lockAndBattery: return L10n.text("Lock Status and Battery")
         }
     }
 }

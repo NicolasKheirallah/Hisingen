@@ -27,7 +27,7 @@ struct RegressionFixTests {
         let software = PolestarGRPC.parseSoftware(payload)
         XCTAssertEqual(software.version, "5.0.10")
         XCTAssertEqual(software.state, .available)
-        XCTAssertEqual(software.installedVersion, "5.0.10")
+        XCTAssertNil(software.installedVersion)
         XCTAssertEqual(software.latestAvailableVersion, "5.0.10")
     }
 

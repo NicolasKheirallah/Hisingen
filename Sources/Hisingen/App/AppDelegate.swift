@@ -579,7 +579,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        if url.scheme?.lowercased() == "hisingen" {
+        guard url.scheme?.lowercased() == "hisingen" else { return }
+
+        if url.host == "oauth" || url.path.contains("callback") || url.query?.contains("code=") == true {
+            volvoSignInPresenter.handleCallbackURL(url)
+            return
+        }
+
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let command = host.isEmpty ? path : (path.isEmpty ? host : "\(host)/\(path)")
+
+        switch command {
+        case "refresh":
+            refreshCoordinator.refreshNow()
+
+        case "settings", "preferences":
+            statusController.showSettings()
+
+        case "toggle-settings":
+            statusController.toggleSettings()
+
+        case "status", "toggle":
+            statusController.togglePopover()
+
+        case "copy-vin":
+            if let vin = latest?.vin, !vin.isEmpty {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(vin, forType: .string)
+            }
+
+        case "climate/start", "climatization/start":
+            if Preferences.activeBrand == .volvo {
+                let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+                let temp = queryItems?.first(where: { $0.name == "temp" || $0.name == "temperature" })?
+                    .value.flatMap { Float($0) } ?? Float(Preferences.remoteClimateTemperature)
+                performRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "climate/stop", "climatization/stop":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.stopClimate)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "lock":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.lock)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "unlock":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.unlock)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "flash", "flash-lights":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.flashLights)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "honk-flash", "honk":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.honkAndFlash)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        default:
             volvoSignInPresenter.handleCallbackURL(url)
         }
     }
