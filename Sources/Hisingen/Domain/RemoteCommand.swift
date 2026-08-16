@@ -52,6 +52,30 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case installOTANow
     case cancelOTA
 
+    /// Whether *this app's client code for `brand`* can actually dispatch the command.
+    ///
+    /// Deliberately separate from `VehicleCapabilityProfile`, which answers a different
+    /// question: what the vehicle is able to do. A command can be perfectly supported by the
+    /// car and still unimplemented here, and the UI needs to tell those apart — otherwise a
+    /// control appears live and fails at dispatch with a generic "unsupported". Keep this in
+    /// sync with the `switch` in `VolvoAPI.dispatchCommand` / `PolestarGRPC.executeRemoteCommand`.
+    func isImplemented(by brand: VehicleBrand) -> Bool {
+        switch brand {
+        case .polestar:
+            // PolestarGRPC.executeRemoteCommand switches exhaustively over every case.
+            return true
+        case .volvo:
+            // Volvo's Connected Vehicle API v2 exposes only these as command endpoints.
+            switch self {
+            case .lock, .unlock, .startClimate, .stopClimate,
+                 .honkAndFlash, .flashLights, .honkHorn:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
     var feature: AppFeature {
         switch self {
         case .startClimate, .stopClimate: return .remoteClimate

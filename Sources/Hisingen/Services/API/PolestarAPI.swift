@@ -1,7 +1,5 @@
-import CryptoKit
 import Foundation
 import OSLog
-import Security
 
 private struct OptionalCapability<Value: Sendable>: Sendable {
     let value: Value?
@@ -1191,16 +1189,15 @@ actor PolestarAPI {
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
+    /// Wraps `PKCE.randomURLSafeString()` only to translate its `URLError` into the
+    /// Polestar error domain the rest of this actor throws.
     private static func randomURLSafeString() throws -> String {
-        var buffer = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, buffer.count, &buffer) == errSecSuccess else {
-            throw PolestarError.invalidResponse(operation: "secure random generator")
-        }
-        return Data(buffer).base64URLEncoded()
+        do { return try PKCE.randomURLSafeString() }
+        catch { throw PolestarError.invalidResponse(operation: "secure random generator") }
     }
 
     private static func codeChallenge(for verifier: String) -> String {
-        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
+        PKCE.codeChallenge(for: verifier)
     }
 
     static func extractResumePath(from html: String) -> String? {
@@ -1339,13 +1336,5 @@ private final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @un
     }
 }
 
-private extension Data {
-    func base64URLEncoded() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-}
 
 

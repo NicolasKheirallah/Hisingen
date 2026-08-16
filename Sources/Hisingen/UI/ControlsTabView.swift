@@ -18,6 +18,16 @@ struct ControlsTabView: View {
     private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { Preferences.features.enabled }
+
+    /// A control is live only when all three layers agree: this app implements the command for
+    /// the active brand, the vehicle's capability profile permits it, and nothing else is
+    /// already in flight. Previously each button hardcoded a brand check, which meant the
+    /// capability system and the actual affordance could drift apart silently.
+    private func isDisabled(_ command: RemoteCommand) -> Bool {
+        guard command.isImplemented(by: Preferences.activeBrand),
+              profile.permits(command.requiredCapability) else { return true }
+        return remoteCommandInProgress
+    }
     private var climateActive: Bool {
         guard let status = state.climateStatus else { return false }
         return status.activity == .active || status.activity == .heating
@@ -166,7 +176,7 @@ struct ControlsTabView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                .disabled(isDisabled(.stopClimate))
 
                                 HStack(spacing: 4) {
                                     ForEach([19, 20, 21, 22, 23], id: \.self) { temp in
@@ -182,7 +192,7 @@ struct ControlsTabView: View {
                                         .buttonStyle(.bordered)
                                         .tint(isSelected ? Color.orange : nil)
                                         .controlSize(.small)
-                                        .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                        .disabled(isDisabled(.stopClimate))
                                     }
                                 }
 
@@ -198,7 +208,7 @@ struct ControlsTabView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                .disabled(isDisabled(.stopClimate))
                             }
                         }
                     } else {
@@ -258,7 +268,7 @@ struct ControlsTabView: View {
                                 ) { newLevel in
                                     Preferences.remoteDriverSeatHeating = newLevel
                                 }
-                                .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                .disabled(isDisabled(.stopClimate))
 
                                 SeatHeatingControl(
                                     title: L10n.text("Passenger"),
@@ -266,14 +276,14 @@ struct ControlsTabView: View {
                                 ) { newLevel in
                                     Preferences.remoteFrontRightSeatHeating = newLevel
                                 }
-                                .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                .disabled(isDisabled(.stopClimate))
                             }
 
                             if profile.hasSelectableSteeringWheelHeating {
                                 SteeringHeatingControl(level: $steeringHeating) { newLevel in
                                     Preferences.remoteSteeringWheelHeating = newLevel
                                 }
-                                .disabled(isBrandVolvo ? remoteCommandInProgress : false)
+                                .disabled(isDisabled(.stopClimate))
                             }
                         }
                     }

@@ -339,49 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let result = try await activeProvider.executeRemoteCommand(command, vin: state.vin)
-                if case .startClimate(let temp, _, _, _, _, _) = command {
-                    if var current = self.latest {
-                        current.climateStatus = VehicleClimateStatus(
-                            activity: .heating,
-                            timeRemainingMinutes: 30,
-                            timerTriggered: false,
-                            interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                            requestedTemperatureCelsius: Double(temp > 0 ? temp : 22.0)
-                        )
-                        self.latest = current
-                        self.stateStore.save(current)
-                        self.render()
-                    }
-                } else if case .stopClimate = command {
-                    if var current = self.latest {
-                        current.climateStatus = VehicleClimateStatus(
-                            activity: .idle,
-                            timeRemainingMinutes: nil,
-                            timerTriggered: false,
-                            interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                            requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-                        )
-                        self.latest = current
-                        self.stateStore.save(current)
-                        self.render()
-                    }
-                } else if case .lock = command {
-                    if var current = self.latest, var ext = current.exteriorStatus {
-                        ext.isLocked = true
-                        current.exteriorStatus = ext
-                        self.latest = current
-                        self.stateStore.save(current)
-                        self.render()
-                    }
-                } else if case .unlock = command {
-                    if var current = self.latest, var ext = current.exteriorStatus {
-                        ext.isLocked = false
-                        current.exteriorStatus = ext
-                        self.latest = current
-                        self.stateStore.save(current)
-                        self.render()
-                    }
-                }
+                self.applyConfirmedStateChange(for: command, outcome: result.outcome)
                 let message: String
                 if let backendMessage = result.message, !backendMessage.isEmpty {
                     message = backendMessage
@@ -404,6 +362,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
+    }
+
+    /// Patches the visible state to what a command should have produced, so the lock icon or
+    /// climate row flips immediately instead of waiting for the follow-up refresh.
+    ///
+    /// Only `.completed` qualifies. TERMS.md states that a backend acknowledgment confirms
+    /// delivery, not execution — so patching on `.accepted`/`.delivered` would render an
+    /// unverified guess as fact, and a command the vehicle silently refused would show as
+    /// having worked until the next refresh corrected it. Those outcomes fall through to the
+    /// refresh scheduled a couple of seconds later, which reports what actually happened.
+    private func applyConfirmedStateChange(for command: RemoteCommand,
+                                           outcome: RemoteCommandOutcome) {
+        guard outcome == .completed, var current = latest else { return }
+        switch command {
+        case .startClimate(let temperature, _, _, _, _, _):
+            current.climateStatus = VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
+            )
+        case .stopClimate:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
+        case .lock, .unlock:
+            guard var exterior = current.exteriorStatus else { return }
+            exterior.isLocked = (command == .lock)
+            current.exteriorStatus = exterior
+        default:
+            return
+        }
+        latest = current
+        stateStore.save(current)
+        render()
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {

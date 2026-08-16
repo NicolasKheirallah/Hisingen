@@ -1,5 +1,10 @@
 import Foundation
 
+/// Main-actor isolated because it holds no lock of its own: every mutation is a
+/// read-modify-write over a `UserDefaults`-backed dictionary, which two concurrent callers
+/// would interleave and lose writes from. Both real callers (`RefreshCoordinator`, `Notifier`)
+/// are already `@MainActor`; this makes the requirement compiler-enforced rather than assumed.
+@MainActor
 final class VehicleStateStore {
     private let defaults: UserDefaults
     private let snapshotsKey = "cached_vehicle_snapshots_v1"
