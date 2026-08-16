@@ -556,7 +556,7 @@ struct InfoTabView: View {
                         let isExpired = factoryDate < Date()
                         KVRow(
                             L10n.text("Manufacturer Warranty"),
-                            Format.dateTimeFormatter.string(from: factoryDate),
+                            Format.dateFormatter.string(from: factoryDate),
                             symbol: "checkmark.shield.fill",
                             warning: isExpired
                         )
@@ -564,12 +564,24 @@ struct InfoTabView: View {
 
                     if let batteryDate = warranty.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
                         let isExpired = batteryDate < Date()
-                        let kmLimit = warranty.batteryWarrantyKm.map { Format.distance(km: $0, grouped: true, unit: Preferences.distanceUnit) } ?? "160,000 km"
                         KVRow(
                             L10n.text("EV Battery (8 yr / 160k km)"),
-                            "\(Format.dateTimeFormatter.string(from: batteryDate)) / \(kmLimit)",
+                            Format.dateFormatter.string(from: batteryDate),
                             symbol: "bolt.shield.fill",
                             warning: isExpired
+                        )
+                    }
+
+                    if state.powertrain.hasElectricRange,
+                       let maxKm = warranty.batteryWarrantyKm ?? (state.powertrain.hasElectricRange ? 160_000 : nil),
+                       let odo = state.odometerKm {
+                        let remainingKm = max(0, maxKm - odo)
+                        let isMileageExpired = odo >= maxKm
+                        KVRow(
+                            L10n.text("Battery Warranty Remaining"),
+                            Format.distance(km: remainingKm, grouped: true, unit: Preferences.distanceUnit),
+                            symbol: "gauge.with.needle",
+                            warning: isMileageExpired
                         )
                     }
 
@@ -578,7 +590,7 @@ struct InfoTabView: View {
                         let label = warranty.assistanceContact ?? L10n.text("Roadside Assistance")
                         KVRow(
                             label,
-                            Format.dateTimeFormatter.string(from: roadsideDate),
+                            Format.dateFormatter.string(from: roadsideDate),
                             symbol: "phone.badge.checkmark",
                             warning: isExpired
                         )
@@ -596,7 +608,7 @@ struct InfoTabView: View {
                         let isExpired = digitalDate < Date()
                         KVRow(
                             L10n.text("Digital Services & Data"),
-                            Format.dateTimeFormatter.string(from: digitalDate),
+                            Format.dateFormatter.string(from: digitalDate),
                             symbol: "antenna.radiowaves.left.and.right",
                             warning: isExpired
                         )
@@ -606,7 +618,7 @@ struct InfoTabView: View {
                         let isExpired = corrosionDate < Date()
                         KVRow(
                             L10n.text("Corrosion Protection (12 yr)"),
-                            Format.dateTimeFormatter.string(from: corrosionDate),
+                            Format.dateFormatter.string(from: corrosionDate),
                             symbol: "shield.fill",
                             warning: isExpired
                         )

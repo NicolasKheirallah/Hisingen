@@ -463,6 +463,22 @@ struct FormattingTests {
         let formatted = Format.shortTime(date: date)
         XCTAssertFalse(formatted.isEmpty)
     }
+
+    @Test
+    func testShortDateFormattingHasNoTime() {
+        let calendar = Calendar.current
+        var comps = DateComponents()
+        comps.year = 2030
+        comps.month = 12
+        comps.day = 26
+        comps.hour = 14
+        comps.minute = 30
+        comps.second = 0
+        let date = calendar.date(from: comps) ?? Date()
+        let formatted = Format.shortDate(date: date)
+        XCTAssertFalse(formatted.isEmpty)
+        XCTAssertFalse(formatted.contains(":"))
+    }
 }
 
 func vehicle(
