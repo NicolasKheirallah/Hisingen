@@ -990,7 +990,13 @@ actor PolestarAPI {
         cars = accountCars.compactMap { car in
             guard let vin = car.vin else { return nil }
             let title = [car.modelName, car.modelYear?.value].compactMap { $0 }.joined(separator: " · ")
-            return CarSummary(vin: vin, title: title.isEmpty ? vin : title)
+            return CarSummary(
+                vin: vin,
+                title: title.isEmpty ? vin : title,
+                modelName: car.modelName,
+                modelYear: car.modelYear?.value,
+                registrationNo: car.registrationNo
+            )
         }
         let selected = preferredVIN.flatMap { wanted in
             accountCars.first(where: { $0.vin == wanted })
@@ -1179,7 +1185,7 @@ actor PolestarAPI {
 
     private func targetSOC(enabled: Bool, vin: String, token: String) async throws -> Int? {
         guard enabled else { return nil }
-        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 900 {
+        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 10 {
             return cached.value
         }
         let value: Int?
