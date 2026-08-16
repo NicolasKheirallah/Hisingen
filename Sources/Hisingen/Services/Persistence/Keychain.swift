@@ -57,7 +57,10 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
         try save(password, account: Self.passwordAccount)
     }
-    func readPassword() throws -> String? { try read(account: Self.passwordAccount) }
+    func readPassword() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_password") || isTestService else { return nil }
+        return try read(account: Self.passwordAccount)
+    }
     func deletePassword() throws {
         UserDefaults.standard.set(false, forKey: "has_polestar_password")
         try delete(account: Self.passwordAccount)
@@ -67,7 +70,10 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
         try save(token, account: Self.sessionAccount)
     }
-    func readSessionToken() throws -> String? { try read(account: Self.sessionAccount) }
+    func readSessionToken() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_session") || isTestService else { return nil }
+        return try read(account: Self.sessionAccount)
+    }
     func deleteSessionToken() throws {
         UserDefaults.standard.set(false, forKey: "has_polestar_session")
         try delete(account: Self.sessionAccount)
@@ -76,10 +82,17 @@ struct KeychainStore: Sendable {
     /// Refresh token for the Polestar command client, kept separate from the primary session
     /// because the two are issued to different OAuth clients and expire independently.
     func saveCommandSessionToken(_ token: String) throws {
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
         try save(token, account: Self.commandSessionAccount)
     }
-    func readCommandSessionToken() throws -> String? { try read(account: Self.commandSessionAccount) }
-    func deleteCommandSessionToken() throws { try delete(account: Self.commandSessionAccount) }
+    func readCommandSessionToken() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_cmd_session") || isTestService else { return nil }
+        return try read(account: Self.commandSessionAccount)
+    }
+    func deleteCommandSessionToken() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
+        try delete(account: Self.commandSessionAccount)
+    }
 
     func saveVolvoSessionToken(_ token: String) throws {
         var bundle = readVolvoBundle()
@@ -134,39 +147,69 @@ struct KeychainStore: Sendable {
     private static let volvoApiKeyDraftAccount = "volvo-vcc-api-key-draft"
 
     func savePasswordDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_polestar_pw_draft")
         try save(value, account: Self.passwordDraftAccount)
     }
 
     func readPasswordDraft() throws -> String? {
-        try read(account: Self.passwordDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_polestar_pw_draft") || isTestService else { return nil }
+        return try read(account: Self.passwordDraftAccount)
     }
 
     func deletePasswordDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_pw_draft")
         try delete(account: Self.passwordDraftAccount)
     }
 
     func saveVolvoClientSecretDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_secret_draft")
         try save(value, account: Self.volvoClientSecretDraftAccount)
     }
 
     func readVolvoClientSecretDraft() throws -> String? {
-        try read(account: Self.volvoClientSecretDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_volvo_secret_draft") || isTestService else { return nil }
+        return try read(account: Self.volvoClientSecretDraftAccount)
     }
 
     func deleteVolvoClientSecretDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_volvo_secret_draft")
         try delete(account: Self.volvoClientSecretDraftAccount)
     }
 
     func saveVolvoApiKeyDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_key_draft")
         try save(value, account: Self.volvoApiKeyDraftAccount)
     }
 
     func readVolvoApiKeyDraft() throws -> String? {
-        try read(account: Self.volvoApiKeyDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_volvo_key_draft") || isTestService else { return nil }
+        return try read(account: Self.volvoApiKeyDraftAccount)
     }
 
     func deleteVolvoApiKeyDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_volvo_key_draft")
         try delete(account: Self.volvoApiKeyDraftAccount)
+    }
+
+    /// Wipes all stored credentials, tokens, session state, and presence flags.
+    func wipeAll() {
+        try? deletePassword()
+        try? deleteSessionToken()
+        try? deleteCommandSessionToken()
+        try? deletePasswordDraft()
+        try? deleteVolvoSessionToken()
+        try? deleteVolvoClientSecret()
+        try? deleteVolvoApiKey()
+        try? deleteVolvoClientSecretDraft()
+        try? deleteVolvoApiKeyDraft()
+        try? delete(account: Self.volvoBundleAccount)
+        UserDefaults.standard.removeObject(forKey: "has_polestar_password")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_session")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_cmd_session")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_session")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_pw_draft")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_secret_draft")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_key_draft")
     }
 
     private func readVolvoBundle() -> VolvoSecretBundle {
