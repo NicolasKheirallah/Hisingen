@@ -903,3 +903,10 @@
 "The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "Fordonstjänsten avvisade kommandot utan att ange någon orsak. Det betyder oftast att fordonet inte kan utföra det just nu.";
 "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Programvaruuppdatering %@ är tillgänglig. Fordonet laddar ned den automatiskt; den kan installeras när det är klart.";
 "A software update is available. The vehicle downloads it automatically." = "En programvaruuppdatering är tillgänglig. Fordonet laddar ned den automatiskt.";
+
+/* Missing Swedish Keys */
+"Cabin Seating Matrix" = "Säteskonfiguration";
+"Rear Center" = "Mitten bak";
+"Sensor readings" = "Sensoravläsningar";
+"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Visar senast sparade ögonblicksbild — merparten av realtidstelemetrin är otillgänglig tills nästa lyckade uppdatering.";
+"The last refresh could not read: %@" = "Senaste uppdateringen kunde inte läsa: %@";
