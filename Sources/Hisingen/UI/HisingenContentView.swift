@@ -1345,6 +1345,23 @@ struct VehicleTabView: View {
     private var openingsCard: AnyView? {
         guard features.contains(.exteriorStatus) else { return nil }
         guard let ext = state.exteriorStatus, !ext.openings.isEmpty else {
+            if state.isVolvo {
+                return AnyView(Card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(HisingenTheme.semanticWarning)
+                            Text(L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings."))
+                                .font(.system(size: 11))
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                        .padding(8)
+                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                })
+            }
             return unavailableCard(.exteriorStatus, symbol: "car.side.lock",
                                    title: L10n.text("Doors & Openings"), color: .indigo,
                                    badge: AppFeature.exteriorStatus.title)
@@ -1397,6 +1414,23 @@ struct VehicleTabView: View {
     private var tireSchematicCard: AnyView? {
         guard features.contains(.tyreAndWarnings) else { return nil }
         guard let tyres = state.healthDetails?.tyres, !tyres.isEmpty else {
+            if state.isVolvo {
+                return AnyView(Card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: .blue)
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(HisingenTheme.semanticWarning)
+                            Text(L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors."))
+                                .font(.system(size: 11))
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                        .padding(8)
+                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                })
+            }
             return unavailableCard(.tyreAndWarnings, symbol: "circle.grid.2x2",
                                    title: L10n.text("Tire Status (iTPMS)"), color: .blue,
                                    badge: AppFeature.tyreAndWarnings.title)
@@ -1408,7 +1442,7 @@ struct VehicleTabView: View {
     private var locationCard: AnyView? {
         guard features.contains(.vehicleLocation) else { return nil }
         guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else {
-            let explanation = (Preferences.activeBrand == .volvo)
+            let explanation = state.isVolvo
                 ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.")
                 : L10n.text("Parking position unavailable.")
             return AnyView(Card {
@@ -1441,6 +1475,10 @@ struct VehicleTabView: View {
     private var softwareCard: AnyView? {
         guard features.contains(.softwareUpdates) else { return nil }
         guard let software = state.softwareInfo else {
+            if state.isVolvo {
+                // Volvo does not publish OTA software update state on its public Developer Portal API.
+                return nil
+            }
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
                     CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: .blue)
@@ -1532,6 +1570,9 @@ struct VehicleTabView: View {
             rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer"))
         }
         guard !rows.isEmpty else {
+            if state.isVolvo {
+                return nil
+            }
             return unavailableCard(nil, symbol: "stethoscope",
                                    title: L10n.text("Diagnostics & Sensors"), color: .orange,
                                    badge: L10n.text("Sensor readings"))

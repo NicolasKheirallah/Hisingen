@@ -888,6 +888,8 @@
 "Over Vehicle Image (Top Left)" = "Over Vehicle Image (Top Left)";
 "Below Greeting" = "Below Greeting";
 "Hidden" = "Hidden";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings.";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors.";
 
 
 

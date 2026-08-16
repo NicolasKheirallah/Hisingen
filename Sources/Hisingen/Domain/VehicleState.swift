@@ -556,6 +556,10 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     var model: VehicleModel { VehicleModel(modelName: modelName) }
 
+    var isVolvo: Bool {
+        vin.uppercased().hasPrefix("YV")
+    }
+
     var estimatedRangeHealth: (percentage: Double, rating: String)? {
         guard model.hasVerifiedNominalSpecs,
               let battery = batteryPercentage, battery > 10,
