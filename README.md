@@ -61,7 +61,11 @@ Hisingen keeps the selected vehicle visible without opening a full application w
 - **Configurable Measurement Units**: Distance (`km` / `mi`), Fuel Volume (`L` / `gal US` / `UK gal`), and Fuel Economy (`L/100km` / `MPG US` / `MPG UK` / `km/L`);
 - **Pixel-Perfect Vehicle Outline**: Interactive animated schematics for iTPMS tire status, doors, windows, sunroof, hood, tailgate, charge lid, and fuel filler flap;
 - **Battery, Range & Engine Telemetry**: SoC %, electric range, fuel level %, fuel volume, distance to empty, avg fuel consumption, engine hours to service, and charging speed;
-- **Studio Render & Identity**: Transparent configured vehicle studio render, owner greeting, per-vehicle nickname, model, year, registration number, and VIN;
+- **Charging Cost & Tariff Calculator**: Configurable currency & price/kWh with automated session cost estimation;
+- **Charging History CSV & JSON Export**: Native macOS `NSSavePanel` export tool for exporting charging history for expense or tax reports;
+- **macOS App Intents & Shortcuts**: Siri voice queries and Shortcuts automation for battery levels, locks, and climate preconditioning;
+- **Adaptive Fast Refresh**: 60-second fast polling while charging or preconditioning, and 5-minute cadence when idle;
+- **Studio Render, Interior Trim & Identity**: Transparent configured vehicle studio render, upholstery details, steering orientation, owner greeting, per-vehicle nickname, model, year, registration number, and VIN;
 - **Diagnostics, Lighting & Hardware Health**: 16-bulb lighting monitor, 4-wheel indirect TPMS, brake fluid, washer fluid, service countdown, and 12V battery health;
 - **Climate & Comfort**: Live cabin/requested temperature, heating/cooling state, timers, air quality (AQI, PM2.5), and pre-cleaning status;
 - **Vehicle Software Versioning**: Live software version tracking with installed version, latest available OTA, and release status (e.g. 5.1.17);
@@ -145,16 +149,16 @@ Every optional group can be enabled independently. Unsupported services degrade 
 | Capability | Data shown |
 | --- | --- |
 | Core telemetry | Battery, range, charging state, time to full, fetch time, vehicle-reported time, and stale/asleep state |
-| Vehicle identity | Model, year, registration, VIN, per-VIN local nickname, and account vehicle discovery |
+| Vehicle identity | Model, year, registration, VIN, upholstery/interior trim, steering orientation, per-VIN local nickname, and account vehicle discovery |
 | Owner greeting | Polestar ID first name localized using the selected app language |
-| Studio image | Transparent configured vehicle render from Polestar's image service |
-| Charging details | Plug state, type, power, current, voltage, target SOC, current limit where supported, ready time, speed, and charger module state |
-| Charging history | Optional local summaries capped at 20 per vehicle: SOC gained, estimated energy, peak power, duration, and cost |
+| Studio image | Transparent configured vehicle render from first-party image services |
+| Charging details | Plug state, type, power, current draw vs current limit, voltage, target SOC, current limit where supported, ready time, speed, and charger module state |
+| Charging history | Optional local summaries capped at 20 per vehicle: SOC gained, estimated energy, peak power, duration, tariff cost, and CSV/JSON export |
 | Availability | Online/offline state and reasons such as power saving, vehicle in use, service mode, tracking, or OTA |
 | Odometer and service | Odometer, service countdown, service state, and fluid warnings |
 | Exterior | Central lock, doors, windows, sunroof, hood, tailgate, charge lid, and alarm |
-| Tyres and warnings | Direct pressures where reported, tyre warnings, lights, fluids, service, and 12 V warning |
-| Trip meters | Manual and automatic trip distances with Digital Twin and legacy fallback |
+| Tyres and warnings | Direct pressures where reported, tyre warnings, exterior lights (including hazard & reversing lights), fluids, service triggers, and 12 V battery health |
+| Trip meters | Manual and automatic trip distances, average speed, trip computer electric/fuel range with Digital Twin and legacy fallback |
 | Climate | Activity, heating/cooling/ventilation, time remaining, actual/requested temperature, and timers |
 | Charging schedules | Global and saved-location charge windows and departure schedules; precise locations and aliases are discarded |
 | Air quality | Cleaning state, AQI, PM2.5, runtime remaining, and reported errors |
@@ -169,7 +173,8 @@ Every optional group can be enabled independently. Unsupported services degrade 
 - Dynamic battery gauge with charge-target marker and subtle charging pulse.
 - Ready-time calculation based on the vehicle-reported sample timestamp.
 - Charging-speed estimate in `km/h` or `mph`.
-- Estimated completion cost using a configurable electricity rate and currency.
+- **Electricity Rate & Tariff Calculator**: Estimated session and completion cost using a configurable electricity rate (per kWh) and currency symbol.
+- **CSV & JSON Exporter**: Native export of stored charging sessions with full energy, duration, battery delta, peak kW, and calculated tariff cost columns.
 - Session sparkline with a capped rolling sample buffer.
 - Optional local session summaries; raw long-term telemetry is not collected.
 - **Range Health Estimate**, explicitly labeled as range-based rather than measured battery State of Health.
@@ -198,6 +203,20 @@ Private notification mode hides detailed vehicle values from banners. Stable ide
 4. **Compact Charging** — `73% (1h42m)` while charging
 5. **Battery and Power** — `73% · 7.2 kW` while charging
 6. **Range** — `280km`
+7. **Icon Only** — Minimal battery icon without text
+8. **Lock and Battery** — `🔒 73%` / `🔓 73%` with live lock state
+
+The icon can remain monochrome or tint green while charging and orange at low battery. Values use tabular digits to avoid width jitter.
+
+### macOS App Intents & Shortcuts (macOS 13+)
+
+Hisingen integrates with Apple's **App Intents** framework for native Siri voice actions and Shortcuts app workflows:
+
+- **`GetVehicleBatteryIntent`**: Queries current battery percentage, estimated range, and charging power.
+  - Voice phrases: *"Check my car battery"*, *"What is my charge level?"*, *"How much range is left?"*
+- **`LockVehicleIntent` & `UnlockVehicleIntent`**: Dispatches remote lock and unlock commands to the active vehicle.
+- **`StartClimateIntent` & `StopClimateIntent`**: Starts or stops cabin climate preconditioning.
+- **`AppShortcutsProvider`**: Automatically registers shortcuts into macOS Shortcuts without manual setup.
 
 The icon can remain monochrome or tint green while charging and orange at low battery. Values use tabular digits to avoid width jitter.
 
@@ -256,19 +275,20 @@ The following official developer endpoints are fully supported and mapped into H
 
 | Category | API Endpoint | Data & Telemetry Provided | Hisingen UI Feature |
 |---|---|---|---|
-| **Vehicle Identity & Render** | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, exterior color, gearbox type, battery capacity (kWh), transparent exterior studio image URL, steering orientation | Transparent vehicle hero render with ambient glow, Vehicle Identity card |
+| **Vehicle Identity & Render** | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, exterior color, gearbox type, battery capacity (kWh), transparent exterior studio image URL, upholstery/interior trim, steering orientation | Transparent vehicle hero render with ambient glow, Vehicle Identity card |
 | **Doors & Security** | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock status, front/rear left/right doors, hood, tailgate, charge/tank lid | Door schematic, lock/unlock status pill |
 | **Windows & Sunroof** | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Front/rear left/right windows, sunroof status | Window status indicators |
-| **Energy & Battery** | `GET /energy/v2/vehicles/{vin}/state` | Battery SoC (%), electric range (km), charger connection, charging status (Idle/Charging), charging current limit (A), target SoC (%), charging power (kW) | Battery gauge with target marker, charging details card, live charging speed |
-| **Energy Capabilities** | `GET /energy/v2/vehicles/{vin}/capabilities` | Hardware feature support matrix for all 10 energy fields | Runtime capability probing & feature degradation |
+| **Energy & Battery** | `GET /energy/v2/vehicles/{vin}/state` | Battery SoC (%), electric range (km), charger connection, charging status (Idle/Charging), charging current draw (A), current limit (A), target SoC (%), charging power (kW) | Battery gauge with target marker, charging details card, live charging speed |
+| **Energy Capabilities** | `GET /energy/v2/vehicles/{vin}/capabilities` | Hardware feature support matrix for all 10 energy fields | Runtime capability probing & feature degradation in Settings matrix |
 | **Odometer** | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total vehicle odometer mileage (km) | Vehicle Identity card odometer reading |
-| **Diagnostics & Health** | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, time to service (months/days), distance to service (km), engine operating hours to service (h), washer fluid warning | Service due countdown (days, km, hours), fluid warning badges |
+| **Diagnostics & Health** | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, serviceTrigger, time to service (months/days), distance to service (km), engine operating hours to service (h), washer fluid warning, 12V auxiliary battery status | Service due countdown (days, km, hours), fluid warning badges, 12V health indicator |
 | **Brake System** | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid level warning status | Vehicle Health & fluid warning alerts |
-| **Lighting & Bulb Monitors** | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16 individual light bulb sensor monitors (brake lights, fog lights, position lights, high/low beams, DRLs, turn signals, license plate, side markers) | Exterior lighting health status and fault alerts |
+| **Lighting & Bulb Monitors** | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 18 individual light bulb sensor monitors (brake lights, fog lights, position lights, high/low beams, DRLs, turn signals, license plate, hazard lights, reversing lights) | Exterior lighting health status and fault alerts |
 | **Tyres (iTPMS)** | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | 4-wheel indirect tire pressure status (`No Warning`, `Low`, `Very Low`) | 4-wheel iTPMS schematic card |
-| **Trip & Speed Analytics** | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Average energy consumption (kWh/100km), average speed (km/h), manual trip meter (km), automatic trip meter (km), distance to empty | Trip & Consumption card, average speed telemetry |
+| **Trip & Speed Analytics** | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Average energy consumption (kWh/100km), average speed (km/h), manual trip meter (km), automatic trip meter (km), trip computer electric/fuel distance to empty | Trip & Consumption card, average speed telemetry |
 | **Cloud Availability** | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Real-time vehicle cloud connectivity status (`AVAILABLE`) | Connectivity status pill |
-| **Remote Commands** | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | Remote execution for `lock`, `unlock`, `climatization-start`, `climatization-stop`, `flash`, `honk-flash` | **Controls (Reglage)** tab with biometric authorization |
+| **Remote Commands** | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | Remote execution for `lock`, `unlock`, `climatization-start`, `climatization-stop`, `flash`, `honk`, `honk-flash` | **Controls (Reglage)** tab with biometric authorization |
+| **Command Execution Polling** | `GET /connected-vehicle/v2/vehicles/{vin}/commands/{commandId}` | Asynchronous command lifecycle tracking (`PENDING` ➔ `STARTED` ➔ `DELIVERED` ➔ `COMPLETED`) | Real-time progress monitoring & completion confirmation |
 | **Location API** | `GET /location/v1/vehicles/{vin}/location` | GPS coordinates, heading, and timestamp *(requires subscribing to the Location API product in portal)* | Vehicle map & reverse-geocoded address |
 
 ---
@@ -289,7 +309,7 @@ Certain APIs exposed or discussed in automotive telematics are restricted to ent
 ## Refresh And Reliability
 
 - One in-flight refresh with duplicate manual-refresh coalescing.
-- 60-second cadence while charging and 5-minute cadence while idle.
+- **Adaptive Cadence**: 60-second fast polling while charging or actively preconditioning, and 5-minute cadence while idle.
 - Exponential backoff, jitter, `Retry-After`, and rate-limit enforcement.
 - Network reachability, macOS sleep/wake, and stale-on-activation handling.
 - Optional capability cache/backoff so one unavailable service cannot fail core telemetry.
