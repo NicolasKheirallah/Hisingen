@@ -295,8 +295,8 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.state = state
         self.scheduledAt = scheduledAt
         self.updatedAt = updatedAt
-        self.installedVersion = installedVersion ?? version
-        self.latestAvailableVersion = latestAvailableVersion ?? version
+        self.installedVersion = installedVersion
+        self.latestAvailableVersion = latestAvailableVersion
     }
 }
 
@@ -549,6 +549,10 @@ struct ChargingSession: Codable, Equatable, Sendable {
 
     var percentageAdded: Double {
         max(0, endBatteryPercentage - startBatteryPercentage)
+    }
+
+    func estimatedCost(tariff: Double? = nil) -> Double? {
+        cost ?? tariff.map { $0 * kwhDelivered }
     }
 
     static func completed(

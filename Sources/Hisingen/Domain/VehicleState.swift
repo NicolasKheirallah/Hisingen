@@ -410,6 +410,11 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     var isCharging: Bool { chargingState.isActivelyCharging }
 
+    var isClimateActive: Bool {
+        guard let activity = climateStatus?.activity else { return false }
+        return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
+    }
+
 
     var stateSummary: VehicleStateSummary {
         if exteriorStatus?.alarmTriggered == true {

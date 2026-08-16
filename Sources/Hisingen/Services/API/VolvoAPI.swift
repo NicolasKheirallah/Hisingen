@@ -352,7 +352,15 @@ actor VolvoAPI {
         var probes = VehicleProbedCapabilities()
         if doors != nil || windows != nil { probes.record(.exteriorStatus, as: .supported) }
         if diagnostics != nil { probes.record(.serviceWarnings, as: .supported) }
-        if engineStatus != nil { _ = engineStatus?.isRunning }
+        if software != nil { probes.record(.softwareStatus, as: .supported) }
+        if tyres?.readings.contains(where: { $0.kilopascals != nil }) == true {
+            probes.record(.tyrePressureValues, as: .supported)
+        }
+        if commandAccessibility?.isAvailable == true {
+            probes.record(.climateStartStop, as: .supported)
+            probes.record(.locks, as: .supported)
+            probes.record(.honkAndFlash, as: .supported)
+        }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
         }

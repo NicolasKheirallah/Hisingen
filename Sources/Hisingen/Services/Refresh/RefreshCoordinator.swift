@@ -14,8 +14,8 @@ struct DiagnosticsSnapshot: Sendable {
 }
 
 enum RefreshPolicy {
-    static func regularInterval(isCharging: Bool) -> TimeInterval {
-        isCharging ? 60 : 300
+    static func regularInterval(isCharging: Bool, isClimateActive: Bool = false) -> TimeInterval {
+        (isCharging || isClimateActive) ? 60 : 300
     }
 
     static func retryDelay(failureCount: Int, retryAfter: TimeInterval?) -> TimeInterval {
@@ -156,7 +156,7 @@ final class RefreshCoordinator {
 
     func refreshIfStale() {
         guard let latest else { refreshNow(); return }
-        let interval = RefreshPolicy.regularInterval(isCharging: latest.isCharging)
+        let interval = RefreshPolicy.regularInterval(isCharging: latest.isCharging, isClimateActive: latest.isClimateActive)
         if Date().timeIntervalSince(latest.fetchedAt) >= interval { refreshNow() }
     }
 
@@ -331,7 +331,7 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(state)
         onState?(state)
-        schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging), retrySession: false)
+        schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging, isClimateActive: state.isClimateActive), retrySession: false)
         publishDiagnostics()
     }
 
