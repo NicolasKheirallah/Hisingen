@@ -30,6 +30,7 @@ struct InfoTabView: View {
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
+            batteryHealthCard
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
@@ -490,6 +491,61 @@ struct InfoTabView: View {
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }
+    }
+
+    private var batteryHealthCard: some View {
+        guard state.powertrain.hasElectricRange, let soh = state.batteryStateOfHealthPercent else {
+            return AnyView(EmptyView())
+        }
+
+        let deg = state.batteryDegradationPercent ?? 0.0
+        let status = state.batteryHealthStatus
+        let usable = state.effectiveUsableBatteryCapacityKwh
+        let nominal = state.effectiveNominalBatteryCapacityKwh
+        let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "battery.100.bolt", title: L10n.text("Battery Health & Longevity"), color: .green)
+                    Spacer()
+                    Pill(
+                        text: status,
+                        color: statusColor,
+                        symbol: "checkmark.shield.fill"
+                    )
+                }
+
+                VStack(spacing: 6) {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(HisingenTheme.accent)
+                                .frame(width: 14)
+                            Text(L10n.text("State of Health (SoH)"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        HStack(spacing: 6) {
+                            ProgressView(value: min(100, soh), total: 100)
+                                .progressViewStyle(.linear)
+                                .frame(width: 60)
+                                .tint(statusColor)
+                            Text(String(format: "%.1f%%", soh))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(statusColor)
+                        }
+                    }
+                    .padding(.vertical, 2)
+
+                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0)
+                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh", usable, nominal), symbol: "battery.100")
+                    KVRow(L10n.text("Warranty Minimum Target"), "70% / 160,000 km", symbol: "shield.lefthalf.filled")
+                }
+            }
+        })
     }
 
     private var serviceAndHealthCard: some View {

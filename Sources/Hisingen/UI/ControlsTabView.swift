@@ -621,12 +621,26 @@ struct ControlsTabView: View {
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
                         Button {
-                            onRemoteCommand(profile.model == .polestar2 ? .honkAndFlash : .flashLights)
+                            onRemoteCommand(.flashLights)
                         } label: {
                             VStack(spacing: 3) {
-                                Image(systemName: profile.model == .polestar2 ? "light.beacon.max.fill" : "flashlight.on.fill")
+                                Image(systemName: "flashlight.on.fill")
                                     .font(.system(size: 13))
-                                Text(profile.model == .polestar2 ? L10n.text("Honk & Flash") : L10n.text("Flash Lights"))
+                                Text(L10n.text("Flash Lights"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDisabled(.flashLights))
+
+                        Button {
+                            onRemoteCommand(.honkAndFlash)
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "light.beacon.max.fill")
+                                    .font(.system(size: 13))
+                                Text(L10n.text("Honk & Flash"))
                                     .font(.system(size: 10, weight: .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 42)
