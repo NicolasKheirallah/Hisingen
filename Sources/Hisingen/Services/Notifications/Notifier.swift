@@ -250,6 +250,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
+    func notifyCommandNotice(title: String, body: String) {
+        postNotice(
+            identifier: "hisingen.notice.\(UUID().uuidString)",
+            thread: "hisingen.notices",
+            title: title,
+            body: body
+        )
+    }
+
     private func postNotice(identifier: String, thread: String, title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title

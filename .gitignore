@@ -12,3 +12,9 @@ DerivedData/
 *.key
 *.csr
 
+# Local environment secrets and keys
+.env
+.env.*
+!.env.example
+*.secret
+

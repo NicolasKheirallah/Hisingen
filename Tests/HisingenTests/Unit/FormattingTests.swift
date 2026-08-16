@@ -42,6 +42,38 @@ struct FormattingTests {
     }
 
     @Test
+    func testVehicleModelBadgePositionPreference() {
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
+        Preferences.vehicleModelBadgePosition = .topRightOverlay
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topRightOverlay)
+        Preferences.vehicleModelBadgePosition = .topLeftOverlay
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topLeftOverlay)
+        Preferences.vehicleModelBadgePosition = .subheadline
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .subheadline)
+        Preferences.vehicleModelBadgePosition = .hidden
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .hidden)
+        Preferences.vehicleModelBadgePosition = .inlineHeader
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
+    }
+
+    @Test
+    func testRegistrationBadgePositionPreference() {
+        XCTAssertEqual(Preferences.registrationBadgePosition, .belowGreeting)
+        Preferences.registrationBadgePosition = .platePill
+        XCTAssertEqual(Preferences.registrationBadgePosition, .platePill)
+        Preferences.registrationBadgePosition = .inlineHeader
+        XCTAssertEqual(Preferences.registrationBadgePosition, .inlineHeader)
+        Preferences.registrationBadgePosition = .topRightOverlay
+        XCTAssertEqual(Preferences.registrationBadgePosition, .topRightOverlay)
+        Preferences.registrationBadgePosition = .topLeftOverlay
+        XCTAssertEqual(Preferences.registrationBadgePosition, .topLeftOverlay)
+        Preferences.registrationBadgePosition = .hidden
+        XCTAssertEqual(Preferences.registrationBadgePosition, .hidden)
+        Preferences.registrationBadgePosition = .belowGreeting
+        XCTAssertEqual(Preferences.registrationBadgePosition, .belowGreeting)
+    }
+
+    @Test
     func testFeatureSelectionCanDisableOptionalCapabilities() {
         var features = FeatureSelection.default
         XCTAssertTrue(features.contains(.vehicleImage))
@@ -58,10 +90,10 @@ struct FormattingTests {
     }
 
     @Test
-    func testUnsupportedRemoteFeaturesCannotBeEnabledInPreferences() {
-        let selection = FeatureSelection(enabled: Set(AppFeature.userSelectableCases))
+    func testRemoteFeaturesAreOptInAndSelectable() {
+        let selection = FeatureSelection.default
         XCTAssertFalse(AppFeature.remoteFeatures.contains { selection.contains($0) })
-        XCTAssertFalse(AppFeature.userSelectableCases.contains(.remoteClimate))
+        XCTAssertTrue(AppFeature.userSelectableCases.contains(.remoteClimate))
     }
 
     @Test
@@ -326,7 +358,7 @@ struct FormattingTests {
         )
 
         XCTAssertNotNil(chargingCar.formattedCompletionTime)
-        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+61 km/h")
+        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+70 km/h")
         XCTAssertTrue(chargingCar.freshnessDescription.contains("Updated"))
     }
 

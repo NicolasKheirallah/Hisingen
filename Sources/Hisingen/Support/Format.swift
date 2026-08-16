@@ -184,6 +184,19 @@ enum Format {
                 return [primaryPct, Format.kilowatts(watts: power)].compactMap { $0 }.joined(separator: " · ")
             }
             return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
+
+        case .iconOnly:
+            return ""
+
+        case .lockAndBattery:
+            let lockGlyph: String = {
+                guard let isLocked = data.exteriorStatus?.isLocked else { return "" }
+                return isLocked ? "🔒" : "🔓"
+            }()
+            if !lockGlyph.isEmpty, let pct = primaryPct {
+                return "\(lockGlyph) \(pct)"
+            }
+            return primaryPct ?? "--"
         }
     }
 }

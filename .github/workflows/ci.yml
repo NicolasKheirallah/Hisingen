@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -66,17 +66,28 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
       - name: Cache Swift Package Manager dependencies
-        uses: actions/cache@13aacd865c20de90d75de16800850573e321f07f # v4.0.0
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: .build
           key: ${{ matrix.os }}-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
             ${{ matrix.os }}-spm-
+
+      - name: Select Xcode toolchain
+        run: |
+          set -euo pipefail
+          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app; do
+            if [ -d "$xcode/Contents/Developer" ]; then
+              echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+              echo "Selected $xcode"
+              break
+            fi
+          done
 
       - name: Verify toolchain
         run: |
@@ -92,18 +103,27 @@ jobs:
             echo "::warning::release.yml pins DEVELOPER_DIR=/Applications/Xcode_16.2.app, but that Xcode is not present on this macos-15 runner image. The release build may fail even though CI passed. Update the pin in release.yml to an Xcode version available on the runner image."
           fi
 
+      - name: Inject Volvo secrets or fallback template
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+        run: sh Scripts/inject-secrets.sh
+
       - name: Build with complete concurrency checks
         run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
       - name: Test (deterministic suite only — live/remote-command tests excluded)
-        run: >-
-          swift test --disable-xctest --enable-swift-testing
-          --skip Live
-          -Xswiftc -strict-concurrency=complete
-          -Xswiftc -warn-concurrency
+        run: |
+          set -euo pipefail
+          if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
+            swift test --disable-xctest --enable-swift-testing --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          else
+            swift test --filter "^((?!Live).)*$" -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          fi
 
       - name: Build app bundle and DMG installer
-        run: make all SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+        run: make all IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
 
       - name: Validate bundle and disk image
         run: |
@@ -120,7 +140,7 @@ jobs:
 
       - name: Upload build artifacts (App & DMG)
         if: matrix.os == 'macos-15'
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.6.1
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: Hisingen-macos-build
           path: |

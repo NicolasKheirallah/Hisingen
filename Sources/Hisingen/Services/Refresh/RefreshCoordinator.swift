@@ -11,16 +11,26 @@ struct DiagnosticsSnapshot: Sendable {
     let sessionValid: Bool
     let networkAvailable: Bool
     let refreshInProgress: Bool
+
+    /// Features the last fetch could not retrieve, and whether the displayed state came off
+    /// disk rather than the network. Surfaced so a degraded dashboard can be explained in the
+    /// app instead of only in the unified log.
+    var unavailableFeatures: [AppFeature] = []
+    var servingCachedSnapshot: Bool = false
 }
 
 enum RefreshPolicy {
-    static func regularInterval(isCharging: Bool) -> TimeInterval {
-        isCharging ? 60 : 300
+    static func regularInterval(isCharging: Bool, isClimateActive: Bool = false) -> TimeInterval {
+        (isCharging || isClimateActive) ? 60 : 300
     }
 
-    static func retryDelay(failureCount: Int, retryAfter: TimeInterval?) -> TimeInterval {
+    static func retryDelay(failureCount: Int, retryAfter: TimeInterval?,
+                           requiresNewSession: Bool = false) -> TimeInterval {
         if let retryAfter { return min(max(retryAfter, 30), 3_600) }
-        return min(30 * pow(2, Double(min(max(failureCount - 1, 0), 5))), 900)
+        let base = min(30 * pow(2, Double(min(max(failureCount - 1, 0), 5))), 900)
+        // Re-establishing a session hits the identity provider rather than the telemetry API,
+        // so back off harder and allow a longer ceiling before trying again.
+        return requiresNewSession ? min(max(base, 60) * 2, 1_800) : base
     }
 }
 
@@ -156,7 +166,7 @@ final class RefreshCoordinator {
 
     func refreshIfStale() {
         guard let latest else { refreshNow(); return }
-        let interval = RefreshPolicy.regularInterval(isCharging: latest.isCharging)
+        let interval = RefreshPolicy.regularInterval(isCharging: latest.isCharging, isClimateActive: latest.isClimateActive)
         if Date().timeIntervalSince(latest.fetchedAt) >= interval { refreshNow() }
     }
 
@@ -331,7 +341,7 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(state)
         onState?(state)
-        schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging), retrySession: false)
+        schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging, isClimateActive: state.isClimateActive), retrySession: false)
         publishDiagnostics()
     }
 
@@ -340,7 +350,7 @@ final class RefreshCoordinator {
         failureCount += 1
         logger.error("Refresh failed: \(error.localizedDescription, privacy: .public)")
         onError?(error)
-        guard error.isTransient else {
+        guard error.allowsAutomaticRetry else {
             timer?.invalidate()
             nextRefresh = nil
             publishDiagnostics()
@@ -348,9 +358,12 @@ final class RefreshCoordinator {
         }
         let retryAfter: TimeInterval?
         if case .rateLimited(let value) = error { retryAfter = value } else { retryAfter = nil }
-        let delay = RefreshPolicy.retryDelay(failureCount: failureCount, retryAfter: retryAfter)
+        let needsSession = retrySession || error.requiresNewSession
+        let delay = RefreshPolicy.retryDelay(
+            failureCount: failureCount, retryAfter: retryAfter, requiresNewSession: needsSession
+        )
         if case .rateLimited = error { rateLimitedUntil = Date().addingTimeInterval(delay) }
-        schedule(after: delay, retrySession: retrySession)
+        schedule(after: delay, retrySession: needsSession)
         publishDiagnostics()
     }
 
@@ -386,25 +399,36 @@ final class RefreshCoordinator {
     }
 
     private func installSystemObservers() {
-        let center = NSWorkspace.shared.notificationCenter
-        observerTokens.append(center.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.sleeping = true
-                self?.cancelCurrentWork()
-            }
+        observerTokens.append(addMainActorObserver(for: NSWorkspace.willSleepNotification) { coordinator in
+            coordinator.sleeping = true
+            coordinator.cancelCurrentWork()
         })
-        observerTokens.append(center.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        observerTokens.append(addMainActorObserver(for: NSWorkspace.didWakeNotification) { coordinator in
+            coordinator.sleeping = false
+            if coordinator.sessionReady { coordinator.refresh(trigger: .wake) }
+            else { coordinator.beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+        })
+    }
+
+    /// `MainActor.assumeIsolated` is a runtime assertion, not a compiler-checked guarantee: it
+    /// traps if the notification is ever delivered off the main thread. What makes it sound is
+    /// `queue: .main` on the registration — so the two must never drift apart. Binding them
+    /// together here means the delivery queue cannot be changed independently of the
+    /// assumption that depends on it. The body stays synchronous deliberately: `willSleep`
+    /// must cancel in-flight work *before* the machine suspends, which an async hop onto the
+    /// main actor could miss.
+    private func addMainActorObserver(
+        for name: Notification.Name,
+        handler: @escaping @MainActor @Sendable (RefreshCoordinator) -> Void
+    ) -> any NSObjectProtocol {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: name, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.sleeping = false
-                if self.sessionReady { self.refresh(trigger: .wake) }
-                else { self.beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+                handler(self)
             }
-        })
+        }
     }
 
     private func cancelCurrentWork() {
@@ -424,7 +448,9 @@ final class RefreshCoordinator {
             nextRefresh: nextRefresh,
             sessionValid: sessionReady,
             networkAvailable: networkAvailable,
-            refreshInProgress: task != nil
+            refreshInProgress: task != nil,
+            unavailableFeatures: latest?.unavailableFeatures ?? [],
+            servingCachedSnapshot: latest?.isCachedSnapshot ?? false
         ))
     }
 }
