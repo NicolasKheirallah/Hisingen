@@ -573,8 +573,9 @@ struct InfoTabView: View {
 
                     if let roadsideDate = warranty.roadsideAssistanceValidUntil {
                         let isExpired = roadsideDate < Date()
+                        let label = warranty.assistanceContact ?? L10n.text("Roadside Assistance")
                         KVRow(
-                            L10n.text("Roadside Assistance"),
+                            label,
                             Format.dateTimeFormatter.string(from: roadsideDate),
                             symbol: "phone.badge.checkmark",
                             warning: isExpired
@@ -589,11 +590,25 @@ struct InfoTabView: View {
                         )
                     }
 
-                    KVRow(
-                        L10n.text("Connected Services"),
-                        L10n.text("Active Unlimited"),
-                        symbol: "antenna.radiowaves.left.and.right"
-                    )
+                    if let digitalDate = warranty.digitalServicesValidUntil {
+                        let isExpired = digitalDate < Date()
+                        KVRow(
+                            L10n.text("Digital Services & Data"),
+                            Format.dateTimeFormatter.string(from: digitalDate),
+                            symbol: "antenna.radiowaves.left.and.right",
+                            warning: isExpired
+                        )
+                    }
+
+                    if let corrosionDate = warranty.corrosionWarrantyValidUntil {
+                        let isExpired = corrosionDate < Date()
+                        KVRow(
+                            L10n.text("Corrosion Protection (12 yr)"),
+                            Format.dateTimeFormatter.string(from: corrosionDate),
+                            symbol: "shield.fill",
+                            warning: isExpired
+                        )
+                    }
                 }
             }
         }

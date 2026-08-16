@@ -768,8 +768,11 @@ actor VolvoAPI {
     private func get<T: Decodable>(_ path: String) async throws -> T {
         let (data, response) = try await authenticatedGET(path)
         if response.statusCode == 403 {
-
-
+            // Only per-vehicle telemetry GETs route through this helper, and for those a 403
+            // is empirically a market/model gate rather than a token problem: the same token
+            // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
+            // not use this path, so their 403s stay `.permissionDenied` — the asymmetry is
+            // deliberate. This is tuned from observed behaviour, not Volvo documentation.
             throw VolvoError.regionRestricted(service: path)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }

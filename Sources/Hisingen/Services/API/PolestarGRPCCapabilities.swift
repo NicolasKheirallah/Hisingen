@@ -77,7 +77,9 @@ extension PolestarGRPC {
                                               vin: vin, accessToken: accessToken)
             if let payload = Self.message(body, field: 1) {
                 rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
-                info = Self.parseSoftware(payload)
+                let parsed = Self.parseSoftware(payload)
+                otaSoftwareStates[vin] = parsed.state
+                info = parsed
             }
         } catch { firstError = error }
 
@@ -94,6 +96,9 @@ extension PolestarGRPC {
                 let fields = Protobuf.fields(scheduler)
                 scheduledAt = Self.timestamp(Self.message(fields, field: 3))
                 rememberSoftwareID(Self.string(fields, 4), vin: vin)
+                if scheduledAt != nil, otaSoftwareStates[vin] == nil {
+                    otaSoftwareStates[vin] = .scheduled
+                }
             }
         } catch {
             if firstError == nil { firstError = error }

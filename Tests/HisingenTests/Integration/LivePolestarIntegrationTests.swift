@@ -335,6 +335,154 @@ struct LivePolestarRemoteCommandIntegrationTests {
             XCTAssertTrue(error.localizedDescription.isEmpty == false)
         }
     }
+
+    /// Captures the raw C3 OTA exchange so a failing install can be diagnosed.
+    ///
+    /// `URLSession` does not expose HTTP/2 trailers, and gRPC delivers the status of a
+    /// *successful-looking* call there — so a backend rejection can reach the app as
+    /// "no response frames" rather than as its real status. This talks to C3 directly and
+    /// prints the HTTP status, every visible header, and the raw bytes of each frame.
+    ///
+    /// Reads only, unless `HISINGEN_TEST_OTA_INSTALL=1` is set — that flag makes it attempt a
+    /// real `InstallNow`, which starts a real software installation on a real car.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDiagnoseLiveOtaExchange() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+        let attemptInstall = environment["HISINGEN_TEST_OTA_INSTALL"] == "1"
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let vin = try XCTUnwrap(resolvedVIN)
+        let token = try XCTUnwrap(resolvedToken)
+
+        // C3 discovery — the OTA services live on the discovered host, not a fixed one.
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let host = try XCTUnwrap(c3["grpcHost"] as? String)
+        let port = c3["grpcPort"] as? Int ?? 443
+        let base = try XCTUnwrap(URL(string: "https://\(host):\(port)"))
+
+        print("\n========================================================")
+        print("🔧 OTA DIAGNOSTIC — VIN \(vin)")
+        print("  • C3 host: \(base.absoluteString)")
+
+        var softwareID: String?
+        for (label, path, body) in Self.otaReadProbes(vin: vin) {
+            let result = await Self.callGRPC(base: base, path: path, body: body,
+                                             vin: vin, token: token, label: label)
+            if label == "GetSoftwareInfo", let frame = result.frames.first,
+               let payload = Protobuf.fields(frame).first(where: { $0.number == 1 && $0.wire == 2 })?.data {
+                let fields = Protobuf.fields(payload)
+                softwareID = fields.first(where: { $0.number == 1 && $0.wire == 2 })
+                    .flatMap { String(data: $0.data, encoding: .utf8) }
+                print("  → parsed state=\(fields.first(where: { $0.number == 4 })?.varint.description ?? "nil") "
+                      + "version=\(fields.first(where: { $0.number == 6 && $0.wire == 2 }).flatMap { String(data: $0.data, encoding: .utf8) } ?? "nil") "
+                      + "softwareID=\(softwareID ?? "nil")")
+            }
+            if label == "GetSchedule", softwareID == nil, let frame = result.frames.first,
+               let timer = Protobuf.fields(frame).first(where: { $0.number == 1 && $0.wire == 2 })?.data {
+                softwareID = Protobuf.fields(timer).first(where: { $0.number == 4 && $0.wire == 2 })
+                    .flatMap { String(data: $0.data, encoding: .utf8) }
+                print("  → schedule softwareID=\(softwareID ?? "nil")")
+            }
+        }
+
+        guard let softwareID, !softwareID.isEmpty else {
+            print("  ⚠️ No software_id available — nothing to install. This alone explains an")
+            print("     install failure: the scheduler has no update to act on.")
+            print("========================================================\n")
+            try? await api.signOut()
+            return
+        }
+
+        guard attemptInstall else {
+            print("  ℹ️ Set HISINGEN_TEST_OTA_INSTALL=1 to attempt a real InstallNow.")
+            print("========================================================\n")
+            try? await api.signOut()
+            return
+        }
+
+        var install = Data()
+        install.append(Protobuf.stringField(1, vin))
+        install.append(Protobuf.stringField(2, softwareID))
+        _ = await Self.callGRPC(base: base, path: "/ota_mobcache.SchedulerService/InstallNow",
+                                body: install, vin: vin, token: token, label: "InstallNow")
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    private static func otaReadProbes(vin: String) -> [(String, String, Data)] {
+        var softwareInfo = Data()
+        softwareInfo.append(Protobuf.stringField(1, vin))
+        softwareInfo.append(Protobuf.stringField(2, "en"))
+        return [
+            ("GetSoftwareInfo", "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo", softwareInfo),
+            ("GetSchedule", "/ota_mobcache.SchedulerService/GetSchedule", Protobuf.stringField(1, vin))
+        ]
+    }
+
+    /// Issues one gRPC call and prints everything observable about the response.
+    private static func callGRPC(base: URL, path: String, body: Data, vin: String,
+                                 token: String, label: String) async -> (frames: [Data], status: String?) {
+        var request = URLRequest(url: base.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(vin, forHTTPHeaderField: "vin")
+        request.setValue("trailers", forHTTPHeaderField: "TE")
+        request.httpBody = Protobuf.grpcFrame(body)
+
+        print("\n── \(label) ─────────────────────────────")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                print("  ✗ non-HTTP response")
+                return ([], nil)
+            }
+            print("  HTTP \(http.statusCode)")
+            for (key, value) in http.allHeaderFields {
+                print("  \(key): \(value)")
+            }
+            let status = http.value(forHTTPHeaderField: "grpc-status")
+            if let message = http.value(forHTTPHeaderField: "grpc-message") {
+                print("  grpc-message (decoded): \(message.removingPercentEncoding ?? message)")
+            }
+            print("  body bytes: \(data.count)")
+            if !data.isEmpty {
+                print("  raw: \(data.map { String(format: "%02x", $0) }.joined())")
+            }
+            var frames: [Data] = []
+            var index = data.startIndex
+            while index + 5 <= data.endIndex {
+                let size = Int(data[index + 1]) << 24 | Int(data[index + 2]) << 16
+                    | Int(data[index + 3]) << 8 | Int(data[index + 4])
+                let start = index + 5
+                guard size >= 0, start + size <= data.endIndex else { break }
+                frames.append(data[start..<(start + size)])
+                index = start + size
+            }
+            print("  frames: \(frames.count)")
+            if frames.isEmpty && (status == nil || status == "0") {
+                print("  ⚠️ 200 OK, no grpc-status header, and no message frame — the real status")
+                print("     is in HTTP/2 trailers that URLSession does not expose.")
+            }
+            return (frames, status)
+        } catch {
+            print("  ✗ transport error: \(error)")
+            return ([], nil)
+        }
+    }
 }
 #endif
 

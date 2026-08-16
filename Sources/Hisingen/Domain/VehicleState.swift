@@ -436,19 +436,38 @@ struct VehicleState: Codable, Equatable, Sendable {
             return explicit
         }
         let calendar = Calendar.current
-        let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
-        var components = DateComponents()
-        components.year = yearInt
-        components.month = 6
-        components.day = 1
-        let baselineDeliveryDate = calendar.date(from: components) ?? Date()
+        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
+
+        let baselineDeliveryDate: Date = {
+            if let rawWeek = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines),
+               rawWeek.count >= 6,
+               let year = Int(rawWeek.prefix(4)),
+               let week = Int(rawWeek.suffix(2)) {
+                var components = DateComponents()
+                components.yearForWeekOfYear = year
+                components.weekOfYear = week
+                components.weekday = 2
+                if let buildDate = calendar.date(from: components) {
+                    return calendar.date(byAdding: .weekOfYear, value: 4, to: buildDate) ?? buildDate
+                }
+            }
+
+            let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
+            var components = DateComponents()
+            components.year = yearInt
+            components.month = 6
+            components.day = 1
+            return calendar.date(from: components) ?? Date()
+        }()
 
         let factoryEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
         let batteryEnd = calendar.date(byAdding: .year, value: 8, to: baselineDeliveryDate)
         let roadsideEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let digitalServicesEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let corrosionEnd = calendar.date(byAdding: .year, value: 12, to: baselineDeliveryDate)
 
-        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
         let plan = isVolvo ? "Care by Volvo" : "Polestar Care"
+        let assistanceName = isVolvo ? "Volvo Assistance" : "Polestar Assistance"
 
         return VehicleWarrantyInfo(
             planName: plan,
@@ -457,7 +476,10 @@ struct VehicleState: Codable, Equatable, Sendable {
             batteryWarrantyValidUntil: powertrain.hasElectricRange ? batteryEnd : nil,
             batteryWarrantyKm: powertrain.hasElectricRange ? 160_000 : nil,
             roadsideAssistanceValidUntil: roadsideEnd,
-            includedMaintenance: true
+            includedMaintenance: true,
+            corrosionWarrantyValidUntil: corrosionEnd,
+            digitalServicesValidUntil: digitalServicesEnd,
+            assistanceContact: assistanceName
         )
     }
 

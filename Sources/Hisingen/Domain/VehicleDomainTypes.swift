@@ -509,6 +509,9 @@ struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
     let batteryWarrantyKm: Int?
     let roadsideAssistanceValidUntil: Date?
     let includedMaintenance: Bool?
+    let corrosionWarrantyValidUntil: Date?
+    let digitalServicesValidUntil: Date?
+    let assistanceContact: String?
 
     init(
         planName: String? = nil,
@@ -517,7 +520,10 @@ struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
         batteryWarrantyValidUntil: Date? = nil,
         batteryWarrantyKm: Int? = 160_000,
         roadsideAssistanceValidUntil: Date? = nil,
-        includedMaintenance: Bool? = nil
+        includedMaintenance: Bool? = nil,
+        corrosionWarrantyValidUntil: Date? = nil,
+        digitalServicesValidUntil: Date? = nil,
+        assistanceContact: String? = nil
     ) {
         self.planName = planName
         self.status = status
@@ -526,6 +532,9 @@ struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
         self.batteryWarrantyKm = batteryWarrantyKm
         self.roadsideAssistanceValidUntil = roadsideAssistanceValidUntil
         self.includedMaintenance = includedMaintenance
+        self.corrosionWarrantyValidUntil = corrosionWarrantyValidUntil
+        self.digitalServicesValidUntil = digitalServicesValidUntil
+        self.assistanceContact = assistanceContact
     }
 }
 

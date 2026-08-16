@@ -244,10 +244,56 @@ struct RemoteCommandTests {
         let warranty = state.effectiveWarrantyInfo
         XCTAssertEqual(warranty.planName, "Care by Volvo")
         XCTAssertEqual(warranty.status, "Active")
+        XCTAssertEqual(warranty.assistanceContact, "Volvo Assistance")
         XCTAssertTrue(warranty.factoryWarrantyValidUntil != nil)
         XCTAssertTrue(warranty.batteryWarrantyValidUntil != nil)
+        XCTAssertTrue(warranty.digitalServicesValidUntil != nil)
+        XCTAssertTrue(warranty.corrosionWarrantyValidUntil != nil)
         XCTAssertEqual(warranty.batteryWarrantyKm, 160_000)
         XCTAssertEqual(warranty.includedMaintenance, true)
+
+        var polestarState = VehicleState(
+            batteryPercentage: 75.0,
+            rangeKm: 270,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 90,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2 Long Range Dual Motor",
+            modelYear: "2023",
+            registrationNo: "PLS789",
+            vin: "YSMVSEDE6PL147228",
+            ownerFirstName: "Nico",
+            odometerKm: 42000,
+            daysToService: 340,
+            distanceToServiceKm: 12000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            powertrain: .bev,
+            fuelLevelPercent: nil,
+            fuelRangeKm: nil,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+        polestarState.structureWeek = "202245"
+
+        let polestarWarranty = polestarState.effectiveWarrantyInfo
+        XCTAssertEqual(polestarWarranty.planName, "Polestar Care")
+        XCTAssertEqual(polestarWarranty.status, "Active")
+        XCTAssertEqual(polestarWarranty.assistanceContact, "Polestar Assistance")
+        XCTAssertTrue(polestarWarranty.factoryWarrantyValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.batteryWarrantyValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.digitalServicesValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.corrosionWarrantyValidUntil != nil)
+        XCTAssertEqual(polestarWarranty.batteryWarrantyKm, 160_000)
+        XCTAssertEqual(polestarWarranty.includedMaintenance, true)
     }
 
     private func invocation(status: Int) -> Data {
