@@ -92,6 +92,24 @@ enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
     }
 }
 
+enum VehicleModelBadgePosition: String, CaseIterable, Codable, Sendable {
+    case inlineHeader = "inline-header"
+    case topRightOverlay = "top-right-overlay"
+    case topLeftOverlay = "top-left-overlay"
+    case subheadline = "subheadline"
+    case hidden = "hidden"
+
+    var title: String {
+        switch self {
+        case .inlineHeader: return L10n.text("Inline with Greeting (Top Right)")
+        case .topRightOverlay: return L10n.text("Over Vehicle Image (Top Right)")
+        case .topLeftOverlay: return L10n.text("Over Vehicle Image (Top Left)")
+        case .subheadline: return L10n.text("Below Greeting")
+        case .hidden: return L10n.text("Hidden")
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
     case light = "light"
@@ -443,6 +461,14 @@ enum Preferences {
             return CarRenderAngle(rawValue: raw) ?? .frontThreeQuarter
         }
         set { d.set(newValue.rawValue, forKey: "car_render_angle") }
+    }
+
+    static var vehicleModelBadgePosition: VehicleModelBadgePosition {
+        get {
+            let raw = d.string(forKey: "vehicle_model_badge_position") ?? ""
+            return VehicleModelBadgePosition(rawValue: raw) ?? .inlineHeader
+        }
+        set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") }
     }
 
     static var distanceUnit: DistanceUnit {

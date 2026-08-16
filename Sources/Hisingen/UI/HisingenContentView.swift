@@ -473,6 +473,10 @@ struct VehicleTabView: View {
         Card {
             VStack(spacing: 10) {
 
+                let badgePosition = Preferences.vehicleModelBadgePosition
+                let modelIdentity = features.contains(.vehicleIdentity)
+                    ? [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " · ") : ""
+
                 if features.contains(.vehicleImage), let imageData = heroImageData,
                    let nsImage = NSImage(data: imageData) {
                     ZStack {
@@ -495,6 +499,28 @@ struct VehicleTabView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 205)
                             .padding(.horizontal, 8)
+
+                        if !modelIdentity.isEmpty && (badgePosition == .topRightOverlay || badgePosition == .topLeftOverlay) {
+                            VStack {
+                                HStack {
+                                    if badgePosition == .topRightOverlay { Spacer() }
+                                    Text(modelIdentity)
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundStyle(HisingenTheme.ink)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(.ultraThinMaterial, in: Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                                        )
+                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+                                    if badgePosition == .topLeftOverlay { Spacer() }
+                                }
+                                .padding(8)
+                                Spacer()
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 220)
@@ -505,8 +531,6 @@ struct VehicleTabView: View {
 
 
                 let nickname = Preferences.vehicleNickname(for: state.vin)
-                let modelIdentity = features.contains(.vehicleIdentity)
-                    ? [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " · ") : ""
                 let greeting = features.contains(.ownerGreeting)
                     ? state.ownerFirstName.map { Format.greeting($0) } : nil
                 let plate = features.contains(.vehicleIdentity) ? state.registrationNo : nil
@@ -514,8 +538,11 @@ struct VehicleTabView: View {
                     ?? (!nickname.isEmpty ? nickname : nil)
                     ?? (modelIdentity.isEmpty ? "Hisingen" : modelIdentity)
 
+                let showModelInline = (badgePosition == .inlineHeader) && !modelIdentity.isEmpty && modelIdentity != primaryTitle
+                let showModelSubheadline = (badgePosition == .subheadline) && !modelIdentity.isEmpty && modelIdentity != primaryTitle
+
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         if greeting == nil, !nickname.isEmpty {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 12))
@@ -526,25 +553,34 @@ struct VehicleTabView: View {
                             .tracking(HisingenTheme.displayTracking * 0.3)
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
+                        if showModelInline {
+                            Text(modelIdentity)
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
                     }
 
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if let plate, !plate.isEmpty {
-                            Text(plate)
-                                .font(.system(size: 13, weight: HisingenTheme.valueWeight))
-                                .monospaced()
-                                .foregroundStyle(HisingenTheme.ink)
-                        }
-                        if greeting != nil, !nickname.isEmpty {
-                            Text(nickname)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(HisingenTheme.inkMuted)
-                        }
-                        Spacer()
-                        if !modelIdentity.isEmpty, modelIdentity != primaryTitle {
-                            Text(modelIdentity)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(HisingenTheme.inkMuted)
+                    let hasPlate = plate != nil && !plate!.isEmpty
+                    let hasNickname = greeting != nil && !nickname.isEmpty
+                    if hasPlate || hasNickname || showModelSubheadline {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if let plate, !plate.isEmpty {
+                                Text(plate)
+                                    .font(.system(size: 13, weight: HisingenTheme.valueWeight))
+                                    .monospaced()
+                                    .foregroundStyle(HisingenTheme.ink)
+                            }
+                            if greeting != nil, !nickname.isEmpty {
+                                Text(nickname)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                            }
+                            Spacer()
+                            if showModelSubheadline {
+                                Text(modelIdentity)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                            }
                         }
                     }
                 }

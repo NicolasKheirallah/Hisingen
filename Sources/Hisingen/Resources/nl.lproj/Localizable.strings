@@ -846,3 +846,20 @@
 "The last software update failed." = "De laatste software-update is mislukt.";
 "Software is up to date (%@)." = "De software is up-to-date (%@).";
 "Cancel Scheduled Installation" = "Geplande installatie annuleren";
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "Deze update is aan het voertuig aangeboden maar nog niet gedownload. De auto downloadt hem zelf zodra de omstandigheden dat toelaten; installeren kan pas daarna.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "De update wordt nog naar het voertuig gedownload. Probeer het opnieuw zodra dat klaar is.";
+"The vehicle is already installing this update." = "Het voertuig installeert deze update al.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "De laatste updatepoging is mislukt en het voertuig biedt de installatie niet opnieuw aan.";
+"There is no software update waiting to be installed on this vehicle." = "Er wacht geen software-update op installatie op dit voertuig.";
+"The vehicle cannot install a software update right now." = "Het voertuig kan nu geen software-update installeren.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "Een software-installatie kan alleen tussen %d minuten en %d dagen vanaf nu worden ingepland.";
+"The vehicle service rejected the request as invalid." = "De voertuigservice heeft het verzoek als ongeldig geweigerd.";
+"The vehicle service has no such update to act on." = "De voertuigservice kent zo'n update niet.";
+"Your Polestar account is not permitted to run this command." = "Je Polestar-account mag deze opdracht niet uitvoeren.";
+"The vehicle is not in a state where this command can run right now." = "Het voertuig verkeert nu niet in een staat waarin deze opdracht kan worden uitgevoerd.";
+"The vehicle service refused the command (gRPC status %@)." = "De voertuigservice heeft de opdracht geweigerd (gRPC-status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "De voertuigservice heeft de opdracht zonder opgaaf van reden geweigerd. Meestal betekent dit dat het voertuig hem nu niet kan uitvoeren.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Software-update %@ is beschikbaar. Het voertuig downloadt hem automatisch; daarna kan hij worden geïnstalleerd.";
+"A software update is available. The vehicle downloads it automatically." = "Er is een software-update beschikbaar. Het voertuig downloadt hem automatisch.";

@@ -51,6 +51,7 @@ struct KeychainStore: Sendable {
     private static let passwordAccount = "polestar-password"
     private static let sessionAccount = "polestar-refresh-token"
     private static let volvoBundleAccount = "volvo-credentials-bundle"
+    private static let commandSessionAccount = "polestar-command-refresh-token"
 
     func savePassword(_ password: String) throws {
         UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
@@ -71,6 +72,14 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(false, forKey: "has_polestar_session")
         try delete(account: Self.sessionAccount)
     }
+
+    /// Refresh token for the Polestar command client, kept separate from the primary session
+    /// because the two are issued to different OAuth clients and expire independently.
+    func saveCommandSessionToken(_ token: String) throws {
+        try save(token, account: Self.commandSessionAccount)
+    }
+    func readCommandSessionToken() throws -> String? { try read(account: Self.commandSessionAccount) }
+    func deleteCommandSessionToken() throws { try delete(account: Self.commandSessionAccount) }
 
     func saveVolvoSessionToken(_ token: String) throws {
         var bundle = readVolvoBundle()

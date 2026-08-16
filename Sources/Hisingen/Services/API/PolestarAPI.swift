@@ -23,14 +23,29 @@ actor PolestarAPI {
     private let publicApiKey = "da2-js63uvc7c5hwpdudt657d5lyou"
     private let oidcProviderURL = URL(string: "https://polestarid.eu.polestar.com")!
 
-    // The Polestar mobile-app OIDC client, not the polestar.com web client (`l3oopkc_10`).
-    // The web client is only granted the read-only `customer:attributes` scope, so every
-    // write RPC — OTA install/schedule/cancel included — comes back rejected. The app
-    // client additionally holds `customer:attributes:write`, which is what the C3
-    // `ota_mobcache.SchedulerService` methods require.
-    private let oidcClientID = "lp8dyrd_10"
-    private let oidcRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
+    // The polestar.com web client. The mobile-app client (`lp8dyrd_10`,
+    // `polestar-explore://explore.polestar.com`) authenticates fine but its token is rejected
+    // by `pc-api.polestar.com/mystar-v2` with `UnauthorizedException`, so vehicle discovery
+    // returns nothing and the app has no car to talk about — verified live against a real
+    // account. The `getConsumerCarsV2` query only accepts this client.
+    private let oidcClientID = "l3oopkc_10"
+    private let oidcRedirectURL = URL(string: "https://www.polestar.com/sign-in-callback")!
+    // `customer:attributes:write` is what the C3 `ota_mobcache.SchedulerService` write RPCs
+    // require. This client grants it on request — adding it does not disturb discovery.
     private let oidcScope = "openid profile email customer:attributes customer:attributes:write"
+
+    // Remote commands are gated on a *client-id allowlist*, separate from scope. C3 spells the
+    // rule out when it refuses: `Client id l3oopkc_10 is not a required client id: [… lp8dyrd_10 …]`.
+    // The web client above can list vehicles but cannot invoke; this one can invoke but is
+    // rejected by `mystar-v2` for reads. Neither is sufficient alone, so the app holds a token
+    // from each and picks per call. Verified live: `Lock` via C3 with this client returns
+    // `outcome = accepted`.
+    private let commandClientID = "lp8dyrd_10"
+    private let commandRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
+
+    private var commandAccessToken: String?
+    private var commandRefreshToken: String?
+    private var commandTokenExpiry: Date?
 
     private var session: URLSession
     private var redirectDelegate: OAuthRedirectDelegate
@@ -69,7 +84,7 @@ actor PolestarAPI {
 
     init(keychain: KeychainStore = .app) {
         self.keychain = keychain
-        let delegate = OAuthRedirectDelegate(callbackURL: oidcRedirectURL)
+        let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
     }
@@ -85,9 +100,55 @@ actor PolestarAPI {
         try await discoverOIDCConfiguration()
         let authorization = try await obtainAuthorizationCode(email: email, password: password)
         try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
+        await acquireCommandToken(email: email, password: password)
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage) { await fetchCarImage() }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+    }
+
+    /// Signs in a second time as the command-capable client. Failure is non-fatal: reads and
+    /// OTA still work without it, only invocation-backed commands become unavailable.
+    private func acquireCommandToken(email: String, password: String) async {
+        do {
+            let authorization = try await obtainAuthorizationCode(
+                email: email, password: password,
+                clientID: commandClientID, redirectURI: commandRedirectURL, scope: oidcScope
+            )
+            let token = try await exchangeCode(authorization.code, verifier: authorization.verifier,
+                                               clientID: commandClientID, redirectURI: commandRedirectURL)
+            commandAccessToken = token.accessToken
+            commandRefreshToken = token.refreshToken
+            commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+            if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
+            logger.info("Polestar command-client token acquired")
+        } catch {
+            logger.warning("Polestar command-client sign-in failed; remote commands unavailable")
+        }
+    }
+
+    /// A valid token for invocation-backed commands, refreshed on demand.
+    private func validCommandToken() async -> String? {
+        if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
+           let token = commandAccessToken { return token }
+        let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        guard let refresh = stored, let tokenEndpoint else { return commandAccessToken }
+        var request = URLRequest(url: tokenEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.formBody([
+            "grant_type": "refresh_token",
+            "client_id": commandClientID,
+            "refresh_token": refresh
+        ])
+        guard let token = try? await Self.requestToken(request: request, session: session,
+                                                       invalidReason: .expiredSession) else {
+            return nil
+        }
+        commandAccessToken = token.accessToken
+        commandRefreshToken = token.refreshToken ?? refresh
+        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+        return token.accessToken
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -114,11 +175,14 @@ actor PolestarAPI {
         accessToken = nil
         refreshToken = nil
         tokenExpiry = nil
+        commandAccessToken = nil
+        commandRefreshToken = nil
+        commandTokenExpiry = nil
         refreshTask?.cancel()
         refreshTask = nil
         clearAccountState()
         session.invalidateAndCancel()
-        let delegate = OAuthRedirectDelegate(callbackURL: oidcRedirectURL)
+        let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
         await grpc.invalidateDiscoveredHost()
@@ -428,7 +492,10 @@ actor PolestarAPI {
             throw RemoteCommandError.unsupported
         }
         let adaptedCommand = command.adapted(to: profile)
-        let result = try await grpc.executeRemoteCommand(adaptedCommand, vin: vin, accessToken: token)
+        let result = try await grpc.executeRemoteCommand(
+            adaptedCommand, vin: vin, accessToken: token,
+            commandToken: await validCommandToken()
+        )
         if case .setChargeTarget = adaptedCommand { targetCache[vin] = nil }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
@@ -509,7 +576,9 @@ actor PolestarAPI {
         revocationEndpoint = discovery.revocationEndpoint.flatMap(Self.validPolestarURL)
     }
 
-    private func obtainAuthorizationCode(email: String, password: String) async throws
+    private func obtainAuthorizationCode(email: String, password: String,
+                                         clientID: String? = nil, redirectURI: URL? = nil,
+                                         scope: String? = nil) async throws
         -> (code: String, verifier: String) {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
@@ -517,9 +586,9 @@ actor PolestarAPI {
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
         let queryItems = Self.authorizationQueryItems(
-            clientID: oidcClientID,
-            redirectURI: oidcRedirectURL.absoluteString,
-            scope: oidcScope,
+            clientID: clientID ?? oidcClientID,
+            redirectURI: (redirectURI ?? oidcRedirectURL).absoluteString,
+            scope: scope ?? oidcScope,
             state: state,
             challenge: Self.codeChallenge(for: verifier)
         )
@@ -536,7 +605,8 @@ actor PolestarAPI {
         logger.info("Authorization page returned status \(response.statusCode, privacy: .public)")
 
         let authorizationCallback = redirectDelegate.takeCallback() ?? response.url
-        if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state) {
+        if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state,
+                                              callbackURL: redirectURI ?? oidcRedirectURL) {
             return (code, verifier)
         }
         let html = String(decoding: data, as: UTF8.self)
@@ -548,14 +618,16 @@ actor PolestarAPI {
             queryItems: queryItems,
             email: email,
             password: password,
-            expectedState: state
+            expectedState: state,
+            callbackURL: redirectURI ?? oidcRedirectURL
         )
         return (code, verifier)
     }
 
     private func performLogin(resumePath: String, queryItems: [URLQueryItem],
                               email: String, password: String,
-                              expectedState: String) async throws -> String {
+                              expectedState: String,
+                              callbackURL: URL? = nil) async throws -> String {
         guard resumePath.hasPrefix("/"),
               var components = URLComponents(url: oidcProviderURL.appendingPathComponent(resumePath),
                                              resolvingAgainstBaseURL: false) else {
@@ -572,7 +644,8 @@ actor PolestarAPI {
         )
         logger.info("Polestar sign-in returned status \(response.statusCode, privacy: .public)")
         let loginCallback = redirectDelegate.takeCallback() ?? response.url
-        if let code = try extractValidatedCode(from: loginCallback, expectedState: expectedState) { return code }
+        if let code = try extractValidatedCode(from: loginCallback, expectedState: expectedState,
+                                              callbackURL: callbackURL) { return code }
 
         if let uid = Self.queryValue("uid", from: response.url) {
             let (_, confirmation) = try await postForm(
@@ -580,7 +653,8 @@ actor PolestarAPI {
                 fields: ["pf.submit": "true", "subject": uid]
             )
             let confirmationCallback = redirectDelegate.takeCallback() ?? confirmation.url
-            if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState) {
+            if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState,
+                                                  callbackURL: callbackURL) {
                 return code
             }
         }
@@ -592,15 +666,36 @@ actor PolestarAPI {
         throw PolestarError.authenticationRequired(.callbackRejected)
     }
 
-    private func extractValidatedCode(from url: URL?, expectedState: String) throws -> String? {
+    private func extractValidatedCode(from url: URL?, expectedState: String,
+                                      callbackURL: URL? = nil) throws -> String? {
         guard let url else { return nil }
-        guard url.scheme == oidcRedirectURL.scheme,
-              url.host == oidcRedirectURL.host,
-              Self.normalizedPath(url) == Self.normalizedPath(oidcRedirectURL) else { return nil }
+        let expected = callbackURL ?? oidcRedirectURL
+        guard url.scheme == expected.scheme,
+              url.host == expected.host,
+              Self.normalizedPath(url) == Self.normalizedPath(expected) else { return nil }
         guard Self.queryValue("state", from: url) == expectedState else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         return Self.queryValue("code", from: url)
+    }
+
+    private func exchangeCode(_ code: String, verifier: String,
+                              clientID: String, redirectURI: URL) async throws -> TokenResponseDTO {
+        guard let tokenEndpoint else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        var request = URLRequest(url: tokenEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.formBody([
+            "grant_type": "authorization_code",
+            "client_id": clientID,
+            "code": code,
+            "redirect_uri": redirectURI.absoluteString,
+            "code_verifier": verifier
+        ])
+        return try await Self.requestToken(request: request, session: session,
+                                           invalidReason: .callbackRejected)
     }
 
     private func exchangeCodeForToken(_ code: String, verifier: String) async throws {
@@ -1306,21 +1401,25 @@ actor PolestarAPI {
 }
 
 private final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    private let callbackURL: URL
+    /// Both OAuth clients redirect through this one session, and the command client's callback
+    /// is a custom scheme `URLSession` cannot load — so every callback the app might see has to
+    /// be recognised here, or the redirect is followed into a failure and the code is lost.
+    private let callbackURLs: [URL]
     private let lock = NSLock()
     private var callback: URL?
 
-    init(callbackURL: URL) {
-        self.callbackURL = callbackURL
+    init(callbackURLs: [URL]) {
+        self.callbackURLs = callbackURLs
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        if let target = request.url, target.scheme == callbackURL.scheme,
-           target.host == callbackURL.host,
-           PolestarAPI.normalizedPath(target) == PolestarAPI.normalizedPath(callbackURL) {
+        if let target = request.url, callbackURLs.contains(where: { candidate in
+            target.scheme == candidate.scheme && target.host == candidate.host
+                && PolestarAPI.normalizedPath(target) == PolestarAPI.normalizedPath(candidate)
+        }) {
             lock.withLock { callback = target }
             completionHandler(nil)
         } else {

@@ -86,6 +86,49 @@ struct VehicleCapabilityParsingTests {
         XCTAssertNil(software.latestAvailableVersion)
     }
 
+    /// Decodes a real `GetSoftwareInfo` frame captured from a Polestar 2 (VIN redacted).
+    /// Pins every field number against actual bytes rather than an inferred schema.
+    @Test
+    func testRealCapturedSoftwareInfoFrameDecodes() throws {
+        let hex =
+            "0ab1020a2461393532353433372d313864332d346561632d626630392d316637356630383462" +
+            "65656112e7010a0f536f66747761726520757064617465120f536f6674776172652075706461" +
+            "74651ac2013c74657874626c6f636b3e41206e657720736f6674776172652075706461746520" +
+            "697320617661696c61626c6520636f6e7461696e696e6720696d70726f7665642066756e6374" +
+            "696f6e616c6974792e20436c69636b2052656164206d6f726520746f20726561642061626f75" +
+            "742069742e20506c6561736520636f6e7461637420506f6c657374617220696620796f752068" +
+            "61766520616e79207175657374696f6e732061626f757420746865207570646174652e3c2f74" +
+            "657874626c6f636b3e1a00200f2a0308982a3206352e302e3130520608a2f99bd0065a065359" +
+            "5354454d"
+        var bytes = Data()
+        var index = hex.startIndex
+        while let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) {
+            bytes.append(UInt8(hex[index..<next], radix: 16)!)
+            index = next
+        }
+        let payload = try XCTUnwrap(
+            Protobuf.fields(bytes).first(where: { $0.number == 1 && $0.wire == 2 })?.data
+        )
+        let software = PolestarGRPC.parseSoftware(payload)
+        XCTAssertEqual(software.state, .available)                       // field 4 == 15
+        XCTAssertEqual(software.latestAvailableVersion, "5.0.10")        // field 6
+        XCTAssertNil(software.installedVersion)
+        XCTAssertEqual(software.title, "Software update")                // field 2.1
+        XCTAssertNil(software.scheduledAt)                               // no field 8
+        XCTAssertNotNil(software.updatedAt)                              // field 10
+    }
+
+    /// The C3 scheduler answers `relativeTime should be between 2 to 10080!` — minutes, not
+    /// seconds. Pins the unit and bounds so the `* 60` bug cannot come back.
+    @Test
+    func testOtaScheduleDelayIsExpressedInMinutesWithinBackendBounds() {
+        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.lowerBound, 2)
+        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.upperBound, 10_080)
+        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.upperBound, 7 * 24 * 60)
+        XCTAssertFalse(PolestarGRPC.otaScheduleMinutes.contains(1))
+        XCTAssertFalse(PolestarGRPC.otaScheduleMinutes.contains(10_081))
+    }
+
     @Test
     func testSoftwareStateEnumCoversTheFullBackendRange() {
         let expected: [UInt64: SoftwareUpdateState] = [

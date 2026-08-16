@@ -1,16 +1,23 @@
 import Foundation
 
 extension PolestarGRPC {
+    // C3, not PCCS. `pccs.invocation.v1.InvocationService` exists but answers every write
+    // with `Unauthenticated: Access denied` regardless of client; the C3 service accepts them.
     private static let invocationService = "/invocation.InvocationService"
-    private static let targetSOCService = "/chronos.services.v1.TargetSocService"
-    private static let ampLimitService = "/chronos.services.v1.AmpLimitService"
-    private static let chargeNowService = "/chronos.services.v1.ChargeNowService"
-    private static let chargeTimerService = "/chronos.services.v2.GlobalChargeTimerService"
-    private static let climateTimerService = "/chronos.services.v1.ParkingClimateTimerService"
+    private static let targetSOCService = "/pccs.chronos.services.v1.TargetSocService"
+    private static let ampLimitService = "/pccs.chronos.services.v1.AmpLimitService"
+    private static let chargeNowService = "/pccs.chronos.services.v1.ChargeNowService"
+    private static let chargeTimerService = "/pccs.chronos.services.v2.GlobalChargeTimerService"
+    private static let climateTimerService = "/pccs.chronos.services.v1.ParkingClimateTimerService"
     private static let otaSchedulerService = "/ota_mobcache.SchedulerService"
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String,
-                              accessToken: String) async throws -> RemoteCommandResult {
+                              accessToken: String,
+                              commandToken: String? = nil) async throws -> RemoteCommandResult {
+        // Invocation-backed commands are gated on a client-id allowlist that the primary
+        // (web) client is not on, so they need the command client's token. Everything else
+        // — OTA and chronos — is happy with the primary token.
+        self.activeCommandToken = commandToken ?? accessToken
         switch command {
         case .startClimate(let temperature, let frontLeft, let frontRight,
                            let rearLeft, let rearRight, let steeringWheel):
@@ -118,12 +125,22 @@ extension PolestarGRPC {
             }
             return RemoteCommandResult(outcome: .completed, message: nil)
         case .scheduleOTA(let minutes):
-            guard (1...1_440).contains(minutes) else { throw RemoteCommandError.rejected(nil) }
+            // `relative_time` is in MINUTES, and the backend enforces 2…10080 (7 days) —
+            // verified live, which answers it with
+            // `grpc-status 3: relativeTime should be between 2 to 10080!`.
+            // This previously sent `minutes * 60`, so every schedule request was rejected as
+            // out of range once the delay exceeded ~2.8 hours, and was silently wrong below it.
+            guard Self.otaScheduleMinutes.contains(minutes) else {
+                throw RemoteCommandError.rejected(
+                    L10n.format("A software installation can only be scheduled between %d minutes and %d days from now.",
+                                Self.otaScheduleMinutes.lowerBound, Self.otaScheduleMinutes.upperBound / 1_440)
+                )
+            }
             let softwareID = try await softwareID(vin: vin, accessToken: accessToken,
                                                  requiringInstallable: true)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
-            request.append(Protobuf.intField(2, minutes * 60))
+            request.append(Protobuf.intField(2, minutes))
             request.append(Protobuf.stringField(3, softwareID))
             return try await ota(method: "Schedule", request: request, vin: vin, token: accessToken)
         case .installOTANow:
@@ -169,18 +186,30 @@ extension PolestarGRPC {
         return resolved
     }
 
-    /// States in which the scheduler will accept an install. `downloading` is excluded because
-    /// the payload is not on the car yet; `completed`/`unknown` because nothing is pending.
+    /// Bounds the C3 scheduler enforces on `relative_time`, in minutes.
+    static let otaScheduleMinutes = 2...10_080
+
+    /// States in which the scheduler will accept an install or a schedule.
+    ///
+    /// `available` is deliberately excluded. Verified live: a Polestar 2 advertising an update
+    /// in state 15 answers both `Schedule` and `InstallNow` with
+    /// `grpc-status 3: The software with software id <id> is not ready to be scheduled!`
+    /// — "available" means the update has been *offered*, not that the car has downloaded it.
+    /// Only once the download completes does the scheduler accept a request.
     private static let installableStates: Set<SoftwareUpdateState> = [
-        .available, .downloaded, .deferred, .scheduled, .failed
+        .downloaded, .deferred, .scheduled
     ]
 
     private static func notInstallableMessage(_ state: SoftwareUpdateState) -> String {
         switch state {
+        case .available:
+            return L10n.text("This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards.")
         case .downloading:
             return L10n.text("The update is still downloading to the vehicle. Try again once it has finished.")
         case .installing:
             return L10n.text("The vehicle is already installing this update.")
+        case .failed:
+            return L10n.text("The last update attempt failed, and the vehicle has not made it available to install again.")
         case .completed, .unknown:
             return L10n.text("There is no software update waiting to be installed on this vehicle.")
         default:
@@ -191,7 +220,8 @@ extension PolestarGRPC {
     private func invocation(method: String, request: Data, vin: String,
                             token: String) async throws -> RemoteCommandResult {
         let body = try await lastMessage(path: Self.invocationService + "/\(method)",
-                                         message: request, vin: vin, accessToken: token, host: .pccs)
+                                         message: request, vin: vin,
+                                         accessToken: activeCommandToken ?? token, host: .c3)
         return try Self.parseInvocationResult(body)
     }
 

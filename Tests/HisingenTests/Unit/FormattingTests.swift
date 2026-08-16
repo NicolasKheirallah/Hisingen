@@ -42,6 +42,21 @@ struct FormattingTests {
     }
 
     @Test
+    func testVehicleModelBadgePositionPreference() {
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
+        Preferences.vehicleModelBadgePosition = .topRightOverlay
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topRightOverlay)
+        Preferences.vehicleModelBadgePosition = .topLeftOverlay
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topLeftOverlay)
+        Preferences.vehicleModelBadgePosition = .subheadline
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .subheadline)
+        Preferences.vehicleModelBadgePosition = .hidden
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .hidden)
+        Preferences.vehicleModelBadgePosition = .inlineHeader
+        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
+    }
+
+    @Test
     func testFeatureSelectionCanDisableOptionalCapabilities() {
         var features = FeatureSelection.default
         XCTAssertTrue(features.contains(.vehicleImage))
