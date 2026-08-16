@@ -570,7 +570,7 @@ actor PolestarAPI {
             adaptedCommand, vin: vin, accessToken: token,
             commandToken: await validCommandToken()
         )
-        if case .setChargeTarget = adaptedCommand { targetCache[vin] = nil }
+        if case .setChargeTarget(let target) = adaptedCommand { targetCache[vin] = (target, Date()) }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }
