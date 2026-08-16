@@ -96,13 +96,17 @@ enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
     case rearThreeQuarter = 1
     case sideProfile = 2
     case overhead = 3
+    case frontDirect = 4
+    case rearProfile = 5
 
     var title: String {
         switch self {
         case .frontThreeQuarter: return L10n.text("Front Three-Quarter")
         case .rearThreeQuarter: return L10n.text("Rear Three-Quarter")
         case .sideProfile: return L10n.text("Side Profile")
-        case .overhead: return L10n.text("Overhead")
+        case .overhead: return L10n.text("Overhead (Top-Down)")
+        case .frontDirect: return L10n.text("Front Direct")
+        case .rearProfile: return L10n.text("Rear Profile")
         }
     }
 
@@ -112,6 +116,8 @@ enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
         case .rearThreeQuarter: return "car.side.rear.open.fill"
         case .sideProfile: return "car.side.fill"
         case .overhead: return "car.top.door.front.left.open.fill"
+        case .frontDirect: return "car.front.waves.up.fill"
+        case .rearProfile: return "car.rear.and.tire.marks"
         }
     }
 }

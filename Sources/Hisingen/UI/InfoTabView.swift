@@ -54,12 +54,21 @@ struct InfoTabView: View {
             VStack(spacing: 10) {
                 // Angle & Interior View Switcher
                 HStack(spacing: 4) {
-                    angleButton(title: L10n.text("Front"), angle: 0, icon: "car.side.front.open.fill")
-                    angleButton(title: L10n.text("Side"), angle: 2, icon: "car.side.fill")
-                    angleButton(title: L10n.text("Rear"), angle: 1, icon: "car.side.rear.open.fill")
-                    if hasInterior {
-                        angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            angleButton(title: L10n.text("3/4 Front"), angle: 0, icon: "car.side.front.open.fill")
+                            angleButton(title: L10n.text("Side"), angle: 2, icon: "car.side.fill")
+                            angleButton(title: L10n.text("3/4 Rear"), angle: 1, icon: "car.side.rear.open.fill")
+                            angleButton(title: L10n.text("Top"), angle: 3, icon: "car.top.door.front.left.open.fill")
+                            angleButton(title: L10n.text("Front"), angle: 4, icon: "car.front.waves.up.fill")
+                            angleButton(title: L10n.text("Rear"), angle: 5, icon: "car.rear.and.tire.marks")
+                            if hasInterior {
+                                angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
+
                     Spacer()
                     if let color = state.externalColour, !color.isEmpty && !isInterior {
                         Pill(
