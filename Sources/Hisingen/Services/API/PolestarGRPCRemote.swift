@@ -119,14 +119,16 @@ extension PolestarGRPC {
             return RemoteCommandResult(outcome: .completed, message: nil)
         case .scheduleOTA(let minutes):
             guard (1...1_440).contains(minutes) else { throw RemoteCommandError.rejected(nil) }
-            let softwareID = try await softwareID(vin: vin, accessToken: accessToken)
+            let softwareID = try await softwareID(vin: vin, accessToken: accessToken,
+                                                 requiringInstallable: true)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.intField(2, minutes * 60))
             request.append(Protobuf.stringField(3, softwareID))
             return try await ota(method: "Schedule", request: request, vin: vin, token: accessToken)
         case .installOTANow:
-            let softwareID = try await softwareID(vin: vin, accessToken: accessToken)
+            let softwareID = try await softwareID(vin: vin, accessToken: accessToken,
+                                                 requiringInstallable: true)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.stringField(2, softwareID))
@@ -148,11 +150,42 @@ extension PolestarGRPC {
     /// `GetSoftwareInfo`/`GetSchedule` read. The id is cached per VIN, but a command issued
     /// before the first successful software read — or after the app restarted — would otherwise
     /// fail with "missing context", so fetch it on demand instead of giving up.
-    private func softwareID(vin: String, accessToken: String) async throws -> String {
-        if let cached = otaSoftwareIDs[vin] { return cached }
+    private func softwareID(vin: String, accessToken: String,
+                            requiringInstallable: Bool = false) async throws -> String {
+        // Always re-read before a write. A cached id can name a version the car has since
+        // finished installing, and `InstallNow` on that is refused by the backend in HTTP/2
+        // trailers URLSession cannot surface — which reaches the user as an unexplained
+        // "unexpected response" rather than anything actionable.
         _ = try? await fetchSoftware(vin: vin, accessToken: accessToken, locale: "en")
-        guard let resolved = otaSoftwareIDs[vin] else { throw RemoteCommandError.missingContext }
+        guard let resolved = otaSoftwareIDs[vin], !resolved.isEmpty else {
+            throw RemoteCommandError.missingContext
+        }
+        if requiringInstallable {
+            let state = otaSoftwareStates[vin] ?? .unknown
+            guard Self.installableStates.contains(state) else {
+                throw RemoteCommandError.rejected(Self.notInstallableMessage(state))
+            }
+        }
         return resolved
+    }
+
+    /// States in which the scheduler will accept an install. `downloading` is excluded because
+    /// the payload is not on the car yet; `completed`/`unknown` because nothing is pending.
+    private static let installableStates: Set<SoftwareUpdateState> = [
+        .available, .downloaded, .deferred, .scheduled, .failed
+    ]
+
+    private static func notInstallableMessage(_ state: SoftwareUpdateState) -> String {
+        switch state {
+        case .downloading:
+            return L10n.text("The update is still downloading to the vehicle. Try again once it has finished.")
+        case .installing:
+            return L10n.text("The vehicle is already installing this update.")
+        case .completed, .unknown:
+            return L10n.text("There is no software update waiting to be installed on this vehicle.")
+        default:
+            return L10n.text("The vehicle cannot install a software update right now.")
+        }
     }
 
     private func invocation(method: String, request: Data, vin: String,
