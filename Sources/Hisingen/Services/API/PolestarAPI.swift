@@ -50,8 +50,15 @@ actor PolestarAPI {
 
     private var session: URLSession
     private var redirectDelegate: OAuthRedirectDelegate
-    private let grpc = PolestarGRPC()
+    let grpc = PolestarGRPC()
     private let keychain: KeychainStore
+
+    func currentAccessToken() async throws -> String {
+        guard let token = try await validAccessToken() else {
+            throw PolestarError.authenticationRequired(.invalidCredentials)
+        }
+        return token
+    }
 
     private var accessToken: String?
     private var refreshToken: String?
