@@ -239,6 +239,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     var chargingCurrentLimitAmps: Int? = nil
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
+    var optimisticCommandLockUntil: Date? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -751,14 +752,14 @@ struct VehicleState: Codable, Equatable, Sendable {
             return current
         }()
 
-        let isRecentlyUpdated = Date().timeIntervalSince(previous.fetchedAt) < 90
+        let isCommandLocked = (previous.optimisticCommandLockUntil ?? .distantPast) > Date()
         let mergedClimate: VehicleClimateStatus? = {
             guard let prevClimate = previous.climateStatus else {
                 return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
             }
-            if isRecentlyUpdated {
+            if isCommandLocked {
                 if prevClimate.activity == .heating || prevClimate.activity == .cooling || prevClimate.activity == .ventilating || prevClimate.activity == .active {
-                    if let incoming = climateStatus, incoming.activity != .idle && incoming.activity != .unknown {
+                    if let incoming = climateStatus, incoming.activity == .heating || incoming.activity == .cooling || incoming.activity == .ventilating || incoming.activity == .active {
                         return incoming
                     }
                     return prevClimate
@@ -773,14 +774,14 @@ struct VehicleState: Codable, Equatable, Sendable {
         }()
 
         let mergedChargeTarget: Int? = {
-            if isRecentlyUpdated, let prevTarget = previous.chargeTargetPercentage {
+            if isCommandLocked, let prevTarget = previous.chargeTargetPercentage {
                 return prevTarget
             }
             return chargeTargetPercentage ?? previous.chargeTargetPercentage
         }()
 
         let mergedCurrentAmps: Int? = {
-            if isRecentlyUpdated, let prevAmps = previous.chargingCurrentAmps {
+            if isCommandLocked, let prevAmps = previous.chargingCurrentAmps {
                 return prevAmps
             }
             return chargingCurrentAmps ?? previous.chargingCurrentAmps
@@ -862,6 +863,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
+        merged.optimisticCommandLockUntil = isCommandLocked ? previous.optimisticCommandLockUntil : nil
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

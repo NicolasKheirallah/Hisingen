@@ -428,6 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         current.fetchedAt = Date()
+        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
         latest = current
         stateStore.save(current)
         render()
