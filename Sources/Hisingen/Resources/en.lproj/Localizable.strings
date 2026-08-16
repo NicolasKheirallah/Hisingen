@@ -174,6 +174,7 @@
 "PM2.5 Concentration" = "PM2.5 Concentration";
 "Ambient Weather" = "Ambient Weather";
 "Tire Status (iTPMS)" = "Tire Status (iTPMS)";
+"Sensor readings" = "Sensor readings";
 "Network Type" = "Network Type";
 "Signal Strength" = "Signal Strength";
 "Charging Started" = "Charging Started";
@@ -835,3 +836,23 @@
 "Market Delivery" = "Market Delivery";
 "Software Release" = "Software Release";
 
+
+/* Vehicle software & OTA */
+"Polestar Remote Commands" = "Polestar Remote Commands";
+"Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices." = "Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices.";
+"Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices." = "Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices.";
+"Install or cancel a pending software update" = "Install or cancel a pending software update";
+"Software status is unavailable for this vehicle." = "Software status is unavailable for this vehicle.";
+"Software update %@ is ready to install." = "Software update %@ is ready to install.";
+"A software update is ready to install." = "A software update is ready to install.";
+"Downloading software update %@…" = "Downloading software update %@…";
+"Downloading a software update…" = "Downloading a software update…";
+"Installing software update %@…" = "Installing software update %@…";
+"Installing a software update…" = "Installing a software update…";
+"Installation is scheduled for %@." = "Installation is scheduled for %@.";
+"An installation is scheduled." = "An installation is scheduled.";
+"The last software update failed." = "The last software update failed.";
+"Software is up to date (%@)." = "Software is up to date (%@).";
+"Cancel Scheduled Installation" = "Cancel Scheduled Installation";
+"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
+"The last refresh could not read: %@" = "The last refresh could not read: %@";

@@ -260,8 +260,15 @@ struct AppBackendCarDTO: Decodable {
     struct Content: Decodable {
         let model: Model?
         let exterior: NamedOption?
+        let exteriorColor: NamedOption?
         let interior: NamedOption?
+        let upholstery: NamedOption?
         let wheels: NamedOption?
+        let packages: [NamedOption]?
+
+        private enum CodingKeys: String, CodingKey {
+            case model, exterior, exteriorColor, interior, upholstery, wheels, packages
+        }
     }
 
     struct NamedOption: Decodable {
@@ -281,10 +288,10 @@ struct AppBackendCarDTO: Decodable {
             registrationNo: registrationNo,
             pno34: nil,
             structureWeek: nil,
-            exteriorColorName: content?.exterior?.name,
-            upholsteryName: content?.interior?.name,
+            exteriorColorName: content?.exterior?.name ?? content?.exteriorColor?.name,
+            upholsteryName: content?.interior?.name ?? content?.upholstery?.name,
             wheelsName: content?.wheels?.name,
-            packageNames: []
+            packageNames: content?.packages?.compactMap(\.name) ?? []
         )
     }
 }

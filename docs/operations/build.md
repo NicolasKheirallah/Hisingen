@@ -33,13 +33,9 @@ macOS 13 Ventura or later; Xcode 15+ or compatible Command Line Tools with Swift
 
 Every build in CI (and recommended locally) passes `-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. This is not a default `swift build`/`make build` behavior — it's opt-in via `SWIFT_FLAGS`, applied explicitly in `ci.yml` and `release.yml`. See [architecture/concurrency.md](../architecture/concurrency.md).
 
-## The `HISINGEN_EXPERIMENTAL_REMOTE` flag
+## Remote-command dispatch
 
-```bash
-HISINGEN_EXPERIMENTAL_REMOTE=1 swift build
-```
-
-Compiles in Polestar's remote-command dispatch code path (normally stubbed to always throw `RemoteCommandError.unsupported`). Never set in CI or release builds — see [security/threat-model.md](../security/threat-model.md#remote-control-surface). Setting it locally is for owner-authorized experimentation only; the real backend is still expected to reject unpaired-client write calls.
+There is no build flag for this any more. `HISINGEN_EXPERIMENTAL_REMOTE` was removed in [ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md); Polestar's remote-command path is compiled into every build, including releases. It stays inert until the matching capability is enabled in Settings, and non-routine commands still require Touch ID — see [security/threat-model.md](../security/threat-model.md#remote-control-surface).
 
 ## Verifying a local build
 

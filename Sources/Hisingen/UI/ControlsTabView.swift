@@ -82,27 +82,27 @@ struct ControlsTabView: View {
 
     private var restrictedNoticeBanner: some View {
         HStack(spacing: 10) {
-            Image(systemName: isBrandVolvo ? "checkmark.shield.fill" : "lock.shield.fill")
+            Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(isBrandVolvo ? HisingenTheme.accent : .secondary)
+                .foregroundStyle(HisingenTheme.accent)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Remote Controls Temporarily Disabled"))
+                Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Polestar Remote Commands"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(isBrandVolvo
                      ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
-                     : L10n.text("Polestar's backend restricts remote write commands to paired mobile devices."))
+                     : L10n.text("Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
             Spacer()
         }
         .padding(10)
-        .background(isBrandVolvo ? HisingenTheme.accent.opacity(0.08) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isBrandVolvo ? HisingenTheme.accent.opacity(0.3) : Color.primary.opacity(0.15), lineWidth: 0.5)
+                .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -624,37 +624,104 @@ struct ControlsTabView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "shippingbox.fill", title: L10n.text("Vehicle Software & OTA"), color: .blue)
-                if let software = state.softwareInfo, software.state == .available || software.state == .downloaded {
-                    let version = software.latestAvailableVersion ?? software.version ?? "Update"
-                    Text(L10n.format("Software update %@ is downloaded and ready to install.", version))
-                        .font(.system(size: 11))
-                        .foregroundStyle(HisingenTheme.ink)
-
-                    Button {
-                        onRemoteCommand(.installOTANow)
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text(L10n.text("Install Update Now"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .controlSize(.regular)
-                    .disabled(remoteCommandInProgress)
+                if let software = state.softwareInfo {
+                    otaStatusLine(software)
+                    otaActions(software)
                 } else {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(HisingenTheme.semanticGood)
-                        Text(L10n.text("Software is up to date"))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(HisingenTheme.ink)
-                    }
+                    otaStatusRow(symbol: "questionmark.circle.fill",
+                                 tint: .secondary,
+                                 text: L10n.text("Software status is unavailable for this vehicle."))
                 }
             }
         }
     }
+
+    /// The advertised version only means "an update is waiting" while the state says so —
+    /// in every settled state it is what the car is already running, so it must not be
+    /// described as pending.
+    @ViewBuilder
+    private func otaStatusLine(_ software: VehicleSoftwareInfo) -> some View {
+        let pending = software.latestAvailableVersion ?? software.version
+        switch software.state {
+        case .available, .downloaded, .deferred:
+            otaStatusRow(symbol: "arrow.down.circle.fill", tint: .blue,
+                         text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
+                            ?? L10n.text("A software update is ready to install."))
+        case .downloading:
+            otaStatusRow(symbol: "arrow.down.circle", tint: .blue,
+                         text: pending.map { L10n.format("Downloading software update %@…", $0) }
+                            ?? L10n.text("Downloading a software update…"))
+        case .installing:
+            otaStatusRow(symbol: "gearshape.2.fill", tint: .blue,
+                         text: pending.map { L10n.format("Installing software update %@…", $0) }
+                            ?? L10n.text("Installing a software update…"))
+        case .scheduled:
+            let when = software.scheduledAt.map(Format.dateTimeFormatter.string(from:))
+            otaStatusRow(symbol: "calendar.badge.clock", tint: .blue,
+                         text: when.map { L10n.format("Installation is scheduled for %@.", $0) }
+                            ?? L10n.text("An installation is scheduled."))
+        case .failed:
+            otaStatusRow(symbol: "exclamationmark.triangle.fill", tint: HisingenTheme.semanticWarning,
+                         text: L10n.text("The last software update failed."))
+        case .completed, .unknown:
+            let installed = software.installedVersion ?? software.version
+            otaStatusRow(symbol: "checkmark.circle.fill", tint: HisingenTheme.semanticGood,
+                         text: installed.map { L10n.format("Software is up to date (%@).", $0) }
+                            ?? L10n.text("Software is up to date"))
+        }
+    }
+
+    @ViewBuilder
+    private func otaActions(_ software: VehicleSoftwareInfo) -> some View {
+        switch software.state {
+        case .available, .downloaded, .deferred, .failed:
+            otaButton(title: L10n.text("Install Update Now"), symbol: "arrow.down.circle.fill",
+                      prominent: true) { onRemoteCommand(.installOTANow) }
+        case .scheduled:
+            VStack(spacing: 6) {
+                otaButton(title: L10n.text("Install Update Now"), symbol: "arrow.down.circle.fill",
+                          prominent: true) { onRemoteCommand(.installOTANow) }
+                otaButton(title: L10n.text("Cancel Scheduled Installation"), symbol: "xmark.circle",
+                          prominent: false) { onRemoteCommand(.cancelOTA) }
+            }
+        case .downloading, .installing, .completed, .unknown:
+            EmptyView()
+        }
+    }
+
+    private func otaStatusRow(symbol: String, tint: Color, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).foregroundStyle(tint)
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(HisingenTheme.ink)
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func otaButton(title: String, symbol: String, prominent: Bool,
+                           action: @escaping () -> Void) -> some View {
+        let label = HStack(spacing: 5) {
+            Image(systemName: symbol)
+            Text(title)
+        }
+        .frame(maxWidth: .infinity)
+
+        if prominent {
+            Button(action: action) { label }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .controlSize(.regular)
+                .disabled(remoteCommandInProgress)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .disabled(remoteCommandInProgress)
+        }
+    }
+
 
     private var noControlsEnabledCard: some View {
         Card {

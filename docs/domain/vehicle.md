@@ -52,7 +52,7 @@ In `ControlsTabView.swift`, cards adapt dynamically using `profile.hasSelectable
 - `risk: RemoteCommandRisk` — `.routine` (confirmation dialog only), `.securitySensitive` (`unlock`, `unlockTrunk`, `openWindows` — requires Touch ID/Mac password), `.destructive` (`installOTANow`, `deleteClimateTimer` — same authentication requirement).
 - `adapted(to:)` — silently strips parameters the vehicle's capability profile says aren't selectable (e.g. a Polestar 2's vehicle-managed climate temperature gets reset to "unspecified" rather than sent).
 
-Remote command dispatch is gated at the build level for Polestar (`HISINGEN_EXPERIMENTAL_REMOTE`) and only partially implemented for Volvo — see [api/polestar.md](../api/polestar.md#remote-commands) and [api/volvo.md](../api/volvo.md#remote-commands).
+Remote command dispatch is compiled into every build for both brands ([ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md)); for Polestar only the OTA scheduler commands are reachable from the UI, and Volvo's are only partially implemented — see [api/polestar.md](../api/polestar.md#remote-commands) and [api/volvo.md](../api/volvo.md#remote-commands).
 
 ### Remote command optimistic updates
 

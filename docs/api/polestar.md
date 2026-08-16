@@ -55,7 +55,23 @@ gRPC `HealthService/GetHealth` (C3), `PolestarGRPC.parseHealth` — positional p
 
 ## Software / OTA
 
-gRPC `OtaDiscoveryService/GetSoftwareInfo` and `SchedulerService` (`GetSchedule`/`Schedule`/`InstallNow`/`CancelSchedule`), both C3. `PolestarGRPC.parseSoftware` maps a numeric protobuf field to `SoftwareUpdateState` (`available`, `downloading`, `downloaded`, `installing`, `completed`, `failed`, `deferred`, `scheduled`).
+gRPC `OtaDiscoveryService/GetSoftwareInfo` and `SchedulerService` (`GetSchedule`/`Schedule`/`InstallNow`/`CancelSchedule`), both C3.
+
+`GetSoftwareInfo` takes `{1 vin, 2 locale}` and answers `{1 CarSoftwareInfo}`, decoded by `PolestarGRPC.parseSoftware`:
+
+| Field | Meaning |
+| --- | --- |
+| `1` | `software_id` — the handle every OTA write is addressed to |
+| `2` | `description {1 name, 2 short_desc, 3 long_desc}` |
+| `3` | `qb_code` (unused) |
+| `4` | `state` → `SoftwareUpdateState` via `PolestarGRPC.softwareState` |
+| `6` | `new_sw_version` |
+| `8` | `schedule_info {2 scheduled_at}` |
+| `10` | `state_timestamp` |
+
+**`new_sw_version` is not simply "the installed version".** Its meaning depends on `state`: while an update is pending it names the *target* version and the running version is not reported at all; only in the settled states (`0 UNKNOWN`, `9 INSTALLATION_COMPLETED`, `14 INSTALLATION_UNKNOWN`) does it describe what is on the car. `parseSoftware` therefore populates exactly one of `installedVersion`/`latestAvailableVersion`, and `VehicleState.mergingLastKnown` carries the last settled reading forward so the UI can still show "installed → available" mid-rollout. Nothing is substituted when the field is absent — the version stays nil rather than being filled with a plausible-looking constant.
+
+The three writes all answer with `{1 Scheduler}` = `{1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by}`, where `status` is `0 UNKNOWN, 1 IDLE, 2 SCHEDULED, 3 INSTALL`. `GetSchedule` is a second source of `software_id`, which is what keeps "cancel a scheduled installation" reachable when `GetSoftwareInfo` has nothing to report.
 
 ## Connectivity, trip meters, odometer
 
@@ -67,7 +83,28 @@ gRPC `OtaDiscoveryService/GetSoftwareInfo` and `SchedulerService` (`GetSchedule`
 
 ## Vehicle images
 
-A separate, unauthenticated-by-bearer-token GraphQL call: `GetCarImages($pno34, $structureWeek, $modelYear, $locale)` against the *public* API host, authenticated by an `x-api-key` header instead of a bearer token, locale hardcoded to `en-GB`. Prefers a transparent render over an opaque one, and `angle == 0` over other angles. Only runs when `pno34`/`structureWeek` are known (legacy-query-only fields), and only once per session (`carImageData` cache).
+A separate, unauthenticated-by-bearer-token GraphQL call: `GetCarImages($pno34, $structureWeek, $modelYear, $locale)` against the *public* API host, authenticated by an `x-api-key` header instead of a bearer token, locale hardcoded to `en-GB`. Only runs when `pno34`/`structureWeek` are known (legacy-query-only fields — VDMS never returns them, see above).
+
+**Exterior studio renders only — no interior/cabin image exists in this API surface.** The query returns two parallel arrays, each holding the *same* set of camera angles in two rendering styles:
+
+```graphql
+getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
+  transparent { url angle }   # PNG, background removed
+  opaque { url angle }        # JPG, studio backdrop included
+}
+```
+
+- **`transparent` vs `opaque`** — same camera angle, two file formats/treatments. `PolestarAPI.swift`'s `fetchCarImage()` prefers the `transparent` array and only falls back to `opaque` if it's empty (`let pool = transparent.isEmpty ? opaque : transparent` — the app never mixes the two, and never exposes the opaque/backdrop style at all when a transparent one exists).
+- **`angle` is a plain `Int`, not a named enum in the schema** — Polestar's API gives no semantic label, just a position index. A real captured response (from the independent [pypolestar](https://github.com/pypolestar/pypolestar) project's test fixtures, Polestar 3) shows **six angles, `0`–`5`**, e.g.:
+  ```
+  https://car-images.polestar.com/359/2024/summary-transparent/EA/72300/001190/R80000/_/19/_/XPLUSS/_/1/_/default/0.png
+  ...
+  https://car-images.polestar.com/359/2024/summary-transparent/EA/72300/001190/R80000/_/19/_/XPLUSS/_/1/_/default/5.png
+  ```
+  `Preferences.swift`'s `CarRenderAngle` only defines **four** named cases (`frontThreeQuarter=0`, `rearThreeQuarter=1`, `sideProfile=2`, `overhead=3`) — angles `4` and `5` have no UI-facing name and can't be selected in Settings' angle picker. Since nobody has visually confirmed what camera position `4`/`5` actually show, no name is guessed here rather than inventing an unverified label.
+- **The data layer already fetches and caches all six**, even though only four are selectable: `fetchCarImage()` downloads whichever angle is requested (falling back `requestedAngle → 0 → 1 → pool.first` if the exact match is missing), then kicks off background `Task.detached` fetches for *every other angle present in the pool* — `for other in pool { ... CarImageCache.shared.save(otherBytes, for: vin, angle: otherAngle) }` (no filtering by whether that angle has a UI name). So a Polestar user's disk cache silently accumulates angle-`4`/`5` images that the Settings picker can never surface.
+- Selection preference order when the exact requested angle isn't in the pool: exact match → angle `0` → angle `1` → array's first element.
+- Cached per VIN *and* angle (`CarImageCache.shared.save(bytes, for: vin, angle: angle)`), so switching angles after the first fetch is instant (disk-cache hit, no network).
 
 ## Schedules
 
@@ -81,7 +118,9 @@ See [architecture/capabilities.md](../architecture/capabilities.md) for the gene
 
 Dispatched through `invocation.InvocationService/<Method>` (generic write RPC — `ClimatizationStart/Stop`, `PreCleaning`, `Lock`, `Unlock`, `WindowControl`, `HonkFlash`), plus dedicated `chronos.services.*` RPCs for charging/schedule/OTA writes. Every request is hand-built protobuf with validated bounds (e.g. charge target 40–100%, amp limit 1–64A, temperature 16–30°C in 0.5° steps) rejected client-side before any network call.
 
-**Gated behind `HISINGEN_EXPERIMENTAL_REMOTE`.** `Package.swift` only defines this compile flag when the `HISINGEN_EXPERIMENTAL_REMOTE=1` environment variable is set at build time — never set in CI or release builds. Without it, `PolestarAPI.executeRemoteCommand` always throws `RemoteCommandError.unsupported` before touching the network, discarding the command. Even with the flag set for local experimentation, the real backend is expected to reject write calls from an unpaired client: gRPC status `16` (`UNAUTHENTICATED`) on a write RPC maps to the explicit message *"Polestar cloud backend requires official mobile app pairing for remote commands."* This is the concrete, code-level evidence behind Hisingen's "remote controls are unavailable" stance for Polestar — see [architecture/technical-debt.md](../architecture/technical-debt.md) and [security/threat-model.md](../security/threat-model.md).
+**Write scope is what makes these work.** Hisingen signs in as the Polestar mobile-app OIDC client (`lp8dyrd_10`, redirect `polestar-explore://explore.polestar.com`) requesting `openid profile email customer:attributes customer:attributes:write`. It previously used the polestar.com **web** client (`l3oopkc_10`) with only `customer:attributes`, which holds no write scope — that, rather than any device-pairing requirement, is why writes came back rejected and why the app's own docs described remote control as impossible. A write RPC answering gRPC status `16` (`UNAUTHENTICATED`) still maps to *"Polestar cloud backend requires official mobile app pairing for remote commands."*
+
+Dispatch is compiled into every build ([ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md) removed the former `HISINGEN_EXPERIMENTAL_REMOTE` flag). Of the Polestar commands, only the OTA scheduler ones are reachable from the UI today; `ControlsTabView` still hardcodes locks, windows, climate, and charging to `.disabled(true)` — see [architecture/technical-debt.md](../architecture/technical-debt.md) and [security/threat-model.md](../security/threat-model.md).
 
 Outcome parsing reads a numeric status field from the response: `1`→accepted, `4`→delivered, `6`→completed; `9`/`10`/`12` map to specific rejection reasons (privacy setting, vehicle mode, conflicting command); anything else surfaces the raw message field.
 

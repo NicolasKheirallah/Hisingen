@@ -128,6 +128,7 @@ struct SettingsView: View {
 
     private var appearanceCard: some View {
         let vehicleLabel = Preferences.lastVehicleLabel(for: Preferences.activeBrand)
+        let supportsMultipleAngles = Preferences.activeBrand == .polestar
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -184,17 +185,21 @@ struct SettingsView: View {
                 // Vehicle Image Perspective & Studio Render Preview
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text(L10n.text("Vehicle Perspective"))
+                        Text(L10n.text(supportsMultipleAngles ? "Vehicle Perspective" : "Vehicle Image"))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
-                        Text(carRenderAngle.title)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
+                        if supportsMultipleAngles {
+                            Text(carRenderAngle.title)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     // Live Studio Render Preview
-                    let previewData = CarImageCache.shared.image(for: Preferences.vin, angle: carRenderAngle.rawValue) ?? CarImageCache.shared.image(for: Preferences.vin)
+                    let previewData = supportsMultipleAngles
+                        ? (CarImageCache.shared.image(for: Preferences.vin, angle: carRenderAngle.rawValue) ?? CarImageCache.shared.image(for: Preferences.vin))
+                        : CarImageCache.shared.image(for: Preferences.vin)
                     if let previewData, let nsImg = NSImage(data: previewData) {
                         Image(nsImage: nsImg)
                             .resizable()
@@ -209,38 +214,40 @@ struct SettingsView: View {
                             .transition(.opacity)
                     }
 
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                        ForEach(CarRenderAngle.allCases, id: \.self) { angle in
-                            let isAngleSelected = carRenderAngle == angle
-                            Button {
-                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                                    carRenderAngle = angle
-                                    Preferences.carRenderAngle = angle
+                    if supportsMultipleAngles {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            ForEach(CarRenderAngle.allCases, id: \.self) { angle in
+                                let isAngleSelected = carRenderAngle == angle
+                                Button {
+                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                        carRenderAngle = angle
+                                        Preferences.carRenderAngle = angle
+                                    }
+                                    onSettingsChanged(.presentation)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: angle.symbol)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                        Text(angle.title)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                            .lineLimit(1)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                    )
+                                    .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
                                 }
-                                onSettingsChanged(.presentation)
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: angle.symbol)
-                                        .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                    Text(angle.title)
-                                        .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                        .lineLimit(1)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 4)
-                                .background(
-                                    isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
-                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                                )
-                                .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                                .buttonStyle(.plain)
+                                .withoutFocusRing()
                             }
-                            .buttonStyle(.plain)
-                            .withoutFocusRing()
                         }
                     }
                 }
@@ -665,11 +672,11 @@ struct SettingsView: View {
         let isVolvo = Preferences.activeBrand == .volvo
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: isVolvo ? .blue : .secondary)
+                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
 
                 Text(isVolvo
                      ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
-                     : L10n.text("Remote vehicle commands are unavailable because Polestar restricts write operations to paired mobile devices."))
+                     : L10n.text("Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
@@ -680,7 +687,7 @@ struct SettingsView: View {
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
-                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install a pending software update", isSupported: false, badgeText: isVolvo ? "Not in API" : "Rejected by Backend")
+                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install or cancel a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                 }
             }
         }
@@ -799,6 +806,22 @@ struct SettingsView: View {
         .opacity(isSupported ? 1.0 : 0.55)
     }
 
+    private func degradedNotice(symbol: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10))
+                .foregroundStyle(HisingenTheme.semanticWarning)
+            Text(text)
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(HisingenTheme.semanticWarning.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
     private var capabilitiesCard: AnyView {
         guard let state else { return AnyView(EmptyView()) }
         let profile = state.capabilityProfile
@@ -810,6 +833,24 @@ struct SettingsView: View {
                 Text(L10n.format("Probed capabilities for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
+
+                // A degraded dashboard should explain itself here rather than only in the
+                // unified log — the cached snapshot keeps very little telemetry, so cards
+                // going quiet is otherwise indistinguishable from an unsupported vehicle.
+                if state.isCachedSnapshot {
+                    degradedNotice(
+                        symbol: "internaldrive",
+                        text: L10n.text("Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.")
+                    )
+                } else if !state.unavailableFeatures.isEmpty {
+                    degradedNotice(
+                        symbol: "exclamationmark.arrow.triangle.2.circlepath",
+                        text: L10n.format(
+                            "The last refresh could not read: %@",
+                            state.unavailableFeatures.map(\.title).sorted().joined(separator: ", ")
+                        )
+                    )
+                }
 
                 VStack(spacing: 6) {
                     ForEach(items, id: \.self) { cap in

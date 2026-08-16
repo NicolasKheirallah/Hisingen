@@ -831,3 +831,21 @@
 "Market Delivery" = "Marknadsleverans";
 "Software Release" = "Mjukvaruversion";
 
+
+/* Vehicle software & OTA */
+"Polestar Remote Commands" = "Polestar fjärrkommandon";
+"Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices." = "Programvaruinstallation är aktiv. Lås-, klimat- och laddningskommandon är begränsade till parkopplade mobilenheter.";
+"Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices." = "Programvaruinstallation skickas via Polestars OTA-schemaläggare. Övriga kommandon går via en backend som endast accepterar parkopplade mobilenheter.";
+"Install or cancel a pending software update" = "Installera eller avbryt en väntande programvaruuppdatering";
+"Software status is unavailable for this vehicle." = "Programvarustatus är inte tillgänglig för det här fordonet.";
+"Software update %@ is ready to install." = "Programvaruuppdatering %@ är redo att installeras.";
+"A software update is ready to install." = "En programvaruuppdatering är redo att installeras.";
+"Downloading software update %@…" = "Laddar ned programvaruuppdatering %@ …";
+"Downloading a software update…" = "Laddar ned en programvaruuppdatering …";
+"Installing software update %@…" = "Installerar programvaruuppdatering %@ …";
+"Installing a software update…" = "Installerar en programvaruuppdatering …";
+"Installation is scheduled for %@." = "Installationen är schemalagd till %@.";
+"An installation is scheduled." = "En installation är schemalagd.";
+"The last software update failed." = "Den senaste programvaruuppdateringen misslyckades.";
+"Software is up to date (%@)." = "Programvaran är uppdaterad (%@).";
+"Cancel Scheduled Installation" = "Avbryt schemalagd installation";

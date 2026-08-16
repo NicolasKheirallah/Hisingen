@@ -59,6 +59,73 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(software.title, "Polestar OS")
         XCTAssertEqual(software.state, .scheduled)
         XCTAssertEqual(software.scheduledAt, Date(timeIntervalSince1970: 2_000_000_000))
+        XCTAssertEqual(software.latestAvailableVersion, "P4.2.1")
+        XCTAssertNil(software.installedVersion)
+    }
+
+    @Test
+    func testSettledSoftwareStateReportsRunningVersionRatherThanAnOffer() {
+        var payload = Data()
+        payload.append(Protobuf.stringField(1, "sw-9f2c"))
+        payload.append(Protobuf.intField(4, 9))
+        payload.append(Protobuf.stringField(6, "P2.14.3"))
+        let software = PolestarGRPC.parseSoftware(payload)
+        XCTAssertEqual(software.state, .completed)
+        XCTAssertEqual(software.installedVersion, "P2.14.3")
+        XCTAssertNil(software.latestAvailableVersion)
+    }
+
+    @Test
+    func testMissingVersionStringIsReportedAsUnknownNotSubstituted() {
+        var payload = Data()
+        payload.append(Protobuf.intField(4, 9))
+        let software = PolestarGRPC.parseSoftware(payload)
+        XCTAssertNil(software.version)
+        XCTAssertNil(software.title)
+        XCTAssertNil(software.installedVersion)
+        XCTAssertNil(software.latestAvailableVersion)
+    }
+
+    @Test
+    func testSoftwareStateEnumCoversTheFullBackendRange() {
+        let expected: [UInt64: SoftwareUpdateState] = [
+            0: .unknown, 1: .available, 2: .downloading, 3: .downloaded,
+            4: .failed, 5: .installing, 6: .installing, 7: .failed,
+            8: .failed, 9: .completed, 10: .deferred, 11: .failed,
+            12: .scheduled, 13: .installing, 14: .unknown, 15: .available, 99: .unknown
+        ]
+        for (raw, state) in expected {
+            XCTAssertEqual(PolestarGRPC.softwareState(raw), state)
+        }
+        // A failed install still describes a target version, not what the car is running.
+        var payload = Data()
+        payload.append(Protobuf.intField(4, 8))
+        payload.append(Protobuf.stringField(6, "P2.15.0"))
+        let failed = PolestarGRPC.parseSoftware(payload)
+        XCTAssertNil(failed.installedVersion)
+        XCTAssertEqual(failed.latestAvailableVersion, "P2.15.0")
+    }
+
+    @Test
+    func testPendingUpdateKeepsLastSettledInstalledVersion() {
+        var settled = vehicle(vin: "YSMTEST")
+        settled.softwareInfo = VehicleSoftwareInfo(
+            version: "P2.14.3", title: "P2.14.3", state: .completed, installedVersion: "P2.14.3"
+        )
+        var offered = vehicle(vin: "YSMTEST")
+        offered.softwareInfo = VehicleSoftwareInfo(
+            version: "P2.15.0", title: "P2.15.0", state: .available, latestAvailableVersion: "P2.15.0"
+        )
+        let merged = offered.mergingLastKnown(from: settled, features: .default)
+        XCTAssertEqual(merged.softwareInfo?.installedVersion, "P2.14.3")
+        XCTAssertEqual(merged.softwareInfo?.latestAvailableVersion, "P2.15.0")
+        XCTAssertEqual(merged.softwareInfo?.state, .available)
+
+        // A different car must not inherit the previous car's version.
+        var otherCar = vehicle(vin: "YSMOTHER")
+        otherCar.softwareInfo = offered.softwareInfo
+        XCTAssertNil(otherCar.mergingLastKnown(from: settled, features: .default)
+            .softwareInfo?.installedVersion)
     }
 
     @Test

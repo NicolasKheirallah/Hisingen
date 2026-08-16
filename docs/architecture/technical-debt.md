@@ -66,7 +66,7 @@ Charge-target/amp-limit/schedule/pre-cleaning/OTA commands all fall through to `
 
 **Severity: Medium (user-facing, but currently fails safe)**
 
-`ControlsTabView` shows/hides sections based on `VehicleCapabilityProfile.permits(_:)`, but *enables* them based on a separate, hardcoded `isBrandVolvo` check — Polestar's controls are always `.disabled(true)` regardless of capability state or the `HISINGEN_EXPERIMENTAL_REMOTE` build flag, and Volvo's charging controls (charge target, amp limit, charge-now override) are hardcoded `.disabled(true)` for every brand because they aren't wired to a working backend call yet. This currently fails safe (nothing un-implemented is reachable from the UI), but it means the capability system and the actual UI affordance can silently drift apart as new capabilities are added to the profile without the corresponding UI wiring catching up.
+`ControlsTabView` shows/hides sections based on `VehicleCapabilityProfile.permits(_:)`, but *enables* them based on a separate, hardcoded `isBrandVolvo` check — Polestar's lock/window/climate/charging controls are always `.disabled(true)` regardless of capability state, and Volvo's charging controls (charge target, amp limit, charge-now override) are hardcoded `.disabled(true)` for every brand because they aren't wired to a working backend call yet. The OTA card is now the exception: its buttons follow only `remoteCommandInProgress`. This currently fails safe (nothing un-implemented is reachable from the UI), but it means the capability system and the actual UI affordance can silently drift apart as new capabilities are added to the profile without the corresponding UI wiring catching up.
 
 ## Optimistic local state patch on remote commands vs. "ack ≠ execution" stance
 
@@ -91,3 +91,19 @@ Charge-target/amp-limit/schedule/pre-cleaning/OTA commands all fall through to `
 **Severity: Trivial**
 
 `UI/Theme.swift` is a small, mostly-superseded set of AppKit label/color helpers; `UI/HisingenTheme.swift` is the real, actively-used design system. `Theme.swift` isn't fully dead (a few AppKit call sites still use it), but it's a candidate for consolidation next time someone touches AppKit-facing label styling.
+
+## Polestar exposes 6 vehicle-image angles, `CarRenderAngle` only names 4
+
+**Severity: Low**
+
+Polestar's `GetCarImages` query returns angles `0`–`5` (confirmed via a real captured response in the independent [pypolestar](https://github.com/pypolestar/pypolestar) project's test fixtures), but `Preferences.swift`'s `CarRenderAngle` enum only defines four named cases (`frontThreeQuarter=0`, `rearThreeQuarter=1`, `sideProfile=2`, `overhead=3`), so Settings' angle picker can never select angle `4` or `5`. The data layer doesn't know about this gap — `PolestarAPI.fetchCarImage()`'s background prefetch loop downloads and caches *every* angle present in the response pool regardless of whether it has a UI name, so a Polestar user's disk cache silently accumulates two unreachable images per vehicle. See [api/polestar.md#vehicle-images](../api/polestar.md#vehicle-images). **Fix direction:** visually inspect what angles `4`/`5` actually show for a real vehicle (no semantic label exists in the API itself — it's a bare `Int`, not an enum), then either give them real names in `CarRenderAngle` or, if they turn out to be low-value duplicates/close variants of 0-3, leave them unexposed deliberately and note why.
+
+## PCCS gRPC calls use C3 package prefixes
+
+**Severity: High (suspected silent feature failure, unverified)**
+
+Every request Hisingen sends to the PCCS host (`api.pccs-prod.plstr.io`) uses the **C3** package names — `chronos.services.v1.TargetSocService`, `chronos.services.v2.GlobalChargeTimerService`, `chronos.services.v1.AmpLimitService`, `chronos.services.v1.ChargeLocationService`, `chronos.services.v1.ParkingClimateTimerService`, and `invocation.InvocationService`. An independent reverse-engineered client ([kildahldev/unofficial-polestar-api](https://github.com/kildahldev/unofficial-polestar-api), `src/polestar_api/backend.py`) maps the same logical services to **`pccs.`-prefixed** packages on that host: `pccs.chronos.services.v1.TargetSocService`, `pccs.invocation.v1.InvocationService`, and so on.
+
+If that mapping is right, every PCCS call Hisingen makes answers `grpc-status 12` (`UNIMPLEMENTED`) and has never worked — which would explain why charge target, amp limit, charge windows, climate timers, and all non-OTA remote commands are quietly unavailable. It is consistent with those exact features being the ones marked unsupported in the UI. OTA is unaffected: `ota_mobcache.*` is C3-only.
+
+**Fix direction:** this needs live confirmation before changing anything, since the C3 names may also be served on PCCS. Run the read-only PCCS calls (`GetTargetSoc`, `GetAmpLimit`) against a real vehicle with both path spellings and compare the `grpc-status` headers, then introduce a per-host path profile rather than the single hardcoded string set in `PolestarGRPCRemote`/`PolestarGRPCCapabilities`.
