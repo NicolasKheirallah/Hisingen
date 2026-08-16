@@ -188,6 +188,68 @@ struct RemoteCommandTests {
         XCTAssertEqual(chargeSchedule.endMinute, 30)
     }
 
+    @Test
+    func testRemoteEngineStartCommandAttributesAndBrandImplementation() {
+        let start = RemoteCommand.startEngine(runtimeMinutes: 15)
+        let stop = RemoteCommand.stopEngine
+
+        XCTAssertTrue(start.isImplemented(by: .volvo))
+        XCTAssertFalse(start.isImplemented(by: .polestar))
+        XCTAssertTrue(stop.isImplemented(by: .volvo))
+        XCTAssertFalse(stop.isImplemented(by: .polestar))
+
+        XCTAssertEqual(start.feature, .remoteClimate)
+        XCTAssertEqual(stop.feature, .remoteClimate)
+        XCTAssertEqual(start.requiredCapability, .engineStart)
+        XCTAssertEqual(stop.requiredCapability, .engineStart)
+        XCTAssertEqual(start.risk, .securitySensitive)
+        XCTAssertEqual(stop.risk, .routine)
+        XCTAssertEqual(start.identifier, "start-engine")
+        XCTAssertEqual(stop.identifier, "stop-engine")
+    }
+
+    @Test
+    func testVehicleWarrantyInfoDerivedAndExplicit() {
+        let state = VehicleState(
+            batteryPercentage: 80.0,
+            rangeKm: 50,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 100,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Volvo XC60 T8 Recharge",
+            modelYear: "2024",
+            registrationNo: "HYB123",
+            vin: "YV1XZEHR2R2371256",
+            ownerFirstName: "Nico",
+            odometerKm: 12000,
+            daysToService: 240,
+            distanceToServiceKm: 18000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            powertrain: .phev,
+            fuelLevelPercent: 75.0,
+            fuelRangeKm: 550,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+
+        let warranty = state.effectiveWarrantyInfo
+        XCTAssertEqual(warranty.planName, "Care by Volvo")
+        XCTAssertEqual(warranty.status, "Active")
+        XCTAssertTrue(warranty.factoryWarrantyValidUntil != nil)
+        XCTAssertTrue(warranty.batteryWarrantyValidUntil != nil)
+        XCTAssertEqual(warranty.batteryWarrantyKm, 160_000)
+        XCTAssertEqual(warranty.includedMaintenance, true)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))

@@ -210,6 +210,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
     var interiorImageData: Data? = nil
+    var warrantyInfo: VehicleWarrantyInfo? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -311,7 +312,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
-        case interiorImageData
+        case interiorImageData, warrantyInfo
     }
 
     init(from decoder: Decoder) throws {
@@ -384,6 +385,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
         self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
         self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
+        self.warrantyInfo = try values.decodeIfPresent(VehicleWarrantyInfo.self, forKey: .warrantyInfo)
     }
 
     var formattedBuildWeek: String? {
@@ -427,6 +429,36 @@ struct VehicleState: Codable, Equatable, Sendable {
     var isClimateActive: Bool {
         guard let activity = climateStatus?.activity else { return false }
         return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
+    }
+
+    var effectiveWarrantyInfo: VehicleWarrantyInfo {
+        if let explicit = warrantyInfo {
+            return explicit
+        }
+        let calendar = Calendar.current
+        let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
+        var components = DateComponents()
+        components.year = yearInt
+        components.month = 6
+        components.day = 1
+        let baselineDeliveryDate = calendar.date(from: components) ?? Date()
+
+        let factoryEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let batteryEnd = calendar.date(byAdding: .year, value: 8, to: baselineDeliveryDate)
+        let roadsideEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+
+        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
+        let plan = isVolvo ? "Care by Volvo" : "Polestar Care"
+
+        return VehicleWarrantyInfo(
+            planName: plan,
+            status: L10n.text("Active"),
+            factoryWarrantyValidUntil: factoryEnd,
+            batteryWarrantyValidUntil: powertrain.hasElectricRange ? batteryEnd : nil,
+            batteryWarrantyKm: powertrain.hasElectricRange ? 160_000 : nil,
+            roadsideAssistanceValidUntil: roadsideEnd,
+            includedMaintenance: true
+        )
     }
 
 
@@ -629,6 +661,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         copy.serviceTrigger = serviceTrigger
         copy.tripComputerElectricRangeKm = tripComputerElectricRangeKm
         copy.chargingCurrentLimitAmps = chargingCurrentLimitAmps
+        copy.warrantyInfo = warrantyInfo
         return copy
     }
 
@@ -736,6 +769,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
         merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
+        merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
 

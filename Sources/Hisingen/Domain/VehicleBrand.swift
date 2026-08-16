@@ -33,6 +33,7 @@ enum PowertrainType: String, Codable, Sendable {
 
     var hasElectricRange: Bool { self == .bev || self == .phev || self == .mildHybrid }
     var hasFuelRange: Bool { self == .ice || self == .phev || self == .mildHybrid }
+    var hasCombustionEngine: Bool { self == .ice || self == .phev || self == .mildHybrid }
     var isHybrid: Bool { self == .phev || self == .mildHybrid }
     var isCombustionOnly: Bool { self == .ice }
     var isElectricOnly: Bool { self == .bev }

@@ -523,11 +523,17 @@ actor VolvoAPI {
 
     private func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
         let commandName: String
+        var bodyData = "{}".data(using: .utf8)
         switch command {
         case .lock: commandName = "lock"
         case .unlock: commandName = "unlock"
         case .startClimate: commandName = "climatization-start"
         case .stopClimate: commandName = "climatization-stop"
+        case .startEngine(let runtimeMinutes):
+            commandName = "engine-start"
+            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
+        case .stopEngine:
+            commandName = "engine-stop"
         case .honkAndFlash: commandName = "honk-flash"
         case .flashLights: commandName = "flash"
         case .honkHorn: commandName = "honk"
@@ -542,29 +548,34 @@ actor VolvoAPI {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = "{}".data(using: .utf8)
+        request.httpBody = bodyData
         let (data, response) = try await perform(request, operation: "command: \(commandName)")
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: commandName) {
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errObj = json["error"] as? [String: Any],
-               let desc = errObj["description"] as? String, !desc.isEmpty {
-                throw VolvoError.permissionDenied(operation: "\(commandName) (\(desc))")
+            if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
+               let text = detail.text {
+                throw VolvoError.permissionDenied(operation: "\(commandName) (\(text))")
             }
             throw failure
         }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataObj = json["data"] as? [String: Any] {
-            let status = (dataObj["invokeStatus"] as? String)?.uppercased()
-            let msg = dataObj["message"] as? String
-            if status == "COMPLETED" || status == "DELIVERED" {
-                return RemoteCommandResult(outcome: .completed, message: msg?.isEmpty == false ? msg : nil)
-            }
-            if let commandId = dataObj["commandId"] as? String, !commandId.isEmpty {
-                return await pollCommandStatus(vin: vin, commandId: commandId, commandName: commandName, accessToken: accessToken)
-            }
-            return RemoteCommandResult(outcome: .accepted, message: msg?.isEmpty == false ? msg : nil)
+        guard let envelope = try? JSONDecoder.volvo.decode(
+            VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
+        ), let payload = envelope.data else {
+            throw VolvoError.decoding(operation: "command: \(commandName)")
         }
-        return RemoteCommandResult(outcome: .accepted, message: nil)
+        if payload.isFailure {
+            throw RemoteCommandError.rejected(payload.text
+                ?? L10n.text("Vehicle reported command failed"))
+        }
+        if let outcome = payload.outcome, outcome != .accepted {
+            return RemoteCommandResult(outcome: outcome, message: payload.text)
+        }
+        // Volvo answers asynchronously for slower commands: the POST returns a commandId and
+        // the real result only shows up on the status endpoint.
+        if let commandId = payload.pendingCommandId {
+            return try await pollCommandStatus(vin: vin, commandId: commandId,
+                                               commandName: commandName, accessToken: accessToken)
+        }
+        return RemoteCommandResult(outcome: .accepted, message: payload.text)
     }
 
     private func pollCommandStatus(
@@ -574,7 +585,7 @@ actor VolvoAPI {
         accessToken: String,
         maxAttempts: Int = 6,
         intervalSeconds: UInt64 = 2
-    ) async -> RemoteCommandResult {
+    ) async throws -> RemoteCommandResult {
         guard let vccApiKey else { return RemoteCommandResult(outcome: .accepted, message: nil) }
         var request = URLRequest(url: apiURL(
             path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandId)"
@@ -587,19 +598,24 @@ actor VolvoAPI {
             try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
             guard let (data, response) = try? await perform(request, operation: "poll command: \(commandName)"),
                   response.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let dataObj = json["data"] as? [String: Any] else {
+                  let envelope = try? JSONDecoder.volvo.decode(
+                      VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
+                  ),
+                  let payload = envelope.data else {
                 continue
             }
-            let status = (dataObj["invokeStatus"] as? String)?.uppercased()
-            let msg = dataObj["message"] as? String
-            if status == "COMPLETED" || status == "DELIVERED" {
-                return RemoteCommandResult(outcome: .completed, message: msg?.isEmpty == false ? msg : nil)
+            // A vehicle that refuses the command is a failure, not a success with a sad
+            // message attached — reporting `.accepted` here previously showed "Command sent"
+            // over text saying the command had failed.
+            if payload.isFailure {
+                throw RemoteCommandError.rejected(payload.text
+                    ?? L10n.text("Vehicle reported command failed"))
             }
-            if status == "FAILED" || status == "REJECTED" {
-                return RemoteCommandResult(outcome: .accepted, message: msg ?? L10n.text("Vehicle reported command failed"))
+            if let outcome = payload.outcome, outcome != .accepted {
+                return RemoteCommandResult(outcome: outcome, message: payload.text)
             }
         }
+        // Still pending after the polling window: delivered, outcome genuinely unknown.
         return RemoteCommandResult(outcome: .accepted, message: nil)
     }
 

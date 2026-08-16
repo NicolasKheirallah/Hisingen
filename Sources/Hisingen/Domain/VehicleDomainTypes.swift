@@ -501,6 +501,34 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let energyUsedSinceChargeWh: Double?
 }
 
+struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
+    let planName: String?
+    let status: String?
+    let factoryWarrantyValidUntil: Date?
+    let batteryWarrantyValidUntil: Date?
+    let batteryWarrantyKm: Int?
+    let roadsideAssistanceValidUntil: Date?
+    let includedMaintenance: Bool?
+
+    init(
+        planName: String? = nil,
+        status: String? = nil,
+        factoryWarrantyValidUntil: Date? = nil,
+        batteryWarrantyValidUntil: Date? = nil,
+        batteryWarrantyKm: Int? = 160_000,
+        roadsideAssistanceValidUntil: Date? = nil,
+        includedMaintenance: Bool? = nil
+    ) {
+        self.planName = planName
+        self.status = status
+        self.factoryWarrantyValidUntil = factoryWarrantyValidUntil
+        self.batteryWarrantyValidUntil = batteryWarrantyValidUntil
+        self.batteryWarrantyKm = batteryWarrantyKm
+        self.roadsideAssistanceValidUntil = roadsideAssistanceValidUntil
+        self.includedMaintenance = includedMaintenance
+    }
+}
+
 
 struct VehicleLocation: Codable, Equatable, Sendable {
     let latitude: Double?

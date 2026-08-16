@@ -31,6 +31,7 @@ struct InfoTabView: View {
             interiorCabinCard
             powertrainSpecsCard
             serviceAndHealthCard
+            warrantyAndProtectionCard
             factoryBuildCard
         }
     }
@@ -522,6 +523,77 @@ struct InfoTabView: View {
                     if let sw = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version, !sw.isEmpty {
                         KVRow(L10n.text("Software Release"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard")
                     }
+                }
+            }
+        }
+    }
+
+    private var warrantyAndProtectionCard: some View {
+        let warranty = state.effectiveWarrantyInfo
+        let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
+        let planTitle = warranty.planName ?? (isVolvo ? "Care by Volvo" : "Polestar Care")
+
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(
+                        symbol: "shield.lefthalf.filled.badge.checkmark",
+                        title: L10n.text("Warranty & Protection"),
+                        color: .indigo
+                    )
+                    Spacer()
+                    Pill(
+                        text: planTitle,
+                        color: .indigo,
+                        symbol: "checkmark.seal.fill"
+                    )
+                }
+
+                VStack(spacing: 6) {
+                    if let factoryDate = warranty.factoryWarrantyValidUntil {
+                        let isExpired = factoryDate < Date()
+                        KVRow(
+                            L10n.text("Manufacturer Warranty"),
+                            Format.dateTimeFormatter.string(from: factoryDate),
+                            symbol: "checkmark.shield.fill",
+                            warning: isExpired
+                        )
+                    }
+
+                    if let batteryDate = warranty.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
+                        let isExpired = batteryDate < Date()
+                        let kmLimit = warranty.batteryWarrantyKm.map { Format.distance(km: $0, grouped: true, unit: Preferences.distanceUnit) } ?? "160,000 km"
+                        KVRow(
+                            L10n.text("EV Battery (8 yr / 160k km)"),
+                            "\(Format.dateTimeFormatter.string(from: batteryDate)) / \(kmLimit)",
+                            symbol: "bolt.shield.fill",
+                            warning: isExpired
+                        )
+                    }
+
+                    if let roadsideDate = warranty.roadsideAssistanceValidUntil {
+                        let isExpired = roadsideDate < Date()
+                        KVRow(
+                            L10n.text("Roadside Assistance"),
+                            Format.dateTimeFormatter.string(from: roadsideDate),
+                            symbol: "phone.badge.checkmark",
+                            warning: isExpired
+                        )
+                    }
+
+                    if warranty.includedMaintenance == true {
+                        KVRow(
+                            L10n.text("Scheduled Maintenance"),
+                            L10n.text("Included (3 Years / 50,000 km)"),
+                            symbol: "wrench.and.screwdriver.fill"
+                        )
+                    }
+
+                    KVRow(
+                        L10n.text("Connected Services"),
+                        L10n.text("Active Unlimited"),
+                        symbol: "antenna.radiowaves.left.and.right"
+                    )
                 }
             }
         }

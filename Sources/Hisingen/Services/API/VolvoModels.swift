@@ -530,3 +530,64 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
 }
 
 
+
+/// Response body of `POST /connected-vehicle/v2/vehicles/{vin}/commands/{name}` and of the
+/// `GET .../commands/{commandId}` status poll — both return the same shape.
+///
+/// Previously parsed with untyped `JSONSerialization` dictionary lookups while every read-path
+/// DTO was `Decodable`, which meant a shape change on Volvo's side degraded silently to a
+/// generic `.accepted` instead of surfacing a decode error.
+struct VolvoCommandResponseDTO: Decodable, Sendable {
+    let invokeStatus: String?
+    let message: String?
+    let commandId: String?
+
+    /// Blank-normalised accessors — the API returns `""` as often as it omits the key, and
+    /// an empty string surfaced to the UI reads as a missing message rather than no message.
+    var text: String? { message?.blankAsNil }
+    var pendingCommandId: String? { commandId?.blankAsNil }
+
+    /// Volvo's documented `invokeStatus` values, upper-cased before comparison because the
+    /// API has been observed returning both cases.
+    var outcome: RemoteCommandOutcome? {
+        switch invokeStatus?.uppercased() {
+        case "COMPLETED", "SUCCESS": return .completed
+        case "DELIVERED": return .delivered
+        case "RUNNING", "WAITING", "ACCEPTED": return .accepted
+        default: return nil
+        }
+    }
+
+    var isFailure: Bool {
+        switch invokeStatus?.uppercased() {
+        case "FAILED", "REJECTED", "TIMEOUT", "CONNECTION_FAILURE",
+             "VEHICLE_IN_SLEEP", "UNLOCK_TIME_FRAME_PASSED", "NOT_ALLOWED":
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// Error envelope returned alongside a non-2xx command response.
+struct VolvoCommandErrorDTO: Decodable, Sendable {
+    struct Detail: Decodable, Sendable {
+        let message: String?
+        let description: String?
+    }
+    let error: Detail?
+
+    var text: String? {
+        let value = error?.description ?? error?.message
+        return value?.isEmpty == false ? value : nil
+    }
+}
+
+extension String {
+    /// Treats a whitespace-only string as absent, so `""` from the API and a missing key
+    /// reach the UI the same way.
+    var blankAsNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
