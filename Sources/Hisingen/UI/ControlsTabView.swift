@@ -28,6 +28,22 @@ struct ControlsTabView: View {
               profile.permits(command.requiredCapability) else { return true }
         return remoteCommandInProgress
     }
+
+    /// Dims a whole card whose commands are unavailable on this vehicle, so "shown but inert"
+    /// reads as deliberate rather than broken. Keyed off the card's representative command
+    /// rather than the brand, for the same reason as `isDisabled`.
+    private func cardOpacity(_ representative: RemoteCommand) -> Double {
+        representative.isImplemented(by: Preferences.activeBrand)
+            && profile.permits(representative.requiredCapability) ? 1.0 : 0.65
+    }
+
+    /// Stands in for the real `.startClimate` when only its gating matters — neither
+    /// `isImplemented(by:)` nor `requiredCapability` looks at the associated values, and
+    /// building the live one here would duplicate the picker state the button already reads.
+    private static let climateProbe = RemoteCommand.startClimate(
+        temperatureCelsius: 0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified,
+        rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified
+    )
     private var climateActive: Bool {
         guard let status = state.climateStatus else { return false }
         return status.activity == .active || status.activity == .heating
@@ -45,6 +61,7 @@ struct ControlsTabView: View {
         features.contains(.remoteClimate) ||
         (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)) ||
         hasAnyVisibleChargingControls ||
+        (state.powertrain.hasCombustionEngine && isBrandVolvo) ||
         features.contains(.remoteLocks) ||
         (features.contains(.remoteWindows) && profile.permits(.windows)) ||
         features.contains(.remoteHonkFlash) ||
@@ -57,6 +74,9 @@ struct ControlsTabView: View {
             if hasAnyVisibleControlCards {
                 if features.contains(.remoteClimate) || (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)) {
                     climateControlCard
+                }
+                if state.powertrain.hasCombustionEngine && isBrandVolvo {
+                    engineStartControlCard
                 }
                 if hasAnyVisibleChargingControls {
                     chargingControlCard
@@ -304,7 +324,7 @@ struct ControlsTabView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color.red)
-                            .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                            .disabled(isDisabled(.stopClimate))
                         } else {
                             Button {
                                 onRemoteCommand(.startClimate(
@@ -325,7 +345,7 @@ struct ControlsTabView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(HisingenTheme.polestarAmber)
-                            .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                            .disabled(isDisabled(Self.climateProbe))
                         }
                     }
                 }
@@ -350,7 +370,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(Self.climateProbe))
     }
 
     private var chargingControlCard: some View {
@@ -485,7 +505,7 @@ struct ControlsTabView: View {
                 HStack(spacing: 8) {
                     let isLocked = state.exteriorStatus?.isLocked == true
 
-                    if (profile.permits(.locks) || isBrandVolvo) && features.contains(.remoteLocks) {
+                    if profile.permits(.locks) && features.contains(.remoteLocks) {
                         Button {
                             onRemoteCommand(.lock)
                         } label: {
@@ -499,7 +519,7 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(!isLocked ? .blue : nil)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.lock))
 
                         Button {
                             onRemoteCommand(.unlock)
@@ -514,7 +534,7 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(isLocked ? .blue : nil)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.unlock))
                     }
 
                     if profile.permits(.trunk) && features.contains(.remoteLocks) {
@@ -535,12 +555,12 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(.lock))
     }
 
     private var windowsLocateCard: some View {
         let showWindows = profile.permits(.windows) && features.contains(.remoteWindows)
-        let showLocate = (profile.permits(.honkAndFlash) || isBrandVolvo) && features.contains(.remoteHonkFlash)
+        let showLocate = profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash)
         let headerTitle = showWindows && showLocate
             ? L10n.text("Windows & Locate Vehicle")
             : (showWindows ? L10n.text("Windows Control") : L10n.text("Locate Vehicle"))
@@ -581,7 +601,7 @@ struct ControlsTabView: View {
                         .disabled(true)
                     }
 
-                    if (profile.permits(.honkAndFlash) || isBrandVolvo) && features.contains(.remoteHonkFlash) {
+                    if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
                         Button {
                             onRemoteCommand(.flashLights)
                         } label: {
@@ -594,7 +614,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.flashLights))
 
                         Button {
                             onRemoteCommand(.honkHorn)
@@ -608,7 +628,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.honkHorn))
 
                         Button {
                             onRemoteCommand(.honkAndFlash)
@@ -622,12 +642,12 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.honkAndFlash))
                     }
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(.honkAndFlash))
     }
 
     private var otaControlCard: some View {
@@ -732,6 +752,70 @@ struct ControlsTabView: View {
         }
     }
 
+    private var engineStartControlCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    CardHeader(symbol: "flame.fill", title: L10n.text("Remote Engine Start (RES)"), color: .orange)
+                    Spacer()
+                    if state.isEngineRunning == true {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(HisingenTheme.semanticGood)
+                                .frame(width: 6, height: 6)
+                            Text(L10n.text("Engine Running"))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(HisingenTheme.semanticGood)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
+                    } else {
+                        Text(L10n.text("Engine Stopped"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.secondary.opacity(0.12), in: Capsule())
+                    }
+                }
+
+                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    Button {
+                        onRemoteCommand(.startEngine(runtimeMinutes: 15))
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "flame.fill")
+                            Text(L10n.text("Start Engine (15 min)"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: 15)) || (state.isEngineRunning == true))
+
+                    Button {
+                        onRemoteCommand(.stopEngine)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "stop.fill")
+                            Text(L10n.text("Stop Engine"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isDisabled(.stopEngine) || (state.isEngineRunning != true))
+                }
+            }
+        }
+        .opacity(cardOpacity(.startEngine(runtimeMinutes: 15)))
+    }
 
     private var noControlsEnabledCard: some View {
         Card {

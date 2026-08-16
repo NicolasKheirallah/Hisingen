@@ -51,6 +51,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case scheduleOTA(delayMinutes: Int)
     case installOTANow
     case cancelOTA
+    case startEngine(runtimeMinutes: Int)
+    case stopEngine
 
     /// Whether *this app's client code for `brand`* can actually dispatch the command.
     ///
@@ -62,13 +64,19 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     func isImplemented(by brand: VehicleBrand) -> Bool {
         switch brand {
         case .polestar:
-            // PolestarGRPC.executeRemoteCommand switches exhaustively over every case.
-            return true
+            // PolestarGRPC.executeRemoteCommand switches exhaustively over every case (except engine commands, which are Volvo ICE/PHEV specific).
+            switch self {
+            case .startEngine, .stopEngine:
+                return false
+            default:
+                return true
+            }
         case .volvo:
             // Volvo's Connected Vehicle API v2 exposes only these as command endpoints.
             switch self {
             case .lock, .unlock, .startClimate, .stopClimate,
-                 .honkAndFlash, .flashLights, .honkHorn:
+                 .honkAndFlash, .flashLights, .honkHorn,
+                 .startEngine, .stopEngine:
                 return true
             default:
                 return false
@@ -78,7 +86,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
 
     var feature: AppFeature {
         switch self {
-        case .startClimate, .stopClimate: return .remoteClimate
+        case .startClimate, .stopClimate, .startEngine, .stopEngine: return .remoteClimate
         case .startPreCleaning, .stopPreCleaning: return .remotePreCleaning
         case .lock, .unlock, .unlockTrunk: return .remoteLocks
         case .openWindows, .closeWindows: return .remoteWindows
@@ -94,6 +102,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     var requiredCapability: VehicleCapability {
         switch self {
         case .startClimate, .stopClimate: return .climateStartStop
+        case .startEngine, .stopEngine: return .engineStart
         case .startPreCleaning, .stopPreCleaning: return .preCleaning
         case .lock, .unlock: return .locks
         case .unlockTrunk: return .trunk
@@ -126,7 +135,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
 
     var risk: RemoteCommandRisk {
         switch self {
-        case .unlock, .unlockTrunk, .openWindows:
+        case .unlock, .unlockTrunk, .openWindows, .startEngine:
             return .securitySensitive
         case .installOTANow, .deleteClimateTimer:
             return .destructive
@@ -139,6 +148,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .startClimate: return "start-climate"
         case .stopClimate: return "stop-climate"
+        case .startEngine: return "start-engine"
+        case .stopEngine: return "stop-engine"
         case .startPreCleaning: return "start-precleaning"
         case .stopPreCleaning: return "stop-precleaning"
         case .lock: return "lock"
@@ -172,6 +183,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
             }
             return L10n.text("Start climate (automatic)")
         case .stopClimate: return L10n.text("Stop climate")
+        case .startEngine(let minutes): return L10n.format("Start engine (%d min)", minutes)
+        case .stopEngine: return L10n.text("Stop engine")
         case .startPreCleaning: return L10n.text("Start cabin cleaning")
         case .stopPreCleaning: return L10n.text("Stop cabin cleaning")
         case .lock: return L10n.text("Lock vehicle")

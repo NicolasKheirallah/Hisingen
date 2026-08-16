@@ -371,6 +371,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case connectivity
     case softwareStatus
     case softwareInstallControl
+    case engineStart
 
     var title: String {
         switch self {
@@ -395,6 +396,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .connectivity: return L10n.text("Connectivity diagnostics")
         case .softwareStatus: return L10n.text("Vehicle software status")
         case .softwareInstallControl: return L10n.text("Software installation control")
+        case .engineStart: return L10n.text("Remote engine start (RES)")
         }
     }
 
@@ -405,7 +407,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
         .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
-        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl
+        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
 }
 
@@ -550,10 +552,14 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
         support(for: .steeringWheelHeating) == .supported
     }
 
+    var hasEngineStart: Bool {
+        support(for: .engineStart) == .supported
+    }
+
     func supportsAnyCommand(in feature: AppFeature) -> Bool {
         let capabilities: [VehicleCapability]
         switch feature {
-        case .remoteClimate: capabilities = [.climateStartStop]
+        case .remoteClimate: capabilities = [.climateStartStop, .engineStart]
         case .remotePreCleaning: capabilities = [.preCleaning]
         case .remoteCharging:
             capabilities = [.chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride]
@@ -585,7 +591,7 @@ private extension VehicleCapability {
     var associatedFeature: AppFeature {
         switch self {
         case .climateStartStop, .climateTemperature, .seatHeating,
-             .steeringWheelHeating, .climateTimers:
+             .steeringWheelHeating, .climateTimers, .engineStart:
             return .climateStatus
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,

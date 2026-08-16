@@ -137,6 +137,10 @@ extension PolestarGRPC {
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.stringField(2, softwareID))
             return try await ota(method: "CancelSchedule", request: request, vin: vin, token: accessToken)
+        case .startEngine, .stopEngine:
+            // Remote engine start is a Volvo ICE/PHEV command; Polestar's line-up is electric
+            // and its backend exposes no equivalent RPC. Mirrors `isImplemented(by: .polestar)`.
+            throw RemoteCommandError.unsupported
         }
     }
 
