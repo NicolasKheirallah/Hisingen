@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
     @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
     @State private var registrationBadgePosition: RegistrationNumberBadgePosition = Preferences.registrationBadgePosition
+    @State private var vehicleLabelFormat: VehicleLabelFormat = Preferences.vehicleLabelFormat
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
     @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
@@ -446,6 +447,56 @@ struct SettingsView: View {
                             onSettingsChanged(.presentation)
                         }
                     }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Vehicle display name"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Shown in footer switcher, menus, and vehicle headers"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $vehicleLabelFormat) {
+                            ForEach(VehicleLabelFormat.allCases, id: \.self) { format in
+                                Text(format.title).tag(format)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: vehicleLabelFormat) { _ in
+                            Preferences.vehicleLabelFormat = vehicleLabelFormat
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    let previewTitle = Preferences.formattedVehicleTitle(
+                        vin: Preferences.vin.isEmpty ? "YS2TESTVIN123456" : Preferences.vin,
+                        modelName: state?.modelName ?? (Preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
+                        modelYear: state?.modelYear ?? "2024",
+                        registrationNo: state?.registrationNo ?? "ZCJ 06G",
+                        format: vehicleLabelFormat
+                    )
+                    HStack(spacing: 6) {
+                        Text(L10n.text("Preview:"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Image(systemName: Preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(HisingenTheme.accent)
+                            Text(previewTitle)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
 
                     Divider().opacity(0.4)
 

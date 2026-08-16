@@ -291,7 +291,13 @@ extension Color {
 
     init(light: NSColor, dark: NSColor) {
         self.init(NSColor(name: nil, dynamicProvider: { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+            let isDark: Bool
+            if let match = appearance.bestMatch(from: [.darkAqua, .aqua]) {
+                isDark = (match == .darkAqua)
+            } else {
+                isDark = appearance.name.rawValue.lowercased().contains("dark")
+            }
+            return isDark ? dark : light
         }))
     }
 

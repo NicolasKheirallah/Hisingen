@@ -57,6 +57,7 @@ final class StatusItemController: NSObject {
         }
         popover.behavior = .semitransient
         popover.delegate = self
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         popover.contentSize = NSSize(width: HisingenTheme.popoverWidth, height: 560)
         installGlobalHotKey()
     }
@@ -144,9 +145,12 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
 
         if let state = latestState {
-            let nickname = Preferences.vehicleNickname(for: state.vin)
-            let vehicleName = [nickname.isEmpty ? nil : nickname, state.modelName]
-                .compactMap { $0 }.first ?? Preferences.activeBrand.displayName
+            let vehicleName = Preferences.formattedVehicleTitle(
+                vin: state.vin,
+                modelName: state.modelName,
+                modelYear: state.modelYear,
+                registrationNo: state.registrationNo
+            )
             let battery = state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
             let range = state.rangeKm.map {
                 "\(Preferences.distanceUnit.convert(km: $0)) \(Preferences.distanceUnit.suffix)"
@@ -206,7 +210,7 @@ final class StatusItemController: NSObject {
         if cars.count > 1 || otherBrandResumable {
             let switchMenu = NSMenu()
             for (index, car) in cars.enumerated() {
-                let name = car.title.isEmpty ? Preferences.activeBrand.displayName : car.title
+                let name = car.displayTitle()
                 let battery = cachedSnapshots[car.vin]?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌥\(index + 1)" : ""
                 let title = shortcut.isEmpty
@@ -472,6 +476,7 @@ final class StatusItemController: NSObject {
 
     private func showPopover() {
         guard !popover.isShown else { return }
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         let view = HisingenContentView(
             state: latestState,
             error: latestError,
@@ -567,8 +572,9 @@ final class StatusItemController: NSObject {
         return faded
     }
 
-    private func refreshPopoverIfNeeded() {
+    func refreshPopoverIfNeeded() {
         guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<HisingenContentView> else { return }
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         let view = HisingenContentView(
             state: latestState,
             error: latestError,

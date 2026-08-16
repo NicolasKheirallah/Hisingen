@@ -2507,6 +2507,33 @@ struct LivePolestarRemoteCommandIntegrationTests {
     }
 
     @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testSeedAppCredentialsIntoKeychain() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let appKeychain = KeychainStore.app
+        try appKeychain.savePassword(password)
+
+        Preferences.email = email
+        Preferences.activeBrand = .polestar
+        if let preferredVIN {
+            Preferences.vin = preferredVIN
+        }
+
+        let api = PolestarAPI(keychain: appKeychain)
+        var features = FeatureSelection.default
+        features.set(.remoteCharging, enabled: true)
+        features.set(.chargingDetails, enabled: true)
+        features.set(.vehicleIdentity, enabled: true)
+        try await api.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
+
+        let state = try await api.fetchVehicleState(vin: preferredVIN ?? "YSMVSEDE6PL147228", features: features)
+        print("✅ Successfully seeded app session! Target SoC: \(state.chargeTargetPercentage.map { "\($0)%" } ?? "nil")")
+    }
+
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
     func testLiveTargetSocSetAndReadback() async throws {
         let environment = ProcessInfo.processInfo.environment
         let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])

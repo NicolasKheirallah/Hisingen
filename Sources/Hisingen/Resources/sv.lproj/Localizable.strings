@@ -880,6 +880,14 @@
 "Over Vehicle Image (Top Left)" = "Över bilbild (uppe till vänster)";
 "Below Greeting" = "Under hälsning";
 "Hidden" = "Dold";
+"Vehicle display name" = "Visningsnamn för fordon";
+"Shown in footer switcher, menus, and vehicle headers" = "Visas i sidfotsväljare, menyer och fordonsrubriker";
+"Registration / License Plate" = "Registreringsnummer / Regnr";
+"Nickname" = "Fordonsnamn / Smeknamn";
+"Model Name & Year" = "Modellnamn & årsmodell";
+"Model Name Only" = "Endast modellnamn";
+"Nickname & Registration" = "Smeknamn & registreringsnummer";
+"Registration & Model" = "Registreringsnummer & modell";
 "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings." = "Kräver prenumeration på 'Connected Vehicle API' på developer.volvocars.com och att 'Volvo Connected Services' är aktiverat i bilens integritetsinställningar.";
 "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors." = "Kräver prenumeration på 'Connected Vehicle API' på developer.volvocars.com och att bilen körs för att kalibrera däcktryckssensorerna.";
 

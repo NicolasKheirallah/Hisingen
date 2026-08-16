@@ -885,6 +885,14 @@
 "Over Vehicle Image (Top Left)" = "Over Vehicle Image (Top Left)";
 "Below Greeting" = "Below Greeting";
 "Hidden" = "Hidden";
+"Vehicle display name" = "Vehicle display name";
+"Shown in footer switcher, menus, and vehicle headers" = "Shown in footer switcher, menus, and vehicle headers";
+"Registration / License Plate" = "Registration / License Plate";
+"Nickname" = "Nickname";
+"Model Name & Year" = "Model Name & Year";
+"Model Name Only" = "Model Name Only";
+"Nickname & Registration" = "Nickname & Registration";
+"Registration & Model" = "Registration & Model";
 "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings.";
 "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors.";
 

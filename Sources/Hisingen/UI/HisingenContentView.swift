@@ -179,8 +179,20 @@ struct HisingenContentView: View {
 
     private func vehicleMenuLabel(_ car: CarSummary) -> String {
         let isActive = car.vin == activeVin
-        guard let snapshot = isActive ? state : cachedSnapshots[car.vin] else { return car.title }
-        var label = car.title
+        let snapshot = isActive ? state : cachedSnapshots[car.vin]
+        let baseTitle: String = {
+            if let snap = snapshot {
+                return Preferences.formattedVehicleTitle(
+                    vin: snap.vin,
+                    modelName: snap.modelName,
+                    modelYear: snap.modelYear,
+                    registrationNo: snap.registrationNo
+                )
+            }
+            return car.displayTitle()
+        }()
+        guard let snapshot else { return baseTitle }
+        var label = baseTitle
         if let battery = snapshot.batteryPercentage {
             label += " · \(Int(battery))%"
             if snapshot.isCharging { label += "⚡" }
@@ -212,6 +224,28 @@ struct HisingenContentView: View {
     private var vehicleSwitcher: some View {
         let currentVin = activeVin ?? cars.first?.vin ?? ""
         let currentCar = cars.first { $0.vin == currentVin }
+        let currentTitle: String = {
+            if let state, state.vin == currentVin {
+                return Preferences.formattedVehicleTitle(
+                    vin: state.vin,
+                    modelName: state.modelName,
+                    modelYear: state.modelYear,
+                    registrationNo: state.registrationNo
+                )
+            }
+            if let snap = cachedSnapshots[currentVin] {
+                return Preferences.formattedVehicleTitle(
+                    vin: snap.vin,
+                    modelName: snap.modelName,
+                    modelYear: snap.modelYear,
+                    registrationNo: snap.registrationNo
+                )
+            }
+            if let currentCar {
+                return currentCar.displayTitle()
+            }
+            return Preferences.activeBrand.displayName
+        }()
         let brandIcon = Preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill"
 
         return Menu {
@@ -256,7 +290,7 @@ struct HisingenContentView: View {
             HStack(spacing: 4) {
                 Image(systemName: brandIcon)
                     .font(.system(size: 10))
-                Text(currentCar?.title ?? Preferences.activeBrand.displayName)
+                Text(currentTitle)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -269,8 +303,8 @@ struct HisingenContentView: View {
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .withoutFocusRing()
-        .help(L10n.format("%@ — Switch Vehicle (⌥[ / ⌥])", currentCar?.title ?? Preferences.activeBrand.displayName))
-        .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentCar?.title ?? Preferences.activeBrand.displayName))
+        .help(L10n.format("%@ — Switch Vehicle (⌥[ / ⌥])", currentTitle))
+        .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentTitle))
     }
 
     private var footerBar: some View {
