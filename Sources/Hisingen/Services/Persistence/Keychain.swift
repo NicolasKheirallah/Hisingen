@@ -211,12 +211,16 @@ struct KeychainStore: Sendable {
         "\(service)|\(account)"
     }
 
-    private func baseQuery(account: String) -> [String: Any] {
-        [
+    private func baseQuery(account: String, useDataProtection: Bool = true) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        if useDataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
     }
 
     private func save(_ value: String, account: String) throws {
@@ -233,17 +237,33 @@ struct KeychainStore: Sendable {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
-        let query = baseQuery(account: account)
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else {
-            throw KeychainError.status(updateStatus)
+        let dpQuery = baseQuery(account: account, useDataProtection: true)
+        let dpUpdate = SecItemUpdate(dpQuery as CFDictionary, attributes as CFDictionary)
+        if dpUpdate == errSecSuccess {
+            _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+            return
+        }
+        if dpUpdate == errSecItemNotFound {
+            var dpAdd = dpQuery
+            attributes.forEach { dpAdd[$0.key] = $0.value }
+            let dpAddStatus = SecItemAdd(dpAdd as CFDictionary, nil)
+            if dpAddStatus == errSecSuccess {
+                _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+                return
+            }
         }
 
-        var add = query
-        attributes.forEach { add[$0.key] = $0.value }
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw KeychainError.status(addStatus) }
+        let legacyQuery = baseQuery(account: account, useDataProtection: false)
+        let legacyUpdate = SecItemUpdate(legacyQuery as CFDictionary, attributes as CFDictionary)
+        if legacyUpdate == errSecSuccess { return }
+        guard legacyUpdate == errSecItemNotFound else {
+            throw KeychainError.status(legacyUpdate)
+        }
+
+        var legacyAdd = legacyQuery
+        attributes.forEach { legacyAdd[$0.key] = $0.value }
+        let legacyAddStatus = SecItemAdd(legacyAdd as CFDictionary, nil)
+        guard legacyAddStatus == errSecSuccess else { throw KeychainError.status(legacyAddStatus) }
     }
 
     private func read(account: String) throws -> String? {
@@ -257,19 +277,31 @@ struct KeychainStore: Sendable {
             return val
         }
 
-        var query = baseQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var dpQuery = baseQuery(account: account, useDataProtection: true)
+        dpQuery[kSecReturnData as String] = true
+        dpQuery[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data else {
-            throw KeychainError.status(status)
+        let dpStatus = SecItemCopyMatching(dpQuery as CFDictionary, &item)
+        if dpStatus == errSecSuccess, let data = item as? Data, let result = String(data: data, encoding: .utf8) {
+            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            return result
         }
-        let result = String(data: data, encoding: .utf8)
-        InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
-        return result
+
+        var legacyQuery = baseQuery(account: account, useDataProtection: false)
+        legacyQuery[kSecReturnData as String] = true
+        legacyQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var legacyItem: CFTypeRef?
+        let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
+        if legacyStatus == errSecSuccess, let data = legacyItem as? Data, let result = String(data: data, encoding: .utf8) {
+            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            try? save(result, account: account)
+            _ = SecItemDelete(legacyQuery as CFDictionary)
+            return result
+        }
+
+        return nil
     }
 
     private func delete(account: String) throws {
@@ -280,10 +312,8 @@ struct KeychainStore: Sendable {
             Self.testLock.unlock()
             return
         }
-        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.status(status)
-        }
+        _ = SecItemDelete(baseQuery(account: account, useDataProtection: true) as CFDictionary)
+        _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
     }
 }
 
