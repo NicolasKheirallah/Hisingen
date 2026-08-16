@@ -96,14 +96,16 @@ jobs:
         run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
       - name: Test (deterministic suite only — live/remote-command tests excluded)
-        run: >-
-          swift test --disable-xctest --enable-swift-testing
-          --skip Live
-          -Xswiftc -strict-concurrency=complete
-          -Xswiftc -warn-concurrency
+        run: |
+          set -euo pipefail
+          if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
+            swift test --disable-xctest --enable-swift-testing --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          else
+            swift test --filter "^((?!Live).)*$" -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          fi
 
       - name: Build app bundle and DMG installer
-        run: make all SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+        run: make all IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
 
       - name: Validate bundle and disk image
         run: |
