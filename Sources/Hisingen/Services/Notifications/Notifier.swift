@@ -87,6 +87,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
         checkRainWithWindows(previous: previousState, current: state)
         checkEveningUnlocked(previous: previousState, current: state)
+        checkLowBatteryPlugIn(previous: previousState, current: state)
         checkSoftwareUpdate(previous: previousState, current: state)
         checkVehicleWarnings(previous: previousState, current: state)
     }
@@ -144,7 +145,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
 
-    static func rainWithWindowsOpenCondition(_ state: VehicleState?) -> Bool {
+    nonisolated static func rainWithWindowsOpenCondition(_ state: VehicleState?) -> Bool {
         guard let state, let weather = state.weather,
               let condition = weather.condition?.lowercased(),
               (condition.contains("rain") || condition.contains("drizzle") || condition.contains("shower") || condition.contains("snow")),
@@ -169,7 +170,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
 
-    static func eveningUnlockedCondition(_ state: VehicleState?) -> Bool {
+    nonisolated static func eveningUnlockedCondition(_ state: VehicleState?) -> Bool {
         guard let state, let ext = state.exteriorStatus, ext.isLocked == false else { return false }
         let hour = Calendar.current.component(.hour, from: state.fetchedAt)
         return hour >= 21 || hour < 6
@@ -186,6 +187,28 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.threadIdentifier = "hisingen.security.\(current.vin)"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).evening-unlocked", content: content, trigger: nil)
+        )
+    }
+
+    nonisolated static func plugInReminderCondition(_ state: VehicleState?) -> Bool {
+        guard let state, state.powertrain.hasElectricRange,
+              let battery = state.batteryPercentage, battery <= 40.0,
+              state.chargerConnection == .disconnected, !state.isCharging else { return false }
+        return true
+    }
+
+    private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
+        guard Preferences.notifyPlugInReminder,
+              Self.plugInReminderCondition(current),
+              !Self.plugInReminderCondition(previous) else { return }
+
+        let brandTitle = current.model.brand.displayName
+        let content = UNMutableNotificationContent()
+        content.title = "⚡️ " + L10n.text("Plug-In Reminder")
+        content.body = L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, current.batteryPercentage ?? 40.0)
+        content.threadIdentifier = "hisingen.charging.\(current.vin)"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "hisingen.\(current.vin).plugin-reminder", content: content, trigger: nil)
         )
     }
 

@@ -392,7 +392,7 @@ struct ControlsTabView: View {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: .green)
 
                 if profile.permits(.chargeTarget) && features.contains(.remoteCharging) {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(L10n.text("Target Limit"))
                                 .font(.system(size: 11, weight: .medium))
@@ -402,6 +402,66 @@ struct ControlsTabView: View {
                                 .font(.system(size: 12, weight: .bold))
                                 .monospacedDigit()
                                 .foregroundStyle(.primary)
+                        }
+
+                        // One-Touch Quick Presets
+                        HStack(spacing: 6) {
+                            Button {
+                                chargeTarget = 80
+                                onRemoteCommand(.setChargeTarget(80))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "shield.fill")
+                                        .font(.system(size: 9))
+                                    Text("80% " + L10n.text("Daily"))
+                                        .font(.system(size: 10, weight: chargeTarget == 80 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 80 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 80 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(80)))
+
+                            Button {
+                                chargeTarget = 90
+                                onRemoteCommand(.setChargeTarget(90))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "battery.75percent")
+                                        .font(.system(size: 9))
+                                    Text("90% " + L10n.text("Standard"))
+                                        .font(.system(size: 10, weight: chargeTarget == 90 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 90 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 90 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(90)))
+
+                            Button {
+                                chargeTarget = 100
+                                onRemoteCommand(.setChargeTarget(100))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "road.lanes")
+                                        .font(.system(size: 9))
+                                    Text("100% " + L10n.text("Road Trip"))
+                                        .font(.system(size: 10, weight: chargeTarget == 100 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 100 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 100 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(100)))
                         }
 
                         Picker("", selection: Binding(
@@ -561,9 +621,9 @@ struct ControlsTabView: View {
                             onRemoteCommand(.unlockTrunk)
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: "car.rear")
+                                Image(systemName: "car.side.rear.open.fill")
                                     .font(.system(size: 15))
-                                Text(L10n.text("Trunk"))
+                                Text(L10n.text("Unlock Trunk"))
                                     .font(.system(size: 11, weight: .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 46)
