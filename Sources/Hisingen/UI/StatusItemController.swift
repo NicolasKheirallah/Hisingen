@@ -501,6 +501,10 @@ final class StatusItemController: NSObject {
         }
     }
 
+    func openPopover() {
+        showPopover()
+    }
+
     private func selectCar(_ vin: String) {
         guard vin != activeVin else { return }
         onSelectCar?(vin)
