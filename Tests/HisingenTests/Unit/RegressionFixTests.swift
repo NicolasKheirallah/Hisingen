@@ -157,7 +157,7 @@ struct RegressionFixTests {
             modelYear: "2024",
             registrationNo: "TEST123",
             vin: "YS2P2000000000001",
-            ownerFirstName: nil,
+            ownerFirstName: "Nico",
             odometerKm: 10000,
             daysToService: 100,
             distanceToServiceKm: 5000,
@@ -165,12 +165,24 @@ struct RegressionFixTests {
             fluidWarnings: [],
             exteriorStatus: exteriorStatus,
             weather: weather,
+            location: VehicleLocation(latitude: 57.7427, longitude: 11.9682),
             unavailableFeatures: unavailableFeatures,
             imageData: nil,
             fetchedAt: fetchedAt,
             vehicleReportedAt: fetchedAt,
             dataWarnings: []
         )
+    }
+
+    @Test
+    func testCacheableCopyPreservesLocationAndRegistrationAndGreeting() {
+        let original = makeVehicleState()
+        let copy = original.cacheableCopy
+
+        XCTAssertEqual(copy.registrationNo, "TEST123")
+        XCTAssertEqual(copy.ownerFirstName, "Nico")
+        XCTAssertEqual(copy.location?.latitude, 57.7427)
+        XCTAssertEqual(copy.location?.longitude, 11.9682)
     }
 }
 

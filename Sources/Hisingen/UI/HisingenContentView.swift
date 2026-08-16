@@ -1505,6 +1505,7 @@ struct VehicleTabView: View {
             accuracy: loc.accuracyMeters,
             parkingBrake: loc.parkingBrakeEngaged,
             gear: loc.gear,
+            weather: state.weather,
             isLive: !state.isStale(), freshnessText: state.freshnessDescription
         ))
     }
@@ -1950,6 +1951,7 @@ struct LocationCardView: View {
     var accuracy: Double? = nil
     var parkingBrake: Bool? = nil
     var gear: String? = nil
+    var weather: VehicleWeather? = nil
     let isLive: Bool
     let freshnessText: String
 
@@ -2040,6 +2042,28 @@ struct LocationCardView: View {
                             }
                             .buttonStyle(.plain)
                             .help(L10n.text("Copy Coordinates"))
+                        }
+
+                        if let weather, let temp = weather.temperatureCelsius {
+                            HStack(spacing: 4) {
+                                Image(systemName: "cloud.sun.fill")
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.orange)
+                                Text(String(format: "%.1f °C", temp))
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .foregroundStyle(HisingenTheme.ink)
+                                if let cond = weather.condition {
+                                    Text("· \(L10n.text(cond))")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(HisingenTheme.inkMuted)
+                                }
+                                if let hum = weather.relativeHumidity {
+                                    Text("· \(hum)%")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .padding(.top, 2)
                         }
 
                         if let speed, speed > 0 {

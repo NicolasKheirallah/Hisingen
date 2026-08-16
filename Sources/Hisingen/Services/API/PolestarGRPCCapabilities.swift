@@ -666,9 +666,19 @@ extension PolestarGRPC {
     static func parseLocation(_ data: Data) -> VehicleLocation? {
         let fields = Protobuf.fields(data)
 
-        var lon = numeric(fields, 2)
-        var lat = numeric(fields, 3)
-        var tsMillis = varint(fields, 4)
+        var lon: Double?
+        var lat: Double?
+        var tsMillis: UInt64?
+
+        if let f1 = fields.first(where: { $0.number == 1 }), f1.wire == 1 || f1.wire == 5 {
+            lon = numeric(fields, 1)
+            lat = numeric(fields, 2)
+            tsMillis = varint(fields, 3)
+        } else {
+            lon = numeric(fields, 2)
+            lat = numeric(fields, 3)
+            tsMillis = varint(fields, 4)
+        }
 
         if (lat == nil || lon == nil), let subData = message(fields, field: 5) ?? message(fields, field: 1) ?? message(fields, field: 3) {
             let subFields = Protobuf.fields(subData)
@@ -702,18 +712,18 @@ extension PolestarGRPC {
             return nil
         }
 
-        let heading = [numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
+        let heading = [numeric(fields, 4), numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
             .compactMap { $0 }
-            .first(where: { $0 >= 0 && $0 <= 360 })
-        let speed = [numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
+            .first(where: { $0 >= 0 && $0 <= 360 && abs($0 - Double(tsMillis ?? 0)) > 1000 })
+        let speed = [numeric(fields, 5), numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
             .compactMap { $0 }
             .first(where: { $0 >= 0 && $0 <= 300 })
         let date = tsMillis.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1_000) : nil }
-        let altitude = numeric(fields, 8) ?? numeric(fields, 6)
-        let accuracy = numeric(fields, 9) ?? numeric(fields, 7)
-        let parkingBrake = varint(fields, 10).map { $0 != 0 } ?? varint(fields, 8).map { $0 != 0 }
+        let altitude = numeric(fields, 6) ?? numeric(fields, 8)
+        let accuracy = numeric(fields, 7) ?? numeric(fields, 9)
+        let parkingBrake = varint(fields, 8).map { $0 != 0 } ?? varint(fields, 10).map { $0 != 0 }
         let gear: String? = {
-            guard let g = varint(fields, 11) ?? varint(fields, 9) else { return nil }
+            guard let g = varint(fields, 9) ?? varint(fields, 11) else { return nil }
             switch g {
             case 1: return "P"
             case 2: return "R"

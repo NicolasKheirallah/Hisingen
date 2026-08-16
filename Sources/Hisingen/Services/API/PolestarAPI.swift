@@ -1260,21 +1260,21 @@ actor PolestarAPI {
         guard enabled else { return OptionalCapability(value: nil, unavailable: false) }
         let cacheKey = key ?? feature.rawValue
         let scopedCacheKey = "\(vin)|\(cacheKey)"
-        if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date() {
+        if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
             return OptionalCapability(value: cached.value as? Value, unavailable: false)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-
-
             return OptionalCapability(value: nil, unavailable: false)
         }
         do {
             let value = try await operation()
             capabilityBackoff[vin]?[cacheKey] = nil
-            capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
-                value: value,
-                expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
-            )
+            if value != nil {
+                capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
+                    value: value,
+                    expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
+                )
+            }
             return OptionalCapability(value: value, unavailable: false)
         } catch {
             if Self.isGlobalFailure(error) { throw error }
@@ -1491,8 +1491,11 @@ actor PolestarAPI {
         if key == "climate-status" {
             return 15
         }
-        if feature == .exteriorStatus || feature == .airQuality {
+        if feature == .exteriorStatus || feature == .airQuality || feature == .vehicleLocation {
             return 30
+        }
+        if feature == .vehicleWeather {
+            return 300
         }
         return 60 * 60
     }
