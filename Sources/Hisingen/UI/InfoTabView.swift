@@ -49,8 +49,6 @@ struct InfoTabView: View {
         let supportsMultipleAngles = Preferences.activeBrand == .polestar
         let hasInterior = (state.interiorImageData != nil)
             || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
-            || supportsMultipleAngles
-            || (state.upholstery != nil)
 
         return Card {
             VStack(spacing: 12) {
