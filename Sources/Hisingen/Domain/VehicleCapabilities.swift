@@ -477,7 +477,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .tyrePressureValues:
+            case .tyrePressureValues, .honkAndFlash:
                 return .unavailable
             case .softwareInstallControl:
                 return .backendDependent

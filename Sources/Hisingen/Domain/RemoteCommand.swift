@@ -118,6 +118,9 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     }
 
     func adapted(to profile: VehicleCapabilityProfile) -> RemoteCommand {
+        if case .flashLights = self, profile.model == .polestar2 {
+            return .honkAndFlash
+        }
         guard case .startClimate(let temperature, let frontLeft, let frontRight,
                                  let rearLeft, let rearRight, let steeringWheel) = self else {
             return self

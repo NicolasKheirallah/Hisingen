@@ -88,22 +88,17 @@ extension PolestarGRPC {
             let body = try await lastMessage(path: Self.ampLimitService + "/SetAmpLimit",
                                              message: Self.chronosRequest(vin, payload: payload),
                                              vin: vin, accessToken: accessToken, host: .pccs)
-            guard let response = Self.message(body, field: 3),
-                  Self.varint(response, field: 1) == UInt64(amps) else {
-                throw RemoteCommandError.rejected(nil)
-            }
-            return RemoteCommandResult(outcome: .completed, message: nil)
+            return try Self.chronosResult(body, statusField: 3)
         case .startChargingOverride, .stopChargingOverride:
             let method = command == .startChargingOverride
                 ? "StartOverrideChargeTimer" : "StopOverrideChargeTimer"
             let body = try await lastMessage(path: Self.chargeNowService + "/\(method)",
                                              message: Self.chronosRequest(vin), vin: vin,
                                              accessToken: accessToken, host: .pccs)
-            guard let response = Self.message(body, field: 3),
-                  let status = Self.varint(response, field: 1), status > 0 else {
-                throw RemoteCommandError.rejected(nil)
+            if let status = Protobuf.fields(body).first(where: { $0.number == 1 && $0.wire == 0 })?.varint, status > 0 {
+                return RemoteCommandResult(outcome: .accepted, message: nil)
             }
-            return RemoteCommandResult(outcome: .accepted, message: nil)
+            return try Self.chronosResult(body, statusField: 3)
         case .setGlobalChargeTimer(let schedule):
             let timer = try Self.globalChargeTimer(schedule)
             var payload = Data()
@@ -372,7 +367,7 @@ extension PolestarGRPC {
         request.append(payload)
         return request
     }
-    private static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
+    static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
         let status = varint(data, field: statusField) ?? 0
         guard [1, 2, 3, 4, 8].contains(status) else { throw RemoteCommandError.rejected(nil) }
         let outcome: RemoteCommandOutcome = status == 1 ? .accepted : (status == 2 ? .delivered : .completed)
