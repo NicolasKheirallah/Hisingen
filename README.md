@@ -209,12 +209,14 @@ Private notification mode hides detailed vehicle values from banners. Stable ide
 
 ## Vehicle Info & Build Specifications (`Info` Tab)
 
-A dedicated top-level **Info** tab (`info.circle`) breaks down complete vehicle build details and styling specifications:
-- **Hero Studio Visual**: High-resolution studio exterior render with paint color pill and model year badge.
-- **Exterior & Styling**: Exterior paint finish (`externalColour`), factory wheels & rims (`wheels`), factory equipment packages (`packages` with badge pills like `Pilot`, `Plus`, `Performance`), and door body style.
+A dedicated top-level **Info** tab (`info.circle`) breaks down complete vehicle build details, interior blueprint, and styling specifications:
+- **Interactive Multi-Angle Studio Carousel**: Instant camera angle switching across 4 studio views (`Front 3/4`, `Side Profile`, `Rear 3/4`, `Overhead`) with automatic background pre-caching.
+- **Interactive 2D Cabin Seating Matrix**: Top-down vector blueprint of the cabin seating positions with dynamic LHD/RHD driver steering wheel placement, multi-level heated seats (Levels 1–3 amber/orange heat glow), steering wheel heat indicator, comfort target temperature, and active CleanZone air purification.
+- **Exterior & Styling**: Exterior paint finish (`externalColour`), factory wheels & rims (`wheels`), factory equipment packages (`packages` with badge pills like `Pilot`, `Plus`, `Performance`), parking brake status, and door body style.
 - **Interior & Cabin**: Interior trim & upholstery material (`upholstery`), steering orientation (`steeringOrientation`), multi-stage heated seats & heated steering wheel levels, and CleanZone cabin air purification.
-- **Powertrain & Battery**: Architecture (`BEV`, `PHEV`, `ICE`), usable battery capacity (kWh), gearbox transmission, and fuel type.
-- **Factory Build & Identity**: License plate, 1-click copyable VIN, factory build week (`structureWeek` e.g. `2023 · W42`), factory spec code (`pno34`), market code, and software release version.
+- **Powertrain & Specs**: Architecture (`BEV`, `PHEV`, `ICE`), usable battery capacity (kWh), gearbox transmission, fuel volume & average consumption.
+- **Service & Health**: Total odometer, service countdown & trigger reason, engine operating hours, manual/automatic trip meters, and average driving speed.
+- **Factory Build & Identity**: License plate, 1-click copyable VIN, internal vehicle ID, factory build week (`structureWeek` e.g. `2023 · W42`), factory spec code (`pno34`), market code, cloud connectivity status, and software release version.
 
 ## Menu Bar And macOS Integration
 

@@ -958,6 +958,21 @@ actor PolestarAPI {
         if let vin = selectedVIN {
             let angle = (pick?["angle"] as? Int) ?? requestedAngle
             CarImageCache.shared.save(bytes, for: vin, angle: angle)
+
+            for other in pool {
+                guard let otherAngle = other["angle"] as? Int, otherAngle != angle,
+                      let otherUrlStr = other["url"] as? String,
+                      let otherUrl = URL(string: otherUrlStr),
+                      otherUrl.scheme == "https",
+                      CarImageCache.shared.image(for: vin, angle: otherAngle) == nil else { continue }
+                Task.detached { [session] in
+                    guard let (otherBytes, otherResp) = try? await HTTPBodyReader.data(
+                        for: URLRequest(url: otherUrl), using: session, limit: 5_000_000, operation: "vehicle angle image"),
+                        (otherResp as? HTTPURLResponse)?.statusCode == 200,
+                        otherBytes.count <= 5_000_000 else { return }
+                    CarImageCache.shared.save(otherBytes, for: vin, angle: otherAngle)
+                }
+            }
         }
     }
 
