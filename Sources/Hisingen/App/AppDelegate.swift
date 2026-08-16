@@ -82,7 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-
     private func cacheDormantBrandSnapshot() {
         let dormantBrand: VehicleBrand = Preferences.activeBrand == .polestar ? .volvo : .polestar
         let dormantVIN = Preferences.vin(for: dormantBrand)

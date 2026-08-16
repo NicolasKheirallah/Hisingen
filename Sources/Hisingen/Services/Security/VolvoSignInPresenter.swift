@@ -1,23 +1,9 @@
 import AppKit
-import AuthenticationServices
 import Foundation
 
 @MainActor
-final class VolvoSignInPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class VolvoSignInPresenter: NSObject {
     private var pendingContinuation: CheckedContinuation<URL, Error>?
-    private var authSession: ASWebAuthenticationSession?
-
-    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        if Thread.isMainThread {
-            return MainActor.assumeIsolated {
-                NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSWindow()
-            }
-        } else {
-            return DispatchQueue.main.sync {
-                NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSWindow()
-            }
-        }
-    }
 
     func signIn(authorizeURL: URL, callbackScheme: String) async throws -> URL {
         NSApp.activate(ignoringOtherApps: true)
@@ -29,31 +15,10 @@ final class VolvoSignInPresenter: NSObject, ASWebAuthenticationPresentationConte
             }
             self.pendingContinuation = continuation
 
-            let session = ASWebAuthenticationSession(
-                url: authorizeURL,
-                callbackURLScheme: callbackScheme
-            ) { [weak self] callbackURL, error in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.authSession = nil
-                    if let callbackURL {
-                        self.handleCallbackURL(callbackURL)
-                    } else if let error {
-                        if let asError = error as? ASWebAuthenticationSessionError,
-                           asError.code == .canceledLogin {
-                            self.cancel(with: VolvoError.authenticationRequired(.callbackRejected))
-                        } else {
-                            self.cancel(with: error)
-                        }
-                    }
-                }
-            }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = false
-            self.authSession = session
-
-            if !session.start() {
-                NSWorkspace.shared.open(authorizeURL)
+            let opened = NSWorkspace.shared.open(authorizeURL)
+            if !opened {
+                self.pendingContinuation = nil
+                continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
             }
         }
     }
@@ -61,16 +26,12 @@ final class VolvoSignInPresenter: NSObject, ASWebAuthenticationPresentationConte
     func handleCallbackURL(_ url: URL) {
         guard let continuation = pendingContinuation else { return }
         pendingContinuation = nil
-        authSession?.cancel()
-        authSession = nil
         continuation.resume(returning: url)
     }
 
     func cancel(with error: Error? = nil) {
         guard let continuation = pendingContinuation else { return }
         pendingContinuation = nil
-        authSession?.cancel()
-        authSession = nil
         continuation.resume(throwing: error ?? VolvoError.authenticationRequired(.callbackRejected))
     }
 }
