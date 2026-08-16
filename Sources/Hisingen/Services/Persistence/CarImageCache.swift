@@ -36,12 +36,6 @@ final class CarImageCache: @unchecked Sendable {
             return data
         }
 
-        if angle != nil {
-            let fallbackURL = cacheDirectory.appendingPathComponent("\(cleanVIN).jpg")
-            if let data = try? Data(contentsOf: fallbackURL), !data.isEmpty {
-                return data
-            }
-        }
         return nil
     }
 

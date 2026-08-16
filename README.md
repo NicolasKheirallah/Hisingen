@@ -184,6 +184,8 @@ Every optional group can be enabled independently. Unsupported services degrade 
 ## Charging Intelligence
 
 - Dynamic battery gauge with charge-target marker and subtle charging pulse.
+- **Dual-Mode Live Charging Power Curve**: Interactive chart supporting **`SoC %`**, **`Power kW`**, and **`Dual`** overlay modes with peak power callouts and average power lines.
+- **Micro-Sparklines in History**: Anti-aliased vector sparklines embedded directly inside collapsed charging session rows.
 - Ready-time calculation based on the vehicle-reported sample timestamp.
 - Charging-speed estimate in `km/h` or `mph`.
 - **Electricity Rate & Tariff Calculator**: Estimated session and completion cost using a configurable electricity rate (per kWh) and currency symbol.
@@ -205,6 +207,14 @@ Every optional group can be enabled independently. Unsupported services degrade 
 
 Private notification mode hides detailed vehicle values from banners. Stable identifiers and notification threads prevent repeated copies of the same alert.
 
+## Vehicle Info & Build Specifications (`Info` Tab)
+
+A dedicated top-level **Info** tab (`info.circle`) breaks down complete vehicle build details and styling specifications:
+- **Hero Studio Visual**: High-resolution studio exterior render with paint color pill and model year badge.
+- **Exterior & Styling**: Exterior paint finish (`externalColour`), factory wheels & rims (`wheels`), factory equipment packages (`packages` with badge pills like `Pilot`, `Plus`, `Performance`), and door body style.
+- **Interior & Cabin**: Interior trim & upholstery material (`upholstery`), steering orientation (`steeringOrientation`), multi-stage heated seats & heated steering wheel levels, and CleanZone cabin air purification.
+- **Powertrain & Battery**: Architecture (`BEV`, `PHEV`, `ICE`), usable battery capacity (kWh), gearbox transmission, and fuel type.
+- **Factory Build & Identity**: License plate, 1-click copyable VIN, factory build week (`structureWeek` e.g. `2023 · W42`), factory spec code (`pno34`), market code, and software release version.
 
 ## Menu Bar And macOS Integration
 

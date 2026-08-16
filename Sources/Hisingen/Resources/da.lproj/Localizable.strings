@@ -791,5 +791,10 @@
 "Modem Synced" = "Modem synkroniseret";
 "Remote controls restricted to paired mobile devices" = "Fjernbetjening er begrænset til parrede mobile enheder";
 "Command Restricted" = "Kommando begrænset";
-"Polestar restricts remote write commands to paired mobile devices." = "Polestar begrænser fjernskrivekommandoer til parrede mobile enheder.";
-
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar begrænser fjernbetjening til parrede mobile enheder.";
+"Factory Build & Options" = "Fabriksudstyr & tilvalg";
+"Exterior Paint" = "Udvendig lak";
+"Vehicle Perspective" = "Køretøjsperspektiv";
+"PEAK POWER" = "TOPPEFFEKT";
+"Power Curve" = "Effektkurve";
+"Peak" = "Spids";

@@ -17,7 +17,7 @@ struct VehicleTimelineProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (VehicleWidgetEntry) -> Void) {
-        let (vin, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
+        let (_, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
             let v = Preferences.vin
             let s = VehicleStateStore().snapshot(for: v)
             return (v, s)
@@ -26,7 +26,7 @@ struct VehicleTimelineProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<VehicleWidgetEntry>) -> Void) {
-        let (vin, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
+        let (_, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
             let v = Preferences.vin
             let s = VehicleStateStore().snapshot(for: v)
             return (v, s)
