@@ -257,6 +257,8 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let oilLevelWarning: VolvoField<String>?
     let washerFluidLevelWarning: VolvoField<String>?
     let batteryChargeLevelWarning: VolvoField<String>?
+    let workshopId: VolvoField<String>?
+    let workshopName: VolvoField<String>?
 
     var hasServiceWarning: Bool {
         guard let raw = serviceWarning?.value?.uppercased() else { return false }

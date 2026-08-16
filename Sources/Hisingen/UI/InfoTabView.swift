@@ -588,6 +588,13 @@ struct InfoTabView: View {
         if let hours = state.engineHoursToService, hours > 0 {
             rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
         }
+        if let workshopName = state.preferredWorkshopName, !workshopName.isEmpty {
+            var val = workshopName
+            if let id = state.preferredWorkshopId, !id.isEmpty { val += " (\(id))" }
+            rows.append(KVRow(L10n.text("Service Center"), val, symbol: "building.2.fill"))
+        } else if let id = state.preferredWorkshopId, !id.isEmpty {
+            rows.append(KVRow(L10n.text("Service Center ID"), id, symbol: "building.2.fill"))
+        }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
 

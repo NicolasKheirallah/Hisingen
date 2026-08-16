@@ -245,6 +245,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     var regeneratedEnergyKwh: Double? = nil
     var frontBrakePadStatus: String? = nil
     var rearBrakePadStatus: String? = nil
+    var preferredWorkshopId: String? = nil
+    var preferredWorkshopName: String? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -348,6 +350,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
+        case preferredWorkshopId, preferredWorkshopName
     }
 
     init(from decoder: Decoder) throws {
@@ -426,6 +429,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.regeneratedEnergyKwh = try values.decodeIfPresent(Double.self, forKey: .regeneratedEnergyKwh)
         self.frontBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .frontBrakePadStatus)
         self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
+        self.preferredWorkshopId = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopId)
+        self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
     }
 
     var formattedBuildWeek: String? {
@@ -1024,6 +1029,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.regeneratedEnergyKwh = regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh
         merged.frontBrakePadStatus = frontBrakePadStatus ?? previous.frontBrakePadStatus
         merged.rearBrakePadStatus = rearBrakePadStatus ?? previous.rearBrakePadStatus
+        merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId
+        merged.preferredWorkshopName = preferredWorkshopName ?? previous.preferredWorkshopName
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

@@ -852,6 +852,11 @@ enum Preferences {
         set { d.set(newValue, forKey: "notify_low_battery") }
     }
 
+    static var notifyPlugInReminder: Bool {
+        get { boolDefaultTrue("notify_plugin_reminder") }
+        set { d.set(newValue, forKey: "notify_plugin_reminder") }
+    }
+
     static var notifySoftwareUpdates: Bool {
         get { boolDefaultTrue("notify_software_updates") }
         set { d.set(newValue, forKey: "notify_software_updates") }

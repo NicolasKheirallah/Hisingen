@@ -486,6 +486,8 @@ actor VolvoAPI {
         state.regeneratedEnergyKwh = statistics?.regeneratedEnergy?.value
         state.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
         state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
+        state.preferredWorkshopId = diagnostics?.workshopId?.value
+        state.preferredWorkshopName = diagnostics?.workshopName?.value
         return state
     }
 
