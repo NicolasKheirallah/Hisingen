@@ -901,3 +901,9 @@
 "The last refresh could not read: %@" = "Letzte Aktualisierung konnte nicht gelesen werden: %@";
 "Volvo Assistance" = "Volvo Assistance";
 "Warranty & Protection" = "Garantie & Schutz";
+
+/* Remote charging & timers enablement */
+"Charging & Climate Timers" = "Lade- und Klima-Timer";
+"Create and edit charge windows and departure timers" = "Ladefenster und Abfahrtszeiten erstellen und bearbeiten";
+"Remote climate, locks, windows, charging, timers and software installation are active." = "Ferngesteuertes Klima, Verriegelung, Fenster, Laden, Timer und Software-Installation sind aktiv.";
+"Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler." = "Klima, Verriegelung, Fenster, Innenraumreinigung, Laden und Timer werden über Polestars Befehlsdienst gesendet, die Software-Installation über den OTA-Planer.";

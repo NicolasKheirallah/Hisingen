@@ -198,6 +198,22 @@ actor PolestarAPI {
     }
 
     func signOut() async throws {
+        // Two clients were signed in, so both refresh tokens have to go. Revoke the command
+        // client's first — it is the one that can act on the vehicle.
+        let commandToRevoke = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        if let commandToRevoke, let endpoint = revocationEndpoint {
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.formBody([
+                "client_id": commandClientID,
+                "token": commandToRevoke,
+                "token_type_hint": "refresh_token"
+            ])
+            _ = try? await perform(request, limit: 64_000, operation: "command session revocation")
+        }
+        try? keychain.deleteCommandSessionToken()
+
         let tokenToRevoke = refreshToken
         let endpoint = revocationEndpoint
         if let tokenToRevoke, let endpoint {

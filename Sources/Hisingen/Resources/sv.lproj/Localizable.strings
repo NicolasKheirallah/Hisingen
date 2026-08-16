@@ -910,3 +910,9 @@
 "Sensor readings" = "Sensoravläsningar";
 "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Visar senast sparade ögonblicksbild — merparten av realtidstelemetrin är otillgänglig tills nästa lyckade uppdatering.";
 "The last refresh could not read: %@" = "Senaste uppdateringen kunde inte läsa: %@";
+
+/* Remote charging & timers enablement */
+"Charging & Climate Timers" = "Laddnings- och klimattimers";
+"Create and edit charge windows and departure timers" = "Skapa och redigera laddningsfönster och avgångstimers";
+"Remote climate, locks, windows, charging, timers and software installation are active." = "Fjärrstyrd klimat, lås, fönster, laddning, timers och programvaruinstallation är aktiva.";
+"Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler." = "Klimat, lås, fönster, kupérengöring, laddning och timers skickas via Polestars kommandotjänst, och programvaruinstallation via OTA-schemaläggaren.";

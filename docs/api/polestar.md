@@ -4,6 +4,12 @@ Polestar publishes no supported third-party vehicle-cloud API. Everything in thi
 
 Source: `Services/API/PolestarAPI.swift`, `PolestarGRPC.swift`, `PolestarGRPCCapabilities.swift`, `PolestarGRPCRemote.swift`, `GraphQLModels.swift`, `PolestarServiceError.swift`.
 
+> **See also: [polestar-backend-map.md](polestar-backend-map.md)** (with raw transcripts in
+> [polestar-probe-transcripts.md](polestar-probe-transcripts.md)) — the complete host/service/method/field map,
+> the two-client allowlist rule, the full `SoftwareState` enum, error semantics, transport quirks,
+> and what the probing techniques can and cannot prove. Everything there is measured against a live
+> vehicle; this page is the narrative overview.
+
 ## Two protocols, four hosts
 
 Polestar 2 and later share connectivity infrastructure with Volvo (both are Geely-group brands), which is why Polestar's backend topology looks the way it does:

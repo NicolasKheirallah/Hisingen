@@ -907,3 +907,9 @@
 "The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.";
 "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.";
 "A software update is available. The vehicle downloads it automatically." = "A software update is available. The vehicle downloads it automatically.";
+
+/* Remote charging & timers enablement */
+"Charging & Climate Timers" = "Charging & Climate Timers";
+"Create and edit charge windows and departure timers" = "Create and edit charge windows and departure timers";
+"Remote climate, locks, windows, charging, timers and software installation are active." = "Remote climate, locks, windows, charging, timers and software installation are active.";
+"Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler." = "Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler.";

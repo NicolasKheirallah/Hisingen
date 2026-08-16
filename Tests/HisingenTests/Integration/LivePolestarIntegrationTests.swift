@@ -1396,6 +1396,602 @@ struct LivePolestarRemoteCommandIntegrationTests {
         try? await api.signOut()
     }
 
+    /// Exhaustive method sweep over the two OTA services that are known to be real.
+    ///
+    /// On C3 the oracle is reliable: an unknown method answers `Method not found: <svc>/<m>`,
+    /// a real one answers with a business error or a payload. The known methods are named
+    /// `GetSoftwareInfo`, `GetSchedule`, `Schedule`, `InstallNow`, `CancelSchedule` — bare
+    /// verbs as often as `Get`-prefixed — so the candidate space is built accordingly.
+    /// Anything that is not "Method not found" is printed.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testExhaustiveOtaMethodSweep() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let resolvedWeb = try await api.validAccessToken()
+        let vin = try XCTUnwrap(resolvedVIN)
+        let webToken = try XCTUnwrap(resolvedWeb)
+
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(webToken)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let base = try XCTUnwrap(URL(string:
+            "https://\(c3["grpcHost"] as! String):\(c3["grpcPort"] as? Int ?? 443)"))
+        let token = try await Self.authorize(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+
+        let bare = ["Download", "DownloadNow", "StartDownload", "TriggerDownload",
+                    "InitiateDownload", "RequestDownload", "BeginDownload", "Fetch", "Pull",
+                    "Install", "InstallLater", "Update", "UpdateNow", "Upgrade",
+                    "Accept", "AcceptUpdate", "Approve", "ApproveUpdate", "Consent",
+                    "GiveConsent", "SetConsent", "Confirm", "ConfirmUpdate", "OptIn",
+                    "Defer", "Postpone", "Snooze", "Dismiss", "Decline", "Reject",
+                    "Acknowledge", "Ack", "MarkAsRead", "SetRead", "Read",
+                    "Wake", "WakeUp", "Notify", "Poll", "Sync", "Refresh", "Check",
+                    "CheckForUpdates", "Prepare", "Activate", "Commit", "Apply", "Push",
+                    "Enable", "Allow", "Permit", "Start", "Trigger", "Execute", "Perform",
+                    "Retry", "Resume", "Continue", "Proceed"]
+        let prefixed = ["GetSoftwareStatus", "GetSoftwareState", "GetDownloadStatus",
+                        "GetCampaign", "GetCampaigns", "GetConsent", "SetSoftwareState",
+                        "SetDownloadConsent", "SetUpdateConsent", "SetPreference",
+                        "SetAutoUpdate", "UpdateConsent", "RequestSoftware", "FetchSoftware",
+                        "SyncSoftware", "RefreshSoftwareInfo", "PrepareInstallation",
+                        "PrepareSoftware", "ActivateSoftware", "StartSoftwareDownload",
+                        "DownloadSoftware", "InstallSoftware", "ScheduleDownload"]
+        let methods = bare + prefixed
+
+        print("\n========================================================")
+        print("🔬 EXHAUSTIVE OTA METHOD SWEEP (\(methods.count) names × 2 services)")
+        var hits = 0
+        for service in ["/ota_mobcache.OtaDiscoveryService", "/ota_mobcache.SchedulerService"] {
+            for method in methods {
+                var request = URLRequest(url: base.appendingPathComponent("\(service)/\(method)"))
+                request.httpMethod = "POST"
+                request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+                request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.setValue(vin, forHTTPHeaderField: "vin")
+                request.httpBody = Protobuf.grpcFrame(Protobuf.stringField(1, vin))
+                let config = URLSessionConfiguration.ephemeral
+                config.timeoutIntervalForRequest = 10
+                guard let (stream, response) = try? await URLSession(configuration: config).bytes(for: request),
+                      let http = response as? HTTPURLResponse else { continue }
+                let message = http.value(forHTTPHeaderField: "grpc-message")?.removingPercentEncoding ?? ""
+                for try await _ in stream { break }
+                if !message.contains("Method not found") {
+                    hits += 1
+                    print("  ⭐️ \(service)/\(method) → status=\(http.value(forHTTPHeaderField: "grpc-status") ?? "OK") \(message)")
+                }
+            }
+        }
+        print("  \(hits) method(s) exist beyond the five already known")
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// The app-backend is the Polestar *app's* own GraphQL, and the app does show software
+    /// update state — so its schema plausibly has operations the mystar-v2 schema lacks. Every
+    /// earlier attempt used the web client's token; this uses the app client's, which is what
+    /// that host expects. Also captures `id_token`, since `X-PolestarId-Authorization` may want
+    /// the identity token rather than the access token.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testAppBackendWithAppClientToken() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let access = try XCTUnwrap(tokens["access_token"] as? String)
+        let identity = tokens["id_token"] as? String
+
+        print("\n========================================================")
+        print("📱 APP-BACKEND WITH APP-CLIENT TOKEN (id_token \(identity == nil ? "absent" : "present"))")
+
+        let url = URL(string: "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!
+        let probe = "query GetVDMSCars { vdms { getVehiclesInformation { vin } } }"
+        var working: [String: String]?
+        var combos: [(String, [String: String])] = [
+            ("PolestarId: Bearer access", ["X-PolestarId-Authorization": "Bearer \(access)"]),
+            ("PolestarId: raw access", ["X-PolestarId-Authorization": access])
+        ]
+        if let identity {
+            combos += [
+                ("PolestarId: Bearer id_token", ["X-PolestarId-Authorization": "Bearer \(identity)"]),
+                ("PolestarId: raw id_token", ["X-PolestarId-Authorization": identity]),
+                ("Authorization: Bearer id_token", ["Authorization": "Bearer \(identity)"])
+            ]
+        }
+        for (label, extra) in combos {
+            var headers = [
+                "Content-Type": "application/json",
+                "User-Agent": "PolestarApp/5.5.0b1102 Android/14",
+                "X-Polestar-Force-Update-Version": "5.5.0",
+                "X-Polestar-Locale": "SE",
+                "X-APOLLO-OPERATION-NAME": "GetVDMSCars",
+                "Accept": "multipart/mixed;deferSpec=20220824, application/graphql-response+json, application/json"
+            ]
+            extra.forEach { headers[$0.key] = $0.value }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: [
+                "operationName": "GetVDMSCars", "variables": [:], "query": probe,
+                "extensions": ["clientLibrary": ["name": "apollo-kotlin", "version": "4.4.1"]]
+            ])
+            guard let (data, response) = try? await URLSession.shared.data(for: request) else { continue }
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(decoding: data, as: UTF8.self)
+            print("  \(label) → HTTP \(code) \(body.prefix(140))")
+            // Authenticated = a `data` payload with no error envelope. The vehicle list may
+            // legitimately be empty for this client; that is not an auth failure.
+            if code == 200, body.contains("\"data\""), !body.contains("\"errors\"") { working = headers }
+        }
+
+        guard let working else {
+            print("  ✗ no header combination authenticated; app-backend stays closed")
+            print("========================================================\n")
+            return
+        }
+        print("\n  ✅ authenticated — probing schema for software/OTA operations")
+
+        // graphql-java frequently appends "Did you mean ...?" to FieldUndefined — a far better
+        // oracle than blind name guessing.
+        for (label, query) in [
+            ("near-miss on vdms", "query Q { vdms { getVehiclesInformatio { vin } } }"),
+            ("software on vdms", "query Q { vdms { software { __typename } } }"),
+            ("root software", "query Q { software { __typename } }"),
+            ("root ota", "query Q { ota { __typename } }"),
+            ("root softwareUpdate", "query Q { softwareUpdate { __typename } }"),
+            ("mutation root", "mutation M { __typename }"),
+            ("mutation startDownload", "mutation M { startSoftwareDownload { __typename } }"),
+            ("mutation downloadSoftware", "mutation M { downloadSoftware { __typename } }"),
+            ("mutation acceptSoftware", "mutation M { acceptSoftwareUpdate { __typename } }")
+        ] {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            working.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": query])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { continue }
+            let body = String(decoding: data, as: UTF8.self)
+            let hint = body.contains("Did you mean") ? " ⭐️ SUGGESTION" : ""
+            print("  \(label)\(hint) → \(body.prefix(260))")
+        }
+        print("========================================================\n")
+    }
+
+    /// The app-backend authenticates with the app-client token and its validator emits
+    /// "Did you mean …?" suggestions. If introspection is also open there — mystar-v2 blocks it,
+    /// but this is a different service — the whole schema is readable and the question of
+    /// whether a software/OTA operation exists is settled outright.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testAppBackendSchemaIntrospection() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let access = try XCTUnwrap(tokens["access_token"] as? String)
+
+        func call(_ query: String) async -> String {
+            var request = URLRequest(url: URL(string:
+                "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!)
+            request.httpMethod = "POST"
+            for (key, value) in [
+                "Content-Type": "application/json",
+                "User-Agent": "PolestarApp/5.5.0b1102 Android/14",
+                "X-Polestar-Force-Update-Version": "5.5.0",
+                "X-Polestar-Locale": "SE",
+                "X-PolestarId-Authorization": "Bearer \(access)"
+            ] { request.setValue(value, forHTTPHeaderField: key) }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": query])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+
+        print("\n========================================================")
+        print("🔓 APP-BACKEND SCHEMA")
+
+        let queryFields = await call("{ __schema { queryType { fields { name } } } }")
+        let mutationFields = await call("{ __schema { mutationType { fields { name } } } }")
+        print("  raw query introspection: \(queryFields.prefix(400))")
+        print("  raw mutation introspection: \(mutationFields.prefix(400))")
+
+        // `__schema` is filtered to an empty field list, but `__type` is a different resolver
+        // and the validator's suggestion engine clearly still sees the real names.
+        for typeName in ["PolestarGraphQlQuery", "PolestarGraphQlMutation", "VdmsGraphQlQueries"] {
+            let body = await call("{ __type(name: \"\(typeName)\") { fields { name } } }")
+            print("  __type(\(typeName)): \(body.prefix(600))")
+        }
+
+        if queryFields.contains("FieldUndefined") || queryFields.contains("Validation error")
+            || queryFields.contains("\"fields\":[]") {
+            print("  introspection blocked here too — falling back to the suggestion oracle")
+            for stem in ["softwar", "software", "getSoftware", "ota", "getOta", "updat", "update", "getUpdate", "downloa", "download", "firmwar", "instal", "upgrad", "vehicl", "vdm", "getVehicle", "car", "getCar"] {
+                let body = await call("{ \(stem) { __typename } }")
+                if let range = body.range(of: "Did you mean") {
+                    print("  ⭐️ '\(stem)' → \(body[range.lowerBound...].prefix(180))")
+                } else {
+                    print("  '\(stem)' → no suggestion")
+                }
+            }
+        } else {
+            func names(_ body: String) -> [String] {
+                body.components(separatedBy: "\"name\":\"").dropFirst()
+                    .map { String($0.prefix(while: { $0 != "\"" })) }
+            }
+            let queries = names(queryFields), mutations = names(mutationFields)
+            print("  ✅ introspection OPEN")
+            print("\n  QUERY fields (\(queries.count)): \(queries.joined(separator: ", "))")
+            print("\n  MUTATION fields (\(mutations.count)): \(mutations.joined(separator: ", "))")
+            let interesting = ["software", "ota", "update", "download", "firmware", "install", "upgrade"]
+            let hits = (queries + mutations).filter { name in
+                interesting.contains { name.lowercased().contains($0) }
+            }
+            print("\n  ⭐️ software/OTA-related: \(hits.isEmpty ? "NONE" : hits.joined(separator: ", "))")
+        }
+        // `cars` is a root field the suggestion oracle just revealed. Walk into it the same
+        // way — its own type will suggest its real subfields.
+        print("\n  ── exploring root field `cars`")
+        print("  type: \(await call("{ cars { __typename } }").prefix(300))")
+        for stem in ["softwar", "software", "ota", "updat", "download", "firmwar",
+                     "versio", "statu", "vi", "model", "informatio"] {
+            let body = await call("{ cars { \(stem) { __typename } } }")
+            if let range = body.range(of: "Did you mean") {
+                print("  ⭐️ cars.\(stem) → \(body[range.lowerBound...].prefix(160))")
+            }
+        }
+        print("\n  ── exploring `vdms`")
+        for stem in ["softwar", "ota", "updat", "download", "getSoftwar", "getOta", "getUpdat"] {
+            let body = await call("{ vdms { \(stem) { __typename } } }")
+            if let range = body.range(of: "Did you mean") {
+                print("  ⭐️ vdms.\(stem) → \(body[range.lowerBound...].prefix(160))")
+            }
+        }
+        print("========================================================\n")
+    }
+
+    /// Determines whether the command client issues a refresh token. If it does, one
+    /// email+password sign-in is enough forever; if not, every app restart needs credentials
+    /// again and the session-restore path can never recover remote commands on its own.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testCommandClientRefreshTokenAvailability() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+
+        print("\n========================================================")
+        print("🎫 COMMAND-CLIENT TOKEN RESPONSE")
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        for key in tokens.keys.sorted() {
+            let value = tokens[key]
+            let shown = (value as? String).map { $0.count > 24 ? "<\($0.count) chars>" : $0 }
+                ?? String(describing: value ?? "")
+            print("  \(key): \(shown)")
+        }
+        let hasRefresh = (tokens["refresh_token"] as? String)?.isEmpty == false
+        print("  → refresh_token issued: \(hasRefresh ? "YES — one sign-in suffices" : "NO — credentials needed each restore")")
+
+        if let refresh = tokens["refresh_token"] as? String {
+            var request = URLRequest(url: URL(string: "https://polestarid.eu.polestar.com/as/token.oauth2")!)
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = "grant_type=refresh_token&client_id=lp8dyrd_10&refresh_token=\(refresh)"
+                .data(using: .utf8)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let ok = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])??["access_token"] != nil
+            print("  → refresh grant: HTTP \(code) \(ok ? "✅ works" : String(decoding: data, as: UTF8.self).prefix(160))")
+        }
+        print("========================================================\n")
+    }
+
+    /// Two untried avenues, run live:
+    /// (A) enumerate `CarsQueries` and `VdmsGraphQlQueries` subfields via the suggestion oracle
+    ///     — a software/consent/preferences field could live one level down where I never looked.
+    /// (B) now that real commands work, wake the car with `Lock`, then re-read software state to
+    ///     see whether an actively-connected car advances past `available`.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testFurtherOtaAvenues() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let tokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let access = try XCTUnwrap(tokens["access_token"] as? String)
+
+        func app(_ query: String) async -> String {
+            var request = URLRequest(url: URL(string:
+                "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!)
+            request.httpMethod = "POST"
+            for (k, v) in ["Content-Type": "application/json",
+                           "User-Agent": "PolestarApp/5.5.0b1102 Android/14",
+                           "X-Polestar-Force-Update-Version": "5.5.0", "X-Polestar-Locale": "SE",
+                           "X-PolestarId-Authorization": "Bearer \(access)"] {
+                request.setValue(v, forHTTPHeaderField: k)
+            }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": query])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+
+        print("\n========================================================")
+        print("🅰️  APP-BACKEND SUBFIELD ORACLE")
+        // A field that exists but is queried wrong (missing subselection / bad type) yields a
+        // *different* error than FieldUndefined, and near-misses trigger "Did you mean".
+        let stems = ["software", "softwar", "ota", "otaa", "update", "updat", "download", "downloa",
+                     "firmware", "firmwar", "install", "consent", "preference", "setting", "campaign",
+                     "notification", "status", "version", "car", "vehicle", "detail"]
+        for (container, wrapper) in [("cars", "cars"), ("vdms", "vdms")] {
+            print("── \(container) (\(await app("{ \(wrapper) { __typename } }")))")
+            for stem in stems {
+                let body = await app("{ \(wrapper) { \(stem) } }")
+                // The ONLY positive signal is a "Did you mean" suggestion (near-miss of a real
+                // field) or a sub-selection error naming a concrete return type. A bare
+                // "Cannot query field 'X'" — regardless of how the quotes are encoded — means
+                // the field is absent. (An earlier version of this check compared against an
+                // ASCII quote while the JSON uses ', and reported every field as EXISTS.)
+                if body.contains("Did you mean") {
+                    let hint = body.range(of: "Did you mean").map { String(body[$0.lowerBound...].prefix(80)) } ?? ""
+                    print("  ⭐️ \(stem) → \(hint)")
+                } else if body.contains("must have a selection of subfields")
+                            || body.contains("of type '\(stem)") {
+                    print("  ⭐️ \(stem) EXISTS → \(body.prefix(150))")
+                }
+            }
+        }
+
+        print("\n🅱️  WAKE-THEN-RECHECK")
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        features.set(.remoteLocks, enabled: true); features.set(.remoteOTA, enabled: true)
+        features.set(.softwareUpdates, enabled: true)
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: features)
+        let resolvedForWake = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedForWake)
+
+        let before = try await api.fetchVehicleState(vin: vin, features: features)
+        print("  state before wake: \(before.softwareInfo?.state.displayName ?? "nil")")
+        do {
+            let result = try await api.executeRemoteCommand(.lock, vin: vin)
+            print("  wake (Lock): \(result.outcome)")
+        } catch {
+            print("  wake failed: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+        }
+        // Give the car a moment to react to being addressed, then re-read three times.
+        for attempt in 1...3 {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            let s = try await api.fetchVehicleState(vin: vin, features: features)
+            print("  state +\(attempt * 5)s: \(s.softwareInfo?.state.displayName ?? "nil") "
+                  + "(installed=\(s.softwareInfo?.installedVersion ?? "—"))")
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// Now that the PCCS paths are correct and invocation works, this maps what *else* is
+    /// reachable — the capabilities Hisingen could newly support. Every write here is a no-op or
+    /// trivially reversible:
+    ///   - `SetTargetSoc` to the *current* value (no configuration change)
+    ///   - each invocation command probed with a real envelope but read-classified by response
+    /// so we learn which are accepted without committing a state change beyond the benign SetSoc.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testMapNewlyReachableCapabilities() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        for f in [AppFeature.remoteCharging, .remoteSchedules, .chargingDetails,
+                  .chargingSchedule, .climateStatus] { features.set(f, enabled: true) }
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: features)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+
+        print("\n========================================================")
+        print("🗺️  NEWLY-REACHABLE CAPABILITY MAP")
+
+        let state = try await api.fetchVehicleState(vin: vin, features: features)
+        let currentTarget = state.chargeTargetPercentage ?? 90
+        print("  current charge target: \(currentTarget)%  (writing it back unchanged)")
+
+        // Chronos write path — the whole "Remote Charging" family depends on this.
+        do {
+            let result = try await api.executeRemoteCommand(.setChargeTarget(currentTarget), vin: vin)
+            print("  ✅ SetTargetSoc(\(currentTarget)) → \(result.outcome) \(result.message ?? "")")
+            print("     → chronos WRITES work; remote charging (target, amp limit, charge-now,")
+            print("       charge windows, climate timers) is reachable")
+        } catch {
+            let text = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            print("  ✗ SetTargetSoc refused → \(text)")
+        }
+
+        // Read-back to confirm the setting is unchanged.
+        let after = try await api.fetchVehicleState(vin: vin, features: features)
+        print("  charge target after: \(after.chargeTargetPercentage.map(String.init) ?? "—")%")
+
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// Enumerates the GraphQL **type namespace** rather than field names.
+    ///
+    /// `__schema.types` and `__Type.fields` are filtered to empty on both backends, but
+    /// `__type(name:)` still *resolves* — it returned a non-null object for real types earlier.
+    /// If lookup works, a real type name yields `{"__type":{"name":…}}` and an invented one
+    /// yields `{"__type":null}`. That is a far stronger oracle than edit-distance suggestions,
+    /// which only fire for near-misses of names you already guessed correctly.
+    ///
+    /// Controls (known-real and known-fake) are probed in the same pass to prove the oracle.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testEnumerateGraphQLTypeNamespace() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+
+        let appTokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "lp8dyrd_10", redirect: "polestar-explore://explore.polestar.com",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let appToken = try XCTUnwrap(appTokens["access_token"] as? String)
+        let webTokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let webToken = try XCTUnwrap(webTokens["access_token"] as? String)
+
+        func query(_ body: String, appBackend: Bool) async -> String {
+            let url = appBackend
+                ? "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql"
+                : "https://pc-api.polestar.com/eu-north-1/mystar-v2/"
+            var request = URLRequest(url: URL(string: url)!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if appBackend {
+                for (k, v) in ["User-Agent": "PolestarApp/5.5.0b1102 Android/14",
+                               "X-Polestar-Force-Update-Version": "5.5.0",
+                               "X-Polestar-Locale": "SE",
+                               "X-PolestarId-Authorization": "Bearer \(appToken)"] {
+                    request.setValue(v, forHTTPHeaderField: k)
+                }
+            } else {
+                request.setValue("Bearer \(webToken)", forHTTPHeaderField: "Authorization")
+            }
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["query": body])
+            guard let (data, _) = try? await URLSession.shared.data(for: request) else { return "" }
+            return String(decoding: data, as: UTF8.self)
+        }
+
+        let candidates = [
+            // Controls — must resolve if the oracle works at all.
+            "__CONTROL_REAL__PolestarGraphQlQuery", "__CONTROL_REAL__VdmsGraphQlQueries",
+            "__CONTROL_REAL__CarsQueries", "__CONTROL_REAL__VehicleInformation",
+            // Controls — must NOT resolve.
+            "__CONTROL_FAKE__ZzzTotallyInventedType", "__CONTROL_FAKE__SoftwareNonsenseXyz",
+            // The actual research target.
+            "Software", "SoftwareInfo", "SoftwareStatus", "SoftwareUpdate", "SoftwareVersion",
+            "SoftwareRelease", "SoftwareCampaign", "SoftwareDownload", "SoftwareInstallation",
+            "CarSoftware", "CarSoftwareInfo", "VehicleSoftware", "VehicleSoftwareInfo",
+            "Ota", "OtaStatus", "OtaInfo", "OtaUpdate", "OtaCampaign", "OtaSchedule",
+            "Update", "UpdateStatus", "UpdateInfo", "AvailableUpdate", "PendingUpdate",
+            "Firmware", "FirmwareUpdate", "FirmwareVersion",
+            "Download", "DownloadStatus", "DownloadState",
+            "Install", "Installation", "InstallationStatus", "InstallationSchedule",
+            "Upgrade", "UpgradeStatus", "Version", "VersionInfo",
+            "Campaign", "ReleaseNotes", "Consent", "ConsentStatus"
+        ]
+
+        for (label, isApp) in [("app-backend", true), ("mystar-v2", false)] {
+            print("\n════════ TYPE NAMESPACE — \(label)")
+            var resolved: [String] = []
+            var oracleWorks = false
+            for raw in candidates {
+                let name = raw
+                    .replacingOccurrences(of: "__CONTROL_REAL__", with: "")
+                    .replacingOccurrences(of: "__CONTROL_FAKE__", with: "")
+                let body = await query("{ __type(name: \"\(name)\") { name kind } }", appBackend: isApp)
+                let hit = body.contains("\"name\":\"\(name)\"")
+                if raw.hasPrefix("__CONTROL_REAL__") {
+                    print("  [control real] \(name): \(hit ? "resolved ✅" : "NOT resolved ⚠️ oracle unreliable")")
+                    if hit { oracleWorks = true }
+                } else if raw.hasPrefix("__CONTROL_FAKE__") {
+                    print("  [control fake] \(name): \(hit ? "resolved ⚠️ oracle unreliable" : "null ✅")")
+                } else if hit {
+                    resolved.append(name)
+                }
+            }
+            print("  oracle usable: \(oracleWorks)")
+            print("  ⭐️ software/OTA types that resolve: \(resolved.isEmpty ? "NONE" : resolved.joined(separator: ", "))")
+        }
+        print("========================================================\n")
+    }
+
+    /// Full OIDC flow returning the entire token response (so `id_token` is available too).
+    private static func authorizeFull(email: String, password: String, clientID: String,
+                                      redirect: String, scope: String) async throws -> [String: Any] {
+        final class Catcher: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+            var callback: URL?
+            let scheme: String
+            init(scheme: String) { self.scheme = scheme }
+            func urlSession(_ session: URLSession, task: URLSessionTask,
+                            willPerformHTTPRedirection response: HTTPURLResponse,
+                            newRequest request: URLRequest,
+                            completionHandler: @escaping (URLRequest?) -> Void) {
+                if request.url?.scheme == scheme, request.url?.query?.contains("code=") == true {
+                    callback = request.url; completionHandler(nil); return
+                }
+                completionHandler(request)
+            }
+        }
+        let redirectURL = try XCTUnwrap(URL(string: redirect))
+        let catcher = Catcher(scheme: redirectURL.scheme ?? "https")
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieAcceptPolicy = .always
+        let session = URLSession(configuration: config, delegate: catcher, delegateQueue: nil)
+
+        let verifier = try PKCE.randomURLSafeString()
+        let state = try PKCE.randomURLSafeString()
+        let items = [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: redirect),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "scope", value: scope),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: PKCE.codeChallenge(for: verifier)),
+            URLQueryItem(name: "code_challenge_method", value: "S256"),
+            URLQueryItem(name: "response_mode", value: "query")
+        ]
+        var authComponents = URLComponents(string: "https://polestarid.eu.polestar.com/as/authorization.oauth2")!
+        authComponents.queryItems = items
+        let (pageData, _) = try await session.data(from: authComponents.url!)
+        let html = String(decoding: pageData, as: UTF8.self)
+        let resumePath = try XCTUnwrap(PolestarAPI.extractResumePath(from: html))
+        var loginComponents = URLComponents(string: "https://polestarid.eu.polestar.com" + resumePath)!
+        loginComponents.queryItems = (loginComponents.queryItems ?? []) + items
+        var login = URLRequest(url: loginComponents.url!)
+        login.httpMethod = "POST"
+        login.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        login.httpBody = "pf.username=\(email.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)&pf.pass=\(password.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)".data(using: .utf8)
+        let (_, loginResponse) = try await session.data(for: login)
+        let callback = catcher.callback ?? (loginResponse as? HTTPURLResponse)?.url
+        let code = try XCTUnwrap(callback.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
+            .queryItems?.first(where: { $0.name == "code" })?.value)
+        var tokenRequest = URLRequest(url: URL(string: "https://polestarid.eu.polestar.com/as/token.oauth2")!)
+        tokenRequest.httpMethod = "POST"
+        tokenRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        tokenRequest.httpBody = ("grant_type=authorization_code&client_id=\(clientID)&code=\(code)"
+            + "&redirect_uri=\(redirect.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)"
+            + "&code_verifier=\(verifier)").data(using: .utf8)
+        let (tokenData, _) = try await session.data(for: tokenRequest)
+        return try XCTUnwrap(try JSONSerialization.jsonObject(with: tokenData) as? [String: Any])
+    }
+
     /// Confirms the PCCS package-prefix rule for every service Hisingen addresses on that host.
     /// `absent` on the left column and `PRESENT` on the right means the current paths are wrong.
     @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
