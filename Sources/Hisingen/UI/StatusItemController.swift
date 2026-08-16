@@ -114,12 +114,16 @@ final class StatusItemController: NSObject {
         }
     }
 
-    private func toggleFromHotKey() {
+    func togglePopover() {
         if popover.isShown {
             popover.performClose(nil)
         } else {
             showPopover()
         }
+    }
+
+    private func toggleFromHotKey() {
+        togglePopover()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -234,6 +238,78 @@ final class StatusItemController: NSObject {
             switchItem.submenu = switchMenu
         }
 
+        if let state = latestState {
+            let isVolvo = Preferences.activeBrand == .volvo
+            let controlsMenu = NSMenu()
+
+            if isVolvo {
+                let isLocked = state.exteriorStatus?.isLocked == true
+                let lockItem = NSMenuItem(
+                    title: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors"),
+                    action: #selector(contextToggleLock),
+                    keyEquivalent: ""
+                )
+                lockItem.target = self
+                controlsMenu.addItem(lockItem)
+
+                let climateActive = state.climateStatus?.activity == .active
+                    || state.climateStatus?.activity == .heating
+                    || state.climateStatus?.activity == .cooling
+                    || state.climateStatus?.activity == .ventilating
+                let climateItem = NSMenuItem(
+                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(Preferences.remoteClimateTemperature)) °C"),
+                    action: #selector(contextToggleClimate),
+                    keyEquivalent: ""
+                )
+                climateItem.target = self
+                controlsMenu.addItem(climateItem)
+
+                let flashItem = NSMenuItem(
+                    title: L10n.text("Flash Lights"),
+                    action: #selector(contextFlashLights),
+                    keyEquivalent: ""
+                )
+                flashItem.target = self
+                controlsMenu.addItem(flashItem)
+
+                let honkItem = NSMenuItem(
+                    title: L10n.text("Honk Horn"),
+                    action: #selector(contextHonkHorn),
+                    keyEquivalent: ""
+                )
+                honkItem.target = self
+                controlsMenu.addItem(honkItem)
+
+                let honkFlashItem = NSMenuItem(
+                    title: L10n.text("Honk & Flash"),
+                    action: #selector(contextHonkAndFlash),
+                    keyEquivalent: ""
+                )
+                honkFlashItem.target = self
+                controlsMenu.addItem(honkFlashItem)
+            } else {
+                let infoItem = NSMenuItem(
+                    title: L10n.text("Remote controls restricted to paired mobile devices"),
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                infoItem.isEnabled = false
+                controlsMenu.addItem(infoItem)
+            }
+
+            let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
+            remoteSection.submenu = controlsMenu
+
+            if !state.chargingSessions.isEmpty {
+                let exportItem = menu.addItem(
+                    withTitle: L10n.text("Export Charging History (CSV)…"),
+                    action: #selector(contextExportChargingCSV),
+                    keyEquivalent: ""
+                )
+                exportItem.target = self
+            }
+        }
+
         menu.addItem(.separator())
         let settingsItem = menu.addItem(
             withTitle: L10n.text("Preferences…"),
@@ -286,6 +362,62 @@ final class StatusItemController: NSObject {
 
     @objc private func contextQuit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func contextToggleLock() {
+        guard Preferences.activeBrand == .volvo else { return }
+        let isLocked = latestState?.exteriorStatus?.isLocked == true
+        onRemoteCommand(isLocked ? .unlock : .lock)
+    }
+
+    @objc private func contextToggleClimate() {
+        guard Preferences.activeBrand == .volvo else { return }
+        let climateActive = latestState?.climateStatus?.activity == .active
+            || latestState?.climateStatus?.activity == .heating
+            || latestState?.climateStatus?.activity == .cooling
+            || latestState?.climateStatus?.activity == .ventilating
+        if climateActive {
+            onRemoteCommand(.stopClimate)
+        } else {
+            let temp = Float(Preferences.remoteClimateTemperature)
+            onRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
+        }
+    }
+
+    @objc private func contextFlashLights() {
+        guard Preferences.activeBrand == .volvo else { return }
+        onRemoteCommand(.flashLights)
+    }
+
+    @objc private func contextHonkHorn() {
+        guard Preferences.activeBrand == .volvo else { return }
+        onRemoteCommand(.honkHorn)
+    }
+
+    @objc private func contextHonkAndFlash() {
+        guard Preferences.activeBrand == .volvo else { return }
+        onRemoteCommand(.honkAndFlash)
+    }
+
+    @objc private func contextExportChargingCSV() {
+        guard let state = latestState, !state.chargingSessions.isEmpty else { return }
+        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
+        let rows = state.chargingSessions.map { s in
+            let dateStr = ISO8601DateFormatter().string(from: s.startDate)
+            let costStr = s.estimatedCost(tariff: Preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
+            let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
+            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(Preferences.currencySymbol)"
+        }.joined(separator: "\n")
+        let csvData = headers + rows
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "charging_history_\(state.vin.prefix(8)).csv"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? csvData.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     func showSettings() {
@@ -415,7 +547,7 @@ final class StatusItemController: NSObject {
         let isStale = data?.isStale() ?? false
         icon = dimmed(icon, when: isStale)
         statusItem.button?.image = icon
-        statusItem.button?.title = " " + title
+        statusItem.button?.title = title.isEmpty ? "" : " " + title
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
         refreshPopoverIfNeeded()
     }

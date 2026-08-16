@@ -158,6 +158,39 @@ struct VehicleState: Codable, Equatable, Sendable {
     var powertrain: PowertrainType = .bev
     var fuelLevelPercent: Double? = nil
     var fuelRangeKm: Int? = nil
+    var fuelAmountLiters: Double? = nil
+    var averageFuelConsumptionLPer100Km: Double? = nil
+    var isEngineRunning: Bool? = nil
+    var fuelType: String? = nil
+
+    var totalCombinedRangeKm: Int? {
+        switch powertrain {
+        case .bev:
+            return rangeKm
+        case .ice:
+            return fuelRangeKm
+        case .phev, .mildHybrid:
+            if let e = rangeKm, let f = fuelRangeKm { return e + f }
+            return rangeKm ?? fuelRangeKm
+        case .unknown:
+            if let e = rangeKm, let f = fuelRangeKm { return e + f }
+            return rangeKm ?? fuelRangeKm
+        }
+    }
+
+    var primaryRangeKm: Int? {
+        totalCombinedRangeKm ?? rangeKm ?? fuelRangeKm
+    }
+
+    var primaryEnergyFraction: Double? {
+        if powertrain == .ice {
+            return fuelLevelPercent.map { $0 / 100.0 }
+        }
+        if let b = batteryPercentage {
+            return b / 100.0
+        }
+        return fuelLevelPercent.map { $0 / 100.0 }
+    }
 
 
     var reportedBatteryCapacityKwh: Double? = nil
@@ -165,6 +198,26 @@ struct VehicleState: Codable, Equatable, Sendable {
     var gearbox: String? = nil
     var engineHoursToService: Int? = nil
     var averageSpeedKmH: Double? = nil
+    var structureWeek: String? = nil
+    var internalVehicleIdentifier: String? = nil
+    var pno34: String? = nil
+    var accountMarket: String? = nil
+    var upholstery: String? = nil
+    var wheels: String? = nil
+    var packages: [String] = []
+    var steeringOrientation: String? = nil
+    var serviceTrigger: String? = nil
+    var tripComputerElectricRangeKm: Int? = nil
+    var chargingCurrentLimitAmps: Int? = nil
+    var interiorImageData: Data? = nil
+    var warrantyInfo: VehicleWarrantyInfo? = nil
+
+    /// True when this state came from the on-disk snapshot rather than a live fetch.
+    ///
+    /// `cacheableCopy` drops most telemetry, so a cached state is not "the vehicle has no
+    /// tyres data" — it is "we could not ask". Cards use this to show an unavailable badge
+    /// instead of silently disappearing.
+    var isCachedSnapshot: Bool = false
     let imageData: Data?
     let fetchedAt: Date
     let vehicleReportedAt: Date?
@@ -256,6 +309,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
         case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH
+        case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
+        case structureWeek, internalVehicleIdentifier, pno34, accountMarket
+        case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
+        case interiorImageData, warrantyInfo
     }
 
     init(from decoder: Decoder) throws {
@@ -312,17 +369,130 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
         self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
         self.averageSpeedKmH = try values.decodeIfPresent(Double.self, forKey: .averageSpeedKmH)
+        self.fuelAmountLiters = try values.decodeIfPresent(Double.self, forKey: .fuelAmountLiters)
+        self.averageFuelConsumptionLPer100Km = try values.decodeIfPresent(Double.self, forKey: .averageFuelConsumptionLPer100Km)
+        self.isEngineRunning = try values.decodeIfPresent(Bool.self, forKey: .isEngineRunning)
+        self.fuelType = try values.decodeIfPresent(String.self, forKey: .fuelType)
+        self.structureWeek = try values.decodeIfPresent(String.self, forKey: .structureWeek)
+        self.internalVehicleIdentifier = try values.decodeIfPresent(String.self, forKey: .internalVehicleIdentifier)
+        self.pno34 = try values.decodeIfPresent(String.self, forKey: .pno34)
+        self.accountMarket = try values.decodeIfPresent(String.self, forKey: .accountMarket)
+        self.upholstery = try values.decodeIfPresent(String.self, forKey: .upholstery)
+        self.wheels = try values.decodeIfPresent(String.self, forKey: .wheels)
+        self.packages = try values.decodeIfPresent([String].self, forKey: .packages) ?? []
+        self.steeringOrientation = try values.decodeIfPresent(String.self, forKey: .steeringOrientation)
+        self.serviceTrigger = try values.decodeIfPresent(String.self, forKey: .serviceTrigger)
+        self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
+        self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
+        self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
+        self.warrantyInfo = try values.decodeIfPresent(VehicleWarrantyInfo.self, forKey: .warrantyInfo)
+    }
+
+    var formattedBuildWeek: String? {
+        guard let raw = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines), raw.count >= 6 else {
+            return structureWeek
+        }
+        let year = raw.prefix(4)
+        let week = raw.suffix(2)
+        return "\(year) · W\(week)"
+    }
+
+    var formattedServiceTrigger: String? {
+        guard let raw = serviceTrigger?.uppercased().trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        if raw.contains("CALENDAR") || raw.contains("TIME") {
+            return L10n.text("Time")
+        } else if raw.contains("DISTANCE") || raw.contains("MILE") || raw.contains("KM") {
+            return L10n.text("Distance")
+        } else if raw.contains("HOUR") || raw.contains("ENGINE") {
+            return L10n.text("Operating hours")
+        }
+        return raw.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    var formattedSteeringOrientation: String? {
+        guard let raw = steeringOrientation?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let upper = raw.uppercased()
+        if upper == "LEFT" || upper.contains("LHD") {
+            return L10n.text("Left-hand drive")
+        } else if upper == "RIGHT" || upper.contains("RHD") {
+            return L10n.text("Right-hand drive")
+        }
+        return raw.capitalized
     }
 
     var isCharging: Bool { chargingState.isActivelyCharging }
+
+    var isClimateActive: Bool {
+        guard let activity = climateStatus?.activity else { return false }
+        return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
+    }
+
+    var effectiveWarrantyInfo: VehicleWarrantyInfo {
+        if let explicit = warrantyInfo {
+            return explicit
+        }
+        let calendar = Calendar.current
+        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
+
+        let baselineDeliveryDate: Date = {
+            if let rawWeek = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines),
+               rawWeek.count >= 6,
+               let year = Int(rawWeek.prefix(4)),
+               let week = Int(rawWeek.suffix(2)) {
+                var components = DateComponents()
+                components.yearForWeekOfYear = year
+                components.weekOfYear = week
+                components.weekday = 2
+                if let buildDate = calendar.date(from: components) {
+                    return calendar.date(byAdding: .weekOfYear, value: 4, to: buildDate) ?? buildDate
+                }
+            }
+
+            let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
+            var components = DateComponents()
+            components.year = yearInt
+            components.month = 6
+            components.day = 1
+            return calendar.date(from: components) ?? Date()
+        }()
+
+        let factoryEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let batteryEnd = calendar.date(byAdding: .year, value: 8, to: baselineDeliveryDate)
+        let roadsideEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let digitalServicesEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
+        let corrosionEnd = calendar.date(byAdding: .year, value: 12, to: baselineDeliveryDate)
+
+        let plan = isVolvo ? "Care by Volvo" : "Polestar Care"
+        let assistanceName = isVolvo ? "Volvo Assistance" : "Polestar Assistance"
+
+        return VehicleWarrantyInfo(
+            planName: plan,
+            status: L10n.text("Active"),
+            factoryWarrantyValidUntil: factoryEnd,
+            batteryWarrantyValidUntil: powertrain.hasElectricRange ? batteryEnd : nil,
+            batteryWarrantyKm: powertrain.hasElectricRange ? 160_000 : nil,
+            roadsideAssistanceValidUntil: roadsideEnd,
+            includedMaintenance: true,
+            corrosionWarrantyValidUntil: corrosionEnd,
+            digitalServicesValidUntil: digitalServicesEnd,
+            assistanceContact: assistanceName
+        )
+    }
 
 
     var stateSummary: VehicleStateSummary {
         if exteriorStatus?.alarmTriggered == true {
             return VehicleStateSummary(message: L10n.text("Alarm triggered"), severity: .critical)
         }
-        if let battery = batteryPercentage, battery <= 15, !isCharging {
+        if let battery = batteryPercentage, battery <= 15, !isCharging, powertrain.hasElectricRange {
             return VehicleStateSummary(message: L10n.text("Low battery"), severity: .critical)
+        }
+        if let fuel = fuelLevelPercent, fuel <= 12, powertrain.hasFuelRange {
+            return VehicleStateSummary(message: L10n.text("Low fuel"), severity: .critical)
         }
         if let openings = exteriorStatus?.itemsNeedingAttention, !openings.isEmpty {
             if openings.count == 1, let only = openings.first {
@@ -354,6 +524,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         if case .unavailable = availability {
             return VehicleStateSummary(message: availability.displayName, severity: .warning)
         }
+        if isEngineRunning == true {
+            return VehicleStateSummary(message: L10n.text("Engine running"), severity: .good)
+        }
         if exteriorStatus?.isLocked == true {
             return VehicleStateSummary(message: L10n.text("Vehicle secured"), severity: .good)
         }
@@ -382,6 +555,10 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var model: VehicleModel { VehicleModel(modelName: modelName) }
+
+    var isVolvo: Bool {
+        vin.uppercased().hasPrefix("YV")
+    }
 
     var estimatedRangeHealth: (percentage: Double, rating: String)? {
         guard model.hasVerifiedNominalSpecs,
@@ -443,7 +620,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var cacheableCopy: VehicleState {
-        VehicleState(
+        var copy = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: rangeKm,
             chargingState: chargingState,
@@ -460,12 +637,24 @@ struct VehicleState: Codable, Equatable, Sendable {
             registrationNo: nil,
             vin: vin,
             ownerFirstName: nil,
-            odometerKm: nil,
-            daysToService: nil,
-            distanceToServiceKm: nil,
-            serviceWarning: false,
-            fluidWarnings: [],
-            weather: nil,
+            odometerKm: odometerKm,
+            daysToService: daysToService,
+            distanceToServiceKm: distanceToServiceKm,
+            serviceWarning: serviceWarning,
+            fluidWarnings: fluidWarnings,
+            exteriorStatus: exteriorStatus,
+            healthDetails: healthDetails,
+            softwareInfo: softwareInfo,
+            chargingSchedules: chargingSchedules,
+            climateStatus: climateStatus,
+            climateTimers: climateTimers,
+            tripMeterManualKm: tripMeterManualKm,
+            tripMeterAutomaticKm: tripMeterAutomaticKm,
+            connectivity: connectivity,
+            airQuality: airQuality,
+            batteryDiagnostics: batteryDiagnostics,
+            weather: weather,
+            location: nil,
             unavailableFeatures: [],
             probedCapabilities: probedCapabilities,
             chargingSamples: chargingSamples,
@@ -479,6 +668,27 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: vehicleReportedAt,
             dataWarnings: dataWarnings
         )
+        copy.externalColour = externalColour
+        copy.gearbox = gearbox
+        copy.engineHoursToService = engineHoursToService
+        copy.averageSpeedKmH = averageSpeedKmH
+        copy.fuelAmountLiters = fuelAmountLiters
+        copy.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km
+        copy.isEngineRunning = isEngineRunning
+        copy.fuelType = fuelType
+        copy.structureWeek = structureWeek
+        copy.internalVehicleIdentifier = internalVehicleIdentifier
+        copy.pno34 = pno34
+        copy.accountMarket = accountMarket
+        copy.upholstery = upholstery
+        copy.wheels = wheels
+        copy.packages = packages
+        copy.steeringOrientation = steeringOrientation
+        copy.serviceTrigger = serviceTrigger
+        copy.tripComputerElectricRangeKm = tripComputerElectricRangeKm
+        copy.chargingCurrentLimitAmps = chargingCurrentLimitAmps
+        copy.warrantyInfo = warrantyInfo
+        return copy
     }
 
     func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection) -> VehicleState {
@@ -498,6 +708,19 @@ struct VehicleState: Codable, Equatable, Sendable {
         let mergedProbes: VehicleProbedCapabilities? = {
             guard let probedCapabilities else { return previous.probedCapabilities }
             return previous.probedCapabilities?.merging(newerProbe: probedCapabilities) ?? probedCapabilities
+        }()
+        // Polestar reports a single version string whose meaning flips once an update is
+        // pending, so the running version drops out of the payload for the whole rollout.
+        // Carry the last settled reading forward — otherwise "Installed Version" disappears
+        // from the moment an update is offered until it finishes installing.
+        let mergedSoftware: VehicleSoftwareInfo? = {
+            guard var current = softwareInfo else {
+                return keep(.softwareUpdates) ? previous.softwareInfo : nil
+            }
+            if current.installedVersion == nil {
+                current.installedVersion = previous.softwareInfo?.installedVersion
+            }
+            return current
         }()
         var merged = VehicleState(
             batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
@@ -525,21 +748,22 @@ struct VehicleState: Codable, Equatable, Sendable {
 
             serviceWarning: !serviceWarning && keep(.vehicleHealth) ? previous.serviceWarning : serviceWarning,
             fluidWarnings: fluidWarnings.isEmpty && keep(.vehicleHealth) ? previous.fluidWarnings : fluidWarnings,
-            exteriorStatus: exteriorStatus ?? (keep(.exteriorStatus) ? previous.exteriorStatus : nil),
-            healthDetails: healthDetails ?? (keep(.tyreAndWarnings) ? previous.healthDetails : nil),
-            softwareInfo: softwareInfo ?? (keep(.softwareUpdates) ? previous.softwareInfo : nil),
-            chargingSchedules: chargingSchedules.isEmpty && keep(.chargingSchedule)
-                ? previous.chargingSchedules : chargingSchedules,
-            climateStatus: climateStatus ?? (keep(.climateStatus) ? previous.climateStatus : nil),
-            climateTimers: climateTimers.isEmpty && keep(.climateStatus) ? previous.climateTimers : climateTimers,
-            tripMeterManualKm: tripMeterManualKm ?? (keep(.tripMeters) ? previous.tripMeterManualKm : nil),
-            tripMeterAutomaticKm: tripMeterAutomaticKm ?? (keep(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
-            connectivity: connectivity ?? (keep(.connectivityDiagnostics) ? previous.connectivity : nil),
-            airQuality: airQuality ?? (keep(.airQuality) ? previous.airQuality : nil),
+            exteriorStatus: exteriorStatus ?? (features.contains(.exteriorStatus) ? previous.exteriorStatus : nil),
+            healthDetails: healthDetails ?? (features.contains(.tyreAndWarnings) ? previous.healthDetails : nil),
+            softwareInfo: mergedSoftware,
+            chargingSchedules: !chargingSchedules.isEmpty ? chargingSchedules
+                : (features.contains(.chargingSchedule) ? previous.chargingSchedules : []),
+            climateStatus: climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil),
+            climateTimers: !climateTimers.isEmpty ? climateTimers
+                : (features.contains(.climateStatus) ? previous.climateTimers : []),
+            tripMeterManualKm: tripMeterManualKm ?? (features.contains(.tripMeters) ? previous.tripMeterManualKm : nil),
+            tripMeterAutomaticKm: tripMeterAutomaticKm ?? (features.contains(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
+            connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) ? previous.connectivity : nil),
+            airQuality: airQuality ?? (features.contains(.airQuality) ? previous.airQuality : nil),
             batteryDiagnostics: batteryDiagnostics
-                ?? (keep(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
-            weather: weather ?? (keep(.vehicleWeather) ? previous.weather : nil),
-            location: location ?? (keep(.vehicleLocation) ? previous.location : nil),
+                ?? (features.contains(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
+            weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),
+            location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             unavailableFeatures: unavailableFeatures,
             probedCapabilities: mergedProbes,
             chargingSessions: previous.chargingSessions,
@@ -547,11 +771,34 @@ struct VehicleState: Codable, Equatable, Sendable {
             fuelLevelPercent: fuelLevelPercent ?? previous.fuelLevelPercent,
             fuelRangeKm: fuelRangeKm ?? previous.fuelRangeKm,
             reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? previous.reportedBatteryCapacityKwh,
-            imageData: imageData ?? (features.contains(.vehicleImage) ? previous.imageData : nil),
+            imageData: imageData ?? (features.contains(.vehicleImage) ? (previous.imageData ?? CarImageCache.shared.image(for: vin)) : nil),
             fetchedAt: fetchedAt,
             vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
             dataWarnings: dataWarnings
         )
+        merged.externalColour = externalColour ?? previous.externalColour
+        merged.gearbox = gearbox ?? previous.gearbox
+        merged.engineHoursToService = engineHoursToService ?? previous.engineHoursToService
+        merged.averageSpeedKmH = averageSpeedKmH ?? previous.averageSpeedKmH
+        merged.fuelAmountLiters = fuelAmountLiters ?? previous.fuelAmountLiters
+        merged.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km ?? previous.averageFuelConsumptionLPer100Km
+        merged.isEngineRunning = isEngineRunning ?? previous.isEngineRunning
+        merged.fuelType = fuelType ?? previous.fuelType
+        merged.structureWeek = structureWeek ?? previous.structureWeek
+        merged.internalVehicleIdentifier = internalVehicleIdentifier ?? previous.internalVehicleIdentifier
+        merged.pno34 = pno34 ?? previous.pno34
+        merged.accountMarket = accountMarket ?? previous.accountMarket
+        merged.upholstery = upholstery ?? previous.upholstery
+        merged.wheels = wheels ?? previous.wheels
+        merged.packages = !packages.isEmpty ? packages : previous.packages
+        merged.steeringOrientation = steeringOrientation ?? previous.steeringOrientation
+        merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
+        merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
+        merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
+        merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
+        merged.interiorImageData = interiorImageData
+            ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
+
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {
             let sample = ChargingSample(timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts)

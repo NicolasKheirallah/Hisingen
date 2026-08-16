@@ -25,9 +25,10 @@ jobs:
     if: inputs.provider == 'all' || inputs.provider == 'polestar'
     runs-on: macos-15
     timeout-minutes: 15
+    environment: live-integration
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -56,29 +57,36 @@ jobs:
     if: inputs.provider == 'all' || inputs.provider == 'volvo'
     runs-on: macos-15
     timeout-minutes: 15
+    environment: live-integration
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
       - name: Verify Volvo credentials & toolchain
         env:
           HISINGEN_TEST_VOLVO_CLIENT_ID: ${{ secrets.HISINGEN_TEST_VOLVO_CLIENT_ID }}
+          HISINGEN_TEST_VOLVO_CLIENT_SECRET: ${{ secrets.HISINGEN_TEST_VOLVO_CLIENT_SECRET }}
+          HISINGEN_TEST_VOLVO_VCC_API_KEY: ${{ secrets.HISINGEN_TEST_VOLVO_VCC_API_KEY }}
+          HISINGEN_TEST_VOLVO_REFRESH_TOKEN: ${{ secrets.HISINGEN_TEST_VOLVO_REFRESH_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$HISINGEN_TEST_VOLVO_CLIENT_ID" || { echo "HISINGEN_TEST_VOLVO_CLIENT_ID is required"; exit 1; }
+          test -n "$HISINGEN_TEST_VOLVO_CLIENT_SECRET" || { echo "HISINGEN_TEST_VOLVO_CLIENT_SECRET is required"; exit 1; }
+          test -n "$HISINGEN_TEST_VOLVO_VCC_API_KEY" || { echo "HISINGEN_TEST_VOLVO_VCC_API_KEY is required"; exit 1; }
+          test -n "$HISINGEN_TEST_VOLVO_REFRESH_TOKEN" || { echo "HISINGEN_TEST_VOLVO_REFRESH_TOKEN is required"; exit 1; }
           swift --version
 
       - name: Run live Volvo integration tests
         env:
           HISINGEN_TEST_VOLVO_CLIENT_ID: ${{ secrets.HISINGEN_TEST_VOLVO_CLIENT_ID }}
           HISINGEN_TEST_VOLVO_CLIENT_SECRET: ${{ secrets.HISINGEN_TEST_VOLVO_CLIENT_SECRET }}
-          HISINGEN_TEST_VOLVO_API_KEY: ${{ secrets.HISINGEN_TEST_VOLVO_API_KEY }}
+          HISINGEN_TEST_VOLVO_VCC_API_KEY: ${{ secrets.HISINGEN_TEST_VOLVO_VCC_API_KEY }}
           HISINGEN_TEST_VOLVO_REFRESH_TOKEN: ${{ secrets.HISINGEN_TEST_VOLVO_REFRESH_TOKEN }}
           HISINGEN_TEST_VOLVO_VIN: ${{ secrets.HISINGEN_TEST_VOLVO_VIN }}
         run: >-
           swift test --disable-xctest --enable-swift-testing
-          --filter LiveVolvoIntegrationTests
+          --filter LiveVolvoReadOnlyIntegrationTests
           -Xswiftc -strict-concurrency=complete
           -Xswiftc -warn-concurrency

@@ -23,6 +23,8 @@ struct VolvoDecodingTests {
     func testBEVVehicleDetailsFixtureDecodes() throws {
         let details = try loadFixture("volvo-vehicle-details-bev", as: VolvoVehicleDetailsDTO.self)
         XCTAssertEqual(details.descriptions?.model, "EX30")
+        XCTAssertEqual(details.descriptions?.upholstery, "Fixture Textile")
+        XCTAssertEqual(details.descriptions?.steering, "Left")
         XCTAssertEqual(details.batteryCapacityKWH, 64.0)
         XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .bev)
     }
@@ -107,15 +109,17 @@ struct VolvoDecodingTests {
         let readings = tyres.readings
         XCTAssertEqual(readings.count, 4)
         XCTAssertNil(readings.first(where: { $0.position == .frontLeft })?.kilopascals)
-        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .low)
+        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .unknown)
         XCTAssertEqual(readings.first(where: { $0.position == .frontRight })?.warning, TyrePressureWarning.none)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .veryLow)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearLeft })?.warning, .low)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .high)
     }
 
     @Test
     func testDiagnosticsFixtureOnlyReportsActualWarnings() throws {
         let diagnostics = try loadFixture("volvo-diagnostics", as: VolvoDiagnosticsDTO.self)
         XCTAssertFalse(diagnostics.hasServiceWarning)
+        XCTAssertEqual(diagnostics.serviceTrigger?.value, "CALENDAR_TIME")
         XCTAssertEqual(diagnostics.fluidWarnings, ["Oil"])
         XCTAssertEqual(diagnostics.vehicleWarnings, [.oil])
 
@@ -235,6 +239,158 @@ struct VolvoDecodingTests {
         XCTAssertEqual(OpeningState(volvoStatus: "CLOSED"), .closed)
         XCTAssertEqual(OpeningState(volvoStatus: "AJAR"), .ajar)
         XCTAssertNil(OpeningState(volvoStatus: nil))
+    }
+
+    @Test
+    func testWarningsDecodingAndActiveSensors() throws {
+        let json = """
+        {
+            "data": {
+                "brakeLightCenterWarning": {"value": "NO_WARNING"},
+                "brakeLightLeftWarning": {"value": "BULB_FAILURE"},
+                "highBeamRightWarning": {"value": "FAILURE"},
+                "lowBeamLeftWarning": {"value": "NO_WARNING"},
+                "hazardLightsWarning": {"value": "FAULT"},
+                "reverseLightsWarning": {"value": "FAILURE"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoWarningsDTO>.self, from: Data(json.utf8))
+        let warnings = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(warnings.activeWarnings.count, 4)
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Left brake light") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
+        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
+    }
+
+    @Test
+    func testClimatizationDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "status": {"value": "HEATING"},
+                "timeRemainingMinutes": {"value": 25},
+                "interiorTemperatureCelsius": {"value": 18.5},
+                "targetTemperatureCelsius": {"value": 21.0}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "HEATING")
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 25)
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 18.5)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 21.0)
+    }
+
+    @Test
+    func testStandardVolvoConnectedVehicleClimatizationDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "status": {"value": "PARKING_CLIMATE_OFF", "timestamp": "2026-08-15T21:00:00.000Z"},
+                "timeRemaining": {"value": 0},
+                "interiorTemperature": {"value": 21.5},
+                "targetTemperature": {"value": 22.0}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "PARKING_CLIMATE_OFF")
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 0)
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 21.5)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 22.0)
+    }
+
+    @Test
+    func testAlternateVolvoClimatizationKeysDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "climatizationStatus": {"value": "PARKING_CLIMATE_HEATING"},
+                "preconditioning": {"value": "PRECONDITIONING_ON"},
+                "cabinTemperature": {"value": 17.0},
+                "setTemperature": {"value": 21.0},
+                "durationMinutes": {"value": 30}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoClimatizationDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.status?.value, "PARKING_CLIMATE_HEATING")
+        XCTAssertEqual(dto.preconditioning?.value, "PRECONDITIONING_ON")
+        XCTAssertEqual(dto.interiorTemperatureCelsius?.value, 17.0)
+        XCTAssertEqual(dto.targetTemperatureCelsius?.value, 21.0)
+        XCTAssertEqual(dto.timeRemainingMinutes?.value, 30)
+    }
+
+    @Test
+    func testBrakesDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "brakeFluidLevelWarning": {"value": "WARNING"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoBrakesDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertEqual(dto.brakeFluidLevelWarning?.value, "WARNING")
+    }
+
+    @Test
+    func testEngineStatusDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "engineStatus": {"value": "RUNNING"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoEngineStatusDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertTrue(dto.isRunning)
+    }
+
+    @Test
+    func testCommandAccessibilityDecoding() throws {
+        let json = """
+        {
+            "data": {
+                "availabilityStatus": {"value": "AVAILABLE"}
+            }
+        }
+        """
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertTrue(dto.isAvailable)
+    }
+
+    @Test
+    func testVehicleStateFormattedHelpers() {
+        var state = VehicleState(
+            batteryPercentage: 80, rangeKm: 300, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "EX30", modelYear: "2024", registrationNo: nil, vin: "YV1TEST00001",
+            ownerFirstName: nil, odometerKm: 10000, daysToService: 150, distanceToServiceKm: 8500,
+            serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: Date(),
+            vehicleReportedAt: Date(), dataWarnings: []
+        )
+        state.serviceTrigger = "CALENDAR_TIME"
+        state.steeringOrientation = "Left"
+        state.upholstery = "Nordico"
+        state.tripComputerElectricRangeKm = 310
+        state.chargingCurrentLimitAmps = 32
+
+        XCTAssertEqual(state.formattedServiceTrigger, "Time")
+        XCTAssertEqual(state.formattedSteeringOrientation, "Left-hand drive")
+        XCTAssertEqual(state.upholstery, "Nordico")
+        XCTAssertEqual(state.tripComputerElectricRangeKm, 310)
+        XCTAssertEqual(state.chargingCurrentLimitAmps, 32)
     }
 }
 

@@ -94,16 +94,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
             )
         case .volvo:
-            guard !Preferences.volvoClientID.isEmpty,
-                  let clientSecret = (try? Keychain.readVolvoClientSecret()) ?? nil, !clientSecret.isEmpty,
-                  let vccApiKey = (try? Keychain.readVolvoApiKey()) ?? nil, !vccApiKey.isEmpty,
-                  let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil, !sessionToken.isEmpty
+            let clientID = !Preferences.volvoClientID.isEmpty ? Preferences.volvoClientID : BuiltinVolvoSecrets.clientID
+            let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil) ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
+            let vccApiKey = ((try? Keychain.readVolvoApiKey()) ?? nil) ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
+            let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
+
+            guard !clientID.isEmpty,
+                  let clientSecret, !clientSecret.isEmpty,
+                  let vccApiKey, !vccApiKey.isEmpty,
+                  let sessionToken, !sessionToken.isEmpty
             else { return }
-            let clientID = Preferences.volvoClientID
             Task { [weak self] in
                 guard let self else { return }
                 await volvoAPI.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
-
 
                 guard Preferences.activeBrand == .volvo else { return }
                 refreshCoordinator.start(
@@ -119,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !force && Preferences.activeBrand == brand { return }
         refreshCoordinator?.stop()
         Preferences.activeBrand = brand
+        Preferences.syncAppThemeStorageKey()
         let hasSession = Preferences.hasResumableSession(for: brand)
         sessionValid = hasSession
         let vin = Preferences.vin(for: brand)
@@ -134,7 +138,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {
-        let trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedClientID.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            trimmedClientID = BuiltinVolvoSecrets.clientID
+        }
         let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedClientID.isEmpty else {
             showRemoteResult(
@@ -144,8 +151,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
-        let effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
+        var effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
+        if effectiveSecret.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            effectiveSecret = BuiltinVolvoSecrets.clientSecret
+        }
+
+        var effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
+        if effectiveApiKey.isEmpty && BuiltinVolvoSecrets.isConfigured {
+            effectiveApiKey = BuiltinVolvoSecrets.vccApiKey
+        }
+
         let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         if !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
@@ -324,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let result = try await activeProvider.executeRemoteCommand(command, vin: state.vin)
+                self.applyConfirmedStateChange(for: command, outcome: result.outcome)
                 let message: String
                 if let backendMessage = result.message, !backendMessage.isEmpty {
                     message = backendMessage
@@ -346,6 +362,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
+    }
+
+    /// Patches the visible state to what a command should have produced, so the lock icon or
+    /// climate row flips immediately instead of waiting for the follow-up refresh.
+    ///
+    /// Only `.completed` qualifies. TERMS.md states that a backend acknowledgment confirms
+    /// delivery, not execution — so patching on `.accepted`/`.delivered` would render an
+    /// unverified guess as fact, and a command the vehicle silently refused would show as
+    /// having worked until the next refresh corrected it. Those outcomes fall through to the
+    /// refresh scheduled a couple of seconds later, which reports what actually happened.
+    private func applyConfirmedStateChange(for command: RemoteCommand,
+                                           outcome: RemoteCommandOutcome) {
+        guard outcome == .completed, var current = latest else { return }
+        switch command {
+        case .startClimate(let temperature, _, _, _, _, _):
+            current.climateStatus = VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
+            )
+        case .stopClimate:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
+        case .lock, .unlock:
+            guard var exterior = current.exteriorStatus else { return }
+            exterior.isLocked = (command == .lock)
+            current.exteriorStatus = exterior
+        default:
+            return
+        }
+        latest = current
+        stateStore.save(current)
+        render()
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
@@ -415,7 +471,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 resumeStoredSession()
                 statusController.dismissSettings()
             case .volvo:
-                beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
+                if Preferences.hasResumableSession(for: .volvo) {
+                    switchActiveBrand(to: .volvo)
+                    resumeStoredSession()
+                    statusController.dismissSettings()
+                } else {
+                    beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
+                }
             }
         case .closeSettings:
             statusController.dismissSettings()
@@ -427,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
         case .presentation:
-            break
+            refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
         }
@@ -535,7 +597,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        if url.scheme?.lowercased() == "hisingen" {
+        guard url.scheme?.lowercased() == "hisingen" else { return }
+
+        if url.host == "oauth" || url.path.contains("callback") || url.query?.contains("code=") == true {
+            volvoSignInPresenter.handleCallbackURL(url)
+            return
+        }
+
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let command = host.isEmpty ? path : (path.isEmpty ? host : "\(host)/\(path)")
+
+        switch command {
+        case "refresh":
+            refreshCoordinator.refreshNow()
+
+        case "settings", "preferences":
+            statusController.showSettings()
+
+        case "toggle-settings":
+            statusController.toggleSettings()
+
+        case "status", "toggle":
+            statusController.togglePopover()
+
+        case "copy-vin":
+            if let vin = latest?.vin, !vin.isEmpty {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(vin, forType: .string)
+            }
+
+        case "climate/start", "climatization/start":
+            if Preferences.activeBrand == .volvo {
+                let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+                let temp = queryItems?.first(where: { $0.name == "temp" || $0.name == "temperature" })?
+                    .value.flatMap { Float($0) } ?? Float(Preferences.remoteClimateTemperature)
+                performRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "climate/stop", "climatization/stop":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.stopClimate)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "lock":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.lock)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "unlock":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.unlock)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "flash", "flash-lights":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.flashLights)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        case "honk-flash", "honk":
+            if Preferences.activeBrand == .volvo {
+                performRemoteCommand(.honkAndFlash)
+            } else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
+                )
+            }
+
+        default:
             volvoSignInPresenter.handleCallbackURL(url)
         }
     }

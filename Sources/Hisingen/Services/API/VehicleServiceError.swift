@@ -77,6 +77,28 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         }
     }
 
+    /// Whether the refresh loop should keep retrying on its own.
+    ///
+    /// Only errors that cannot clear without the owner doing something first — a wrong
+    /// password, an added sign-in step, or no configuration at all — stop the loop. Everything
+    /// else stays on a backoff schedule, including an expired session: the stored refresh token
+    /// can re-establish it unattended, and a single upstream 401 must not leave the app parked
+    /// on a stale cache until someone notices and pokes it.
+    var allowsAutomaticRetry: Bool {
+        switch self {
+        case .authenticationRequired(_, .invalidCredentials),
+             .authenticationRequired(_, .callbackRejected),
+             .notConfigured,
+             .secureStorage:
+            return false
+        default:
+            return true
+        }
+    }
+
+    /// Recovering from this error means re-establishing the session, not just refetching.
+    var requiresNewSession: Bool { requiresAuthentication }
+
 
     static func map(_ error: Error, provider: VehicleBrand) -> VehicleServiceError {
         if let already = error as? VehicleServiceError { return already }

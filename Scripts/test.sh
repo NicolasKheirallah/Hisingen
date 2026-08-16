@@ -8,9 +8,19 @@ if [ -z "$selected_tools" ]; then
 fi
 
 if [ "$selected_tools" = "$command_line_tools" ]; then
-    exec swift test --disable-xctest --enable-swift-testing \
-        -Xswiftc -F \
-        -Xswiftc "$command_line_tools/Library/Developer/Frameworks" "$@"
+    if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
+        exec swift test --disable-xctest --enable-swift-testing \
+            -Xswiftc -F \
+            -Xswiftc "$command_line_tools/Library/Developer/Frameworks" "$@"
+    else
+        exec swift test \
+            -Xswiftc -F \
+            -Xswiftc "$command_line_tools/Library/Developer/Frameworks" "$@"
+    fi
 fi
 
-exec swift test --disable-xctest --enable-swift-testing "$@"
+if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
+    exec swift test --disable-xctest --enable-swift-testing "$@"
+else
+    exec swift test "$@"
+fi

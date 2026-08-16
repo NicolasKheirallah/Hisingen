@@ -140,6 +140,35 @@ struct GraphQLDecodingTests {
         XCTAssertEqual(vehicles[0].consumerCar.internalVehicleIdentifier, "veh-abc-123")
         XCTAssertEqual(vehicles[1].consumerCar.modelName, "Polestar 2")
     }
+
+    @Test
+    func testVDMSDiscoveryDecodesFactoryOptionsAndSpecs() throws {
+        let json = #"""
+        {"data":{"vdms":{"getVehiclesInformation":[{
+            "vin":"YS3ED400000000001",
+            "internalVehicleIdentifier":"IV-9988",
+            "registrationNo":"ABC 123",
+            "modelYear":"2024",
+            "content":{
+                "model":{"name":"Polestar 2 Long Range Dual Motor"},
+                "exteriorColor":{"name":"Midnight"},
+                "upholstery":{"name":"Charcoal WeaveTech"},
+                "wheels":{"name":"20\" 4-V Spoke Diamond Cut"},
+                "packages":[{"name":"Pilot Pack"},{"name":"Plus Pack"}]
+            }
+        }]}}}
+        """#.data(using: .utf8)!
+        let response = try JSONDecoder().decode(GraphQLResponse<AppBackendCarsPayloadDTO>.self, from: json)
+        let vehicle = try XCTUnwrap(response.data?.vdms?.getVehiclesInformation?.first)
+        let car = vehicle.consumerCar
+        XCTAssertEqual(car.vin, "YS3ED400000000001")
+        XCTAssertEqual(car.modelName, "Polestar 2 Long Range Dual Motor")
+        XCTAssertEqual(car.exteriorColorName, "Midnight")
+        XCTAssertEqual(car.upholsteryName, "Charcoal WeaveTech")
+        XCTAssertEqual(car.wheelsName, "20\" 4-V Spoke Diamond Cut")
+        XCTAssertEqual(car.packageNames, ["Pilot Pack", "Plus Pack"])
+    }
 }
+
 
 

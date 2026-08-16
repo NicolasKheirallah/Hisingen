@@ -15,6 +15,9 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 - [Screenshots](#screenshots)
 - [At A Glance](#at-a-glance)
+- [Multilingual Support](#multilingual-support)
+- [Design, Liquid Glass & Themes](#design-liquid-glass--themes)
+- [Powertrain Support & Measurement Units](#powertrain-support--measurement-units)
 - [Read-Only Capabilities](#read-only-capabilities)
 - [Charging Intelligence](#charging-intelligence)
 - [Notifications](#notifications)
@@ -32,33 +35,167 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 ## Screenshots
 
-The screenshots show the current native popover in Swedish. Hisingen can follow macOS automatically or use English or Swedish independently of the system language.
+The screenshots below showcase the native macOS popover with Apple Liquid Glass styling, dark & light modes, multi-brand Polestar & Volvo telemetry, 3D studio angles, and live capability matrices.
 
-| Vehicle overview | Telemetry details |
-| --- | --- |
-| ![Vehicle overview with studio image, owner greeting, registration, battery, range, status and odometer](assets/hisingen-vehicle-overview.png) | ![Telemetry cards for charging, vehicle state, climate and connectivity](assets/hisingen-telemetry-details.png) |
+### 🌟 Polestar Vehicle Dashboard & Telemetry
 
-| Controls status | Display settings |
-| --- | --- |
-| ![Controls tab explaining that remote commands are unavailable](assets/hisingen-controls-unavailable.png) | ![Language, charging history, menu bar, unit, startup and electricity settings](assets/hisingen-settings-display.png) |
+| Vehicle Overview & 3D Render | Charging & Openings Schematic |
+| :---: | :---: |
+| ![Polestar 2 Hero Card](assets/hisingen-polestar-hero-card.png) | ![Charging and Openings](assets/hisingen-polestar-charging-openings.png) |
 
-| Telemetry features | Diagnostics and notifications |
-| --- | --- |
-| ![Individual read-only telemetry feature switches](assets/hisingen-settings-telemetry.png) | ![Diagnostics and notification settings](assets/hisingen-settings-diagnostics-notifications.png) |
+| Expanded Openings Monitor | 4-Wheel iTPMS Tire Status |
+| :---: | :---: |
+| ![Doors, Windows and Lids](assets/hisingen-polestar-openings-expanded.png) | ![4-Wheel Tire Status](assets/hisingen-polestar-tpms-schematic.png) |
+
+| Health, Fluids & 12V Battery | OTA Software & Range Health |
+| :---: | :---: |
+| ![Vehicle Health and Fluids](assets/hisingen-polestar-identity-health-climate.png) | ![Software OTA and Battery Health](assets/hisingen-polestar-software-diagnostics.png) |
+
+### ℹ️ Vehicle Info, CleanZone & Factory Build Metadata
+
+| 3D Perspective & Dimensions | CleanZone AQI & Diagnostics |
+| :---: | :---: |
+| ![Multi-Angle 3D Render](assets/hisingen-polestar-info-tab-top.png) | ![CleanZone Air Quality and Trip Meters](assets/hisingen-polestar-info-cleanzone-trips.png) |
+
+| Powertrain Specs & Polestar Care | Factory Build Week & Market Spec |
+| :---: | :---: |
+| ![Battery Specs and Warranty](assets/hisingen-polestar-info-specs-warranty.png) | ![Factory Build Week and PNO34 Spec](assets/hisingen-polestar-info-build-metadata.png) |
+
+### 🎮 Remote Controls & Live Capability Matrix
+
+| Remote Climate & Charging Limits | Lock, Unlock, Locate & OTA Controls |
+| :---: | :---: |
+| ![Climate and Charging Controls](assets/hisingen-polestar-controls-climate-charging.png) | ![Locks, Locate and Software Controls](assets/hisingen-polestar-controls-locks-software.png) |
+
+| Live Capability Matrix (Part 1) | Live Capability Matrix (Part 2) |
+| :---: | :---: |
+| ![Capability Matrix Overview](assets/hisingen-polestar-settings-capability-matrix-top.png) | ![Sensor and Remote Capabilities](assets/hisingen-polestar-settings-capability-matrix-bottom.png) |
+
+### 🚗 Volvo Integration & Experience
+
+| Volvo Telemetry & Health | Volvo Remote Controls |
+| :---: | :---: |
+| ![Volvo Vehicle Overview](assets/hisingen-volvo-vehicle-tab-top.png) | ![Volvo Remote Controls](assets/hisingen-volvo-controls-tab.png) |
+
+| Volvo Account & 3D Studio Renders | Volvo XC40 Capability Matrix |
+| :---: | :---: |
+| ![Volvo 3D Studio Render](assets/hisingen-volvo-settings-account-themes.png) | ![Volvo Capability Matrix](assets/hisingen-volvo-settings-capability-matrix.png) |
+
+### ⚙️ Settings, Customization & Notification Engine
+
+| Camera Perspective & 9 Themes | Units, Menu Bar & General Settings |
+| :---: | :---: |
+| ![Theme Selector and Camera Perspectives](assets/hisingen-polestar-settings-perspective-themes.png) | ![Units and Menu Bar Customization](assets/hisingen-polestar-settings-general-units.png) |
+
+| Security & Granular Feature Toggles | Charging & Vehicle Alert Notifications |
+| :---: | :---: |
+| ![Touch ID and Telemetry Toggles](assets/hisingen-polestar-settings-security-toggles.png) | ![Notification Controls](assets/hisingen-polestar-settings-notifications.png) |
 
 ## At A Glance
 
 Hisingen keeps the selected vehicle visible without opening a full application window:
 
-- battery percentage, estimated range, charging state, and data freshness;
-- studio render, owner greeting, per-vehicle nickname, model, year, registration number, and VIN;
-- charging connection, AC/DC type, power, current, voltage, target, time remaining, and ready time;
-- locks, openings, alarm, tyres, service, fluid, light, and 12 V warnings;
-- climate state, cabin/requested temperature, timers, air quality, and pre-cleaning status;
-- odometer, trip meters, software/OTA state, network status, location, maps, and weather;
-- configurable notifications, multiple vehicles, and privacy-aware local caching.
+- **Electric, Hybrid & Combustion Powertrains**: Adaptive telemetry cards customized strictly for Pure Electric (BEV), Plug-in Hybrid (PHEV), or Combustion (Petrol/Diesel ICE);
+- **Multi-Angle Studio Renders**: Configurable 4-angle studio photography (Front 3/4, Rear 3/4, Side Profile, Overhead Top-Down) cached per angle;
+- **Factory Build Specs & Options**: Real-time vehicle spec decoding showing exterior paint name, interior upholstery trim, wheel package, and factory option packages (*Pilot, Plus, Performance*);
+- **Apple Liquid Glass Materials**: Multi-layer frosted translucent cards (`.regularMaterial`) with specular top-leading light-catchers, subtle luminance sheens, and dual-layer ambient occlusion shadows;
+- **Light Mode & Dark Mode Architecture**: System (Automatic), Forced Light Mode (WCAG AAA high-contrast slate ink), or Forced Dark Mode (smoked obsidian OLED pitch black);
+- **9 Scalable Themes**: Hisingen Glass, Polestar Minimal, Volvo Iron, Nordic Night, Aurora Borealis, Swedish Gold, Cyan Racing, Gothenburg Forest, and Sand Dune;
+- **Multilingual Support**: Fully localized in 16+ languages with independent in-app language switching;
+- **Configurable Measurement Units**: Distance (`km` / `mi`), Fuel Volume (`L` / `gal US` / `UK gal`), and Fuel Economy (`L/100km` / `MPG US` / `MPG UK` / `km/L`);
+- **Pixel-Perfect Vehicle Outline**: Interactive animated schematics for iTPMS tire status, doors, windows, sunroof, hood, tailgate, charge lid, and fuel filler flap;
+- **Extended Location & Movement**: GPS coordinates, elevation/altitude, accuracy radius, electronic parking brake status, transmission gear (PRND), heading, speed, reverse-geocoded street address, and 1-click Maps shortcuts;
+- **Battery, Range & Engine Telemetry**: SoC %, electric range, time to min SoC, avg consumption since charge, fuel level %, fuel volume, distance to empty, avg fuel consumption, and charging speed;
+- **CleanZone Cabin Air Filtration**: In-cabin vs outside PM2.5 particulate matter comparison, AQI index, and air filter remaining life %;
+- **Charging Cost & Tariff Calculator**: Configurable currency & price/kWh with automated session cost estimation;
+- **Charging History CSV & JSON Export**: Native macOS `NSSavePanel` export tool for exporting charging history for expense or tax reports;
+- **`hisingen://` URL Scheme & Deep Linking**: Full automation support for Raycast, Alfred, Apple Shortcuts, and Terminal scripts;
+- **macOS App Intents & Siri Shortcuts**: Siri voice queries and Shortcuts automation for battery levels, locks, and climate preconditioning;
+- **Menu Bar Quick Controls**: Context menu on right-click for instant lock/unlock, climate start/stop, flash lights, VIN copying, and Maps;
+- **Live Capabilities Matrix**: Interactive inspector in Settings showing live support state across all 21 vehicle capabilities;
+- **Adaptive Fast Refresh**: 60-second fast polling while charging or preconditioning, and 5-minute cadence when idle;
+- **Diagnostics, Lighting & Hardware Health**: 22-circuit exterior lighting monitor, 4-wheel indirect TPMS, brake fluid, washer fluid, service countdown, and 12V battery health;
+- **Privacy-First & Secure**: Hardware-backed Keychain token isolation, zero external tracking, and automatic stripping of raw GPS coordinates before disk caching.
 
-Standard Hisingen builds are read-only. Remote controls are unavailable because Polestar currently restricts vehicle commands to officially paired mobile clients.
+## Multilingual Support
+
+Hisingen is built for drivers worldwide with full multilingual localization across **16+ languages**. The language can follow your macOS system language automatically or be selected independently inside Settings:
+
+| Language | Locale Code | Native Name | Status |
+|---|---|---|---|
+| **English** | `en` | English | Base / Full Support |
+| **Swedish** | `sv` | Svenska | Full Support |
+| **German** | `de` | Deutsch | Full Support |
+| **Norwegian (Bokmål)** | `nb` | Norsk bokmål | Full Support |
+| **Danish** | `da` | Dansk | Full Support |
+| **Dutch** | `nl` | Nederlands | Full Support |
+| **French** | `fr` | Français | Supported (with English fallback) |
+| **Spanish** | `es` | Español | Supported (with English fallback) |
+| **Italian** | `it` | Italiano | Supported (with English fallback) |
+| **Finnish** | `fi` | Suomi | Supported (with English fallback) |
+| **Portuguese** | `pt` | Português | Supported (with English fallback) |
+| **Norwegian (Nynorsk)** | `nn` | Norsk nynorsk | Supported (with English fallback) |
+| **Norwegian (General)** | `no` | Norsk | Supported (with English fallback) |
+| **Polish** | `pl` | Polski | Supported (with English fallback) |
+| **Chinese (Simplified)** | `zh` | 简体中文 | Supported (with English fallback) |
+| **Korean** | `ko` | 한국어 | Supported (with English fallback) |
+
+All vehicle terms, door names, charging states, diagnostics, unit strings, and settings descriptions are dynamically translated using native string catalogs with automatic fallback.
+
+## Design, Liquid Glass & Themes
+
+### Apple Liquid Glass Material Engine
+Hisingen introduces Apple's modern **Liquid Glass** dynamic material system:
+- **Specular Top-Leading Hairlines**: Two-tone light refraction gradient borders that physically catch ambient light from the top-left corner and smoothly dissipate toward bottom-right shadows.
+- **Translucent Optical Lensing**: Layered `.regularMaterial` frosted glass with adaptive luminance sheens that reflect colors from background desktop wallpapers and windows.
+- **Dual-Layer Ambient Occlusion Shadows**: Crisp 1px contact edge shadow layered over a soft 12px ambient elevation blur.
+
+### Multi-Angle Studio Vehicle Renders
+Customize your vehicle's appearance in the header card with 4 official studio camera angles:
+- **Front 3/4 View** (Angle 0) — Standard dynamic front-corner presentation.
+- **Rear 3/4 View** (Angle 1) — Tailgate, light bar, and rear diffuser angle.
+- **Side Profile** (Angle 2) — Clean architectural side silhouette and wheel stance.
+- **Overhead View** (Angle 3) — Top-down panoramic glass roof and silhouette view.
+
+Angle choices are cached per angle and automatically fetched from GraphQL `getCarImages`.
+
+### Light Mode & Dark Mode Architecture
+- **Appearance Mode Selector**: Switch freely between **System (Automatic)**, **Light Mode**, and **Dark Mode** via a 3-way toggle in Settings.
+- **Light Mode**: High-contrast, WCAG AAA compliant deep charcoal/slate typography (`#0F172A`), crystal-clear glass cards, and punchy saturated accents.
+- **Dark Mode**: Smoked obsidian OLED canvases (`#000000` / `#0B0F19`), luminous electric neon glows, and edge specular highlights.
+
+### 9 Curated Themes Ecosystem
+Choose from 9 distinct visual personalities with category filter pills (`All`, `Brand`, `OLED & Dark`, `Performance`, `Nature`):
+1. **Hisingen Glass** (`.hisingen`): 14pt radius, `.regularMaterial` liquid glass background, Amber `#E56E23` accent.
+2. **Polestar Minimal** (`.polestar`): 0pt radius, sharp architectural edges, Scandinavian monochrome minimalism.
+3. **Volvo Iron** (`.volvo`): 10pt radius, Volvo Iron blue `#1C6BBA` accent, soft navy cards.
+4. **Nordic Night** (`.nordicNight`): 12pt radius, pitch black OLED canvas (`#000000`), electric cyan `#00E5FF` glow.
+5. **Aurora Borealis** (`.aurora`): 16pt radius, midnight slate canvas (`#0B132B`), emerald `#00E676` northern lights.
+6. **Swedish Gold** (`.swedishGold`): 10pt radius, Polestar Engineered Öhlins gold `#D4AF37` accent.
+7. **Cyan Racing** (`.cyanRacing`): 8pt radius, Cyan Racing championship blue `#0090D0` accent.
+8. **Gothenburg Forest** (`.forest`): 14pt radius, Swedish pine green `#4CAF50` earth tones.
+9. **Sand Dune** (`.sandDune`): 12pt radius, warm champagne/titanium `#C5A059` luxury minimalism.
+
+## Powertrain Support & Measurement Units
+
+Hisingen is built with powertrain-aware UI logic that automatically tailors cards and controls to the exact vehicle powertrain:
+
+- **Pure Electric (BEV)** (*Polestar 2, Polestar 3, Polestar 4, Volvo EX30, EX40, EX90, XC40 Recharge BEV*):
+  - Displays Battery SoC %, Electric Range, Charging Status, and `BatteryGauge`.
+  - Shows Charging Details, Charging Curves, Session History, and Range Health Estimate.
+  - Fuel cards and combustion metrics are cleanly hidden.
+- **Pure Combustion (ICE)** (*Volvo XC90 Petrol/Diesel, XC60 B5, XC40 B4, V60 T5*):
+  - Displays Fuel Level %, Remaining Volume, Fuel Range, and `FuelGauge`.
+  - Displays Fuel & Engine Card with Average Fuel Consumption, Engine State (Running/Stopped), Engine Hours to Service, and Fuel Grade.
+  - EV charging cards, battery diagnostics, and charge port controls are cleanly hidden.
+- **Plug-in Hybrid (PHEV)** (*Volvo XC60 T8 Recharge, V60 T6 Recharge, Polestar 1*):
+  - Displays dual readouts (**Battery % + Fuel %**), **`DualEnergyGauge`**, and Combined Total Range.
+  - Renders both Charging Telemetry and Fuel & Engine cards simultaneously.
+
+### Configurable Units
+- **Distance Unit**: Kilometers (`km`) or Miles (`mi`).
+- **Fuel Volume Unit**: Liters (`L`), US Gallons (`gal`), or Imperial Gallons (`UK gal`).
+- **Fuel Economy Unit**: Liters per 100 km (`L/100km`), Miles per Gallon US (`mpg`), Miles per Gallon UK (`mpg (UK)`), or Kilometers per Liter (`km/L`).
 
 ## Read-Only Capabilities
 
@@ -66,32 +203,35 @@ Every optional group can be enabled independently. Unsupported services degrade 
 
 | Capability | Data shown |
 | --- | --- |
-| Core telemetry | Battery, range, charging state, time to full, fetch time, vehicle-reported time, and stale/asleep state |
-| Vehicle identity | Model, year, registration, VIN, per-VIN local nickname, and account vehicle discovery |
+| Core telemetry | Battery, range, charging state, time to full, time to minimum SOC, fetch time, vehicle-reported time, and stale/asleep state |
+| Vehicle identity | Model, year, registration, VIN, paint color name, interior upholstery trim, wheel package, option packages, production build week, factory PNO34 code, market, steering orientation, per-VIN local nickname, and account vehicle discovery |
 | Owner greeting | Polestar ID first name localized using the selected app language |
-| Studio image | Transparent configured vehicle render from Polestar's image service |
-| Charging details | Plug state, type, power, current, voltage, target SOC, current limit where supported, ready time, speed, and charger module state |
-| Charging history | Optional local summaries capped at 20 per vehicle: SOC gained, estimated energy, peak power, duration, and cost |
-| Availability | Online/offline state and reasons such as power saving, vehicle in use, service mode, tracking, or OTA |
-| Odometer and service | Odometer, service countdown, service state, and fluid warnings |
+| Studio image | Configurable transparent vehicle renders across 4 camera angles |
+| Charging details | Plug state, type, power, current draw vs current limit, voltage, target SOC, current limit where supported, ready time, speed, average consumption since charge, and charger module state |
+| Charging history | Optional local summaries: SOC gained, estimated energy, peak power, duration, tariff cost, and native CSV export |
+| Availability | Online/offline state, cellular signal strength (bars), modem wake reason, and connectivity mode |
+| Odometer and service | Odometer, service countdown, service state, service trigger reasons, and fluid warnings |
 | Exterior | Central lock, doors, windows, sunroof, hood, tailgate, charge lid, and alarm |
-| Tyres and warnings | Direct pressures where reported, tyre warnings, lights, fluids, service, and 12 V warning |
-| Trip meters | Manual and automatic trip distances with Digital Twin and legacy fallback |
-| Climate | Activity, heating/cooling/ventilation, time remaining, actual/requested temperature, and timers |
-| Charging schedules | Global and saved-location charge windows and departure schedules; precise locations and aliases are discarded |
-| Air quality | Cleaning state, AQI, PM2.5, runtime remaining, and reported errors |
-| Connectivity | Legacy network type, connection status, signal strength, and timestamp when available |
-| Vehicle software | Version/title, OTA state, scheduled installation, and update timestamp |
-| Vehicle location | Opt-in coordinates, heading/speed when reported, Apple reverse geocoding, and Maps shortcut |
-| Vehicle weather | Opt-in temperature, condition, apparent temperature, and humidity using Open-Meteo with first-party fallback |
-| Capability observations | Positive per-VIN service observations augment conservative model profiles and are cached locally |
+| Tyres and warnings | Direct pressures where reported, tyre warnings, 22-circuit exterior lights monitor, fluids, and 12 V battery health |
+| Trip meters | Manual and automatic trip distances, average speed, trip computer electric/fuel range with Digital Twin and legacy fallback |
+| Climate | Activity, heating/cooling/ventilation, seat & steering wheel heating levels, time remaining, actual/requested temperature, and departure timers |
+| Charging schedules | Global and saved-location charge windows with location names; precise coordinates and aliases are discarded |
+| Air quality | Cleaning state, in-cabin vs outside PM2.5, AQI index, air filter remaining life %, runtime remaining, and reported errors |
+| Connectivity | Network generation (4G/5G), connection status, signal strength bars (1-4), modem wake reason, and timestamp |
+| Vehicle software | Installed version, latest available OTA target version, OTA readiness banner, scheduled installation, and update timestamp |
+| Vehicle location | Opt-in coordinates, elevation/altitude, accuracy radius, electronic parking brake status, transmission gear (PRND), heading, speed, Apple reverse geocoding, and Maps shortcuts |
+| Vehicle weather | Opt-in temperature, condition, apparent temperature, and relative humidity using Open-Meteo with first-party fallback |
+| Capability observations | Live inspector in Settings showing runtime support state across all 21 vehicle capabilities |
 
 ## Charging Intelligence
 
 - Dynamic battery gauge with charge-target marker and subtle charging pulse.
+- **Dual-Mode Live Charging Power Curve**: Interactive chart supporting **`SoC %`**, **`Power kW`**, and **`Dual`** overlay modes with peak power callouts and average power lines.
+- **Micro-Sparklines in History**: Anti-aliased vector sparklines embedded directly inside collapsed charging session rows.
 - Ready-time calculation based on the vehicle-reported sample timestamp.
 - Charging-speed estimate in `km/h` or `mph`.
-- Estimated completion cost using a configurable electricity rate and currency.
+- **Electricity Rate & Tariff Calculator**: Estimated session and completion cost using a configurable electricity rate (per kWh) and currency symbol.
+- **CSV & JSON Exporter**: Native export of stored charging sessions with full energy, duration, battery delta, peak kW, and calculated tariff cost columns.
 - Session sparkline with a capped rolling sample buffer.
 - Optional local session summaries; raw long-term telemetry is not collected.
 - **Range Health Estimate**, explicitly labeled as range-based rather than measured battery State of Health.
@@ -109,6 +249,16 @@ Every optional group can be enabled independently. Unsupported services degrade 
 
 Private notification mode hides detailed vehicle values from banners. Stable identifiers and notification threads prevent repeated copies of the same alert.
 
+## Vehicle Info & Build Specifications (`Info` Tab)
+
+A dedicated top-level **Info** tab (`info.circle`) breaks down complete vehicle build details, interior blueprint, and styling specifications:
+- **Interactive Multi-Angle Studio Carousel**: Instant camera angle switching across 4 studio views (`Front 3/4`, `Side Profile`, `Rear 3/4`, `Overhead`) with automatic background pre-caching.
+- **Interactive Cabin Seating Matrix**: Custom vector top-down cabin blueprint (`CabinSeatingMatrixView`) with driver & front passenger seats showing live heat level badges (Off / L1 / L2 / L3 in amber/orange), a steering wheel dynamically placed left or right per `steeringOrientation` with its own heating glow, an outlined rear bench (Rear Left / Center / Right), a center console badge showing the current comfort target temperature, and a pulsing CleanZone airflow indicator when air purification is active.
+- **Exterior & Styling**: Exterior paint finish (`externalColour`), factory wheels & rims (`wheels`), factory equipment packages (`packages` with badge pills like `Pilot`, `Plus`, `Performance`), parking brake status, and door body style.
+- **Interior & Cabin**: Interior trim & upholstery material (`upholstery`), steering orientation (`steeringOrientation` as text), and CleanZone cabin air purification detail (AQI, PM2.5, filter life). Seat & steering wheel heating are visualized in the Cabin Seating Matrix above, and are only selectable via toggle controls on the Controls tab, and only on capability-supported models (EX30, EX90, ES90, Polestar 2/3/4). Seat & steering wheel heating are only selectable via toggle controls on the Controls tab, and only on capability-supported models (EX30, EX90, ES90, Polestar 2/3/4).
+- **Powertrain & Specs**: Architecture (`BEV`, `PHEV`, `ICE`), usable battery capacity (kWh), gearbox transmission, fuel volume & average consumption.
+- **Service & Health**: Total odometer, service countdown & trigger reason, engine operating hours, manual/automatic trip meters, and average driving speed.
+- **Factory Build & Identity**: License plate, 1-click copyable VIN, internal vehicle ID, factory build week (`structureWeek` e.g. `2023 · W42`), factory spec code (`pno34`), market code, cloud connectivity status, and software release version.
 
 ## Menu Bar And macOS Integration
 
@@ -120,15 +270,67 @@ Private notification mode hides detailed vehicle values from banners. Stable ide
 4. **Compact Charging** — `73% (1h42m)` while charging
 5. **Battery and Power** — `73% · 7.2 kW` while charging
 6. **Range** — `280km`
+7. **Icon Only** — Minimal battery icon without text
+8. **Lock and Battery** — `🔒 73%` / `🔓 73%` with live lock state
 
 The icon can remain monochrome or tint green while charging and orange at low battery. Values use tabular digits to avoid width jitter.
+
+### Deep Linking & Automation (`hisingen://` URL Scheme)
+
+Hisingen registers the `hisingen://` custom URL scheme for direct scripting and triggers from **Raycast, Alfred, Apple Shortcuts, Stream Deck, and Terminal**:
+
+| URL Command | Action | Supported Brands |
+|---|---|---|
+| `hisingen://refresh` | Force an immediate background telemetry refresh | Polestar & Volvo |
+| `hisingen://status` / `hisingen://toggle` | Open or toggle the main popover window | Polestar & Volvo |
+| `hisingen://settings` / `hisingen://preferences` | Open Settings directly | Polestar & Volvo |
+| `hisingen://copy-vin` | Copy active vehicle VIN to system clipboard | Polestar & Volvo |
+| `hisingen://climate/start?temp=21` | Start cabin climate preconditioning (supports custom temperature) | Volvo *(Restricted on Polestar)* |
+| `hisingen://climate/stop` | Stop cabin climate preconditioning | Volvo *(Restricted on Polestar)* |
+| `hisingen://lock` | Lock vehicle central doors | Volvo *(Restricted on Polestar)* |
+| `hisingen://unlock` | Unlock vehicle central doors | Volvo *(Restricted on Polestar)* |
+| `hisingen://flash` | Flash exterior hazard lights | Volvo *(Restricted on Polestar)* |
+| `hisingen://honk-flash` | Honk horn and flash lights | Volvo *(Restricted on Polestar)* |
+
+### macOS App Intents & Shortcuts (macOS 13+)
+
+Hisingen integrates with Apple's **App Intents** framework for native Siri voice actions and Shortcuts app workflows:
+
+- **`GetVehicleBatteryIntent`**: Queries current battery percentage, estimated range, and charging power.
+  - Voice phrases: *"Check my car battery"*, *"What is my charge level?"*, *"How much range is left?"*
+- **`LockVehicleIntent` & `UnlockVehicleIntent`**: Dispatches remote lock and unlock commands to the active vehicle.
+- **`StartClimateIntent` & `StopClimateIntent`**: Starts or stops cabin climate preconditioning.
+- **`AppShortcutsProvider`**: Automatically registers shortcuts into macOS Shortcuts without manual setup.
+
+### macOS Desktop & Notification Center Widgets (`WidgetKit`)
+
+Hisingen provides native macOS desktop and Notification Center widgets:
+
+- **System Small Widget**: Circular battery gauge with live percentage, estimated range, charging wattage pulse, and vehicle lock state pill.
+- **System Medium Widget**: Multi-column vehicle dashboard featuring battery %, range, lock state, live cabin climate activity, charging speed, and odometer reading.
+
+### Touch ID & Biometric Protection
+
+Protect remote operations with macOS Touch ID or device-owner authentication:
+- **Automatic Protection for Sensitive Controls**: Critical and security-sensitive commands (e.g. remote unlock, window ventilation, OTA installation) automatically require biometric authentication.
+- **Optional Universal Touch ID Mode**: Enable *"Require Touch ID"* in Settings to mandate fingerprint verification for every remote command (including climate preconditioning and locking).
+
+### Interactive Charging & Departure Schedule Editor
+
+Configure departure and charging schedules directly from the Mac without needing the mobile app:
+- **Cabin Preconditioning (Departure Timers)**: Configure target departure time and select recurring days of the week (Mon–Sun).
+- **Charging Windows**: Set start and end times for off-peak charging schedules with recurring weekday selectors.
+- **Manage Timers Modal**: View, toggle, edit, or delete active timers with a single click.
 
 ### Keyboard And Context Menu
 
 - `Option + P` toggles the popover globally after macOS Accessibility approval.
 - `Option + [` and `Option + ]` move between vehicles.
 - `Option + 1` through `Option + 9` select a vehicle directly.
-- Right-click opens refresh, Maps, VIN copy, vehicle switching, Settings, and Quit actions.
+- **Status Bar Right-Click Context Menu**:
+  - **Quick Controls**: Instant **Lock / Unlock Doors**, **Start / Stop Climate**, **Flash Lights**, **Honk Horn**, and **Honk & Flash**.
+  - **Export Charging History (CSV)…**: Exports session history to a CSV file.
+  - **Telemetry & Navigation**: Quick access to **Refresh Telemetry**, **Open in Apple Maps**, and **Copy VIN**.
 - Scrolling remains enabled while visual scroll indicators stay hidden.
 - Launch at login uses `SMAppService` and the normal Login Items approval flow.
 
@@ -137,13 +339,15 @@ The icon can remain monochrome or tint green while charging and orange at low ba
 - Per-vehicle local nicknames.
 - System, English, or Swedish interface language.
 - Kilometers or miles.
-- Electricity rate and currency.
+- Electricity rate and currency for dynamic charge cost estimation.
 - Configurable read-only feature groups and notifications.
-- Optional charging-session history.
+- Optional charging-session history with CSV and JSON export.
 
-## Multiple Vehicles
+## Multiple Vehicles & Dual-Brand Multi-Car Switcher
 
-Hisingen discovers all vehicles returned by the signed-in account and isolates state, charging baselines, capability observations, and nicknames per VIN. Vehicles can be switched from the footer, keyboard, or context menu. Guest or secondary accounts without an account vehicle list can provide a validated VIN manually. Only one brand is active at a time today. Switching from Volvo to Polestar (by saving Polestar credentials) or vice versa doesn't delete the other provider's stored session — but switching back through Settings currently re-runs that provider's full sign-in rather than silently resuming it, even though the stored token would still work on a fresh app launch.
+Hisingen discovers all vehicles returned by the signed-in account and isolates state, charging baselines, capability observations, and nicknames per VIN. Vehicles can be switched from the footer, keyboard, or context menu:
+- **Seamless Dual-Brand Switching**: If you own both a Polestar and a Volvo, Hisingen stores both provider sessions in the macOS Keychain. Switching between Polestar and Volvo instantly restores the stored credentials and active API provider without requiring manual re-authentication.
+- **Isolated Telemetry & Nicknames**: Each vehicle maintains independent cached snapshots, local nicknames, and charging history.
 
 ## Supported Vehicles
 
@@ -178,19 +382,20 @@ The following official developer endpoints are fully supported and mapped into H
 
 | Category | API Endpoint | Data & Telemetry Provided | Hisingen UI Feature |
 |---|---|---|---|
-| **Vehicle Identity & Render** | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, exterior color, gearbox type, battery capacity (kWh), transparent exterior studio image URL, steering orientation | Transparent vehicle hero render with ambient glow, Vehicle Identity card |
+| **Vehicle Identity & Render** | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, exterior color, gearbox type, battery capacity (kWh), transparent exterior studio image URL, upholstery/interior trim, steering orientation | Transparent vehicle hero render with ambient glow, Vehicle Identity card |
 | **Doors & Security** | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock status, front/rear left/right doors, hood, tailgate, charge/tank lid | Door schematic, lock/unlock status pill |
 | **Windows & Sunroof** | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Front/rear left/right windows, sunroof status | Window status indicators |
-| **Energy & Battery** | `GET /energy/v2/vehicles/{vin}/state` | Battery SoC (%), electric range (km), charger connection, charging status (Idle/Charging), charging current limit (A), target SoC (%), charging power (kW) | Battery gauge with target marker, charging details card, live charging speed |
-| **Energy Capabilities** | `GET /energy/v2/vehicles/{vin}/capabilities` | Hardware feature support matrix for all 10 energy fields | Runtime capability probing & feature degradation |
+| **Energy & Battery** | `GET /energy/v2/vehicles/{vin}/state` | Battery SoC (%), electric range (km), charger connection, charging status (Idle/Charging), charging current draw (A), current limit (A), target SoC (%), charging power (kW) | Battery gauge with target marker, charging details card, live charging speed |
+| **Energy Capabilities** | `GET /energy/v2/vehicles/{vin}/capabilities` | Hardware feature support matrix for all 10 energy fields | Runtime capability probing & feature degradation in Settings matrix |
 | **Odometer** | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total vehicle odometer mileage (km) | Vehicle Identity card odometer reading |
-| **Diagnostics & Health** | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, time to service (months/days), distance to service (km), engine operating hours to service (h), washer fluid warning | Service due countdown (days, km, hours), fluid warning badges |
+| **Diagnostics & Health** | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, serviceTrigger, time to service (months/days), distance to service (km), engine operating hours to service (h), washer fluid warning, 12V auxiliary battery status | Service due countdown (days, km, hours), fluid warning badges, 12V health indicator |
 | **Brake System** | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid level warning status | Vehicle Health & fluid warning alerts |
-| **Lighting & Bulb Monitors** | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16 individual light bulb sensor monitors (brake lights, fog lights, position lights, high/low beams, DRLs, turn signals, license plate, side markers) | Exterior lighting health status and fault alerts |
+| **Lighting & Bulb Monitors** | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 18 individual light bulb sensor monitors (brake lights, fog lights, position lights, high/low beams, DRLs, turn signals, license plate, hazard lights, reversing lights) | Exterior lighting health status and fault alerts |
 | **Tyres (iTPMS)** | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | 4-wheel indirect tire pressure status (`No Warning`, `Low`, `Very Low`) | 4-wheel iTPMS schematic card |
-| **Trip & Speed Analytics** | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Average energy consumption (kWh/100km), average speed (km/h), manual trip meter (km), automatic trip meter (km), distance to empty | Trip & Consumption card, average speed telemetry |
+| **Trip & Speed Analytics** | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Average energy consumption (kWh/100km), average speed (km/h), manual trip meter (km), automatic trip meter (km), trip computer electric/fuel distance to empty | Trip & Consumption card, average speed telemetry |
 | **Cloud Availability** | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Real-time vehicle cloud connectivity status (`AVAILABLE`) | Connectivity status pill |
-| **Remote Commands** | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | Remote execution for `lock`, `unlock`, `climatization-start`, `climatization-stop`, `flash`, `honk-flash` | **Controls (Reglage)** tab with biometric authorization |
+| **Remote Commands** | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | Remote execution for `lock`, `unlock`, `climatization-start`, `climatization-stop`, `flash`, `honk`, `honk-flash` | **Controls (Reglage)** tab with biometric authorization |
+| **Command Execution Polling** | `GET /connected-vehicle/v2/vehicles/{vin}/commands/{commandId}` | Asynchronous command lifecycle tracking (`PENDING` ➔ `STARTED` ➔ `DELIVERED` ➔ `COMPLETED`) | Real-time progress monitoring & completion confirmation |
 | **Location API** | `GET /location/v1/vehicles/{vin}/location` | GPS coordinates, heading, and timestamp *(requires subscribing to the Location API product in portal)* | Vehicle map & reverse-geocoded address |
 
 ---
@@ -211,7 +416,7 @@ Certain APIs exposed or discussed in automotive telematics are restricted to ent
 ## Refresh And Reliability
 
 - One in-flight refresh with duplicate manual-refresh coalescing.
-- 60-second cadence while charging and 5-minute cadence while idle.
+- **Adaptive Cadence**: 60-second fast polling while charging or actively preconditioning, and 5-minute cadence while idle.
 - Exponential backoff, jitter, `Retry-After`, and rate-limit enforcement.
 - Network reachability, macOS sleep/wake, and stale-on-activation handling.
 - Optional capability cache/backoff so one unavailable service cannot fail core telemetry.
@@ -270,7 +475,7 @@ Vehicular telemetry arrives in drastically different formats across brands and p
 ### 4. Hardware-Backed Security & Cryptography
 
 - **PKCE Implementation (RFC 7636)**: Generates 32-byte cryptographically secure random verifiers using Apple's `SecRandomCopyBytes`, computing `CC_SHA256` digests formatted as base64url strings.
-- **Isolated Keychain Partitioning**: Access tokens and refresh tokens are stored in the macOS Keychain (`kSecClassGenericPassword`) bound strictly to `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. Polestar and Volvo credentials reside in completely segregated service domains (`io.kheirallah.hisingen`).
+- **Isolated Keychain Partitioning**: Refresh tokens and credentials are stored in the macOS Keychain (`kSecClassGenericPassword`) bound to `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — never synced to iCloud Keychain, never leaves the device. `AfterFirstUnlock` rather than `WhenUnlocked` is deliberate: a menu-bar app has to refresh vehicle state while the screen is locked, which `WhenUnlocked` would prevent. Polestar and Volvo credentials reside in separate Keychain accounts under the `io.kheirallah.hisingen` service.
 - **Privacy-Scrubbed Persistence Pipeline**: Before writing cached snapshots to disk, Hisingen's `VehicleStateStore` strips all raw GPS coordinates, VIN details, owner names, license plates, and schedule location strings.
 
 ### 5. Hybrid AppKit / SwiftUI Menu Bar Engine
@@ -293,7 +498,7 @@ Production releases are universal binaries, Developer ID signed, hardened-runtim
 
 ### Build From Source
 
-Requirements: macOS 13 Ventura or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+.
+Requirements: macOS 13 Ventura or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+. CI and production releases build with Xcode 16.2 specifically (see `.github/workflows/release.yml`); older Xcode 15.x installations are expected to work for local development but aren't what ships.
 
 ```bash
 git clone https://github.com/NicolasKheirallah/hisingen.git
@@ -305,6 +510,24 @@ open Hisingen.app
 ```
 
 `make app` produces an ad-hoc-signed local build. Rebuilding changes its identity and can cause Keychain or Accessibility approval to be requested again. Stable trust across rebuilds requires a Developer ID-signed release.
+
+### Production Release & Deployment
+
+The project features a fully automated, zero-secret-leakage release pipeline (`.github/workflows/release.yml`):
+
+1. **Automated Release via Git Tag**:
+   ```bash
+   # Run pre-flight checks, bump version, build universal app/dmg, checksum, and tag
+   make release VERSION=1.2.0    # or patch / minor / major
+
+   # Push to trigger GitHub Actions automated signing, Apple notarization, and DMG release
+   git push origin main --tags
+   ```
+
+2. **Secret Isolation & Security**:
+   - **User Volvo Developer API Keys & Tokens**: Stored only on the user's Mac in the hardware-encrypted **Secure Enclave Keychain** (`kSecClassGenericPassword`), never checked into git or bundled in binaries.
+   - **Polestar OAuth**: Public client IDs are PKCE-secured (`RFC 7636`), requiring dynamic runtime challenge verifiers.
+   - **Code Signing Certificates & Notary Credentials**: Managed via encrypted **GitHub Actions Repository Secrets** (`MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_APP_PASSWORD`), never exposed in logs or build outputs.
 
 ## Documentation & Terms
 

@@ -1,5 +1,10 @@
 import Foundation
 
+/// Main-actor isolated because it holds no lock of its own: every mutation is a
+/// read-modify-write over a `UserDefaults`-backed dictionary, which two concurrent callers
+/// would interleave and lose writes from. Both real callers (`RefreshCoordinator`, `Notifier`)
+/// are already `@MainActor`; this makes the requirement compiler-enforced rather than assumed.
+@MainActor
 final class VehicleStateStore {
     private let defaults: UserDefaults
     private let snapshotsKey = "cached_vehicle_snapshots_v1"
@@ -12,11 +17,15 @@ final class VehicleStateStore {
     }
 
     func snapshot(for vin: String) -> VehicleState? {
-        guard let snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
+        guard var snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
         guard Date().timeIntervalSince(snapshot.fetchedAt) <= 7 * 24 * 60 * 60 else {
             clear(vin: vin)
             return nil
         }
+        // Flagged on read rather than on write, so anything served from disk is marked
+        // regardless of which build wrote it. `cacheableCopy` strips most telemetry, and the
+        // UI must be able to tell "not fetched" apart from "not supported".
+        snapshot.isCachedSnapshot = true
         return snapshot
     }
 

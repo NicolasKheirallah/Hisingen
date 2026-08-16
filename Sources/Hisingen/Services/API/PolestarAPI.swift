@@ -1,7 +1,5 @@
-import CryptoKit
 import Foundation
 import OSLog
-import Security
 
 private struct OptionalCapability<Value: Sendable>: Sendable {
     let value: Value?
@@ -24,9 +22,30 @@ actor PolestarAPI {
 
     private let publicApiKey = "REDACTED-ROTATE-THIS-KEY"
     private let oidcProviderURL = URL(string: "https://polestarid.eu.polestar.com")!
+
+    // The polestar.com web client. The mobile-app client (`lp8dyrd_10`,
+    // `polestar-explore://explore.polestar.com`) authenticates fine but its token is rejected
+    // by `pc-api.polestar.com/mystar-v2` with `UnauthorizedException`, so vehicle discovery
+    // returns nothing and the app has no car to talk about — verified live against a real
+    // account. The `getConsumerCarsV2` query only accepts this client.
     private let oidcClientID = "l3oopkc_10"
     private let oidcRedirectURL = URL(string: "https://www.polestar.com/sign-in-callback")!
-    private let oidcScope = "openid profile email customer:attributes"
+    // `customer:attributes:write` is what the C3 `ota_mobcache.SchedulerService` write RPCs
+    // require. This client grants it on request — adding it does not disturb discovery.
+    private let oidcScope = "openid profile email customer:attributes customer:attributes:write"
+
+    // Remote commands are gated on a *client-id allowlist*, separate from scope. C3 spells the
+    // rule out when it refuses: `Client id l3oopkc_10 is not a required client id: [… lp8dyrd_10 …]`.
+    // The web client above can list vehicles but cannot invoke; this one can invoke but is
+    // rejected by `mystar-v2` for reads. Neither is sufficient alone, so the app holds a token
+    // from each and picks per call. Verified live: `Lock` via C3 with this client returns
+    // `outcome = accepted`.
+    private let commandClientID = "lp8dyrd_10"
+    private let commandRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
+
+    private var commandAccessToken: String?
+    private var commandRefreshToken: String?
+    private var commandTokenExpiry: Date?
 
     private var session: URLSession
     private var redirectDelegate: OAuthRedirectDelegate
@@ -45,11 +64,16 @@ actor PolestarAPI {
 
     private(set) var cars: [CarSummary] = []
     private var selectedVIN: String?
+    private var internalVehicleIdentifier: String?
     private var modelName: String?
     private var modelYear: String?
     private var registrationNo: String?
     private var pno34: String?
     private var structureWeek: String?
+    private var exteriorColorName: String?
+    private var upholsteryName: String?
+    private var wheelsName: String?
+    private var packageNames: [String] = []
     private var ownerFirstName: String?
     private var market: String?
     private var carImageData: Data?
@@ -60,7 +84,7 @@ actor PolestarAPI {
 
     init(keychain: KeychainStore = .app) {
         self.keychain = keychain
-        let delegate = OAuthRedirectDelegate(callbackURL: oidcRedirectURL)
+        let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
     }
@@ -76,9 +100,55 @@ actor PolestarAPI {
         try await discoverOIDCConfiguration()
         let authorization = try await obtainAuthorizationCode(email: email, password: password)
         try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
+        await acquireCommandToken(email: email, password: password)
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage) { await fetchCarImage() }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+    }
+
+    /// Signs in a second time as the command-capable client. Failure is non-fatal: reads and
+    /// OTA still work without it, only invocation-backed commands become unavailable.
+    private func acquireCommandToken(email: String, password: String) async {
+        do {
+            let authorization = try await obtainAuthorizationCode(
+                email: email, password: password,
+                clientID: commandClientID, redirectURI: commandRedirectURL, scope: oidcScope
+            )
+            let token = try await exchangeCode(authorization.code, verifier: authorization.verifier,
+                                               clientID: commandClientID, redirectURI: commandRedirectURL)
+            commandAccessToken = token.accessToken
+            commandRefreshToken = token.refreshToken
+            commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+            if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
+            logger.info("Polestar command-client token acquired")
+        } catch {
+            logger.warning("Polestar command-client sign-in failed; remote commands unavailable")
+        }
+    }
+
+    /// A valid token for invocation-backed commands, refreshed on demand.
+    private func validCommandToken() async -> String? {
+        if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
+           let token = commandAccessToken { return token }
+        let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        guard let refresh = stored, let tokenEndpoint else { return commandAccessToken }
+        var request = URLRequest(url: tokenEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.formBody([
+            "grant_type": "refresh_token",
+            "client_id": commandClientID,
+            "refresh_token": refresh
+        ])
+        guard let token = try? await Self.requestToken(request: request, session: session,
+                                                       invalidReason: .expiredSession) else {
+            return nil
+        }
+        commandAccessToken = token.accessToken
+        commandRefreshToken = token.refreshToken ?? refresh
+        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+        return token.accessToken
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -105,11 +175,14 @@ actor PolestarAPI {
         accessToken = nil
         refreshToken = nil
         tokenExpiry = nil
+        commandAccessToken = nil
+        commandRefreshToken = nil
+        commandTokenExpiry = nil
         refreshTask?.cancel()
         refreshTask = nil
         clearAccountState()
         session.invalidateAndCancel()
-        let delegate = OAuthRedirectDelegate(callbackURL: oidcRedirectURL)
+        let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
         await grpc.invalidateDiscoveredHost()
@@ -165,27 +238,22 @@ actor PolestarAPI {
         }
 
         let query = Self.telematicsQuery(features: features)
-        let response: GraphQLResponse<TelematicsPayloadDTO> = try await graphQL(
+        let response: GraphQLResponse<TelematicsPayloadDTO>? = try? await graphQL(
             query: query,
             variables: ["vins": [vin]],
             token: token,
             operation: "vehicle telematics"
         )
-        guard let telematics = response.data?.carTelematicsV2 else {
-            if let errors = response.errors, !errors.isEmpty {
-                throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: false)
-            }
-            throw PolestarError.incompatibleAPI(operation: "vehicle telematics")
-        }
+        let telematics = response?.data?.carTelematicsV2
 
-        let battery = Self.matchingReading(telematics.battery, vin: vin, vinOf: { $0.vin })
-        let odometer = Self.matchingReading(telematics.odometer, vin: vin, vinOf: { $0.vin })
-        let health = Self.matchingReading(telematics.health, vin: vin, vinOf: { $0.vin })
-
+        let battery = Self.matchingReading(telematics?.battery, vin: vin, vinOf: { $0.vin })
+        let odometer = Self.matchingReading(telematics?.odometer, vin: vin, vinOf: { $0.vin })
+        let health = Self.matchingReading(telematics?.health, vin: vin, vinOf: { $0.vin })
 
         let serviceToken = accessToken ?? token
 
         let needsChargingContext = features.contains(.chargingDetails) || features.contains(.remoteCharging)
+            || battery == nil
         let modelProfile = VehicleCapabilityProfile(modelName: modelName)
         let needsExterior = features.contains(.exteriorStatus) || features.contains(.remoteLocks)
             || features.contains(.remoteWindows)
@@ -197,7 +265,7 @@ actor PolestarAPI {
             || (features.contains(.remotePreCleaning) && modelProfile.permits(.preCleaning))
 
         async let batteryExtrasTask = optionalBattery(
-            enabled: needsChargingContext || features.contains(.batteryDiagnostics),
+            enabled: needsChargingContext || features.contains(.batteryDiagnostics) || battery == nil,
             vin: vin, token: serviceToken
         )
         async let availabilityTask = optionalAvailability(
@@ -293,7 +361,7 @@ actor PolestarAPI {
             : (battery?.estimatedChargingTimeToFullMinutes?.value ?? extras?.estimatedChargingTimeToFullMinutes)
 
         var warnings: [String] = []
-        if response.errors?.isEmpty == false { warnings.append(L10n.text("Some API fields were unavailable")) }
+        if response?.errors?.isEmpty == false { warnings.append(L10n.text("Some API fields were unavailable")) }
         if battery == nil && extras == nil { warnings.append(L10n.text("Battery data was unavailable")) }
 
         var optionalResults: [(AppFeature, Bool)] = [
@@ -348,7 +416,7 @@ actor PolestarAPI {
         if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
         if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
 
-        return VehicleState(
+        var state = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: range,
             chargingState: chargingState,
@@ -397,6 +465,15 @@ actor PolestarAPI {
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
         )
+        state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
+        state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
+        state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil
+        state.externalColour = features.contains(.vehicleIdentity) ? exteriorColorName : nil
+        state.upholstery = features.contains(.vehicleIdentity) ? upholsteryName : nil
+        state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
+        state.packages = features.contains(.vehicleIdentity) ? packageNames : []
+        state.accountMarket = market
+        return state
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
@@ -415,17 +492,13 @@ actor PolestarAPI {
             throw RemoteCommandError.unsupported
         }
         let adaptedCommand = command.adapted(to: profile)
-
-
-#if HISINGEN_EXPERIMENTAL_REMOTE
-        let result = try await grpc.executeRemoteCommand(adaptedCommand, vin: vin, accessToken: token)
+        let result = try await grpc.executeRemoteCommand(
+            adaptedCommand, vin: vin, accessToken: token,
+            commandToken: await validCommandToken()
+        )
         if case .setChargeTarget = adaptedCommand { targetCache[vin] = nil }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
-#else
-        _ = (token, adaptedCommand)
-        throw RemoteCommandError.unsupported
-#endif
     }
 
     static func telematicsQuery(features: FeatureSelection) -> String {
@@ -503,7 +576,9 @@ actor PolestarAPI {
         revocationEndpoint = discovery.revocationEndpoint.flatMap(Self.validPolestarURL)
     }
 
-    private func obtainAuthorizationCode(email: String, password: String) async throws
+    private func obtainAuthorizationCode(email: String, password: String,
+                                         clientID: String? = nil, redirectURI: URL? = nil,
+                                         scope: String? = nil) async throws
         -> (code: String, verifier: String) {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
@@ -511,9 +586,9 @@ actor PolestarAPI {
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
         let queryItems = Self.authorizationQueryItems(
-            clientID: oidcClientID,
-            redirectURI: oidcRedirectURL.absoluteString,
-            scope: oidcScope,
+            clientID: clientID ?? oidcClientID,
+            redirectURI: (redirectURI ?? oidcRedirectURL).absoluteString,
+            scope: scope ?? oidcScope,
             state: state,
             challenge: Self.codeChallenge(for: verifier)
         )
@@ -530,7 +605,8 @@ actor PolestarAPI {
         logger.info("Authorization page returned status \(response.statusCode, privacy: .public)")
 
         let authorizationCallback = redirectDelegate.takeCallback() ?? response.url
-        if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state) {
+        if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state,
+                                              callbackURL: redirectURI ?? oidcRedirectURL) {
             return (code, verifier)
         }
         let html = String(decoding: data, as: UTF8.self)
@@ -542,14 +618,16 @@ actor PolestarAPI {
             queryItems: queryItems,
             email: email,
             password: password,
-            expectedState: state
+            expectedState: state,
+            callbackURL: redirectURI ?? oidcRedirectURL
         )
         return (code, verifier)
     }
 
     private func performLogin(resumePath: String, queryItems: [URLQueryItem],
                               email: String, password: String,
-                              expectedState: String) async throws -> String {
+                              expectedState: String,
+                              callbackURL: URL? = nil) async throws -> String {
         guard resumePath.hasPrefix("/"),
               var components = URLComponents(url: oidcProviderURL.appendingPathComponent(resumePath),
                                              resolvingAgainstBaseURL: false) else {
@@ -566,7 +644,8 @@ actor PolestarAPI {
         )
         logger.info("Polestar sign-in returned status \(response.statusCode, privacy: .public)")
         let loginCallback = redirectDelegate.takeCallback() ?? response.url
-        if let code = try extractValidatedCode(from: loginCallback, expectedState: expectedState) { return code }
+        if let code = try extractValidatedCode(from: loginCallback, expectedState: expectedState,
+                                              callbackURL: callbackURL) { return code }
 
         if let uid = Self.queryValue("uid", from: response.url) {
             let (_, confirmation) = try await postForm(
@@ -574,7 +653,8 @@ actor PolestarAPI {
                 fields: ["pf.submit": "true", "subject": uid]
             )
             let confirmationCallback = redirectDelegate.takeCallback() ?? confirmation.url
-            if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState) {
+            if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState,
+                                                  callbackURL: callbackURL) {
                 return code
             }
         }
@@ -586,15 +666,36 @@ actor PolestarAPI {
         throw PolestarError.authenticationRequired(.callbackRejected)
     }
 
-    private func extractValidatedCode(from url: URL?, expectedState: String) throws -> String? {
+    private func extractValidatedCode(from url: URL?, expectedState: String,
+                                      callbackURL: URL? = nil) throws -> String? {
         guard let url else { return nil }
-        guard url.scheme == oidcRedirectURL.scheme,
-              url.host == oidcRedirectURL.host,
-              url.path == oidcRedirectURL.path else { return nil }
+        let expected = callbackURL ?? oidcRedirectURL
+        guard url.scheme == expected.scheme,
+              url.host == expected.host,
+              Self.normalizedPath(url) == Self.normalizedPath(expected) else { return nil }
         guard Self.queryValue("state", from: url) == expectedState else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         return Self.queryValue("code", from: url)
+    }
+
+    private func exchangeCode(_ code: String, verifier: String,
+                              clientID: String, redirectURI: URL) async throws -> TokenResponseDTO {
+        guard let tokenEndpoint else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        var request = URLRequest(url: tokenEndpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Self.formBody([
+            "grant_type": "authorization_code",
+            "client_id": clientID,
+            "code": code,
+            "redirect_uri": redirectURI.absoluteString,
+            "code_verifier": verifier
+        ])
+        return try await Self.requestToken(request: request, session: session,
+                                           invalidReason: .callbackRejected)
     }
 
     private func exchangeCodeForToken(_ code: String, verifier: String) async throws {
@@ -719,6 +820,10 @@ actor PolestarAPI {
                     bearerToken = newToken
                     continue
                 }
+                logger.error("""
+                    Polestar \(operation, privacy: .public) rejected after token refresh \
+                    (HTTP \(response.statusCode, privacy: .public))
+                    """)
                 if response.statusCode == 401 {
                     throw PolestarError.authenticationRequired(.expiredSession)
                 }
@@ -738,9 +843,17 @@ actor PolestarAPI {
                     bearerToken = newToken
                     continue
                 }
+                logger.error("""
+                    Polestar \(operation, privacy: .public) returned an authentication error after \
+                    token refresh: \(Self.errorSummary(errors), privacy: .public)
+                    """)
                 throw PolestarError.authenticationRequired(.expiredSession)
             }
             if decoded.data == nil, let errors = decoded.errors, !errors.isEmpty {
+                logger.error("""
+                    Polestar \(operation, privacy: .public) failed: \
+                    \(Self.errorSummary(errors), privacy: .public)
+                    """)
                 throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: false)
             }
             return decoded
@@ -775,7 +888,11 @@ actor PolestarAPI {
                         modelYear: vdmsCar.modelYear ?? matching.modelYear,
                         registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
                         pno34: matching.pno34,
-                        structureWeek: matching.structureWeek
+                        structureWeek: matching.structureWeek,
+                        exteriorColorName: vdmsCar.exteriorColorName,
+                        upholsteryName: vdmsCar.upholsteryName,
+                        wheelsName: vdmsCar.wheelsName,
+                        packageNames: vdmsCar.packageNames
                     )
                 }
                 return vdmsCar
@@ -814,7 +931,12 @@ actor PolestarAPI {
           vdms {
             getVehiclesInformation {
               vin internalVehicleIdentifier registrationNo modelYear
-              content { model { name } }
+              content {
+                model { name }
+                exterior { name }
+                interior { name }
+                wheels { name }
+              }
             }
           }
         }
@@ -828,12 +950,14 @@ actor PolestarAPI {
         var request = URLRequest(url: appBackendURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/graphql-response+json, application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/mixed;deferSpec=20220824, application/graphql-response+json, application/json",
+                         forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "X-PolestarId-Authorization")
         request.setValue("GetVDMSCars", forHTTPHeaderField: "X-APOLLO-OPERATION-NAME")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-APOLLO-REQUEST-UUID")
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
-        request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("5.5.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        request.setValue("PolestarApp/5.5.0b1102 Android/14", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
         try validateHTTP(response, operation: "VDMS vehicle discovery")
@@ -863,11 +987,16 @@ actor PolestarAPI {
         }
         if selectedVIN != vin { carImageData = nil }
         selectedVIN = vin
+        internalVehicleIdentifier = car.internalVehicleIdentifier
         modelName = car.modelName
         modelYear = car.modelYear?.value
         registrationNo = car.registrationNo
         pno34 = car.pno34
         structureWeek = car.structureWeek?.value
+        exteriorColorName = car.exteriorColorName
+        upholsteryName = car.upholsteryName
+        wheelsName = car.wheelsName
+        packageNames = car.packageNames
     }
 
     private func fetchOwnerInfo() async {
@@ -883,11 +1012,18 @@ actor PolestarAPI {
     }
 
     private func fetchCarImage() async {
-        guard carImageData == nil, let pno34, let structureWeek, let modelYear else { return }
+        let requestedAngle = await MainActor.run { Preferences.carRenderAngle.rawValue }
+        if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin, angle: requestedAngle) {
+            carImageData = cached
+            return
+        }
+        guard let pno34, let structureWeek, let modelYear else { return }
         let query = """
-        query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String!) {
+        query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String) {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
-            transparent { url angle } opaque { url angle }
+            transparent { url angle }
+            opaque { url angle }
+            interior { url angle }
           }
         }
         """
@@ -909,7 +1045,8 @@ actor PolestarAPI {
         let transparent = images["transparent"] as? [[String: Any]] ?? []
         let opaque = images["opaque"] as? [[String: Any]] ?? []
         let pool = transparent.isEmpty ? opaque : transparent
-        let pick = pool.first(where: { ($0["angle"] as? Int) == 0 })
+        let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
+            ?? pool.first(where: { ($0["angle"] as? Int) == 0 })
             ?? pool.first(where: { ($0["angle"] as? Int) == 1 }) ?? pool.first
         guard let string = pick?["url"] as? String, let url = URL(string: string),
               url.scheme == "https" else { return }
@@ -920,6 +1057,40 @@ actor PolestarAPI {
               http.mimeType?.hasPrefix("image/") == true,
               bytes.count <= 5_000_000 else { return }
         carImageData = bytes
+        if let vin = selectedVIN {
+            let angle = (pick?["angle"] as? Int) ?? requestedAngle
+            CarImageCache.shared.save(bytes, for: vin, angle: angle)
+
+            for other in pool {
+                guard let otherAngle = other["angle"] as? Int, otherAngle != angle,
+                      let otherUrlStr = other["url"] as? String,
+                      let otherUrl = URL(string: otherUrlStr),
+                      otherUrl.scheme == "https",
+                      CarImageCache.shared.image(for: vin, angle: otherAngle) == nil else { continue }
+                Task.detached { [session] in
+                    guard let (otherBytes, otherResp) = try? await HTTPBodyReader.data(
+                        for: URLRequest(url: otherUrl), using: session, limit: 5_000_000, operation: "vehicle angle image"),
+                        (otherResp as? HTTPURLResponse)?.statusCode == 200,
+                        otherBytes.count <= 5_000_000 else { return }
+                    CarImageCache.shared.save(otherBytes, for: vin, angle: otherAngle)
+                }
+            }
+
+            if let interiorPool = images["interior"] as? [[String: Any]],
+               let interiorPick = interiorPool.first,
+               let interiorUrlStr = interiorPick["url"] as? String,
+               let interiorUrl = URL(string: interiorUrlStr),
+               interiorUrl.scheme == "https",
+               CarImageCache.shared.interiorImage(for: vin) == nil {
+                Task.detached { [session] in
+                    guard let (intBytes, intResp) = try? await HTTPBodyReader.data(
+                        for: URLRequest(url: interiorUrl), using: session, limit: 5_000_000, operation: "vehicle interior image"),
+                        (intResp as? HTTPURLResponse)?.statusCode == 200,
+                        intBytes.count <= 5_000_000 else { return }
+                    CarImageCache.shared.saveInterior(intBytes, for: vin)
+                }
+            }
+        }
     }
 
 
@@ -1035,11 +1206,16 @@ actor PolestarAPI {
         if !keepRefreshToken { refreshToken = nil }
         cars = []
         selectedVIN = nil
+        internalVehicleIdentifier = nil
         modelName = nil
         modelYear = nil
         registrationNo = nil
         pno34 = nil
         structureWeek = nil
+        exteriorColorName = nil
+        upholsteryName = nil
+        wheelsName = nil
+        packageNames = []
         ownerFirstName = nil
         market = nil
         carImageData = nil
@@ -1097,21 +1273,26 @@ actor PolestarAPI {
         ]
     }
 
+    /// The app-scheme callback (`polestar-explore://explore.polestar.com`) carries no path,
+    /// which URL reports as "" here and "/" in some redirect forms — treat those as equal.
+    fileprivate static func normalizedPath(_ url: URL) -> String {
+        url.path == "/" ? "" : url.path
+    }
+
     private static func queryValue(_ name: String, from url: URL?) -> String? {
         guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
+    /// Wraps `PKCE.randomURLSafeString()` only to translate its `URLError` into the
+    /// Polestar error domain the rest of this actor throws.
     private static func randomURLSafeString() throws -> String {
-        var buffer = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, buffer.count, &buffer) == errSecSuccess else {
-            throw PolestarError.invalidResponse(operation: "secure random generator")
-        }
-        return Data(buffer).base64URLEncoded()
+        do { return try PKCE.randomURLSafeString() }
+        catch { throw PolestarError.invalidResponse(operation: "secure random generator") }
     }
 
     private static func codeChallenge(for verifier: String) -> String {
-        Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
+        PKCE.codeChallenge(for: verifier)
     }
 
     static func extractResumePath(from html: String) -> String? {
@@ -1151,8 +1332,23 @@ actor PolestarAPI {
         errors.map { GraphQLServiceError(message: $0.message, path: $0.path, code: $0.code) }
     }
 
+    /// Compact `code: message @ path` rendering used for diagnostics. GraphQL errors carry no
+    /// credentials, only the field that was rejected and why.
+    private static func errorSummary(_ errors: [GraphQLErrorDTO]) -> String {
+        errors.prefix(5).map { error in
+            let code = error.code.map { "\($0): " } ?? ""
+            let path = !error.path.isEmpty ? " @ \(error.path.joined(separator: "."))" : ""
+            return "\(code)\(error.message)\(path)"
+        }.joined(separator: " | ")
+    }
+
     static func containsAuthenticationError(_ errors: [GraphQLErrorDTO]) -> Bool {
         errors.contains { error in
+            // A field-scoped error rejects one field, not the session — GraphQL reuses the same
+            // "not authorized" wording for both. Treating a newly restricted field as a dead
+            // session tears down a working login and, with the refresh loop backing off on
+            // authentication failures, hides every other card behind a stale cache.
+            guard error.path.isEmpty else { return false }
             let code = error.code?.uppercased()
             if code == "UNAUTHENTICATED" || code == "UNAUTHORIZED"
                 || code == "UNAUTHORIZED_EXCEPTION" || code == "401" { return true }
@@ -1205,22 +1401,26 @@ actor PolestarAPI {
 }
 
 private final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    private let callbackURL: URL
+    /// Both OAuth clients redirect through this one session, and the command client's callback
+    /// is a custom scheme `URLSession` cannot load — so every callback the app might see has to
+    /// be recognised here, or the redirect is followed into a failure and the code is lost.
+    private let callbackURLs: [URL]
     private let lock = NSLock()
     private var callback: URL?
 
-    init(callbackURL: URL) {
-        self.callbackURL = callbackURL
+    init(callbackURLs: [URL]) {
+        self.callbackURLs = callbackURLs
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,
                     completionHandler: @escaping (URLRequest?) -> Void) {
-        if request.url?.scheme == callbackURL.scheme,
-           request.url?.host == callbackURL.host,
-           request.url?.path == callbackURL.path {
-            lock.withLock { callback = request.url }
+        if let target = request.url, callbackURLs.contains(where: { candidate in
+            target.scheme == candidate.scheme && target.host == candidate.host
+                && PolestarAPI.normalizedPath(target) == PolestarAPI.normalizedPath(candidate)
+        }) {
+            lock.withLock { callback = target }
             completionHandler(nil)
         } else {
             completionHandler(request)
@@ -1235,13 +1435,5 @@ private final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @un
     }
 }
 
-private extension Data {
-    func base64URLEncoded() -> String {
-        base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-}
 
 

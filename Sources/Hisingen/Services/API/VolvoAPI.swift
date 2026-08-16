@@ -53,6 +53,7 @@ actor VolvoAPI {
     private var endpointBackoff: [String: Date] = [:]
     private var remoteCommandsInFlight: Set<String> = []
     private var carImageData: [String: Data] = [:]
+    private var interiorImageData: [String: Data] = [:]
 
     init(keychain: KeychainStore = .app) {
         self.keychain = keychain
@@ -194,6 +195,11 @@ actor VolvoAPI {
         let needsStatistics = features.contains(.tripMeters)
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
+        let needsFuel = powertrain.hasFuelRange || (details.fuelType != nil && details.fuelType != "ELECTRIC")
+        async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
+            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel")
+        }
+
         async let energyTask: VolvoEnergyStateDTO? = optional(enabled: needsEnergy, key: "energy-state", vin: vin) {
             try await self.get("/energy/v2/vehicles/\(vin)/state")
         }
@@ -230,7 +236,11 @@ actor VolvoAPI {
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: true, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
+        async let climatizationStatusTask: VolvoClimatizationDTO? = optional(
+            enabled: features.contains(.climateStatus) || features.contains(.remoteClimate), key: "climatization-status", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/climatization-status") }
 
+        let fuel = try await fuelTask
         let energy = try await energyTask
         let doors = try await doorsTask
         let windows = try await windowsTask
@@ -243,9 +253,11 @@ actor VolvoAPI {
         let warnings = try await warningsTask
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
+        let climatization = try await climatizationStatusTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
+            await fetchInteriorImage(vin: vin, imageUrlString: details.images?.interiorImageUrl)
         }
 
         let vehicleLocation: VehicleLocation? = location.flatMap { (loc: VolvoLocationDTO) -> VehicleLocation? in
@@ -262,28 +274,53 @@ actor VolvoAPI {
         let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
             .compactMap { $0 }.max()
 
-        let climate: VehicleClimateStatus? = features.contains(.climateStatus)
-            ? VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
-                timerTriggered: false,
-                interiorTemperatureCelsius: nil,
-                requestedTemperatureCelsius: 22.0
-            )
-            : nil
+        let climate: VehicleClimateStatus? = {
+            guard features.contains(.climateStatus) else { return nil }
+            if let climatization {
+                let rawStatus = climatization.status?.value ?? climatization.preconditioning?.value
+                let raw = rawStatus?.uppercased().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let activity: ClimateActivity
+                if raw.contains("HEAT") || raw.contains("WARM") {
+                    activity = .heating
+                } else if raw.contains("COOL") {
+                    activity = .cooling
+                } else if raw.contains("VENT") {
+                    activity = .ventilating
+                } else if raw.contains("ON") || raw.contains("RUNNING") || raw.contains("ACTIVE") {
+                    activity = .active
+                } else {
+                    activity = .idle
+                }
+                return VehicleClimateStatus(
+                    activity: activity,
+                    timeRemainingMinutes: climatization.timeRemainingMinutes?.value,
+                    timerTriggered: false,
+                    interiorTemperatureCelsius: climatization.interiorTemperatureCelsius?.value,
+                    requestedTemperatureCelsius: climatization.targetTemperatureCelsius?.value ?? 22.0
+                )
+            } else if features.contains(.remoteClimate) {
+                // If telemetry endpoint is 404/not supported on this model, but remote climate commands work,
+                // present a clean Idle/Standby state rather than a broken unavailable badge
+                return VehicleClimateStatus(
+                    activity: .idle,
+                    timeRemainingMinutes: nil,
+                    timerTriggered: false,
+                    interiorTemperatureCelsius: nil,
+                    requestedTemperatureCelsius: 22.0
+                )
+            }
+            return nil
+        }()
 
-        let modelTitle = details.descriptions?.model ?? "Volvo"
-        let software: VehicleSoftwareInfo? = features.contains(.softwareUpdates)
-            ? VehicleSoftwareInfo(
-                version: "Google built-in (AAOS)",
-                title: "\(modelTitle) \(details.modelYear.map { "\($0)" } ?? "") Infotainment",
-                state: .completed,
-                scheduledAt: nil,
-                updatedAt: reportedAt
-            )
-            : nil
+        // Volvo publishes no software/OTA resource. The Connected Vehicle API v2 surface is
+        // details, doors, windows, tyres, warnings, diagnostics, engine, engine-status, brakes,
+        // fuel, odometer, statistics, commands, command-accessibility — and the Energy and
+        // Location APIs alongside it. None of them reports a firmware level or update state,
+        // so there is nothing to show and nothing to invent.
+        let software: VehicleSoftwareInfo? = nil
 
         var unavailable: [AppFeature] = []
+        if features.contains(.softwareUpdates) { unavailable.append(.softwareUpdates) }
         if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
         if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
         if features.contains(.vehicleHealth), diagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
@@ -313,7 +350,14 @@ actor VolvoAPI {
         var probes = VehicleProbedCapabilities()
         if doors != nil || windows != nil { probes.record(.exteriorStatus, as: .supported) }
         if diagnostics != nil { probes.record(.serviceWarnings, as: .supported) }
-        if engineStatus != nil { _ = engineStatus?.isRunning }
+        if tyres?.readings.contains(where: { $0.kilopascals != nil }) == true {
+            probes.record(.tyrePressureValues, as: .supported)
+        }
+        if commandAccessibility?.isAvailable == true {
+            probes.record(.climateStartStop, as: .supported)
+            probes.record(.locks, as: .supported)
+            probes.record(.honkAndFlash, as: .supported)
+        }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
         }
@@ -330,8 +374,9 @@ actor VolvoAPI {
         let estMinutes: Int? = energy?.estTimeToTargetMinutes
         let targetPct: Int? = energy?.targetPercent
         let chargingWatts: Int? = energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) }
-        let rawAmps = energy?.chargingCurrent?.value ?? energy?.chargingCurrentLimit?.value
-        let chargingAmps: Int? = rawAmps.map { Int($0.rounded()) }
+        let currentDrawAmps: Int? = energy?.chargingCurrent?.value.map { Int($0.rounded()) }
+        let currentLimitAmps: Int? = energy?.chargingCurrentLimit?.value.map { Int($0.rounded()) }
+        let chargingAmps: Int? = currentDrawAmps ?? currentLimitAmps
         let chargingVolts: Int? = energy?.chargingVoltage?.value.map { Int($0.rounded()) }
         let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStatus?.value)
         let chargerConn: ChargerConnection = ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value)
@@ -370,9 +415,15 @@ actor VolvoAPI {
         let tripManual: Double? = statistics?.tripMeterManual?.value
         let tripAuto: Double? = statistics?.tripMeterAutomatic?.value
         let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
-        let fuelRange: Int? = statistics?.distanceToEmptyTank?.value
+        let fuelPct: Double? = fuel?.percentage ?? (fuel?.liters.map { min(100.0, max(0.0, ($0 / 60.0) * 100.0)) })
+        let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTank?.value
+        let fuelLiters: Double? = fuel?.liters
+        let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value
+        let isEngineRunning: Bool? = engineStatus?.isRunning
         let batteryCap: Double? = details.batteryCapacityKWH
-        let carImg: Data? = features.contains(.vehicleImage) ? carImageData[vin] : nil
+        let carImg: Data? = features.contains(.vehicleImage) ? (carImageData[vin] ?? CarImageCache.shared.image(for: vin)) : nil
+        let interiorImg: Data? = features.contains(.vehicleImage)
+            ? (interiorImageData[vin] ?? CarImageCache.shared.interiorImage(for: vin)) : nil
         let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
 
         var state = VehicleState(
@@ -382,7 +433,7 @@ actor VolvoAPI {
             estimatedChargingTimeToFullMinutes: estMinutes,
             chargeTargetPercentage: targetPct,
             chargingPowerWatts: chargingWatts,
-            chargingCurrentAmps: chargingAmps,
+            chargingCurrentAmps: currentDrawAmps ?? chargingAmps,
             chargingVoltageVolts: chargingVolts,
             chargingType: .unknown,
             chargerConnection: chargerConn,
@@ -408,7 +459,7 @@ actor VolvoAPI {
             unavailableFeatures: unavailable,
             probedCapabilities: probesResult,
             powertrain: powertrain,
-            fuelLevelPercent: nil,
+            fuelLevelPercent: fuelPct,
             fuelRangeKm: fuelRange,
             reportedBatteryCapacityKwh: batteryCap,
             imageData: carImg,
@@ -420,15 +471,37 @@ actor VolvoAPI {
         state.gearbox = details.gearbox
         state.engineHoursToService = diagnostics?.engineHoursToService?.value
         state.averageSpeedKmH = statistics?.averageSpeed?.value
+        state.fuelAmountLiters = fuelLiters
+        state.averageFuelConsumptionLPer100Km = avgFuelConsumption
+        state.isEngineRunning = isEngineRunning
+        state.fuelType = details.fuelType
+        state.upholstery = details.descriptions?.upholstery
+        state.steeringOrientation = details.descriptions?.steering
+        state.serviceTrigger = diagnostics?.serviceTrigger?.value
+        state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBattery?.value
+        state.chargingCurrentLimitAmps = currentLimitAmps
+        state.interiorImageData = interiorImg
         return state
     }
 
     private func fetchCarImage(vin: String, imageUrlString: String?) async {
-        guard carImageData[vin] == nil, let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
+        if carImageData[vin] != nil || CarImageCache.shared.image(for: vin) != nil { return }
+        guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
         guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle image"),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         carImageData[vin] = bytes
+        CarImageCache.shared.save(bytes, for: vin)
+    }
+
+    private func fetchInteriorImage(vin: String, imageUrlString: String?) async {
+        if interiorImageData[vin] != nil || CarImageCache.shared.interiorImage(for: vin) != nil { return }
+        guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle interior image"),
+              response.statusCode == 200,
+              bytes.count <= 5_000_000 else { return }
+        interiorImageData[vin] = bytes
+        CarImageCache.shared.saveInterior(bytes, for: vin)
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
@@ -445,13 +518,20 @@ actor VolvoAPI {
 
     private func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
         let commandName: String
+        var bodyData = "{}".data(using: .utf8)
         switch command {
         case .lock: commandName = "lock"
         case .unlock: commandName = "unlock"
         case .startClimate: commandName = "climatization-start"
         case .stopClimate: commandName = "climatization-stop"
+        case .startEngine(let runtimeMinutes):
+            commandName = "engine-start"
+            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
+        case .stopEngine:
+            commandName = "engine-stop"
         case .honkAndFlash: commandName = "honk-flash"
         case .flashLights: commandName = "flash"
+        case .honkHorn: commandName = "honk"
         default:
             throw RemoteCommandError.unsupported
         }
@@ -463,23 +543,74 @@ actor VolvoAPI {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = "{}".data(using: .utf8)
+        request.httpBody = bodyData
         let (data, response) = try await perform(request, operation: "command: \(commandName)")
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: commandName) {
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errObj = json["error"] as? [String: Any],
-               let desc = errObj["description"] as? String, !desc.isEmpty {
-                throw VolvoError.permissionDenied(operation: "\(commandName) (\(desc))")
+            if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
+               let text = detail.text {
+                throw VolvoError.permissionDenied(operation: "\(commandName) (\(text))")
             }
             throw failure
         }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataObj = json["data"] as? [String: Any] {
-            let status = dataObj["invokeStatus"] as? String
-            let msg = dataObj["message"] as? String
-            let outcome: RemoteCommandOutcome = (status == "COMPLETED" || status == "DELIVERED") ? .completed : .accepted
-            return RemoteCommandResult(outcome: outcome, message: msg?.isEmpty == false ? msg : nil)
+        guard let envelope = try? JSONDecoder.volvo.decode(
+            VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
+        ), let payload = envelope.data else {
+            throw VolvoError.decoding(operation: "command: \(commandName)")
         }
+        if payload.isFailure {
+            throw RemoteCommandError.rejected(payload.text
+                ?? L10n.text("Vehicle reported command failed"))
+        }
+        if let outcome = payload.outcome, outcome != .accepted {
+            return RemoteCommandResult(outcome: outcome, message: payload.text)
+        }
+        // Volvo answers asynchronously for slower commands: the POST returns a commandId and
+        // the real result only shows up on the status endpoint.
+        if let commandId = payload.pendingCommandId {
+            return try await pollCommandStatus(vin: vin, commandId: commandId,
+                                               commandName: commandName, accessToken: accessToken)
+        }
+        return RemoteCommandResult(outcome: .accepted, message: payload.text)
+    }
+
+    private func pollCommandStatus(
+        vin: String,
+        commandId: String,
+        commandName: String,
+        accessToken: String,
+        maxAttempts: Int = 6,
+        intervalSeconds: UInt64 = 2
+    ) async throws -> RemoteCommandResult {
+        guard let vccApiKey else { return RemoteCommandResult(outcome: .accepted, message: nil) }
+        var request = URLRequest(url: apiURL(
+            path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandId)"
+        ))
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
+
+        for _ in 0..<maxAttempts {
+            try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
+            guard let (data, response) = try? await perform(request, operation: "poll command: \(commandName)"),
+                  response.statusCode == 200,
+                  let envelope = try? JSONDecoder.volvo.decode(
+                      VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
+                  ),
+                  let payload = envelope.data else {
+                continue
+            }
+            // A vehicle that refuses the command is a failure, not a success with a sad
+            // message attached — reporting `.accepted` here previously showed "Command sent"
+            // over text saying the command had failed.
+            if payload.isFailure {
+                throw RemoteCommandError.rejected(payload.text
+                    ?? L10n.text("Vehicle reported command failed"))
+            }
+            if let outcome = payload.outcome, outcome != .accepted {
+                return RemoteCommandResult(outcome: outcome, message: payload.text)
+            }
+        }
+        // Still pending after the polling window: delivered, outcome genuinely unknown.
         return RemoteCommandResult(outcome: .accepted, message: nil)
     }
 
@@ -634,11 +765,14 @@ actor VolvoAPI {
         throw VolvoError.authenticationRequired(.expiredSession)
     }
 
-    private func get<T: Decodable>(_ path: String) async throws -> T {
+    private func get<T: Decodable & Sendable>(_ path: String) async throws -> T {
         let (data, response) = try await authenticatedGET(path)
         if response.statusCode == 403 {
-
-
+            // Only per-vehicle telemetry GETs route through this helper, and for those a 403
+            // is empirically a market/model gate rather than a token problem: the same token
+            // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
+            // not use this path, so their 403s stay `.permissionDenied` — the asymmetry is
+            // deliberate. This is tuned from observed behaviour, not Volvo documentation.
             throw VolvoError.regionRestricted(service: path)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
@@ -650,7 +784,7 @@ actor VolvoAPI {
         return direct
     }
 
-    private func getList<T: Decodable>(_ path: String) async throws -> [T] {
+    private func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
         let (data, response) = try await authenticatedGET(path)
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {
@@ -676,7 +810,10 @@ actor VolvoAPI {
         } catch {
             if Self.isGlobalFailure(error) { throw error }
             endpointBackoff[backoffKey] = Date().addingTimeInterval(5 * 60)
-            logger.debug("Optional Volvo endpoint unavailable: \(key, privacy: .public)")
+            logger.error("""
+                Optional Volvo endpoint unavailable: \(key, privacy: .public) — \
+                \(String(describing: error), privacy: .public)
+                """)
             return nil
         }
     }

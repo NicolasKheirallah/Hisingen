@@ -19,9 +19,12 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     permissions:
       contents: write
+      attestations: write
+      id-token: write
+    environment: production-release
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -53,8 +56,12 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Test
-        run: swift test --disable-xctest --enable-swift-testing -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+      - name: Test (deterministic suite only — live/remote-command tests excluded)
+        run: >-
+          swift test --disable-xctest --enable-swift-testing
+          --skip Live
+          -Xswiftc -strict-concurrency=complete
+          -Xswiftc -warn-concurrency
 
       - name: Import Developer ID certificate
         env:
@@ -79,6 +86,10 @@ jobs:
           rm -f "$CERTIFICATE_PATH"
 
       - name: Build signed universal app
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
         run: >-
           make app-universal IDENTITY="$IDENTITY"
           SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
@@ -141,14 +152,40 @@ jobs:
           trap - EXIT
           shasum -a 256 Hisingen.dmg Hisingen.zip > SHA256SUMS
 
+      - name: Verify release artifacts exist before publishing
+        run: |
+          set -euo pipefail
+          for artifact in Hisingen.dmg Hisingen.zip SHA256SUMS; do
+            test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
+          done
+          grep -q "Hisingen.dmg" SHA256SUMS
+          grep -q "Hisingen.zip" SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        with:
+          subject-path: |
+            Hisingen.dmg
+            Hisingen.zip
+
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           files: |
             Hisingen.dmg
             Hisingen.zip
             SHA256SUMS
           generate_release_notes: true
+
+      - name: Verify assets were actually attached to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSET_NAMES=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          for artifact in Hisingen.dmg Hisingen.zip SHA256SUMS; do
+            echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $GITHUB_REF_NAME is missing uploaded asset: $artifact"; exit 1; }
+          done
 
       - name: Clean temporary signing material
         if: always()

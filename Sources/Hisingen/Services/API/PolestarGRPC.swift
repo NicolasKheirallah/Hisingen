@@ -22,8 +22,8 @@ actor PolestarGRPC {
     private let discoveryURL = URL(string: "https://cnepmob.volvocars.com")!
     private let batteryPath = "/services.vehiclestates.battery.BatteryService/GetLatestBattery"
     private let availabilityPath = "/services.vehiclestates.availability.AvailabilityService/GetLatestAvailability"
-    private let targetSocPath = "/chronos.services.v1.TargetSocService/GetTargetSoc"
-    private let ampLimitReadPath = "/chronos.services.v1.AmpLimitService/GetAmpLimit"
+    private let targetSocPath = "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc"
+    private let ampLimitReadPath = "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit"
 
 
     private let pccsURL = URL(string: "https://api.pccs-prod.plstr.io:443")!
@@ -32,6 +32,12 @@ actor PolestarGRPC {
     private var c3DiscoveryTask: Task<URL, Error>?
     var exteriorCache: [String: ExteriorSnapshot] = [:]
     var otaSoftwareIDs: [String: String] = [:]
+    /// Last observed OTA state per VIN. `InstallNow` is only meaningful for some of these, and
+    /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
+    /// checked here instead of being discovered as an unexplained refusal.
+    var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
+    /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
+    var activeCommandToken: String?
     let session: URLSession
 
     init() {
@@ -296,6 +302,36 @@ actor PolestarGRPC {
     }
 
 
+    /// Turns a non-zero gRPC status on a write RPC into something the user can act on.
+    /// Previously every status except 12 and 16 collapsed into "returned an unexpected
+    /// response", which hid the one piece of information that explains the failure.
+    /// `grpc-message` is percent-encoded per the gRPC HTTP/2 spec.
+    static func commandError(status: String, message: String?, path: String) -> Error {
+        let detail = message?.removingPercentEncoding?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmptyValue
+        let service = path.split(separator: "/").first.map(String.init) ?? path
+        switch status {
+        case "3":  // INVALID_ARGUMENT
+            return RemoteCommandError.rejected(detail ?? L10n.text("The vehicle service rejected the request as invalid."))
+        case "5":  // NOT_FOUND
+            return RemoteCommandError.rejected(detail ?? L10n.text("The vehicle service has no such update to act on."))
+        case "7":  // PERMISSION_DENIED
+            return RemoteCommandError.rejected(detail ?? L10n.text("Your Polestar account is not permitted to run this command."))
+        case "9":  // FAILED_PRECONDITION
+            return RemoteCommandError.rejected(detail ?? L10n.text("The vehicle is not in a state where this command can run right now."))
+        case "12": // UNIMPLEMENTED
+            return PolestarError.grpcUnimplemented(service: service)
+        case "14": // UNAVAILABLE
+            return PolestarError.grpcUnavailable(service: service)
+        case "16": // UNAUTHENTICATED
+            return RemoteCommandError.rejected(detail ?? L10n.text("Polestar cloud backend requires official mobile app pairing for remote commands."))
+        default:
+            let base = L10n.format("The vehicle service refused the command (gRPC status %@).", status)
+            return RemoteCommandError.rejected(detail.map { "\(base) \($0)" } ?? base)
+        }
+    }
+
     func lastMessage(path: String, message: Data, vin: String,
                      accessToken: String, host: GRPCHost = .c3) async throws -> Data {
         let base = try await resolvedHost(host, accessToken: accessToken)
@@ -316,11 +352,9 @@ actor PolestarGRPC {
         }
         guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
         if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            if status == "12" { throw RemoteCommandError.unsupported }
-            if status == "16" {
-                throw RemoteCommandError.rejected(L10n.text("Polestar cloud backend requires official mobile app pairing for remote commands."))
-            }
-            throw PolestarError.invalidResponse(operation: "gRPC command status \(status)")
+            throw Self.commandError(status: status,
+                                    message: http.value(forHTTPHeaderField: "grpc-message"),
+                                    path: path)
         }
 
         var header = [UInt8]()
@@ -367,7 +401,15 @@ actor PolestarGRPC {
             endedByTimeout = true
         }
         guard let latest, expected == nil || endedByTimeout else {
-            throw PolestarError.invalidResponse(operation: "missing gRPC command response")
+            // 200 OK with no message frame is how a *late* gRPC rejection reaches us: the
+            // server opened the response, then put its real status in HTTP/2 trailers, which
+            // URLSession does not expose. An immediate rejection arrives as Trailers-Only and
+            // is caught above by the `grpc-status` header, so reaching here means the command
+            // was refused for a reason the transport is hiding. Say that, rather than
+            // reporting a generic malformed-response error.
+            throw RemoteCommandError.rejected(
+                L10n.text("The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.")
+            )
         }
         return latest
     }
@@ -612,3 +654,9 @@ enum Protobuf {
 }
 
 
+
+extension String {
+    /// Local spelling of the common `nilIfEmpty` helper — the file-private ones in the
+    /// sibling gRPC files are not visible here.
+    var nilIfEmptyValue: String? { isEmpty ? nil : self }
+}

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum SettingsChange {
@@ -14,12 +15,20 @@ enum SettingsChange {
 @MainActor
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
+    var state: VehicleState? = nil
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
 
-    @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
+    @State private var appTheme: AppTheme = Preferences.appTheme
+    @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
+    @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
+    @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
+    @State private var registrationBadgePosition: RegistrationNumberBadgePosition = Preferences.registrationBadgePosition
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
+    @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
+    @State private var fuelEconomyUnit = Preferences.fuelEconomyUnit
+    @State private var selectedThemeCategory: ThemeCategory = .all
     @State private var interfaceLanguage = Preferences.interfaceLanguage
     @State private var tintMenuBarIcon = Preferences.tintMenuBarIcon
     @State private var launchAtLogin = Preferences.launchAtLogin
@@ -37,6 +46,7 @@ struct SettingsView: View {
     @State private var electricityPrice = String(format: "%.2f", Preferences.electricityPricePerKwh)
     @State private var currencySymbol = Preferences.currencySymbol
     @State private var storeChargingHistory = Preferences.storeChargingHistory
+    @State private var requireBiometrics = Preferences.requireBiometricsForRemoteControls
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -49,6 +59,7 @@ struct SettingsView: View {
                 featureQuickActions
                 vehicleDataCard
                 remoteControlsCard
+                capabilitiesCard
                 notificationsCard
                 actionsCard
                 versionFooter
@@ -105,46 +116,254 @@ struct SettingsView: View {
     }
 
 
+    private var filteredThemes: [AppTheme] {
+        if selectedThemeCategory == .all {
+            return AppTheme.allCases
+        }
+        return AppTheme.allCases.filter { $0.category == selectedThemeCategory }
+    }
+
+    private func themeCategoryCount(_ cat: ThemeCategory) -> Int {
+        if cat == .all { return AppTheme.allCases.count }
+        return AppTheme.allCases.filter { $0.category == cat }.count
+    }
+
     private var appearanceCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "paintpalette", title: L10n.text("Appearance"), color: .purple)
-                VStack(spacing: 6) {
-                    ForEach(AppTheme.allCases, id: \.self) { theme in
-                        themeRow(theme)
+        let vehicleLabel = Preferences.lastVehicleLabel(for: Preferences.activeBrand)
+        let supportsMultipleAngles = Preferences.activeBrand == .polestar
+        return Card {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
+                    Spacer()
+                    Text(L10n.format("%d Themes", AppTheme.allCases.count))
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(HisingenTheme.accent)
+                }
+
+                // Appearance Mode Selector (System / Light / Dark)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.text("Mode"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(HisingenTheme.ink)
+
+                    HStack(spacing: 8) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            let isModeSelected = appearanceMode == mode
+                            Button {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                    appearanceMode = mode
+                                    Preferences.appearanceMode = mode
+                                }
+                                onSettingsChanged(.presentation)
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: mode.symbol)
+                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                    Text(mode.title)
+                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                                .background(
+                                    isModeSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                )
+                                .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                            }
+                            .buttonStyle(.plain)
+                            .withoutFocusRing()
+                        }
+                    }
+                }
+
+                // Vehicle Image Perspective & Studio Render Preview
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(L10n.text(supportsMultipleAngles ? "Vehicle Perspective" : "Vehicle Image"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(HisingenTheme.ink)
+                        Spacer()
+                        if supportsMultipleAngles {
+                            Text(carRenderAngle.title)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Live Studio Render Preview
+                    let previewData = supportsMultipleAngles
+                        ? (CarImageCache.shared.image(for: Preferences.vin, angle: carRenderAngle.rawValue) ?? CarImageCache.shared.image(for: Preferences.vin))
+                        : CarImageCache.shared.image(for: Preferences.vin)
+                    if let previewData, let nsImg = NSImage(data: previewData) {
+                        Image(nsImage: nsImg)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: 110)
+                            .padding(6)
+                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                            .transition(.opacity)
+                    }
+
+                    if supportsMultipleAngles {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            ForEach(CarRenderAngle.allCases, id: \.self) { angle in
+                                let isAngleSelected = carRenderAngle == angle
+                                Button {
+                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                        carRenderAngle = angle
+                                        Preferences.carRenderAngle = angle
+                                    }
+                                    onSettingsChanged(.presentation)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: angle.symbol)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                        Text(angle.title)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                            .lineLimit(1)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                    )
+                                    .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                                }
+                                .buttonStyle(.plain)
+                                .withoutFocusRing()
+                            }
+                        }
+                    }
+                }
+
+                Divider().opacity(0.4)
+
+                Text(L10n.format("Active for %@ — each vehicle saves its own theme preference.", vehicleLabel))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+
+                // Category Filter Pills
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(ThemeCategory.allCases, id: \.self) { cat in
+                            categoryFilterButton(cat)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                // 2-Column Responsive Grid of Themes
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    ForEach(filteredThemes, id: \.self) { theme in
+                        themeTile(theme)
                     }
                 }
             }
         }
     }
 
-    private func themeRow(_ theme: AppTheme) -> some View {
+    private func categoryFilterButton(_ cat: ThemeCategory) -> some View {
+        let isSelected = selectedThemeCategory == cat
+        let count = themeCategoryCount(cat)
+        return Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                selectedThemeCategory = cat
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(cat.title)
+                Text("\(count)")
+                    .font(.system(size: 9, weight: .bold))
+                    .opacity(0.85)
+            }
+            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(
+                isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().stroke(isSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+            )
+            .foregroundStyle(isSelected ? HisingenTheme.accent : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func themeTile(_ theme: AppTheme) -> some View {
         let isSelected = appTheme == theme
+        let accentColor = Color(hex: theme.accentColorHex) ?? HisingenTheme.accent
         return Button {
             guard appTheme != theme else { return }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 appTheme = theme
+                Preferences.appTheme = theme
             }
             onSettingsChanged(.presentation)
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? HisingenTheme.accent : Color(.tertiaryLabelColor))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(theme.title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Text(theme.subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    HStack(spacing: 3) {
+                        ForEach(theme.previewHexColors, id: \.self) { hex in
+                            Circle()
+                                .fill(Color(hex: hex) ?? Color.gray)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(accentColor)
+                    } else {
+                        Circle()
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                            .frame(width: 12, height: 12)
+                    }
                 }
-                Spacer()
+
+                Text(theme.title)
+                    .font(.system(size: 11.5, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.85))
+                    .lineLimit(1)
+
+                Text(theme.subtitle)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(8)
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
             .background(
-                isSelected ? HisingenTheme.accent.opacity(0.08) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? accentColor.opacity(0.08) : Color.primary.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        isSelected ? accentColor.opacity(0.6) : Color.primary.opacity(0.08),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
             )
             .contentShape(Rectangle())
         }
@@ -153,7 +372,6 @@ struct SettingsView: View {
         .accessibilityLabel("\(theme.title): \(theme.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
-
 
     private var displayCard: some View {
         Card {
@@ -181,7 +399,57 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $storeChargingHistory) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Model badge position"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Placement of model & year label"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $vehicleModelBadgePosition) {
+                            ForEach(VehicleModelBadgePosition.allCases, id: \.self) { pos in
+                                Text(pos.title).tag(pos)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: vehicleModelBadgePosition) { _ in
+                            Preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("License plate position"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Placement of registration plate"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $registrationBadgePosition) {
+                            ForEach(RegistrationNumberBadgePosition.allCases, id: \.self) { pos in
+                                Text(pos.title).tag(pos)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: registrationBadgePosition) { _ in
+                            Preferences.registrationBadgePosition = registrationBadgePosition
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Session History"))
                                 .font(.system(size: 12, weight: .medium))
@@ -189,12 +457,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: storeChargingHistory) { _ in
-                        Preferences.storeChargingHistory = storeChargingHistory
-                        onSettingsChanged(.presentation)
+                        Spacer()
+                        Toggle("", isOn: $storeChargingHistory)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: storeChargingHistory) { _ in
+                                Preferences.storeChargingHistory = storeChargingHistory
+                                onSettingsChanged(.presentation)
+                            }
                     }
 
                     Divider().opacity(0.4)
@@ -251,7 +522,7 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $tintMenuBarIcon) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Dynamic status bar tinting"))
                                 .font(.system(size: 12, weight: .medium))
@@ -259,12 +530,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: tintMenuBarIcon) { _ in
-                        Preferences.tintMenuBarIcon = tintMenuBarIcon
-                        onSettingsChanged(.presentation)
+                        Spacer()
+                        Toggle("", isOn: $tintMenuBarIcon)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: tintMenuBarIcon) { _ in
+                                Preferences.tintMenuBarIcon = tintMenuBarIcon
+                                onSettingsChanged(.presentation)
+                            }
                     }
 
                     Divider().opacity(0.4)
@@ -289,7 +563,47 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    Toggle(isOn: $launchAtLogin) {
+                    HStack {
+                        Text(L10n.text("Fuel volume unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $fuelVolumeUnit) {
+                            ForEach(FuelVolumeUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: fuelVolumeUnit) { _ in
+                            Preferences.fuelVolumeUnit = fuelVolumeUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text(L10n.text("Fuel economy unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $fuelEconomyUnit) {
+                            ForEach(FuelEconomyUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: fuelEconomyUnit) { _ in
+                            Preferences.fuelEconomyUnit = fuelEconomyUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Launch at login"))
                                 .font(.system(size: 12, weight: .medium))
@@ -297,12 +611,15 @@ struct SettingsView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: launchAtLogin) { _ in
-                        Preferences.launchAtLogin = launchAtLogin
-                        onSettingsChanged(.launchAtLogin)
+                        Spacer()
+                        Toggle("", isOn: $launchAtLogin)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: launchAtLogin) { _ in
+                                Preferences.launchAtLogin = launchAtLogin
+                                onSettingsChanged(.launchAtLogin)
+                            }
                     }
 
                     Divider().opacity(0.4)
@@ -322,8 +639,8 @@ struct SettingsView: View {
                                 .frame(width: 55)
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
-                                .onChange(of: electricityPrice) { newValue in
-                                    if let price = Double(newValue.replacingOccurrences(of: ",", with: ".")), price > 0 {
+                                .onChange(of: electricityPrice) { _ in
+                                    if let price = Double(electricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
                                         Preferences.electricityPricePerKwh = price
                                     }
                                 }
@@ -331,13 +648,33 @@ struct SettingsView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 45)
                                 .controlSize(.small)
-                                .onChange(of: currencySymbol) { newValue in
-                                    Preferences.currencySymbol = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .onChange(of: currencySymbol) { _ in
+                                    Preferences.currencySymbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
                                 }
                             Text("/kWh")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                         }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Require Touch ID"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Authenticate before running remote commands"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $requireBiometrics)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: requireBiometrics) { _ in
+                                Preferences.requireBiometricsForRemoteControls = requireBiometrics
+                            }
                     }
                 }
             }
@@ -387,21 +724,22 @@ struct SettingsView: View {
         let isVolvo = Preferences.activeBrand == .volvo
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: isVolvo ? .blue : .secondary)
+                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
 
                 Text(isVolvo
                      ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
-                     : L10n.text("Remote vehicle commands are unavailable because Polestar restricts write operations to paired mobile devices."))
+                     : L10n.text("Climate, locks, windows and cabin cleaning are dispatched through Polestar's command service, and software installation through its OTA scheduler. Charging commands are not yet verified against the backend."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
-                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: isVolvo, badgeText: isVolvo ? nil : "Mobile Only")
-                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Mobile Only")
-                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
-                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
-                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
+                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
+                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Unverified")
+                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
+                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
+                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install or cancel a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                 }
             }
         }
@@ -520,6 +858,76 @@ struct SettingsView: View {
         .opacity(isSupported ? 1.0 : 0.55)
     }
 
+    private func degradedNotice(symbol: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10))
+                .foregroundStyle(HisingenTheme.semanticWarning)
+            Text(text)
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(HisingenTheme.semanticWarning.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private var capabilitiesCard: AnyView {
+        guard let state else { return AnyView(EmptyView()) }
+        let profile = state.capabilityProfile
+        let items = VehicleCapability.displayed
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
+                Text(L10n.format("Probed capabilities for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+
+                // A degraded dashboard should explain itself here rather than only in the
+                // unified log — the cached snapshot keeps very little telemetry, so cards
+                // going quiet is otherwise indistinguishable from an unsupported vehicle.
+                if state.isCachedSnapshot {
+                    degradedNotice(
+                        symbol: "internaldrive",
+                        text: L10n.text("Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.")
+                    )
+                } else if !state.unavailableFeatures.isEmpty {
+                    degradedNotice(
+                        symbol: "exclamationmark.arrow.triangle.2.circlepath",
+                        text: L10n.format(
+                            "The last refresh could not read: %@",
+                            state.unavailableFeatures.map(\.title).sorted().joined(separator: ", ")
+                        )
+                    )
+                }
+
+                VStack(spacing: 6) {
+                    ForEach(items, id: \.self) { cap in
+                        let support = profile.support(for: cap)
+                        HStack {
+                            Text(cap.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(HisingenTheme.ink)
+                            Spacer()
+                            let color: Color = {
+                                switch support {
+                                case .supported: return HisingenTheme.semanticGood
+                                case .vehicleManaged: return .blue
+                                case .unavailable: return HisingenTheme.semanticWarning
+                                case .backendDependent: return .secondary
+                                }
+                            }()
+                            Pill(text: support.displayName, color: color, symbol: support.symbolName)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        })
+    }
 
     private var notificationsCard: some View {
         Card {
