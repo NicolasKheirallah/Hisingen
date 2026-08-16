@@ -181,11 +181,33 @@ struct SettingsView: View {
                     }
                 }
 
-                // Vehicle Image Perspective
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.text("Vehicle Perspective"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(HisingenTheme.ink)
+                // Vehicle Image Perspective & Studio Render Preview
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(L10n.text("Vehicle Perspective"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(HisingenTheme.ink)
+                        Spacer()
+                        Text(carRenderAngle.title)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // Live Studio Render Preview
+                    let previewData = CarImageCache.shared.image(for: Preferences.vin, angle: carRenderAngle.rawValue) ?? CarImageCache.shared.image(for: Preferences.vin)
+                    if let previewData, let nsImg = NSImage(data: previewData) {
+                        Image(nsImage: nsImg)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: 110)
+                            .padding(6)
+                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                            .transition(.opacity)
+                    }
 
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(CarRenderAngle.allCases, id: \.self) { angle in

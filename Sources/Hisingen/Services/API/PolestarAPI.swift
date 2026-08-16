@@ -789,7 +789,11 @@ actor PolestarAPI {
                         modelYear: vdmsCar.modelYear ?? matching.modelYear,
                         registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
                         pno34: matching.pno34,
-                        structureWeek: matching.structureWeek
+                        structureWeek: matching.structureWeek,
+                        exteriorColorName: vdmsCar.exteriorColorName,
+                        upholsteryName: vdmsCar.upholsteryName,
+                        wheelsName: vdmsCar.wheelsName,
+                        packageNames: vdmsCar.packageNames
                     )
                 }
                 return vdmsCar

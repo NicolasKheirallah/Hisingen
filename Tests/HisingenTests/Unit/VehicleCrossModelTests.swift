@@ -129,6 +129,25 @@ struct VehicleCrossModelTests {
         XCTAssertFalse(merged.capabilityProfile.hasSelectableClimateTemperature)
     }
 
+    @Test
+    func testVehicleBuildOptionsAndSpecs() {
+        var state = makeVehicleState(vin: "YS2P2000000000001", modelName: "Polestar 2", battery: 78.0)
+        state.externalColour = "Thunder Grey"
+        state.upholstery = "WeaveTech Charcoal"
+        state.wheels = "20\" 4-V Spoke"
+        state.packages = ["Pilot", "Plus", "Performance"]
+        state.structureWeek = "202342"
+        state.gearbox = "1-speed automatic"
+        state.reportedBatteryCapacityKwh = 78.0
+
+        XCTAssertEqual(state.externalColour, "Thunder Grey")
+        XCTAssertEqual(state.upholstery, "WeaveTech Charcoal")
+        XCTAssertEqual(state.wheels, "20\" 4-V Spoke")
+        XCTAssertEqual(state.packages.count, 3)
+        XCTAssertEqual(state.formattedBuildWeek, "2023 · W42")
+        XCTAssertEqual(state.reportedBatteryCapacityKwh, 78.0)
+    }
+
     private func makeVehicleState(vin: String, modelName: String, battery: Double) -> VehicleState {
         VehicleState(
             batteryPercentage: battery,

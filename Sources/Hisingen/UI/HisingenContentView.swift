@@ -34,12 +34,14 @@ struct HisingenContentView: View {
 
     enum Tab: String, CaseIterable {
         case vehicle = "Vehicle"
+        case info = "Info"
         case controls = "Controls"
         case settings = "Settings"
 
         var symbol: String {
             switch self {
             case .vehicle: return "bolt.car"
+            case .info: return "info.circle"
             case .controls: return "slider.horizontal.3"
             case .settings: return "gearshape"
             }
@@ -69,6 +71,8 @@ struct HisingenContentView: View {
                         case .vehicle:
                             VehicleTabView(state: state, cars: cars, activeVin: activeVin,
                                            onSelectCar: onSelectCar, error: error)
+                        case .info:
+                            InfoTabView(state: state)
                         case .controls:
                             ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
                                             onRemoteCommand: onRemoteCommand)
@@ -418,7 +422,7 @@ struct VehicleTabView: View {
 
     private var moreDetailsSection: some View {
         let cards: [AnyView] = [
-            vehicleIdentityCard, openingsCard, tireSchematicCard, lightingAndFluidCard,
+            factoryBuildCard, vehicleIdentityCard, openingsCard, tireSchematicCard, lightingAndFluidCard,
             climateCard, locationCard, softwareCard, diagnosticsCard
         ].compactMap { $0 }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
@@ -1041,6 +1045,53 @@ struct VehicleTabView: View {
     }
 
 
+    private var factoryBuildCard: AnyView? {
+        guard features.contains(.vehicleIdentity) else { return nil }
+        var rows: [KVRow] = []
+
+        if let colour = state.externalColour, !colour.isEmpty {
+            rows.append(KVRow(L10n.text("Exterior Paint"), colour, symbol: "paintpalette.fill"))
+        }
+        if let upholstery = state.upholstery, !upholstery.isEmpty {
+            rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
+        }
+        if let wheels = state.wheels, !wheels.isEmpty {
+            rows.append(KVRow(L10n.text("Wheels"), wheels, symbol: "circle.circle.fill"))
+        }
+        if !state.packages.isEmpty {
+            rows.append(KVRow(L10n.text("Factory Packages"), state.packages.joined(separator: " · "), symbol: "shippingbox.fill"))
+        }
+        if let buildWeek = state.formattedBuildWeek, !buildWeek.isEmpty {
+            rows.append(KVRow(L10n.text("Production Week"), buildWeek, symbol: "calendar.badge.clock"))
+        }
+        if let options = state.pno34, !options.isEmpty {
+            rows.append(KVRow(L10n.text("Factory Code (PNO34)"), options, symbol: "tag.fill"))
+        }
+        if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
+            rows.append(KVRow(L10n.text("Steering"), steering, symbol: "steeringwheel"))
+        }
+        if let cap = state.reportedBatteryCapacityKwh, cap > 0 {
+            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", cap), symbol: "battery.100.bolt"))
+        }
+        if let gearbox = state.gearbox, !gearbox.isEmpty {
+            rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
+        }
+        if let market = state.accountMarket, !market.isEmpty {
+            rows.append(KVRow(L10n.text("Market"), market, symbol: "globe"))
+        }
+        if let internalID = state.internalVehicleIdentifier, !internalID.isEmpty {
+            rows.append(KVRow(L10n.text("Vehicle ID"), internalID, symbol: "barcode"))
+        }
+
+        guard !rows.isEmpty else { return nil }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "slider.horizontal.2.square.on.square", title: L10n.text("Factory Build & Options"), color: HisingenTheme.accent)
+                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        })
+    }
+
     private var vehicleIdentityCard: AnyView? {
         var rows: [KVRow] = []
         if features.contains(.vehicleIdentity) {
@@ -1048,43 +1099,10 @@ struct VehicleTabView: View {
                 rows.append(KVRow(L10n.text("License Plate"), plate, symbol: "rectangle.inset.filled"))
             }
             rows.append(KVRow(L10n.text("VIN"), state.vin, symbol: "number"))
-            if let buildWeek = state.formattedBuildWeek, !buildWeek.isEmpty {
-                rows.append(KVRow(L10n.text("Production Week"), buildWeek, symbol: "calendar.badge.clock"))
-            }
-            if let internalID = state.internalVehicleIdentifier, !internalID.isEmpty {
-                rows.append(KVRow(L10n.text("Vehicle ID"), internalID, symbol: "barcode"))
-            }
-            if let options = state.pno34, !options.isEmpty {
-                rows.append(KVRow(L10n.text("Factory Code"), options, symbol: "tag.fill"))
-            }
-            if let market = state.accountMarket, !market.isEmpty {
-                rows.append(KVRow(L10n.text("Market"), market, symbol: "globe"))
-            }
         }
         if features.contains(.vehicleAvailability), state.availability == .available {
             rows.append(KVRow(L10n.text("Cloud Connectivity"), state.availability.displayName,
                               symbol: "antenna.radiowaves.left.and.right"))
-        }
-        if features.contains(.vehicleIdentity), let colour = state.externalColour, !colour.isEmpty {
-            rows.append(KVRow(L10n.text("Exterior Color"), colour, symbol: "paintpalette.fill"))
-        }
-        if features.contains(.vehicleIdentity), let upholstery = state.upholstery, !upholstery.isEmpty {
-            rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
-        }
-        if features.contains(.vehicleIdentity), let wheels = state.wheels, !wheels.isEmpty {
-            rows.append(KVRow(L10n.text("Wheels"), wheels, symbol: "circle.circle.fill"))
-        }
-        if features.contains(.vehicleIdentity), !state.packages.isEmpty {
-            rows.append(KVRow(L10n.text("Factory Packages"), state.packages.joined(separator: " · "), symbol: "shippingbox.and.arrow.backward.fill"))
-        }
-        if features.contains(.vehicleIdentity), let steering = state.formattedSteeringOrientation, !steering.isEmpty {
-            rows.append(KVRow(L10n.text("Steering"), steering, symbol: "steeringwheel"))
-        }
-        if features.contains(.vehicleIdentity), let cap = state.reportedBatteryCapacityKwh, cap > 0 {
-            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", cap), symbol: "battery.100.bolt"))
-        }
-        if features.contains(.vehicleIdentity), let gearbox = state.gearbox, !gearbox.isEmpty {
-            rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
         }
         if features.contains(.vehicleHealth), let km = state.odometerKm {
             rows.append(KVRow(L10n.text("Odometer"), Format.distance(km: km, grouped: true, unit: Preferences.distanceUnit), symbol: "speedometer"))
@@ -1904,6 +1922,13 @@ struct LocationCardView: View {
 }
 
 
+enum CurveMode: String, CaseIterable, Identifiable {
+    case soc = "SoC %"
+    case power = "Power kW"
+    case dual = "Dual"
+    var id: String { rawValue }
+}
+
 @MainActor
 struct ChargingCurveView: View {
     let samples: [ChargingSample]
@@ -1916,6 +1941,11 @@ struct ChargingCurveView: View {
     @State private var pulse = false
     @State private var isHovering = false
     @State private var hoverLocation: CGPoint? = nil
+    @State private var curveMode: CurveMode = .soc
+
+    private var hasPowerData: Bool {
+        samples.contains { ($0.powerWatts ?? 0) > 0 } || (currentPowerWatts ?? 0) > 0
+    }
 
     private var startSample: ChargingSample { samples.first ?? ChargingSample(batteryPercentage: 0) }
     private var lastSample: ChargingSample { samples.last ?? startSample }
@@ -1923,7 +1953,18 @@ struct ChargingCurveView: View {
         targetPercentage.map(Double.init) ?? (isLive && readyDate != nil ? 100.0 : nil)
     }
 
-    private var domain: (low: Double, high: Double) {
+    private var peakWatts: Int {
+        let samplePeaks = samples.compactMap(\.powerWatts).max() ?? 0
+        return max(samplePeaks, currentPowerWatts ?? 0)
+    }
+
+    private var averageWatts: Int {
+        let valid = samples.compactMap(\.powerWatts).filter { $0 > 0 }
+        guard !valid.isEmpty else { return currentPowerWatts ?? 0 }
+        return valid.reduce(0, +) / valid.count
+    }
+
+    private var socDomain: (low: Double, high: Double) {
         var values = [startSample.batteryPercentage, lastSample.batteryPercentage]
         if let effectiveTargetPct { values.append(effectiveTargetPct) }
         let minV = values.min() ?? 0
@@ -1933,6 +1974,11 @@ struct ChargingCurveView: View {
         let low = max(0, minV - padding)
         let high = min(100, maxV + padding)
         return (low, max(low + 1.0, high))
+    }
+
+    private var powerDomain: (low: Double, high: Double) {
+        let maxKw = Double(max(peakWatts, 7400)) / 1000.0 * 1.15
+        return (0.0, max(3.7, maxKw))
     }
 
     private var timeSpan: (start: Date, end: Date) {
@@ -1953,29 +1999,44 @@ struct ChargingCurveView: View {
     }
 
     private var summaryText: String {
-        let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
-        if isLive {
-            if let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage {
-                return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, effectiveTargetPct)
+        switch curveMode {
+        case .power:
+            if peakWatts > 0 {
+                return String(format: "%@ · %@", Format.kilowatts(watts: peakWatts), L10n.text("Peak"))
             }
-            if pctAdded >= 0.5 {
-                return String(format: "%.0f%% (+%.0f%%)", lastSample.batteryPercentage, pctAdded)
+            return ""
+        case .dual:
+            let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
+            if peakWatts > 0 {
+                return String(format: "+%.0f%% · %@", pctAdded, Format.kilowatts(watts: peakWatts))
             }
-            return String(format: "%.0f%%", lastSample.batteryPercentage)
+            return String(format: "+%.0f%%", pctAdded)
+        case .soc:
+            let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
+            if isLive {
+                if let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage {
+                    return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, effectiveTargetPct)
+                }
+                if pctAdded >= 0.5 {
+                    return String(format: "%.0f%% (+%.0f%%)", lastSample.batteryPercentage, pctAdded)
+                }
+                return String(format: "%.0f%%", lastSample.batteryPercentage)
+            }
+            return String(format: "%.0f%% → %.0f%% (+%.0f%%)", startSample.batteryPercentage, lastSample.batteryPercentage, pctAdded)
         }
-        return String(format: "%.0f%% → %.0f%% (+%.0f%%)", startSample.batteryPercentage, lastSample.batteryPercentage, pctAdded)
     }
 
     var body: some View {
         guard !samples.isEmpty else { return AnyView(EmptyView()) }
-        let (domainLow, domainHigh) = domain
+        let (domainLow, domainHigh) = socDomain
+        let (pwrLow, pwrHigh) = powerDomain
         let (timeStart, timeEnd) = timeSpan
         let totalSpan = max(60, timeEnd.timeIntervalSince(timeStart))
 
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 6) {
-                    Label(L10n.text("Charging Curve"), systemImage: "chart.xyaxis.line")
+                    Label(curveMode == .power ? L10n.text("Power Curve") : L10n.text("Charging Curve"), systemImage: curveMode == .power ? "waveform.path.ecg" : "chart.xyaxis.line")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                     if isLive {
@@ -1989,11 +2050,23 @@ struct ChargingCurveView: View {
                             .tracking(0.3)
                             .foregroundStyle(HisingenTheme.semanticGood)
                     }
+
+                    if hasPowerData {
+                        Picker("", selection: $curveMode) {
+                            ForEach(CurveMode.allCases) { mode in
+                                Text(mode.rawValue).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .controlSize(.mini)
+                        .frame(width: 140)
+                    }
+
                     Spacer()
                     Text(summaryText)
                         .font(.system(size: 11, weight: .semibold))
                         .monospacedDigit()
-                        .foregroundStyle(HisingenTheme.accent)
+                        .foregroundStyle(curveMode == .power ? Color.green : HisingenTheme.accent)
                 }
 
                 GeometryReader { geo in
@@ -2005,16 +2078,28 @@ struct ChargingCurveView: View {
                     let chartHeight = max(1, height - verticalInset * 2)
                     let bottomY = verticalInset + chartHeight
 
-                    let points = samples.map { sample in
+                    let socPoints = samples.map { sample in
                         CGPoint(
                             x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
                             y: yCoord(sample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
                         )
                     }
-                    let firstPoint = points.first ?? CGPoint(x: horizontalInset, y: yCoord(startSample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh))
-                    let lastPoint = points.last ?? firstPoint
+
+                    let powerPoints = samples.map { sample in
+                        let kw = Double(sample.powerWatts ?? currentPowerWatts ?? 0) / 1000.0
+                        return CGPoint(
+                            x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                            y: yCoord(kw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
+                        )
+                    }
+
+                    let firstSocPoint = socPoints.first ?? CGPoint(x: horizontalInset, y: yCoord(startSample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh))
+                    let lastSocPoint = socPoints.last ?? firstSocPoint
+                    let firstPowerPoint = powerPoints.first ?? CGPoint(x: horizontalInset, y: bottomY)
+                    let lastPowerPoint = powerPoints.last ?? firstPowerPoint
+
                     let projectedEnd: CGPoint? = {
-                        guard isLive, let readyDate, let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage else { return nil }
+                        guard isLive, curveMode != .power, let readyDate, let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage else { return nil }
                         return CGPoint(
                             x: xCoord(readyDate, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
                             y: yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
@@ -2029,9 +2114,11 @@ struct ChargingCurveView: View {
 
                         if hoveredDate <= lastSample.timestamp || projectedEnd == nil {
                             let closest = samples.min(by: { abs($0.timestamp.timeIntervalSince(hoveredDate)) < abs($1.timestamp.timeIntervalSince(hoveredDate)) }) ?? lastSample
+                            let kw = Double(closest.powerWatts ?? currentPowerWatts ?? 0) / 1000.0
+                            let targetY = curveMode == .power ? yCoord(kw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh) : yCoord(closest.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
                             let pt = CGPoint(
                                 x: xCoord(closest.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
-                                y: yCoord(closest.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                                y: targetY
                             )
                             return (pt, closest.batteryPercentage, closest.timestamp, closest.powerWatts ?? currentPowerWatts, false)
                         } else if let readyDate, let effectiveTargetPct {
@@ -2049,8 +2136,7 @@ struct ChargingCurveView: View {
                     }()
 
                     ZStack {
-
-                        if let effectiveTargetPct {
+                        if curveMode != .power, let effectiveTargetPct {
                             let guideY = yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
                             Path { path in
                                 path.move(to: CGPoint(x: horizontalInset, y: guideY))
@@ -2067,111 +2153,128 @@ struct ChargingCurveView: View {
                                 .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
                         }
 
-
-                        if let projectedEnd {
+                        if (curveMode == .power || curveMode == .dual) && averageWatts > 0 {
+                            let avgKw = Double(averageWatts) / 1000.0
+                            let avgY = yCoord(avgKw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
                             Path { path in
-                                path.move(to: lastPoint)
-                                path.addLine(to: projectedEnd)
-                                path.addLine(to: CGPoint(x: projectedEnd.x, y: bottomY))
-                                path.addLine(to: CGPoint(x: lastPoint.x, y: bottomY))
-                                path.closeSubpath()
+                                path.move(to: CGPoint(x: horizontalInset, y: avgY))
+                                path.addLine(to: CGPoint(x: width - horizontalInset, y: avgY))
                             }
-                            .fill(
-                                LinearGradient(
-                                    colors: [HisingenTheme.accent.opacity(0.10), HisingenTheme.accent.opacity(0.01)],
-                                    startPoint: .top, endPoint: .bottom
-                                )
-                            )
+                            .stroke(Color.green.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
                         }
 
-
-                        if points.count >= 2 {
-                            smoothPath(points)
-                                .addingClosedBottom(firstX: firstPoint.x, lastX: lastPoint.x, bottomY: bottomY)
+                        if curveMode == .soc || curveMode == .dual {
+                            if let projectedEnd {
+                                Path { path in
+                                    path.move(to: lastSocPoint)
+                                    path.addLine(to: projectedEnd)
+                                    path.addLine(to: CGPoint(x: projectedEnd.x, y: bottomY))
+                                    path.addLine(to: CGPoint(x: lastSocPoint.x, y: bottomY))
+                                    path.closeSubpath()
+                                }
                                 .fill(
                                     LinearGradient(
-                                        colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
+                                        colors: [HisingenTheme.accent.opacity(0.10), HisingenTheme.accent.opacity(0.01)],
                                         startPoint: .top, endPoint: .bottom
                                     )
                                 )
-                        }
-
-
-                        if let projectedEnd {
-                            Path { path in
-                                path.move(to: lastPoint)
-                                path.addLine(to: projectedEnd)
                             }
-                            .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, dash: [4, 4]))
 
-
-                            Circle()
-                                .strokeBorder(HisingenTheme.accent.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
-                                .background(Circle().fill(HisingenTheme.accent.opacity(0.18)))
-                                .frame(width: 8, height: 8)
-                                .position(projectedEnd)
-                        }
-
-
-                        if points.count >= 2 {
-                            smoothPath(points)
-                                .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                                .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
-
-
-                            if isLive && !reduceMotion {
-                                smoothPath(points)
-                                    .stroke(
+                            if socPoints.count >= 2 {
+                                smoothPath(socPoints)
+                                    .addingClosedBottom(firstX: firstSocPoint.x, lastX: lastSocPoint.x, bottomY: bottomY)
+                                    .fill(
                                         LinearGradient(
-                                            colors: [HisingenTheme.accent.opacity(0.2), Color.white.opacity(0.85), HisingenTheme.accent],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        ),
-                                        style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                                            colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
+                                            startPoint: .top, endPoint: .bottom
+                                        )
                                     )
-                                    .opacity(pulse ? 0.85 : 0.3)
+                            }
+
+                            if let projectedEnd {
+                                Path { path in
+                                    path.move(to: lastSocPoint)
+                                    path.addLine(to: projectedEnd)
+                                }
+                                .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, dash: [4, 4]))
+
+                                Circle()
+                                    .strokeBorder(HisingenTheme.accent.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
+                                    .background(Circle().fill(HisingenTheme.accent.opacity(0.18)))
+                                    .frame(width: 8, height: 8)
+                                    .position(projectedEnd)
+                            }
+
+                            if socPoints.count >= 2 {
+                                smoothPath(socPoints)
+                                    .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                                    .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
                             }
                         }
 
+                        if curveMode == .power || curveMode == .dual {
+                            if powerPoints.count >= 2 {
+                                if curveMode == .power {
+                                    smoothPath(powerPoints)
+                                        .addingClosedBottom(firstX: firstPowerPoint.x, lastX: lastPowerPoint.x, bottomY: bottomY)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
+                                                startPoint: .top, endPoint: .bottom
+                                            )
+                                        )
+                                }
 
-                        Circle()
-                            .fill(HisingenTheme.accent.opacity(0.75))
-                            .frame(width: 5, height: 5)
-                            .position(firstPoint)
-
-
-                        ZStack {
-                            if isLive && !reduceMotion {
-                                Circle()
-                                    .stroke(HisingenTheme.accent.opacity(pulse ? 0.0 : 0.65), lineWidth: 1.5)
-                                    .frame(width: 16, height: 16)
-                                    .scaleEffect(pulse ? 1.65 : 0.85)
+                                smoothPath(powerPoints)
+                                    .stroke(
+                                        Color.green,
+                                        style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
+                                    )
+                                    .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
                             }
+                        }
+
+                        if curveMode != .power {
                             Circle()
-                                .fill(HisingenTheme.accent)
+                                .fill(HisingenTheme.accent.opacity(0.75))
+                                .frame(width: 5, height: 5)
+                                .position(firstSocPoint)
+
+                            ZStack {
+                                if isLive && !reduceMotion {
+                                    Circle()
+                                        .stroke(HisingenTheme.accent.opacity(pulse ? 0.0 : 0.65), lineWidth: 1.5)
+                                        .frame(width: 16, height: 16)
+                                        .scaleEffect(pulse ? 1.65 : 0.85)
+                                }
+                                Circle()
+                                    .fill(HisingenTheme.accent)
+                                    .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                                    .frame(width: 7.5, height: 7.5)
+                                    .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
+                            }
+                            .position(lastSocPoint)
+                        } else {
+                            Circle()
+                                .fill(Color.green)
                                 .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
                                 .frame(width: 7.5, height: 7.5)
-                                .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
+                                .position(lastPowerPoint)
                         }
-                        .position(lastPoint)
-
 
                         if let info = hoverInfo {
-
                             Path { path in
                                 path.move(to: CGPoint(x: info.point.x, y: verticalInset))
                                 path.addLine(to: CGPoint(x: info.point.x, y: bottomY))
                             }
-                            .stroke(HisingenTheme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-
+                            .stroke(Color.primary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
 
                             Circle()
-                                .fill(HisingenTheme.accent)
+                                .fill(curveMode == .power ? Color.green : HisingenTheme.accent)
                                 .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
                                 .frame(width: 9, height: 9)
-                                .shadow(color: HisingenTheme.accent.opacity(0.6), radius: 4)
+                                .shadow(color: (curveMode == .power ? Color.green : HisingenTheme.accent).opacity(0.6), radius: 4)
                                 .position(info.point)
-
 
                             HStack(spacing: 4) {
                                 Text(String(format: "%.0f%%", info.pct))
@@ -2180,8 +2283,8 @@ struct ChargingCurveView: View {
                                     .foregroundStyle(HisingenTheme.accent)
                                 if let watts = info.powerWatts, watts > 0 {
                                     Text("· \(Format.kilowatts(watts: watts))")
-                                        .font(.system(size: 8.5, weight: .medium))
-                                        .foregroundStyle(.secondary)
+                                        .font(.system(size: 8.5, weight: .semibold))
+                                        .foregroundStyle(.green)
                                 }
                                 Text("· " + Format.shortTime(date: info.date))
                                     .font(.system(size: 8.5))
@@ -2220,13 +2323,24 @@ struct ChargingCurveView: View {
                         withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { pulse = true }
                     }
                 }
-                .frame(height: 60)
+                .frame(height: 64)
                 .padding(.vertical, 2)
                 .accessibilityHidden(true)
 
                 HStack(alignment: .top) {
                     curveCaption(title: L10n.text("Start"), pct: startSample.batteryPercentage, date: startSample.timestamp)
                     Spacer()
+                    if curveMode == .power && peakWatts > 0 {
+                        VStack(alignment: .center, spacing: 1) {
+                            Text(L10n.text("PEAK POWER"))
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                            Text(Format.kilowatts(watts: peakWatts))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.green)
+                        }
+                        Spacer()
+                    }
                     curveCaption(
                         title: isLive ? L10n.text("Now") : L10n.text("Finished"),
                         pct: lastSample.batteryPercentage,
@@ -2234,7 +2348,7 @@ struct ChargingCurveView: View {
                         emphasized: isLive,
                         isLive: isLive
                     )
-                    if let effectiveTargetPct {
+                    if curveMode != .power, let effectiveTargetPct {
                         Spacer()
                         curveCaption(
                             title: isLive ? L10n.text("Ready") : L10n.text("Target"),
@@ -2306,6 +2420,73 @@ struct ChargingCurveView: View {
     }
 }
 
+struct MiniSparklineView: View {
+    let samples: [ChargingSample]
+
+    var body: some View {
+        guard samples.count >= 2 else { return AnyView(EmptyView()) }
+        let pcts = samples.map(\.batteryPercentage)
+        let minV = pcts.min() ?? 0
+        let maxV = pcts.max() ?? 100
+        let span = max(1.0, maxV - minV)
+
+        return AnyView(
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+                let points = samples.enumerated().map { (idx, s) -> CGPoint in
+                    let x = CGFloat(idx) / CGFloat(samples.count - 1) * w
+                    let y = (1.0 - CGFloat((s.batteryPercentage - minV) / span)) * (h - 4) + 2
+                    return CGPoint(x: x, y: y)
+                }
+
+                ZStack {
+                    smoothPath(points)
+                        .addingClosedBottom(firstX: points.first?.x ?? 0, lastX: points.last?.x ?? w, bottomY: h)
+                        .fill(
+                            LinearGradient(
+                                colors: [HisingenTheme.accent.opacity(0.35), HisingenTheme.accent.opacity(0.02)],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        )
+
+                    smoothPath(points)
+                        .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+
+                    if let last = points.last {
+                        Circle()
+                            .fill(HisingenTheme.accent)
+                            .frame(width: 3.5, height: 3.5)
+                            .position(last)
+                    }
+                }
+            }
+            .frame(width: 44, height: 16)
+        )
+    }
+
+    private func smoothPath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        guard points.count > 1 else { return path }
+        if points.count == 2 {
+            path.addLine(to: points[1])
+            return path
+        }
+        for i in 0..<points.count - 1 {
+            let p0 = points[max(0, i - 1)]
+            let p1 = points[i]
+            let p2 = points[i + 1]
+            let p3 = points[min(points.count - 1, i + 2)]
+            let cp1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
+            let cp2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
+            path.addCurve(to: p2, control1: cp1, control2: cp2)
+        }
+        return path
+    }
+}
+
 private extension Path {
     func addingClosedBottom(firstX: CGFloat, lastX: CGFloat, bottomY: CGFloat) -> Path {
         var closed = self
@@ -2329,7 +2510,8 @@ struct ChargingSessionRow: View {
                         samples: session.samples,
                         targetPercentage: session.targetPercentage,
                         readyDate: nil,
-                        isLive: false
+                        isLive: false,
+                        currentPowerWatts: session.peakPowerWatts
                     )
                 }
                 VStack(spacing: 6) {
@@ -2345,7 +2527,7 @@ struct ChargingSessionRow: View {
             }
             .padding(.top, 6)
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .font(.system(size: 11, weight: .medium))
@@ -2355,6 +2537,9 @@ struct ChargingSessionRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if session.samples.count >= 2 {
+                    MiniSparklineView(samples: session.samples)
+                }
             }
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle())

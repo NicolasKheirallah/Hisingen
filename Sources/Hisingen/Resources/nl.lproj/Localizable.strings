@@ -791,4 +791,10 @@
 "Modem Synced" = "Modem gesynchroniseerd";
 "Remote controls restricted to paired mobile devices" = "Afstandsbediening is beperkt tot gekoppelde mobiele apparaten";
 "Command Restricted" = "Opdracht beperkt";
-"Polestar restricts remote write commands to paired mobile devices." = "Polestar beperkt externe opdrachten tot gekoppelde mobiele apparaten.";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar beperkt externe schrijfopdrachten tot gekoppelde mobiele apparaten.";
+"Factory Build & Options" = "Fabrieksbouw & opties";
+"Exterior Paint" = "Exterieurlak";
+"Vehicle Perspective" = "Voertuigperspectief";
+"PEAK POWER" = "PIEKVERMOGEN";
+"Power Curve" = "Vermogenscurve";
+"Peak" = "Piek";
