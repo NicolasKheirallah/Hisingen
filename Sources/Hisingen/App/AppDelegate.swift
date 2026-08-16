@@ -61,6 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resumeStoredSession()
         cacheDormantBrandSnapshot()
         setupURLEventHandling()
+        if !initialAuthenticated {
+            statusController.openPopover()
+        }
     }
 
     private func setupURLEventHandling() {
