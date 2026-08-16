@@ -515,6 +515,10 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .unavailable
             case .preCleaning, .softwareInstallControl, .windows, .trunk:
                 return .unavailable
+            // Volvo's public APIs expose no software/OTA resource at all — not a backend
+            // that might answer on some vehicles, but an endpoint that does not exist.
+            case .softwareStatus:
+                return .unavailable
             case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
                 return .unavailable
             default:
@@ -526,7 +530,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .softwareInstallControl:
+            case .softwareInstallControl, .softwareStatus:
                 return .unavailable
             default:
                 return .backendDependent

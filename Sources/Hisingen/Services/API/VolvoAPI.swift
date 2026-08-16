@@ -312,19 +312,15 @@ actor VolvoAPI {
             return nil
         }()
 
-        let software: VehicleSoftwareInfo? = features.contains(.softwareUpdates)
-            ? VehicleSoftwareInfo(
-                version: "5.1.17",
-                title: "5.1.17",
-                state: .completed,
-                scheduledAt: nil,
-                updatedAt: reportedAt,
-                installedVersion: "5.1.17",
-                latestAvailableVersion: "5.1.17"
-            )
-            : nil
+        // Volvo publishes no software/OTA resource. The Connected Vehicle API v2 surface is
+        // details, doors, windows, tyres, warnings, diagnostics, engine, engine-status, brakes,
+        // fuel, odometer, statistics, commands, command-accessibility — and the Energy and
+        // Location APIs alongside it. None of them reports a firmware level or update state,
+        // so there is nothing to show and nothing to invent.
+        let software: VehicleSoftwareInfo? = nil
 
         var unavailable: [AppFeature] = []
+        if features.contains(.softwareUpdates) { unavailable.append(.softwareUpdates) }
         if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
         if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
         if features.contains(.vehicleHealth), diagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
@@ -354,7 +350,6 @@ actor VolvoAPI {
         var probes = VehicleProbedCapabilities()
         if doors != nil || windows != nil { probes.record(.exteriorStatus, as: .supported) }
         if diagnostics != nil { probes.record(.serviceWarnings, as: .supported) }
-        if software != nil { probes.record(.softwareStatus, as: .supported) }
         if tyres?.readings.contains(where: { $0.kilopascals != nil }) == true {
             probes.record(.tyrePressureValues, as: .supported)
         }
