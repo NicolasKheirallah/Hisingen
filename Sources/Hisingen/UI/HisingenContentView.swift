@@ -268,6 +268,7 @@ struct HisingenContentView: View {
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
+        .withoutFocusRing()
         .help(L10n.format("%@ — Switch Vehicle (⌥[ / ⌥])", currentCar?.title ?? Preferences.activeBrand.displayName))
         .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentCar?.title ?? Preferences.activeBrand.displayName))
     }
@@ -1062,6 +1063,7 @@ struct VehicleTabView: View {
                                 }
                                 .menuStyle(.borderlessButton)
                                 .controlSize(.mini)
+                                .withoutFocusRing()
                             }
                         }
                         .padding(.top, 6)
