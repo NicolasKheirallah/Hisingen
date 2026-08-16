@@ -575,6 +575,31 @@ actor PolestarAPI {
         if case .setAmpLimit(let amps) = adaptedCommand {
             capabilityCache["\(vin)|amp-limit"] = CapabilityCacheEntry(value: amps, expiresAt: Date().addingTimeInterval(90))
         }
+        if case .startClimate(let temp, let fl, let fr, _, _, let sw) = adaptedCommand {
+            let status = VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: nil,
+                requestedTemperatureCelsius: Double(temp > 0 ? temp : 22.0),
+                driverSeatHeatingLevel: fl.rawValue > 1 ? fl.rawValue - 1 : nil,
+                passengerSeatHeatingLevel: fr.rawValue > 1 ? fr.rawValue - 1 : nil,
+                steeringWheelHeatingLevel: sw.rawValue > 1 ? sw.rawValue - 1 : nil
+            )
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .stopClimate = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .startPreCleaning = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .ventilating, timeRemainingMinutes: 10, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .stopPreCleaning = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }
@@ -1456,8 +1481,11 @@ actor PolestarAPI {
     }
 
     private static func capabilityCacheLifetime(_ feature: AppFeature, key: String) -> TimeInterval {
-        if key == "climate-status" || feature == .exteriorStatus || feature == .airQuality {
-            return 10 * 60
+        if key == "climate-status" {
+            return 15
+        }
+        if feature == .exteriorStatus || feature == .airQuality {
+            return 30
         }
         return 60 * 60
     }

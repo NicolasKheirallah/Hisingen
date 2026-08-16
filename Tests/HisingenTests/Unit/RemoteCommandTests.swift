@@ -442,6 +442,7 @@ struct RemoteCommandTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
+        previous.optimisticCommandLockUntil = Date().addingTimeInterval(90)
 
         // Incoming fresh state from stale cloud cache reporting idle climate and old 90% target
         let staleIncoming = VehicleState(
