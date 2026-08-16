@@ -87,7 +87,6 @@
 "Steering Wheel" = "Ratt";
 "ON" = "PÅ";
 "OFF" = "AV";
-"Start Climate" = "Starta klimat";
 "Stop" = "Stoppa";
 "Stop Air Cleaning" = "Stoppa luftrening";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Rena kupéluften (PM2,5)";
@@ -138,7 +137,6 @@
 "Front-left tyre" = "Vänster framdäck";
 "Front-right tyre" = "Höger framdäck";
 "License Plate" = "Registreringsnummer";
-"Low Level" = "Låg nivå";
 "Manual Trip Meter" = "Manuell trippmätare";
 "Mon" = "Mån";
 "Normal" = "Normal";
@@ -393,7 +391,6 @@
 "⚠︎ Service warning" = "⚠︎ Servicevarning";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Fordonsdata kan vara inaktuella";
 "12 V battery low" = "Låg nivå i 12 V-batteriet";
-"Active" = "Aktiv";
 "Air quality" = "Luftkvalitet";
 "Air quality index" = "Luftkvalitetsindex";
 "Automatic trip" = "Automatisk trippmätare";
@@ -443,7 +440,6 @@
 "Manual trip" = "Manuell trippmätare";
 "Network type" = "Nätverkstyp";
 "No power" = "Ingen ström";
-"Off" = "Av";
 "Oil level" = "Oljenivå";
 "Pending" = "Väntar";
 "Poor" = "Svag";
@@ -730,3 +726,180 @@
 "Cost" = "Kostnad";
 "Projected" = "Prognos";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "Alla normala";
+"Check Pressure" = "Kontrollera tryck";
+"Parked" = "Parkerad";
+"Moving" = "Kör";
+"Copy Coordinates" = "Kopiera koordinater";
+"Copied" = "Kopierad";
+"Google Maps" = "Google Maps";
+"Speed" = "Hastighet";
+"Doors & Openings" = "Dörrar & luckor";
+"Vehicle Health & Lighting" = "Fordonshälsa & belysning";
+"Fluid Levels" = "Vätskenivåer";
+"Lighting Systems" = "Belysningssystem";
+"All 16 Systems OK" = "Alla 16 system OK";
+"Exterior Light" = "Yttre belysning";
+"Low Level" = "Låg nivå";
+"Open" = "Öppen";
+"Closed" = "Stängd";
+"All Closed & Locked" = "Alla stängda & låsta";
+"All Closed" = "Alla stängda";
+"%d Open" = "%d öppna";
+"FL Window" = "VF fönster";
+"FR Window" = "HF fönster";
+"RL Window" = "VB fönster";
+"RR Window" = "HB fönster";
+"Charge Lid" = "Ladelucka";
+"Start Climate" = "Starta klimat";
+"Stop Climate" = "Stoppa klimat";
+"Active" = "Aktiv";
+"Off" = "Av";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Utseendeläge";
+"Mode" = "Läge";
+"System (Automatic)" = "System (Automatiskt)";
+"Light" = "Ljust";
+"Dark" = "Mörkt";
+"Liquid Glass" = "Flytande glas";
+
+/* Tillagt: Ny telemetri, studiovinklar & reglage */
+"Icon Only (Minimal)" = "Endast ikon (minimal)";
+"Lock Status and Battery" = "Låsstatus och batteri";
+"Front Three-Quarter" = "Framifrån trekvart";
+"Rear Three-Quarter" = "Bakifrån trekvart";
+"Side Profile" = "Sidoprofil";
+"Overhead" = "Fågelperspektiv";
+"Wheels" = "Fälgar";
+"Factory Packages" = "Fabrikspaket";
+"Outside PM2.5" = "Utomhus PM2.5";
+"Air Filter Life" = "Luftfilterlivslängd";
+"Cabin" = "Kupé";
+"elevation" = "höjd";
+"Brake Set" = "P-broms aktiverad";
+"Export CSV" = "Exportera CSV";
+"Export History (.csv)" = "Exportera historik (.csv)";
+"Quick Controls" = "Snabbstyrning";
+"Lock Doors" = "Lås dörrar";
+"Unlock Doors" = "Lås upp dörrar";
+"Start Climate (%@)" = "Starta klimat (%@)";
+"Honk Horn" = "Tuta";
+"Honk and Flash" = "Tuta och blinka";
+"Modem Wake Reason" = "Modemets väckningsorsak";
+"Modem Synced" = "Modem synkroniserat";
+"Remote controls restricted to paired mobile devices" = "Fjärrkommandon är begränsade till parkopplade mobila enheter";
+"Command Restricted" = "Kommando begränsat";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar begränsar fjärrkommandon till parkopplade mobila enheter.";
+"Factory Build & Options" = "Fabriksbygge & tillval";
+"Exterior Paint" = "Exteriörlack";
+"Vehicle Perspective" = "Fordonsperspektiv";
+"PEAK POWER" = "TOPPEFFEKT";
+"Power Curve" = "Effektkurva";
+"Peak" = "Topp";
+"Exterior & Styling" = "Exteriör & styling";
+"Wheels & Rims" = "Hjul & fälgar";
+"Body Style" = "Kaross";
+"%d Doors" = "%d dörrar";
+"Parking Brake" = "Parkeringsbroms";
+"Engaged" = "Åtdragen";
+"Released" = "Frisläppt";
+"Interior & Cabin" = "Interiör & kupé";
+"Steering Orientation" = "Rattplacering";
+"Comfort Target" = "Komfortmål";
+"Driver Seat Heating" = "Förarsätesvärme";
+"Passenger Seat Heating" = "Passagerarsätesvärme";
+"Steering Wheel Heating" = "Rattvärme";
+"Level %d" = "Nivå %d";
+"Air Filtration" = "Luftfiltrering";
+"Active Purifying" = "Aktiv rening";
+"CleanZone Ready" = "CleanZone redo";
+"Cabin AQI" = "Kupé AQI";
+"Powertrain & Specs" = "Drivlina & specifikationer";
+"Max DC Fast Charge" = "Max DC-snabbladdning";
+"Max AC Charge" = "Max AC-laddning";
+"Fuel Level" = "Bränslenivå";
+"Service & Health" = "Service & hälsa";
+"Total Odometer" = "Total mätarställning";
+"Factory Build & Identity" = "Fabriksbygge & identitet";
+"Factory Build Week" = "Fabriksbyggvecka";
+"Factory Spec (PNO34)" = "Fabriksspec (PNO34)";
+"Market Delivery" = "Marknadsleverans";
+"Software Release" = "Mjukvaruversion";
+
+
+/* Vehicle software & OTA */
+"Polestar Remote Commands" = "Polestar fjärrkommandon";
+"Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices." = "Programvaruinstallation är aktiv. Lås-, klimat- och laddningskommandon är begränsade till parkopplade mobilenheter.";
+"Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices." = "Programvaruinstallation skickas via Polestars OTA-schemaläggare. Övriga kommandon går via en backend som endast accepterar parkopplade mobilenheter.";
+"Install or cancel a pending software update" = "Installera eller avbryt en väntande programvaruuppdatering";
+"Software status is unavailable for this vehicle." = "Programvarustatus är inte tillgänglig för det här fordonet.";
+"Software update %@ is ready to install." = "Programvaruuppdatering %@ är redo att installeras.";
+"A software update is ready to install." = "En programvaruuppdatering är redo att installeras.";
+"Downloading software update %@…" = "Laddar ned programvaruuppdatering %@ …";
+"Downloading a software update…" = "Laddar ned en programvaruuppdatering …";
+"Installing software update %@…" = "Installerar programvaruuppdatering %@ …";
+"Installing a software update…" = "Installerar en programvaruuppdatering …";
+"Installation is scheduled for %@." = "Installationen är schemalagd till %@.";
+"An installation is scheduled." = "En installation är schemalagd.";
+"The last software update failed." = "Den senaste programvaruuppdateringen misslyckades.";
+"Software is up to date (%@)." = "Programvaran är uppdaterad (%@).";
+"Cancel Scheduled Installation" = "Avbryt schemalagd installation";
+
+/* Remote Engine Start (RES) & Warranty */
+"Remote Engine Start (RES)" = "Fjärrstart av motor (RES)";
+"Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes." = "Startar förbränningsmotorn för att förvärma eller kyla kupén före avfärd. Körs automatiskt i 15 minuter.";
+"Start Engine (15 min)" = "Starta motor (15 min)";
+"Stop Engine" = "Stoppa motor";
+"Engine Running" = "Motorn igång";
+"Engine Stopped" = "Motorn avstängd";
+"Start engine (%d min)" = "Starta motor (%d min)";
+"Warranty & Protection" = "Garanti & skydd";
+"Manufacturer Warranty" = "Nybilsgaranti";
+"EV Battery (8 yr / 160k km)" = "EV-batteri (8 år / 160 000 km)";
+"Roadside Assistance" = "Vägassistans (Assistance)";
+"Scheduled Maintenance" = "Schemalagd service";
+"Included (3 Years / 50,000 km)" = "Ingår (3 år / 50 000 km)";
+"Connected Services" = "Uppkopplade tjänster";
+"Active Unlimited" = "Aktiv obegränsad";
+"Remote engine start (RES)" = "Fjärrstart av motor (RES)";
+"Digital Services & Data" = "Digitala tjänster & data";
+"Corrosion Protection (12 yr)" = "Rostskyddsgaranti (12 år)";
+"Polestar Assistance" = "Polestar Assistance";
+"Volvo Assistance" = "Volvo Assistance";
+"Model badge position" = "Placering av modellmärke";
+"Placement of model & year label" = "Placering av bilmodell och årsmodell";
+"License plate position" = "Placering av registreringsskylt";
+"Placement of registration plate" = "Placering av bilens registreringsskylt";
+"License Plate Style (Below Greeting)" = "Nummerskyltsstil (under hälsning)";
+"Inline with Greeting (Top Right)" = "I linje med hälsning (uppe till höger)";
+"Over Vehicle Image (Top Right)" = "Över bilbild (uppe till höger)";
+"Over Vehicle Image (Top Left)" = "Över bilbild (uppe till vänster)";
+"Below Greeting" = "Under hälsning";
+"Hidden" = "Dold";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings." = "Kräver prenumeration på 'Connected Vehicle API' på developer.volvocars.com och att 'Volvo Connected Services' är aktiverat i bilens integritetsinställningar.";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors." = "Kräver prenumeration på 'Connected Vehicle API' på developer.volvocars.com och att bilen körs för att kalibrera däcktryckssensorerna.";
+
+
+
+
+
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "Den här uppdateringen har erbjudits fordonet men ännu inte laddats ned. Bilen hämtar den själv när förhållandena tillåter; installationen kan startas först därefter.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "Uppdateringen laddas fortfarande ned till fordonet. Försök igen när den är klar.";
+"The vehicle is already installing this update." = "Fordonet installerar redan den här uppdateringen.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "Det senaste uppdateringsförsöket misslyckades och fordonet har inte gjort den tillgänglig för installation igen.";
+"There is no software update waiting to be installed on this vehicle." = "Det finns ingen programvaruuppdatering som väntar på installation på det här fordonet.";
+"The vehicle cannot install a software update right now." = "Fordonet kan inte installera en programvaruuppdatering just nu.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "En programvaruinstallation kan endast schemaläggas mellan %d minuter och %d dagar från nu.";
+"The vehicle service rejected the request as invalid." = "Fordonstjänsten avvisade begäran som ogiltig.";
+"The vehicle service has no such update to act on." = "Fordonstjänsten har ingen sådan uppdatering att agera på.";
+"Your Polestar account is not permitted to run this command." = "Ditt Polestar-konto har inte behörighet att köra det här kommandot.";
+"The vehicle is not in a state where this command can run right now." = "Fordonet är just nu inte i ett tillstånd där det här kommandot kan köras.";
+"The vehicle service refused the command (gRPC status %@)." = "Fordonstjänsten avvisade kommandot (gRPC-status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "Fordonstjänsten avvisade kommandot utan att ange någon orsak. Det betyder oftast att fordonet inte kan utföra det just nu.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Programvaruuppdatering %@ är tillgänglig. Fordonet laddar ned den automatiskt; den kan installeras när det är klart.";
+"A software update is available. The vehicle downloads it automatically." = "En programvaruuppdatering är tillgänglig. Fordonet laddar ned den automatiskt.";

@@ -12,46 +12,90 @@ struct ControlsTabView: View {
     @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
     @State private var chargeTarget: Int = 80
     @State private var ampLimit: Int = 16
+    @State private var showScheduleEditor = false
     @State private var isInitialized = false
 
     private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { Preferences.features.enabled }
+
+    /// A control is live only when all three layers agree: this app implements the command for
+    /// the active brand, the vehicle's capability profile permits it, and nothing else is
+    /// already in flight. Previously each button hardcoded a brand check, which meant the
+    /// capability system and the actual affordance could drift apart silently.
+    private func isDisabled(_ command: RemoteCommand) -> Bool {
+        guard command.isImplemented(by: Preferences.activeBrand),
+              profile.permits(command.requiredCapability) else { return true }
+        return remoteCommandInProgress
+    }
+
+    /// Dims a whole card whose commands are unavailable on this vehicle, so "shown but inert"
+    /// reads as deliberate rather than broken. Keyed off the card's representative command
+    /// rather than the brand, for the same reason as `isDisabled`.
+    private func cardOpacity(_ representative: RemoteCommand) -> Double {
+        representative.isImplemented(by: Preferences.activeBrand)
+            && profile.permits(representative.requiredCapability) ? 1.0 : 0.65
+    }
+
+    /// Stands in for the real `.startClimate` when only its gating matters — neither
+    /// `isImplemented(by:)` nor `requiredCapability` looks at the associated values, and
+    /// building the live one here would duplicate the picker state the button already reads.
+    private static let climateProbe = RemoteCommand.startClimate(
+        temperatureCelsius: 0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified,
+        rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified
+    )
     private var climateActive: Bool {
         guard let status = state.climateStatus else { return false }
         return status.activity == .active || status.activity == .heating
             || status.activity == .cooling || status.activity == .ventilating
     }
 
+    private var hasAnyVisibleChargingControls: Bool {
+        guard state.powertrain.hasElectricRange else { return false }
+        return (profile.permits(.chargeTarget) && features.contains(.remoteCharging)) ||
+        (profile.permits(.chargingCurrentLimit) && features.contains(.remoteCharging)) ||
+        (profile.permits(.chargingScheduleOverride) && (features.contains(.remoteCharging) || features.contains(.remoteSchedules)))
+    }
+
     private var hasAnyVisibleControlCards: Bool {
         features.contains(.remoteClimate) ||
-        features.contains(.remotePreCleaning) ||
-        features.contains(.remoteCharging) ||
-        features.contains(.remoteSchedules) ||
+        (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)) ||
+        hasAnyVisibleChargingControls ||
+        (state.powertrain.hasCombustionEngine && isBrandVolvo) ||
         features.contains(.remoteLocks) ||
-        features.contains(.remoteWindows) ||
-        features.contains(.remoteHonkFlash)
+        (features.contains(.remoteWindows) && profile.permits(.windows)) ||
+        features.contains(.remoteHonkFlash) ||
+        (features.contains(.remoteOTA) && profile.permits(.softwareInstallControl))
     }
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             restrictedNoticeBanner
             if hasAnyVisibleControlCards {
-                if features.contains(.remoteClimate) || features.contains(.remotePreCleaning) {
+                if features.contains(.remoteClimate) || (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)) {
                     climateControlCard
                 }
-                if features.contains(.remoteCharging) || features.contains(.remoteSchedules) {
+                if state.powertrain.hasCombustionEngine && isBrandVolvo {
+                    engineStartControlCard
+                }
+                if hasAnyVisibleChargingControls {
                     chargingControlCard
                 }
                 if features.contains(.remoteLocks) {
                     accessControlCard
                 }
-                if features.contains(.remoteWindows) || features.contains(.remoteHonkFlash) {
+                if (features.contains(.remoteWindows) && profile.permits(.windows)) || features.contains(.remoteHonkFlash) {
                     windowsLocateCard
+                }
+                if features.contains(.remoteOTA) && profile.permits(.softwareInstallControl) {
+                    otaControlCard
                 }
             } else {
                 noControlsEnabledCard
             }
+        }
+        .sheet(isPresented: $showScheduleEditor) {
+            ScheduleEditorSheet(state: state, onRemoteCommand: onRemoteCommand)
         }
         .onAppear {
             if let currentTarget = state.chargeTargetPercentage {
@@ -68,27 +112,27 @@ struct ControlsTabView: View {
 
     private var restrictedNoticeBanner: some View {
         HStack(spacing: 10) {
-            Image(systemName: isBrandVolvo ? "checkmark.shield.fill" : "lock.shield.fill")
+            Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(isBrandVolvo ? HisingenTheme.accent : .secondary)
+                .foregroundStyle(HisingenTheme.accent)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Remote Controls Temporarily Disabled"))
+                Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Polestar Remote Commands"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(isBrandVolvo
                      ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
-                     : L10n.text("Polestar's backend restricts remote write commands to paired mobile devices."))
+                     : L10n.text("Climate, locks, windows and software installation are active. Charging commands are not yet verified."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
             Spacer()
         }
         .padding(10)
-        .background(isBrandVolvo ? HisingenTheme.accent.opacity(0.08) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isBrandVolvo ? HisingenTheme.accent.opacity(0.3) : Color.primary.opacity(0.15), lineWidth: 0.5)
+                .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
     }
 
@@ -96,13 +140,24 @@ struct ControlsTabView: View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    CardHeader(symbol: "fan.fill", title: L10n.text("Climate & Conditioning"), color: .orange)
+                    HStack(spacing: 7) {
+                        SpinningFanView(isSpinning: climateActive, size: 14, color: climateActive ? .orange : HisingenTheme.inkMuted)
+                        Text(L10n.text("Climate & Conditioning"))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(HisingenTheme.ink)
+                    }
                     Spacer()
-                    if let status = state.climateStatus, status.activity != .unknown {
+                    if climateActive {
+                        Pill(
+                            text: state.climateStatus?.activity.displayName ?? L10n.text("Active"),
+                            color: .orange,
+                            symbol: "fan.fill"
+                        )
+                    } else if let status = state.climateStatus, status.activity != .unknown && status.activity != .idle {
                         Pill(
                             text: status.activity.displayName,
-                            color: climateActive ? .orange : .secondary,
-                            symbol: climateActive ? "flame.fill" : nil
+                            color: .secondary,
+                            symbol: nil
                         )
                     }
                 }
@@ -115,10 +170,10 @@ struct ControlsTabView: View {
                                     Text(L10n.text("Target Cabin Temperature"))
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.secondary)
-                                    if let remaining = state.climateStatus?.timeRemainingMinutes {
+                                    if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive {
                                         Text(L10n.format("%d min remaining", remaining))
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.tertiary)
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(HisingenTheme.polestarAmber)
                                     }
                                 }
                                 Spacer()
@@ -141,7 +196,7 @@ struct ControlsTabView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(true)
+                                .disabled(isDisabled(.stopClimate))
 
                                 HStack(spacing: 4) {
                                     ForEach([19, 20, 21, 22, 23], id: \.self) { temp in
@@ -157,7 +212,7 @@ struct ControlsTabView: View {
                                         .buttonStyle(.bordered)
                                         .tint(isSelected ? Color.orange : nil)
                                         .controlSize(.small)
-                                        .disabled(true)
+                                        .disabled(isDisabled(.stopClimate))
                                     }
                                 }
 
@@ -173,41 +228,67 @@ struct ControlsTabView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(true)
+                                .disabled(isDisabled(.stopClimate))
                             }
                         }
                     } else {
-                        HStack(spacing: 10) {
-                            Image(systemName: "thermometer.sun.fill")
-                                .font(.system(size: 22))
-                                .foregroundStyle(.orange)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.text("Automatic Preconditioning"))
-                                    .font(.system(size: 12, weight: .semibold))
-                                Text(L10n.text("Preconditions the cabin to 22.0 °C and activates automatic seat and steering-wheel heating."))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                        if climateActive {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(L10n.text("Cabin Preconditioning Running"))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(HisingenTheme.ink)
+                                    if let remaining = state.climateStatus?.timeRemainingMinutes {
+                                        Text(L10n.format("%d min remaining", remaining))
+                                            .font(.system(size: 10.5, weight: .medium))
+                                            .foregroundStyle(.orange)
+                                    } else {
+                                        Text(L10n.text("Preconditions vehicle using in-car comfort settings."))
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if let interior = state.climateStatus?.interiorTemperatureCelsius {
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        Text(L10n.text("Interior"))
+                                            .font(.system(size: 9.5))
+                                            .foregroundStyle(.secondary)
+                                        Text(String(format: "%.1f °C", interior))
+                                            .font(.system(size: 16, weight: .bold))
+                                            .monospacedDigit()
+                                            .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
+                                    }
+                                }
                             }
-                            Spacer()
+                            .padding(9)
+                            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else {
+                            HStack {
+                                Text(L10n.text("Preconditions the cabin to comfortable temperature using in-car climate settings."))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                if let interior = state.climateStatus?.interiorTemperatureCelsius {
+                                    Text(String(format: "%.1f °C", interior))
+                                        .font(.system(size: 12.5, weight: .semibold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        .padding(10)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.primary.opacity(0.15), lineWidth: 0.5)
-                        )
                     }
 
-                    if profile.permits(.seatHeating) || profile.permits(.steeringWheelHeating) {
+                    if profile.hasSelectableSeatHeating || profile.hasSelectableSteeringWheelHeating {
                         HStack(spacing: 8) {
-                            if profile.permits(.seatHeating) {
+                            if profile.hasSelectableSeatHeating {
                                 SeatHeatingControl(
                                     title: L10n.text("Driver"),
                                     level: $driverSeat
                                 ) { newLevel in
                                     Preferences.remoteDriverSeatHeating = newLevel
                                 }
-                                .disabled(true)
+                                .disabled(isDisabled(.stopClimate))
 
                                 SeatHeatingControl(
                                     title: L10n.text("Passenger"),
@@ -215,14 +296,14 @@ struct ControlsTabView: View {
                                 ) { newLevel in
                                     Preferences.remoteFrontRightSeatHeating = newLevel
                                 }
-                                .disabled(true)
+                                .disabled(isDisabled(.stopClimate))
                             }
 
-                            if profile.permits(.steeringWheelHeating) {
+                            if profile.hasSelectableSteeringWheelHeating {
                                 SteeringHeatingControl(level: $steeringHeating) { newLevel in
                                     Preferences.remoteSteeringWheelHeating = newLevel
                                 }
-                                .disabled(true)
+                                .disabled(isDisabled(.stopClimate))
                             }
                         }
                     }
@@ -230,39 +311,42 @@ struct ControlsTabView: View {
                     Divider().opacity(0.5)
 
                     HStack(spacing: 8) {
-                        Button {
-                            onRemoteCommand(.startClimate(
-                                temperatureCelsius: Float(targetTemperature),
-                                frontLeftSeat: driverSeat,
-                                frontRightSeat: passengerSeat,
-                                rearLeftSeat: .unspecified,
-                                rearRightSeat: .unspecified,
-                                steeringWheel: steeringHeating
-                            ))
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "fan.fill")
-                                Text(L10n.text("Start Climate"))
-                                    .font(.system(size: 12, weight: .semibold))
+                        if climateActive {
+                            Button {
+                                onRemoteCommand(.stopClimate)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    SpinningFanView(isSpinning: true, size: 13, color: .white)
+                                    Text(L10n.text("Stop Climate"))
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 34)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 34)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(HisingenTheme.polestarAmber)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
-
-                        Button {
-                            onRemoteCommand(.stopClimate)
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "stop.fill")
-                                Text(L10n.text("Stop"))
-                                    .font(.system(size: 12, weight: .medium))
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color.red)
+                            .disabled(isDisabled(.stopClimate))
+                        } else {
+                            Button {
+                                onRemoteCommand(.startClimate(
+                                    temperatureCelsius: Float(targetTemperature),
+                                    frontLeftSeat: driverSeat,
+                                    frontRightSeat: passengerSeat,
+                                    rearLeftSeat: .unspecified,
+                                    rearRightSeat: .unspecified,
+                                    steeringWheel: steeringHeating
+                                ))
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "fan.fill")
+                                    Text(L10n.text("Start Climate"))
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 34)
                             }
-                            .frame(maxWidth: 80, minHeight: 34)
+                            .buttonStyle(.borderedProminent)
+                            .tint(HisingenTheme.polestarAmber)
+                            .disabled(isDisabled(Self.climateProbe))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
                     }
                 }
 
@@ -286,7 +370,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(Self.climateProbe))
     }
 
     private var chargingControlCard: some View {
@@ -382,6 +466,22 @@ struct ControlsTabView: View {
                         .disabled(true)
                     }
                 }
+
+                if features.contains(.remoteSchedules) || features.contains(.remoteCharging) {
+                    Divider().opacity(0.5)
+
+                    Button {
+                        showScheduleEditor = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar.badge.clock")
+                            Text(L10n.text("Manage Timers & Schedules…"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
         .opacity(0.65)
@@ -390,26 +490,36 @@ struct ControlsTabView: View {
     private var accessControlCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "lock.fill", title: L10n.text("Locks & Security"), color: .blue)
+                HStack {
+                    CardHeader(symbol: "lock.fill", title: L10n.text("Locks & Security"), color: .blue)
+                    Spacer()
+                    if let isLocked = state.exteriorStatus?.isLocked {
+                        Pill(
+                            text: isLocked ? L10n.text("Locked") : L10n.text("Unlocked"),
+                            color: isLocked ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning,
+                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                        )
+                    }
+                }
 
                 HStack(spacing: 8) {
                     let isLocked = state.exteriorStatus?.isLocked == true
 
-                    if (profile.permits(.locks) || isBrandVolvo) && features.contains(.remoteLocks) {
+                    if profile.permits(.locks) && features.contains(.remoteLocks) {
                         Button {
                             onRemoteCommand(.lock)
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "lock.fill")
                                     .font(.system(size: 15))
-                                Text(L10n.text("Lock Vehicle"))
-                                    .font(.system(size: 11, weight: .semibold))
+                                Text(L10n.text("Lock"))
+                                    .font(.system(size: 11, weight: !isLocked ? .semibold : .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 46)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(isLocked ? .secondary : .blue)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .buttonStyle(.bordered)
+                        .tint(!isLocked ? .blue : nil)
+                        .disabled(isDisabled(.lock))
 
                         Button {
                             onRemoteCommand(.unlock)
@@ -418,12 +528,13 @@ struct ControlsTabView: View {
                                 Image(systemName: "lock.open.fill")
                                     .font(.system(size: 15))
                                 Text(L10n.text("Unlock"))
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(size: 11, weight: isLocked ? .semibold : .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 46)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .tint(isLocked ? .blue : nil)
+                        .disabled(isDisabled(.unlock))
                     }
 
                     if profile.permits(.trunk) && features.contains(.remoteLocks) {
@@ -444,13 +555,20 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(.lock))
     }
 
     private var windowsLocateCard: some View {
-        Card {
+        let showWindows = profile.permits(.windows) && features.contains(.remoteWindows)
+        let showLocate = profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash)
+        let headerTitle = showWindows && showLocate
+            ? L10n.text("Windows & Locate Vehicle")
+            : (showWindows ? L10n.text("Windows Control") : L10n.text("Locate Vehicle"))
+        let headerSymbol = showWindows ? "rectangle.arrowtriangle.2.outward" : "flashlight.on.fill"
+
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "rectangle.arrowtriangle.2.outward", title: L10n.text("Windows & Locate Vehicle"), color: .indigo)
+                CardHeader(symbol: headerSymbol, title: headerTitle, color: .indigo)
 
                 HStack(spacing: 8) {
                     if profile.permits(.windows) && features.contains(.remoteWindows) {
@@ -483,7 +601,7 @@ struct ControlsTabView: View {
                         .disabled(true)
                     }
 
-                    if (profile.permits(.honkAndFlash) || isBrandVolvo) && features.contains(.remoteHonkFlash) {
+                    if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
                         Button {
                             onRemoteCommand(.flashLights)
                         } label: {
@@ -496,7 +614,21 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.flashLights))
+
+                        Button {
+                            onRemoteCommand(.honkHorn)
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.system(size: 13))
+                                Text(L10n.text("Honk Horn"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDisabled(.honkHorn))
 
                         Button {
                             onRemoteCommand(.honkAndFlash)
@@ -510,12 +642,185 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isBrandVolvo ? remoteCommandInProgress : true)
+                        .disabled(isDisabled(.honkAndFlash))
                     }
                 }
             }
         }
-        .opacity(isBrandVolvo ? 1.0 : 0.65)
+        .opacity(cardOpacity(.honkAndFlash))
+    }
+
+    private var otaControlCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "shippingbox.fill", title: L10n.text("Vehicle Software & OTA"), color: .blue)
+                if let software = state.softwareInfo {
+                    otaStatusLine(software)
+                    otaActions(software)
+                } else {
+                    otaStatusRow(symbol: "questionmark.circle.fill",
+                                 tint: .secondary,
+                                 text: L10n.text("Software status is unavailable for this vehicle."))
+                }
+            }
+        }
+    }
+
+    /// The advertised version only means "an update is waiting" while the state says so —
+    /// in every settled state it is what the car is already running, so it must not be
+    /// described as pending.
+    @ViewBuilder
+    private func otaStatusLine(_ software: VehicleSoftwareInfo) -> some View {
+        let pending = software.latestAvailableVersion ?? software.version
+        switch software.state {
+        case .available:
+            otaStatusRow(symbol: "arrow.down.circle", tint: .blue,
+                         text: pending.map { L10n.format("Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.", $0) }
+                            ?? L10n.text("A software update is available. The vehicle downloads it automatically."))
+        case .downloaded, .deferred:
+            otaStatusRow(symbol: "arrow.down.circle.fill", tint: .blue,
+                         text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
+                            ?? L10n.text("A software update is ready to install."))
+        case .downloading:
+            otaStatusRow(symbol: "arrow.down.circle", tint: .blue,
+                         text: pending.map { L10n.format("Downloading software update %@…", $0) }
+                            ?? L10n.text("Downloading a software update…"))
+        case .installing:
+            otaStatusRow(symbol: "gearshape.2.fill", tint: .blue,
+                         text: pending.map { L10n.format("Installing software update %@…", $0) }
+                            ?? L10n.text("Installing a software update…"))
+        case .scheduled:
+            let when = software.scheduledAt.map(Format.dateTimeFormatter.string(from:))
+            otaStatusRow(symbol: "calendar.badge.clock", tint: .blue,
+                         text: when.map { L10n.format("Installation is scheduled for %@.", $0) }
+                            ?? L10n.text("An installation is scheduled."))
+        case .failed:
+            otaStatusRow(symbol: "exclamationmark.triangle.fill", tint: HisingenTheme.semanticWarning,
+                         text: L10n.text("The last software update failed."))
+        case .completed, .unknown:
+            let installed = software.installedVersion ?? software.version
+            otaStatusRow(symbol: "checkmark.circle.fill", tint: HisingenTheme.semanticGood,
+                         text: installed.map { L10n.format("Software is up to date (%@).", $0) }
+                            ?? L10n.text("Software is up to date"))
+        }
+    }
+
+    @ViewBuilder
+    private func otaActions(_ software: VehicleSoftwareInfo) -> some View {
+        switch software.state {
+        case .downloaded, .deferred:
+            otaButton(title: L10n.text("Install Update Now"), symbol: "arrow.down.circle.fill",
+                      prominent: true) { onRemoteCommand(.installOTANow) }
+        case .scheduled:
+            VStack(spacing: 6) {
+                otaButton(title: L10n.text("Install Update Now"), symbol: "arrow.down.circle.fill",
+                          prominent: true) { onRemoteCommand(.installOTANow) }
+                otaButton(title: L10n.text("Cancel Scheduled Installation"), symbol: "xmark.circle",
+                          prominent: false) { onRemoteCommand(.cancelOTA) }
+            }
+        // `available` offers no button: the scheduler rejects an update the car has not
+        // downloaded yet, so a live-looking button would only ever produce an error.
+        case .available, .downloading, .installing, .failed, .completed, .unknown:
+            EmptyView()
+        }
+    }
+
+    private func otaStatusRow(symbol: String, tint: Color, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).foregroundStyle(tint)
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(HisingenTheme.ink)
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func otaButton(title: String, symbol: String, prominent: Bool,
+                           action: @escaping () -> Void) -> some View {
+        let label = HStack(spacing: 5) {
+            Image(systemName: symbol)
+            Text(title)
+        }
+        .frame(maxWidth: .infinity)
+
+        if prominent {
+            Button(action: action) { label }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .controlSize(.regular)
+                .disabled(remoteCommandInProgress)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .disabled(remoteCommandInProgress)
+        }
+    }
+
+    private var engineStartControlCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    CardHeader(symbol: "flame.fill", title: L10n.text("Remote Engine Start (RES)"), color: .orange)
+                    Spacer()
+                    if state.isEngineRunning == true {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(HisingenTheme.semanticGood)
+                                .frame(width: 6, height: 6)
+                            Text(L10n.text("Engine Running"))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(HisingenTheme.semanticGood)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
+                    } else {
+                        Text(L10n.text("Engine Stopped"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.secondary.opacity(0.12), in: Capsule())
+                    }
+                }
+
+                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    Button {
+                        onRemoteCommand(.startEngine(runtimeMinutes: 15))
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "flame.fill")
+                            Text(L10n.text("Start Engine (15 min)"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: 15)) || (state.isEngineRunning == true))
+
+                    Button {
+                        onRemoteCommand(.stopEngine)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "stop.fill")
+                            Text(L10n.text("Stop Engine"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isDisabled(.stopEngine) || (state.isEngineRunning != true))
+                }
+            }
+        }
+        .opacity(cardOpacity(.startEngine(runtimeMinutes: 15)))
     }
 
     private var noControlsEnabledCard: some View {
@@ -533,6 +838,41 @@ struct ControlsTabView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
+        }
+    }
+}
+
+struct SpinningFanView: View {
+    let isSpinning: Bool
+    var size: CGFloat = 13
+    var color: Color = .orange
+
+    @State private var angle: Double = 0
+
+    var body: some View {
+        Image(systemName: "fan.fill")
+            .font(.system(size: size))
+            .foregroundStyle(color)
+            .rotationEffect(.degrees(angle))
+            .onAppear {
+                if isSpinning {
+                    startSpinning()
+                }
+            }
+            .onChange(of: isSpinning) { spinning in
+                if spinning {
+                    startSpinning()
+                } else {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        angle = 0
+                    }
+                }
+            }
+    }
+
+    private func startSpinning() {
+        withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+            angle = 360
         }
     }
 }

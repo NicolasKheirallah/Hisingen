@@ -31,6 +31,14 @@ enum Format {
 
     static func icon(for data: VehicleState?, includeConnection: Bool = true) -> String {
         guard let data else { return "car" }
+        if data.powertrain.isCombustionOnly {
+            return "fuelpump.fill"
+        }
+        if data.powertrain.isHybrid {
+            if includeConnection, data.isCharging { return "bolt.car.fill" }
+            if data.isEngineRunning == true { return "engine.combustion.fill" }
+            return "bolt.and.leaf.fill"
+        }
         if includeConnection, data.isCharging { return "bolt.car.fill" }
         if includeConnection, data.isPluggedIn == true { return "bolt.car" }
         return "car"
@@ -70,6 +78,15 @@ enum Format {
         let converted = unit == .kilometers ? kmH : Int((Double(kmH) * 0.621371).rounded())
         let speedSuffix = unit == .kilometers ? "km/h" : "mph"
         return "+\(converted) \(speedSuffix)"
+    }
+
+    static func fuelVolume(liters: Double, unit: FuelVolumeUnit) -> String {
+        let converted = unit.convert(liters: liters)
+        return String(format: "%.1f %@", converted, unit.suffix)
+    }
+
+    static func fuelEconomy(lPer100Km: Double, unit: FuelEconomyUnit) -> String {
+        unit.format(lPer100Km: lPer100Km)
     }
 
     static func greeting(_ name: String) -> String {
@@ -124,39 +141,62 @@ enum Format {
         includeChargingContext: Bool = true
     ) -> String {
         guard let data else { return "--" }
-        let battery = data.batteryPercentage.map { String(format: "%.0f%%", $0) }
-        let range = data.rangeKm.map { "\(unit.convert(km: $0))\(unit.suffix)" }
+        let primaryPct: String? = {
+            if data.powertrain.isCombustionOnly {
+                return data.fuelLevelPercent.map { String(format: "%.0f%%", $0) }
+            }
+            return data.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? data.fuelLevelPercent.map { String(format: "%.0f%%", $0) }
+        }()
+        let primaryRange: String? = {
+            if let km = data.totalCombinedRangeKm ?? data.rangeKm ?? data.fuelRangeKm {
+                return "\(unit.convert(km: km))\(unit.suffix)"
+            }
+            return nil
+        }()
 
         switch style {
         case .battery:
-            return battery ?? "--"
+            return primaryPct ?? "--"
 
         case .batteryAndRange:
-            return [battery, range].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
+            return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
 
         case .range:
-            return range ?? "--"
+            return primaryRange ?? "--"
 
         case .chargingAware:
             if includeChargingContext, data.isCharging,
                let minutes = data.estimatedChargingTimeToFullMinutes, minutes > 0 {
-                return [battery, Format.shortDuration(minutes: minutes)].compactMap { $0 }.joined(separator: " · ")
+                return [primaryPct, Format.shortDuration(minutes: minutes)].compactMap { $0 }.joined(separator: " · ")
             }
-            return [battery, range].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
+            return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
 
         case .compactCharging:
             if includeChargingContext, data.isCharging,
                let minutes = data.estimatedChargingTimeToFullMinutes, minutes > 0 {
-                return "\(battery ?? "--") (\(Format.shortDuration(minutes: minutes)))"
+                return "\(primaryPct ?? "--") (\(Format.shortDuration(minutes: minutes)))"
             }
-            return battery ?? "--"
+            return primaryPct ?? "--"
 
         case .batteryAndPower:
             if includeChargingContext, data.isCharging,
                let power = data.chargingPowerWatts, power > 0 {
-                return [battery, Format.kilowatts(watts: power)].compactMap { $0 }.joined(separator: " · ")
+                return [primaryPct, Format.kilowatts(watts: power)].compactMap { $0 }.joined(separator: " · ")
             }
-            return [battery, range].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
+            return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
+
+        case .iconOnly:
+            return ""
+
+        case .lockAndBattery:
+            let lockGlyph: String = {
+                guard let isLocked = data.exteriorStatus?.isLocked else { return "" }
+                return isLocked ? "🔒" : "🔓"
+            }()
+            if !lockGlyph.isEmpty, let pct = primaryPct {
+                return "\(lockGlyph) \(pct)"
+            }
+            return primaryPct ?? "--"
         }
     }
 }

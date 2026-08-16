@@ -10,15 +10,15 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     case polestar5
     case polestar6
     case volvoXC40
+    case volvoEX40
+    case volvoC40
+    case volvoEC40
     case volvoXC60
     case volvoXC90
     case volvoS60
     case volvoS90
     case volvoV60
     case volvoV90
-
-
-    case volvoC40
     case volvoEX30
     case volvoEX90
     case volvoES90
@@ -26,7 +26,6 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     case unknown(String?)
 
     init(modelName: String?, vin: String? = nil) {
-
         if let vin = vin?.uppercased(), vin.count >= 4 {
             let chars = Array(vin)
             if vin.hasPrefix("YSM") {
@@ -45,7 +44,6 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             .lowercased()
             .replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
-
 
         if let volvo = Self.volvoModel(from: normalized) {
             self = volvo
@@ -94,21 +92,27 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             case "four": self = .polestar4
             case "five": self = .polestar5
             case "six": self = .polestar6
-            default: self = .unknown(modelName)
+            default:
+                if let vin = vin?.uppercased(), (vin.hasPrefix("YV1") || vin.hasPrefix("YV4") || vin.hasPrefix("LVY")) {
+                    self = .volvoUnknown(modelName)
+                } else {
+                    self = .unknown(modelName)
+                }
             }
         }
     }
-
 
     private static func volvoModel(from normalized: String) -> VehicleModelFamily? {
         let compact = normalized.replacingOccurrences(of: " ", with: "")
         if compact.contains("ex30") { return .volvoEX30 }
         if compact.contains("ex90") { return .volvoEX90 }
         if compact.contains("es90") { return .volvoES90 }
+        if compact.contains("ex40") { return .volvoEX40 }
+        if compact.contains("ec40") { return .volvoEC40 }
         if compact.contains("xc40") { return .volvoXC40 }
+        if compact.contains("c40") { return .volvoC40 }
         if compact.contains("xc60") { return .volvoXC60 }
         if compact.contains("xc90") { return .volvoXC90 }
-        if compact.contains("ex40") || compact.contains("ec40") || compact.contains("c40") { return .volvoC40 }
         if compact.contains("s60") { return .volvoS60 }
         if compact.contains("s90") { return .volvoS90 }
         if compact.contains("v60") { return .volvoV60 }
@@ -125,13 +129,15 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case .polestar5: return "Polestar 5"
         case .polestar6: return "Polestar 6"
         case .volvoXC40: return "Volvo XC40"
+        case .volvoEX40: return "Volvo EX40"
+        case .volvoC40: return "Volvo C40"
+        case .volvoEC40: return "Volvo EC40"
         case .volvoXC60: return "Volvo XC60"
         case .volvoXC90: return "Volvo XC90"
         case .volvoS60: return "Volvo S60"
         case .volvoS90: return "Volvo S90"
         case .volvoV60: return "Volvo V60"
         case .volvoV90: return "Volvo V90"
-        case .volvoC40: return "Volvo C40"
         case .volvoEX30: return "Volvo EX30"
         case .volvoEX90: return "Volvo EX90"
         case .volvoES90: return "Volvo ES90"
@@ -151,14 +157,13 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
 
     var brand: VehicleBrand {
         switch self {
-        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40, .volvoXC60, .volvoXC90,
+             .volvoS60, .volvoS90, .volvoV60, .volvoV90, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
             return .volvo
         case .polestar1, .polestar2, .polestar3, .polestar4, .polestar5, .polestar6, .unknown:
             return .polestar
         }
     }
-
 
     var hasVerifiedNominalSpecs: Bool { brand == .polestar }
 
@@ -171,8 +176,13 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case .polestar5: return 103.0
         case .polestar6: return 103.0
         case .unknown: return 78.0
-        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
+            return 78.0
+        case .volvoEX30:
+            return 69.0
+        case .volvoEX90, .volvoES90:
+            return 111.0
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90, .volvoUnknown:
             return 0
         }
     }
@@ -186,8 +196,13 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case .polestar5: return 96.0
         case .polestar6: return 96.0
         case .unknown: return 75.0
-        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
+            return 75.0
+        case .volvoEX30:
+            return 64.0
+        case .volvoEX90, .volvoES90:
+            return 107.0
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90, .volvoUnknown:
             return 0
         }
     }
@@ -197,22 +212,19 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case .polestar1: return 150.0
         case .polestar2: return 480.0
         case .polestar3: return 610.0
-
-
         case .polestar4: return 610.0
-
-
         case .polestar5: return 670.0
-
-
         case .polestar6: return 670.0
         case .unknown: return 480.0
-        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
+        case .volvoXC40, .volvoEX40: return 570.0
+        case .volvoC40, .volvoEC40: return 580.0
+        case .volvoEX30: return 476.0
+        case .volvoEX90: return 600.0
+        case .volvoES90: return 600.0
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90, .volvoUnknown:
             return 0
         }
     }
-
 
     var averageConsumptionWhPerKm: Double? {
         guard hasVerifiedNominalSpecs, nominalWltpRangeKm > 0 else { return nil }
@@ -232,13 +244,15 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case "polestar5": self = .polestar5
         case "polestar6": self = .polestar6
         case "volvoXC40": self = .volvoXC40
+        case "volvoEX40": self = .volvoEX40
+        case "volvoC40": self = .volvoC40
+        case "volvoEC40": self = .volvoEC40
         case "volvoXC60": self = .volvoXC60
         case "volvoXC90": self = .volvoXC90
         case "volvoS60": self = .volvoS60
         case "volvoS90": self = .volvoS90
         case "volvoV60": self = .volvoV60
         case "volvoV90": self = .volvoV90
-        case "volvoC40": self = .volvoC40
         case "volvoEX30": self = .volvoEX30
         case "volvoEX90": self = .volvoEX90
         case "volvoES90": self = .volvoES90
@@ -258,13 +272,15 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         case .polestar5: try c.encode("polestar5", forKey: .kind)
         case .polestar6: try c.encode("polestar6", forKey: .kind)
         case .volvoXC40: try c.encode("volvoXC40", forKey: .kind)
+        case .volvoEX40: try c.encode("volvoEX40", forKey: .kind)
+        case .volvoC40: try c.encode("volvoC40", forKey: .kind)
+        case .volvoEC40: try c.encode("volvoEC40", forKey: .kind)
         case .volvoXC60: try c.encode("volvoXC60", forKey: .kind)
         case .volvoXC90: try c.encode("volvoXC90", forKey: .kind)
         case .volvoS60: try c.encode("volvoS60", forKey: .kind)
         case .volvoS90: try c.encode("volvoS90", forKey: .kind)
         case .volvoV60: try c.encode("volvoV60", forKey: .kind)
         case .volvoV90: try c.encode("volvoV90", forKey: .kind)
-        case .volvoC40: try c.encode("volvoC40", forKey: .kind)
         case .volvoEX30: try c.encode("volvoEX30", forKey: .kind)
         case .volvoEX90: try c.encode("volvoEX90", forKey: .kind)
         case .volvoES90: try c.encode("volvoES90", forKey: .kind)
@@ -355,6 +371,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case connectivity
     case softwareStatus
     case softwareInstallControl
+    case engineStart
 
     var title: String {
         switch self {
@@ -379,15 +396,18 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .connectivity: return L10n.text("Connectivity diagnostics")
         case .softwareStatus: return L10n.text("Vehicle software status")
         case .softwareInstallControl: return L10n.text("Software installation control")
+        case .engineStart: return L10n.text("Remote engine start (RES)")
         }
     }
+
+    var displayName: String { title }
 
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
         .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
-        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl
+        .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
 }
 
@@ -414,6 +434,17 @@ struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
 
     var isStale: Bool {
         Date().timeIntervalSince(probedAt) > Self.stalenessInterval
+    }
+
+    var resultsMap: [VehicleCapability: VehicleCapabilitySupport] {
+        results
+    }
+
+    var allResults: [(capability: VehicleCapability, support: VehicleCapabilitySupport)] {
+        let list = results.map { (capability: $0.key, support: $0.value) }
+        return list.sorted { (a: (capability: VehicleCapability, support: VehicleCapabilitySupport), b: (capability: VehicleCapability, support: VehicleCapabilitySupport)) in
+            a.capability.title < b.capability.title
+        }
     }
 
     func merging(newerProbe: VehicleProbedCapabilities) -> VehicleProbedCapabilities {
@@ -475,14 +506,31 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             }
         case .polestar1, .polestar5, .polestar6:
             return .backendDependent
-        case .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-             .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown:
-
-
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40, .volvoXC60, .volvoXC90,
+             .volvoS60, .volvoS90, .volvoV60, .volvoV90, .volvoUnknown:
             switch capability {
             case .locks, .honkAndFlash, .exteriorStatus, .climateStartStop, .serviceWarnings:
                 return .supported
-            case .softwareInstallControl:
+            case .climateTemperature, .seatHeating, .steeringWheelHeating:
+                return .unavailable
+            case .preCleaning, .softwareInstallControl, .windows, .trunk:
+                return .unavailable
+            // Volvo's public APIs expose no software/OTA resource at all — not a backend
+            // that might answer on some vehicles, but an endpoint that does not exist.
+            case .softwareStatus:
+                return .unavailable
+            case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
+                return .unavailable
+            default:
+                return .backendDependent
+            }
+        case .volvoEX30, .volvoEX90, .volvoES90:
+            switch capability {
+            case .locks, .honkAndFlash, .exteriorStatus, .climateStartStop, .serviceWarnings:
+                return .supported
+            case .climateTemperature, .seatHeating, .steeringWheelHeating:
+                return .supported
+            case .softwareInstallControl, .softwareStatus:
                 return .unavailable
             default:
                 return .backendDependent
@@ -508,10 +556,14 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
         support(for: .steeringWheelHeating) == .supported
     }
 
+    var hasEngineStart: Bool {
+        support(for: .engineStart) == .supported
+    }
+
     func supportsAnyCommand(in feature: AppFeature) -> Bool {
         let capabilities: [VehicleCapability]
         switch feature {
-        case .remoteClimate: capabilities = [.climateStartStop]
+        case .remoteClimate: capabilities = [.climateStartStop, .engineStart]
         case .remotePreCleaning: capabilities = [.preCleaning]
         case .remoteCharging:
             capabilities = [.chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride]
@@ -543,7 +595,7 @@ private extension VehicleCapability {
     var associatedFeature: AppFeature {
         switch self {
         case .climateStartStop, .climateTemperature, .seatHeating,
-             .steeringWheelHeating, .climateTimers:
+             .steeringWheelHeating, .climateTimers, .engineStart:
             return .climateStatus
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,

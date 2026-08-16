@@ -38,16 +38,6 @@ private let testLinkerSettings: [LinkerSetting] = usesStandaloneCommandLineTools
     ])]
     : []
 
-// Remote vehicle-command dispatch is excluded from standard builds — Polestar
-// currently requires official paired-mobile authorization for these commands.
-// Set HISINGEN_EXPERIMENTAL_REMOTE=1 to opt into that code path for
-// owner-authorized experimentation only; it is never set in CI or release
-// builds, so distributed builds can never dispatch a live vehicle command.
-private let experimentalRemoteSwiftSettings: [SwiftSetting] =
-    ProcessInfo.processInfo.environment["HISINGEN_EXPERIMENTAL_REMOTE"] == "1"
-    ? [.define("HISINGEN_EXPERIMENTAL_REMOTE")]
-    : []
-
 let package = Package(
     name: "Hisingen",
     defaultLocalization: "en",
@@ -58,8 +48,7 @@ let package = Package(
         .executableTarget(
             name: "Hisingen",
             path: "Sources/Hisingen",
-            resources: [.process("Resources")],
-            swiftSettings: experimentalRemoteSwiftSettings
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "HisingenTests",

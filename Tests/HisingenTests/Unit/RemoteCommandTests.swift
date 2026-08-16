@@ -115,6 +115,187 @@ struct RemoteCommandTests {
         }
     }
 
+    @Test
+    func testHonkHornCommandProperties() {
+        let honk = RemoteCommand.honkHorn
+        XCTAssertEqual(honk.feature, .remoteHonkFlash)
+        XCTAssertEqual(honk.requiredCapability, .honkAndFlash)
+        XCTAssertEqual(honk.risk, .routine)
+        XCTAssertEqual(honk.identifier, "honk-horn")
+        XCTAssertFalse(honk.title.isEmpty)
+    }
+
+    @Test
+    func testHonkFlashWireRequests() {
+        let honkAndFlash = PolestarGRPC.honkFlashRequest("VIN123", action: 0)
+        let honkOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 1)
+        let flashOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 2)
+
+        let hfFields = Protobuf.fields(honkAndFlash)
+        let hoFields = Protobuf.fields(honkOnly)
+        let foFields = Protobuf.fields(flashOnly)
+
+        XCTAssertEqual(hfFields.first { $0.number == 2 }?.varint, 0)
+        XCTAssertEqual(hoFields.first { $0.number == 2 }?.varint, 1)
+        XCTAssertEqual(foFields.first { $0.number == 2 }?.varint, 2)
+    }
+
+    @Test
+    @MainActor
+    func testRequireBiometricsPreference() {
+        let original = Preferences.requireBiometricsForRemoteControls
+        Preferences.requireBiometricsForRemoteControls = true
+        XCTAssertTrue(Preferences.requireBiometricsForRemoteControls)
+        Preferences.requireBiometricsForRemoteControls = false
+        XCTAssertFalse(Preferences.requireBiometricsForRemoteControls)
+        Preferences.requireBiometricsForRemoteControls = original
+    }
+
+    @Test
+    func testScheduleKindAndWeekdays() {
+        let climateSchedule = VehicleSchedule(
+            backendID: "timer-123",
+            index: 0,
+            kind: .climate,
+            startHour: 8,
+            startMinute: 15,
+            endHour: nil,
+            endMinute: nil,
+            weekdays: [.monday, .wednesday, .friday],
+            isActive: true
+        )
+        XCTAssertEqual(climateSchedule.kind, .climate)
+        XCTAssertEqual(climateSchedule.startHour, 8)
+        XCTAssertEqual(climateSchedule.startMinute, 15)
+        XCTAssertEqual(climateSchedule.weekdays.count, 3)
+        XCTAssertTrue(climateSchedule.isActive)
+        XCTAssertEqual(climateSchedule.backendID, "timer-123")
+
+        let chargeSchedule = VehicleSchedule(
+            backendID: nil,
+            index: 1,
+            kind: .globalCharging,
+            startHour: 23,
+            startMinute: 0,
+            endHour: 6,
+            endMinute: 30,
+            weekdays: [.saturday, .sunday],
+            isActive: true
+        )
+        XCTAssertEqual(chargeSchedule.kind, .globalCharging)
+        XCTAssertEqual(chargeSchedule.startHour, 23)
+        XCTAssertEqual(chargeSchedule.endHour, 6)
+        XCTAssertEqual(chargeSchedule.endMinute, 30)
+    }
+
+    @Test
+    func testRemoteEngineStartCommandAttributesAndBrandImplementation() {
+        let start = RemoteCommand.startEngine(runtimeMinutes: 15)
+        let stop = RemoteCommand.stopEngine
+
+        XCTAssertTrue(start.isImplemented(by: .volvo))
+        XCTAssertFalse(start.isImplemented(by: .polestar))
+        XCTAssertTrue(stop.isImplemented(by: .volvo))
+        XCTAssertFalse(stop.isImplemented(by: .polestar))
+
+        XCTAssertEqual(start.feature, .remoteClimate)
+        XCTAssertEqual(stop.feature, .remoteClimate)
+        XCTAssertEqual(start.requiredCapability, .engineStart)
+        XCTAssertEqual(stop.requiredCapability, .engineStart)
+        XCTAssertEqual(start.risk, .securitySensitive)
+        XCTAssertEqual(stop.risk, .routine)
+        XCTAssertEqual(start.identifier, "start-engine")
+        XCTAssertEqual(stop.identifier, "stop-engine")
+    }
+
+    @Test
+    func testVehicleWarrantyInfoDerivedAndExplicit() {
+        let state = VehicleState(
+            batteryPercentage: 80.0,
+            rangeKm: 50,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 100,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Volvo XC60 T8 Recharge",
+            modelYear: "2024",
+            registrationNo: "HYB123",
+            vin: "YV1XZEHR2R2371256",
+            ownerFirstName: "Nico",
+            odometerKm: 12000,
+            daysToService: 240,
+            distanceToServiceKm: 18000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            powertrain: .phev,
+            fuelLevelPercent: 75.0,
+            fuelRangeKm: 550,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+
+        let warranty = state.effectiveWarrantyInfo
+        XCTAssertEqual(warranty.planName, "Care by Volvo")
+        XCTAssertEqual(warranty.status, "Active")
+        XCTAssertEqual(warranty.assistanceContact, "Volvo Assistance")
+        XCTAssertTrue(warranty.factoryWarrantyValidUntil != nil)
+        XCTAssertTrue(warranty.batteryWarrantyValidUntil != nil)
+        XCTAssertTrue(warranty.digitalServicesValidUntil != nil)
+        XCTAssertTrue(warranty.corrosionWarrantyValidUntil != nil)
+        XCTAssertEqual(warranty.batteryWarrantyKm, 160_000)
+        XCTAssertEqual(warranty.includedMaintenance, true)
+
+        var polestarState = VehicleState(
+            batteryPercentage: 75.0,
+            rangeKm: 270,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 90,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2 Long Range Dual Motor",
+            modelYear: "2023",
+            registrationNo: "PLS789",
+            vin: "YSMVSEDE6PL147228",
+            ownerFirstName: "Nico",
+            odometerKm: 42000,
+            daysToService: 340,
+            distanceToServiceKm: 12000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            powertrain: .bev,
+            fuelLevelPercent: nil,
+            fuelRangeKm: nil,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+        polestarState.structureWeek = "202245"
+
+        let polestarWarranty = polestarState.effectiveWarrantyInfo
+        XCTAssertEqual(polestarWarranty.planName, "Polestar Care")
+        XCTAssertEqual(polestarWarranty.status, "Active")
+        XCTAssertEqual(polestarWarranty.assistanceContact, "Polestar Assistance")
+        XCTAssertTrue(polestarWarranty.factoryWarrantyValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.batteryWarrantyValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.digitalServicesValidUntil != nil)
+        XCTAssertTrue(polestarWarranty.corrosionWarrantyValidUntil != nil)
+        XCTAssertEqual(polestarWarranty.batteryWarrantyKm, 160_000)
+        XCTAssertEqual(polestarWarranty.includedMaintenance, true)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))

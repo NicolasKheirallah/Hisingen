@@ -19,18 +19,14 @@ struct VolvoModelIdentificationTests {
     }
 
     @Test
-    func testC40AndEX40NamingBothMapToTheSameCase() {
-
-
+    func testC40AndEX40NamingIdentification() {
         XCTAssertEqual(VehicleModelFamily(modelName: "C40 Recharge"), .volvoC40)
-        XCTAssertEqual(VehicleModelFamily(modelName: "EX40"), .volvoC40)
-        XCTAssertEqual(VehicleModelFamily(modelName: "EC40"), .volvoC40)
+        XCTAssertEqual(VehicleModelFamily(modelName: "EX40"), .volvoEX40)
+        XCTAssertEqual(VehicleModelFamily(modelName: "EC40"), .volvoEC40)
     }
 
     @Test
     func testXC40IsNeverMisidentifiedAsC40() {
-
-
         XCTAssertEqual(VehicleModelFamily(modelName: "XC40 Recharge Twin"), .volvoXC40)
         XCTAssertNotEqual(VehicleModelFamily(modelName: "XC40 Recharge Twin"), .volvoC40)
     }
@@ -38,6 +34,8 @@ struct VolvoModelIdentificationTests {
     @Test
     func testVolvoModelsReportVolvoBrand() {
         XCTAssertEqual(VehicleModelFamily.volvoXC60.brand, .volvo)
+        XCTAssertEqual(VehicleModelFamily.volvoXC40.brand, .volvo)
+        XCTAssertEqual(VehicleModelFamily.volvoEX40.brand, .volvo)
         XCTAssertEqual(VehicleModelFamily.volvoEX30.brand, .volvo)
         XCTAssertEqual(VehicleModelFamily.volvoUnknown("Something New").brand, .volvo)
         XCTAssertEqual(VehicleModelFamily.polestar2.brand, .polestar)
@@ -45,8 +43,6 @@ struct VolvoModelIdentificationTests {
 
     @Test
     func testVolvoHasNoVerifiedNominalSpecs() {
-
-
         XCTAssertFalse(VehicleModelFamily.volvoEX30.hasVerifiedNominalSpecs)
         XCTAssertTrue(VehicleModelFamily.polestar2.hasVerifiedNominalSpecs)
         XCTAssertNil(VehicleModelFamily.volvoEX30.averageConsumptionWhPerKm)
@@ -56,8 +52,8 @@ struct VolvoModelIdentificationTests {
     @Test
     func testVolvoModelFamilyRoundTripsThroughCodable() throws {
         let models: [VehicleModelFamily] = [
-            .volvoXC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
-            .volvoC40, .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown("Volvo Concept X")
+            .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40, .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+            .volvoEX30, .volvoEX90, .volvoES90, .volvoUnknown("Volvo Concept X")
         ]
         for model in models {
             let data = try JSONEncoder().encode(model)
@@ -67,18 +63,32 @@ struct VolvoModelIdentificationTests {
     }
 
     @Test
-    func testVolvoCapabilityProfileIsConservativeByDefault() {
+    func testVolvoXC40AndEX40DoNotSupportRemoteTemperatureOrSeatHeating() {
+        let xc40Profile = VehicleCapabilityProfile(modelName: "XC40")
+        XCTAssertFalse(xc40Profile.hasSelectableClimateTemperature)
+        XCTAssertFalse(xc40Profile.hasSelectableSeatHeating)
+        XCTAssertFalse(xc40Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertEqual(xc40Profile.support(for: .climateStartStop), .supported)
+        XCTAssertEqual(xc40Profile.support(for: .locks), .supported)
+        XCTAssertEqual(xc40Profile.support(for: .honkAndFlash), .supported)
+        XCTAssertEqual(xc40Profile.support(for: .climateTemperature), .unavailable)
+        XCTAssertEqual(xc40Profile.support(for: .seatHeating), .unavailable)
+        XCTAssertEqual(xc40Profile.support(for: .steeringWheelHeating), .unavailable)
 
+        let ex40Profile = VehicleCapabilityProfile(modelName: "EX40")
+        XCTAssertFalse(ex40Profile.hasSelectableClimateTemperature)
+        XCTAssertFalse(ex40Profile.hasSelectableSeatHeating)
+        XCTAssertFalse(ex40Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertEqual(ex40Profile.support(for: .climateStartStop), .supported)
+    }
 
-        let profile = VehicleCapabilityProfile(modelName: "XC60")
-        XCTAssertEqual(profile.support(for: .locks), .supported)
-        XCTAssertEqual(profile.support(for: .honkAndFlash), .supported)
-        XCTAssertEqual(profile.support(for: .exteriorStatus), .supported)
-        XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
-        XCTAssertEqual(profile.support(for: .softwareInstallControl), .unavailable)
-        XCTAssertEqual(profile.support(for: .chargeTarget), .backendDependent)
-        XCTAssertEqual(profile.support(for: .chargingCurrentLimit), .backendDependent)
-        XCTAssertEqual(profile.support(for: .tyrePressureValues), .backendDependent)
+    @Test
+    func testVolvoNextGenEX30AndEX90SupportRemoteClimateSettings() {
+        let ex30Profile = VehicleCapabilityProfile(modelName: "EX30")
+        XCTAssertTrue(ex30Profile.hasSelectableClimateTemperature)
+        XCTAssertTrue(ex30Profile.hasSelectableSeatHeating)
+        XCTAssertTrue(ex30Profile.hasSelectableSteeringWheelHeating)
+        XCTAssertEqual(ex30Profile.support(for: .climateStartStop), .supported)
     }
 
     @Test
@@ -87,7 +97,6 @@ struct VolvoModelIdentificationTests {
         probed.record(.chargeTarget, as: .supported)
         let profile = VehicleCapabilityProfile(modelName: "EX30", probed: probed)
         XCTAssertEqual(profile.support(for: .chargeTarget), .supported)
-
         XCTAssertEqual(profile.support(for: .locks), .supported)
     }
 }

@@ -40,6 +40,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case closeWindows
     case flashLights
     case honkAndFlash
+    case honkHorn
     case setChargeTarget(Int)
     case setAmpLimit(Int)
     case startChargingOverride
@@ -50,14 +51,46 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case scheduleOTA(delayMinutes: Int)
     case installOTANow
     case cancelOTA
+    case startEngine(runtimeMinutes: Int)
+    case stopEngine
+
+    /// Whether *this app's client code for `brand`* can actually dispatch the command.
+    ///
+    /// Deliberately separate from `VehicleCapabilityProfile`, which answers a different
+    /// question: what the vehicle is able to do. A command can be perfectly supported by the
+    /// car and still unimplemented here, and the UI needs to tell those apart — otherwise a
+    /// control appears live and fails at dispatch with a generic "unsupported". Keep this in
+    /// sync with the `switch` in `VolvoAPI.dispatchCommand` / `PolestarGRPC.executeRemoteCommand`.
+    func isImplemented(by brand: VehicleBrand) -> Bool {
+        switch brand {
+        case .polestar:
+            // PolestarGRPC.executeRemoteCommand switches exhaustively over every case (except engine commands, which are Volvo ICE/PHEV specific).
+            switch self {
+            case .startEngine, .stopEngine:
+                return false
+            default:
+                return true
+            }
+        case .volvo:
+            // Volvo's Connected Vehicle API v2 exposes only these as command endpoints.
+            switch self {
+            case .lock, .unlock, .startClimate, .stopClimate,
+                 .honkAndFlash, .flashLights, .honkHorn,
+                 .startEngine, .stopEngine:
+                return true
+            default:
+                return false
+            }
+        }
+    }
 
     var feature: AppFeature {
         switch self {
-        case .startClimate, .stopClimate: return .remoteClimate
+        case .startClimate, .stopClimate, .startEngine, .stopEngine: return .remoteClimate
         case .startPreCleaning, .stopPreCleaning: return .remotePreCleaning
         case .lock, .unlock, .unlockTrunk: return .remoteLocks
         case .openWindows, .closeWindows: return .remoteWindows
-        case .flashLights, .honkAndFlash: return .remoteHonkFlash
+        case .flashLights, .honkAndFlash, .honkHorn: return .remoteHonkFlash
         case .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride:
             return .remoteCharging
         case .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer:
@@ -69,11 +102,12 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     var requiredCapability: VehicleCapability {
         switch self {
         case .startClimate, .stopClimate: return .climateStartStop
+        case .startEngine, .stopEngine: return .engineStart
         case .startPreCleaning, .stopPreCleaning: return .preCleaning
         case .lock, .unlock: return .locks
         case .unlockTrunk: return .trunk
         case .openWindows, .closeWindows: return .windows
-        case .flashLights, .honkAndFlash: return .honkAndFlash
+        case .flashLights, .honkAndFlash, .honkHorn: return .honkAndFlash
         case .setChargeTarget: return .chargeTarget
         case .setAmpLimit: return .chargingCurrentLimit
         case .startChargingOverride, .stopChargingOverride: return .chargingScheduleOverride
@@ -101,7 +135,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
 
     var risk: RemoteCommandRisk {
         switch self {
-        case .unlock, .unlockTrunk, .openWindows:
+        case .unlock, .unlockTrunk, .openWindows, .startEngine:
             return .securitySensitive
         case .installOTANow, .deleteClimateTimer:
             return .destructive
@@ -114,6 +148,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .startClimate: return "start-climate"
         case .stopClimate: return "stop-climate"
+        case .startEngine: return "start-engine"
+        case .stopEngine: return "stop-engine"
         case .startPreCleaning: return "start-precleaning"
         case .stopPreCleaning: return "stop-precleaning"
         case .lock: return "lock"
@@ -123,6 +159,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .closeWindows: return "close-windows"
         case .flashLights: return "flash-lights"
         case .honkAndFlash: return "honk-flash"
+        case .honkHorn: return "honk-horn"
         case .setChargeTarget: return "set-charge-target"
         case .setAmpLimit: return "set-amp-limit"
         case .startChargingOverride: return "start-charge-override"
@@ -146,6 +183,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
             }
             return L10n.text("Start climate (automatic)")
         case .stopClimate: return L10n.text("Stop climate")
+        case .startEngine(let minutes): return L10n.format("Start engine (%d min)", minutes)
+        case .stopEngine: return L10n.text("Stop engine")
         case .startPreCleaning: return L10n.text("Start cabin cleaning")
         case .stopPreCleaning: return L10n.text("Stop cabin cleaning")
         case .lock: return L10n.text("Lock vehicle")
@@ -155,6 +194,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .closeWindows: return L10n.text("Close all windows")
         case .flashLights: return L10n.text("Flash lights")
         case .honkAndFlash: return L10n.text("Honk and flash")
+        case .honkHorn: return L10n.text("Honk horn")
         case .setChargeTarget(let target): return L10n.format("Set charge target to %d%%", target)
         case .setAmpLimit(let amps): return L10n.format("Set charging current to %d A", amps)
         case .startChargingOverride: return L10n.text("Charge now (override schedule)")

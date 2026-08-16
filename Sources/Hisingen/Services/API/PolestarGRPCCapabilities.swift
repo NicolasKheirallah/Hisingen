@@ -20,10 +20,10 @@ extension PolestarGRPC {
     private static let dashboardPath = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
     private static let softwarePath = "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo"
     private static let softwareSchedulePath = "/ota_mobcache.SchedulerService/GetSchedule"
-    private static let globalChargeTimerPath = "/chronos.services.v2.GlobalChargeTimerService/GetGlobalChargeTimerStream"
-    private static let chargeLocationsPath = "/chronos.services.v1.ChargeLocationService/GetChargeLocations"
+    private static let globalChargeTimerPath = "/pccs.chronos.services.v2.GlobalChargeTimerService/GetGlobalChargeTimerStream"
+    private static let chargeLocationsPath = "/pccs.chronos.services.v1.ChargeLocationService/GetChargeLocations"
     private static let climatePath = "/services.vehiclestates.parkingclimatization.ParkingClimatizationService/GetLatestParkingClimatization"
-    private static let climateTimersPath = "/chronos.services.v1.ParkingClimateTimerService/GetTimers"
+    private static let climateTimersPath = "/pccs.chronos.services.v1.ParkingClimateTimerService/GetTimers"
     private static let preCleaningPath = "/services.vehiclestates.precleaning.PreCleaningService/GetPreCleaning"
     private static let locationPath = "/dtlinternet.DtlInternetService/GetLastKnownLocation"
     private static let weatherPath = "/weather.WeatherService/GetWeatherReport"
@@ -76,35 +76,52 @@ extension PolestarGRPC {
             let body = try await firstMessage(path: Self.softwarePath, message: request,
                                               vin: vin, accessToken: accessToken)
             if let payload = Self.message(body, field: 1) {
-                let fields = Protobuf.fields(payload)
-                let softwareID = Self.string(fields, 1)
-                if !softwareID.isEmpty { otaSoftwareIDs[vin] = softwareID }
-                info = Self.parseSoftware(payload)
+                rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
+                let parsed = Self.parseSoftware(payload)
+                otaSoftwareStates[vin] = parsed.state
+                info = parsed
             }
         } catch { firstError = error }
 
+        // `Scheduler`: 1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by.
+        // This is a second source of the software id — it stays populated for a scheduled
+        // install even when GetSoftwareInfo has nothing to report, which is what makes
+        // "cancel a scheduled installation" reachable.
         var scheduledAt: Date?
         do {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
                                               vin: vin, accessToken: accessToken)
             if let scheduler = Self.message(body, field: 1) {
-                scheduledAt = Self.timestamp(Self.message(scheduler, field: 3))
+                let fields = Protobuf.fields(scheduler)
+                scheduledAt = Self.timestamp(Self.message(fields, field: 3))
+                rememberSoftwareID(Self.string(fields, 4), vin: vin)
+                if scheduledAt != nil, otaSoftwareStates[vin] == nil {
+                    otaSoftwareStates[vin] = .scheduled
+                }
             }
         } catch {
             if firstError == nil { firstError = error }
         }
 
         if let info {
-            return VehicleSoftwareInfo(version: info.version, title: info.title, state: info.state,
-                                       scheduledAt: scheduledAt ?? info.scheduledAt, updatedAt: info.updatedAt)
+            var merged = info
+            merged.scheduledAt = info.scheduledAt ?? scheduledAt
+            return merged
         }
         if let scheduledAt {
-            return VehicleSoftwareInfo(version: nil, title: nil, state: .scheduled,
-                                       scheduledAt: scheduledAt, updatedAt: nil)
+            // A schedule exists but GetSoftwareInfo returned nothing, so the target version is
+            // genuinely unknown here. Report the schedule and leave every version field nil
+            // rather than inventing one.
+            return VehicleSoftwareInfo(state: .scheduled, scheduledAt: scheduledAt)
         }
         if let firstError { throw firstError }
         return nil
+    }
+
+    private func rememberSoftwareID(_ id: String, vin: String) {
+        guard !id.isEmpty else { return }
+        otaSoftwareIDs[vin] = id
     }
 
     func fetchChargingSchedules(vin: String, accessToken: String) async throws -> [VehicleSchedule] {
@@ -170,13 +187,32 @@ extension PolestarGRPC {
         case 3: status = .connected
         default: status = .unknown
         }
-        let network = [1: "Unknown", 2: "CDMA 1X", 3: "CDMA EVDO", 4: "WCDMA", 5: "GSM", 6: "LTE"]
+        let network = [1: "Unknown", 2: "CDMA 1X", 3: "CDMA EVDO", 4: "WCDMA", 5: "GSM", 6: "LTE", 7: "5G"]
         let signal = [1: "Unknown", 2: "Poor", 3: "Good", 4: "Strong"]
+        let signalRaw = Self.varint(fields, 4)
+        let bars: Int? = signalRaw.flatMap {
+            switch $0 {
+            case 2: return 1
+            case 3: return 3
+            case 4: return 4
+            default: return nil
+            }
+        }
+        let wake = Self.varint(fields, 6).flatMap { val -> String? in
+            switch val {
+            case 1: return L10n.text("Scheduled Climate")
+            case 2: return L10n.text("Charging Active")
+            case 3: return L10n.text("Telemetry Poll")
+            default: return nil
+            }
+        }
         return VehicleConnectivity(
             state: status,
             networkType: Self.varint(fields, 3).flatMap { network[Int($0)] },
-            signalStrength: Self.varint(fields, 4).flatMap { signal[Int($0)] },
-            updatedAt: Self.timestamp(Self.message(fields, field: 2))
+            signalStrength: signalRaw.flatMap { signal[Int($0)] },
+            updatedAt: Self.timestamp(Self.message(fields, field: 2)),
+            signalBars: bars,
+            wakeReason: wake
         )
     }
 
@@ -196,6 +232,9 @@ extension PolestarGRPC {
             cleaningState: state,
             airQualityIndex: Self.positiveInt(Self.varint(fields, 9)),
             particulateMatter25: Self.positiveInt(Self.varint(fields, 10)),
+            particulateMatter10: Self.positiveInt(Self.varint(fields, 14)),
+            externalParticulateMatter25: Self.positiveInt(Self.varint(fields, 15)),
+            filterRemainingPercent: Self.positiveInt(Self.varint(fields, 16)),
             runtimeRemainingMinutes: Self.positiveInt(Self.varint(fields, 11)),
             hasError: (Self.varint(fields, 13) ?? 0) > 0
         )
@@ -357,10 +396,42 @@ extension PolestarGRPC {
         if let value = varint(fields, 7), value > 1 { warnings.append(.engineCoolant) }
         if let value = varint(fields, 8), value > 1 { warnings.append(.oil) }
         if let value = varint(fields, 13), value > 1 { warnings.append(.washerFluid) }
-        if (14...35).contains(where: { varint(fields, $0) == 2 }) { warnings.append(.exteriorLight) }
+        var lightFailures: [String] = []
+        let lightDescriptions: [Int: String] = [
+            14: L10n.text("Left low beam"),
+            15: L10n.text("Right low beam"),
+            16: L10n.text("Left high beam"),
+            17: L10n.text("Right high beam"),
+            18: L10n.text("Left front indicator"),
+            19: L10n.text("Right front indicator"),
+            20: L10n.text("Left rear indicator"),
+            21: L10n.text("Right rear indicator"),
+            22: L10n.text("Left daytime running light"),
+            23: L10n.text("Right daytime running light"),
+            24: L10n.text("Left position light"),
+            25: L10n.text("Right position light"),
+            26: L10n.text("Left brake light"),
+            27: L10n.text("Right brake light"),
+            28: L10n.text("Center brake light"),
+            29: L10n.text("Left reversing light"),
+            30: L10n.text("Right reversing light"),
+            31: L10n.text("Left fog light"),
+            32: L10n.text("Right fog light"),
+            33: L10n.text("Rear fog light"),
+            34: L10n.text("License plate light"),
+            35: L10n.text("Side marker light")
+        ]
+        for fieldNum in 14...35 {
+            if varint(fields, fieldNum) == 2, let desc = lightDescriptions[fieldNum] {
+                lightFailures.append(desc)
+            }
+        }
+        if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
+            warnings.append(.exteriorLight)
+        }
         if varint(fields, 38) == 2 { warnings.append(.lowVoltageBattery) }
         return GrpcHealthReport(
-            details: VehicleHealthDetails(tyres: tyres, warnings: warnings),
+            details: VehicleHealthDetails(tyres: tyres, warnings: warnings, lightFailures: lightFailures),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),
             serviceWarning: warnings.contains(.service)
@@ -386,30 +457,60 @@ extension PolestarGRPC {
     }
 
 
+    /// Parses an `ota_mobcache` `CarSoftwareInfo`:
+    /// `1 software_id`, `2 description{1 name, 2 short, 3 long}`, `3 qb_code`, `4 state`,
+    /// `6 new_sw_version`, `8 schedule_info{2 scheduled_at}`, `10 state_timestamp`.
     static func parseSoftware(_ data: Data) -> VehicleSoftwareInfo {
         let fields = Protobuf.fields(data)
         let description = message(fields, field: 2).map(Protobuf.fields)
-        let stateValue = varint(fields, 4) ?? 0
-        let state: SoftwareUpdateState
-        switch stateValue {
-        case 1, 15: state = .available
-        case 2: state = .downloading
-        case 3: state = .downloaded
-        case 4, 7, 8, 11: state = .failed
-        case 5, 6, 13: state = .installing
-        case 9: state = .completed
-        case 10: state = .deferred
-        case 12: state = .scheduled
-        default: state = .unknown
-        }
+        let state = softwareState(varint(fields, 4) ?? 0)
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
+        let advertisedVersion = string(fields, 6).nilIfEmpty
+        let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? advertisedVersion
+
+        // `new_sw_version` is the only version string the backend returns, and its meaning
+        // depends on `state`: while an update is pending it is the *target* version, and the
+        // running version is not reported at all. Only in the settled states does it describe
+        // what is actually on the car. Anything not settled leaves `installedVersion` nil —
+        // `VehicleState.merged` carries the last settled reading forward so the UI can still
+        // show "installed → available" during a rollout.
+        let describesInstalled: Bool
+        switch state {
+        case .unknown, .completed:
+            describesInstalled = true
+        case .available, .downloading, .downloaded, .installing, .scheduled, .deferred, .failed:
+            describesInstalled = false
+        }
+
         return VehicleSoftwareInfo(
-            version: string(fields, 6).nilIfEmpty,
-            title: description.flatMap { string($0, 1).nilIfEmpty },
+            version: advertisedVersion,
+            title: parsedTitle,
             state: state,
             scheduledAt: timestamp(schedule),
-            updatedAt: timestamp(message(fields, field: 10))
+            updatedAt: timestamp(message(fields, field: 10)),
+            installedVersion: describesInstalled ? advertisedVersion : nil,
+            latestAvailableVersion: describesInstalled ? nil : advertisedVersion
         )
+    }
+
+    /// `ota_mobcache.SoftwareState`. The enum it mirrors runs 0…14; 15 is an extra value this
+    /// backend has been observed emitting for an offered update (pinned by
+    /// `testSoftwareVersionRepresentsAvailableUpdateNotInstalledVersion`). Anything else is
+    /// reported as unknown rather than guessed at.
+    static func softwareState(_ value: UInt64) -> SoftwareUpdateState {
+        switch value {
+        case 1, 15: return .available // DOWNLOAD_READY, UPDATE_AVAILABLE
+        case 2: return .downloading   // DOWNLOAD_STARTED
+        case 3: return .downloaded    // DOWNLOAD_COMPLETED
+        case 4: return .failed        // DOWNLOAD_FAILED
+        case 5, 6: return .installing // INSTALLATION_INITIATED, INSTALLATION_STARTED
+        case 7, 8, 11: return .failed // ABORTED, FAILED, FAILED_CRITICAL
+        case 9: return .completed     // INSTALLATION_COMPLETED
+        case 10: return .deferred     // INSTALLATION_DEFERRED
+        case 12: return .scheduled    // INSTALLATION_SCHEDULED
+        case 13: return .installing   // INSTALLATION_SCHEDULE_TRIGGERED
+        default: return .unknown      // 0 UNKNOWN, 14 INSTALLATION_UNKNOWN
+        }
     }
 
     static func parseGlobalChargeTimer(_ data: Data) -> VehicleSchedule? {
@@ -424,6 +525,7 @@ extension PolestarGRPC {
     static func parseChargeLocationSchedules(_ data: Data) -> [VehicleSchedule] {
         Protobuf.fields(data).filter { $0.number == 3 && $0.wire == 2 }.flatMap { location -> [VehicleSchedule] in
             let fields = Protobuf.fields(location.data)
+            let locName = string(fields, 2).nilIfEmpty
             let chargeTimers = fields.filter { $0.number == 10 && $0.wire == 2 }.compactMap { timer -> VehicleSchedule? in
                 let values = Protobuf.fields(timer.data)
                 guard let start = dailyTime(message(values, field: 3)),
@@ -431,7 +533,8 @@ extension PolestarGRPC {
                 return VehicleSchedule(kind: .locationCharging, startHour: start.0, startMinute: start.1,
                                        endHour: stop.0, endMinute: stop.1,
                                        weekdays: weekdays(message(values, field: 5)),
-                                       isActive: varint(values, 2) == 1)
+                                       isActive: varint(values, 2) == 1,
+                                       locationName: locName)
             }
             let departures = fields.filter { $0.number == 11 && $0.wire == 2 }.compactMap { departure -> VehicleSchedule? in
                 let values = Protobuf.fields(departure.data)
@@ -439,7 +542,8 @@ extension PolestarGRPC {
                 return VehicleSchedule(kind: .departure, startHour: time.0, startMinute: time.1,
                                        endHour: nil, endMinute: nil,
                                        weekdays: weekdays(message(values, field: 4)),
-                                       isActive: varint(values, 2) == 1)
+                                       isActive: varint(values, 2) == 1,
+                                       locationName: locName)
             }
             return chargeTimers + departures
         }
@@ -453,6 +557,9 @@ extension PolestarGRPC {
         let remaining = positiveInt(varint(fields, 3))
         let interiorTemperature = digitalTwin ? numeric(fields, 7) : nil
         let requestedTemperature = digitalTwin ? numeric(fields, 8) : nil
+        let driverSeat = varint(fields, 10).flatMap { $0 > 0 ? Int($0) : nil }
+        let passengerSeat = varint(fields, 11).flatMap { $0 > 0 ? Int($0) : nil }
+        let steeringWheel = varint(fields, 12).flatMap { $0 > 0 ? Int($0) : nil }
         let activity: ClimateActivity
         if digitalTwin {
 
@@ -469,7 +576,7 @@ extension PolestarGRPC {
                     activity = active ? .active : .starting
                 }
             } else {
-                activity = running > 0 ? .idle : .unknown
+                activity = .idle
             }
         } else {
             let actionValue = varint(fields, 4) ?? 0
@@ -487,7 +594,10 @@ extension PolestarGRPC {
         return VehicleClimateStatus(activity: activity, timeRemainingMinutes: remaining,
                                     timerTriggered: timerTriggered,
                                     interiorTemperatureCelsius: interiorTemperature,
-                                    requestedTemperatureCelsius: requestedTemperature)
+                                    requestedTemperatureCelsius: requestedTemperature,
+                                    driverSeatHeatingLevel: driverSeat,
+                                    passengerSeatHeatingLevel: passengerSeat,
+                                    steeringWheelHeatingLevel: steeringWheel)
     }
 
     static func parseClimateTimers(_ data: Data) -> [VehicleSchedule] {
@@ -517,8 +627,30 @@ extension PolestarGRPC {
         let heading = numeric(fields, 4).flatMap { $0 >= 0 ? $0 : nil }
         let speed = numeric(fields, 5).flatMap { $0 >= 0 ? $0 : nil }
         let ts = timestamp(message(fields, field: 3))
-        return VehicleLocation(latitude: latitude, longitude: longitude,
-                               heading: heading, speed: speed, timestamp: ts)
+        let altitude = numeric(fields, 6)
+        let accuracy = numeric(fields, 7)
+        let parkingBrake = varint(fields, 8).map { $0 != 0 }
+        let gear: String? = {
+            guard let g = varint(fields, 9) else { return nil }
+            switch g {
+            case 1: return "P"
+            case 2: return "R"
+            case 3: return "N"
+            case 4: return "D"
+            default: return nil
+            }
+        }()
+        return VehicleLocation(
+            latitude: latitude,
+            longitude: longitude,
+            heading: heading,
+            speed: speed,
+            timestamp: ts,
+            altitudeMeters: altitude,
+            accuracyMeters: accuracy,
+            parkingBrakeEngaged: parkingBrake,
+            gear: gear
+        )
     }
 
 

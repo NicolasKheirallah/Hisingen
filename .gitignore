@@ -1,7 +1,20 @@
 .build*/
 .swiftpm/
 *.app
+*.dmg
+dmg-staging/
 *.zip
 .DS_Store
 xcuserdata/
 DerivedData/
+*.cert
+*.p12
+*.key
+*.csr
+
+# Local environment secrets and keys
+.env
+.env.*
+!.env.example
+*.secret
+

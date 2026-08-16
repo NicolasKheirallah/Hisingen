@@ -75,7 +75,6 @@
 "Est. Charge Cost" = "Est. Charge Cost";
 "Estimated Range" = "Estimated Range";
 "License Plate" = "License Plate";
-"Low Level" = "Low Level";
 "Manual Trip Meter" = "Manual Trip Meter";
 "Normal" = "Normal";
 "Open Settings & Sign In" = "Open Settings & Sign In";
@@ -118,7 +117,6 @@
 "Steering Wheel" = "Steering Wheel";
 "ON" = "ON";
 "OFF" = "OFF";
-"Start Climate" = "Start Climate";
 "Stop" = "Stop";
 "Stop Air Cleaning" = "Stop Air Cleaning";
 "Clean Cabin Air (PM2.5 Pre-Clean)" = "Clean Cabin Air (PM2.5 Pre-Clean)";
@@ -176,6 +174,7 @@
 "PM2.5 Concentration" = "PM2.5 Concentration";
 "Ambient Weather" = "Ambient Weather";
 "Tire Status (iTPMS)" = "Tire Status (iTPMS)";
+"Sensor readings" = "Sensor readings";
 "Network Type" = "Network Type";
 "Signal Strength" = "Signal Strength";
 "Charging Started" = "Charging Started";
@@ -372,7 +371,6 @@
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
 "12 V battery low" = "12 V battery low";
-"Active" = "Active";
 "Air quality" = "Air quality";
 "Air quality index" = "Air quality index";
 "Automatic trip" = "Automatic trip";
@@ -422,7 +420,6 @@
 "Manual trip" = "Manual trip";
 "Network type" = "Network type";
 "No power" = "No power";
-"Off" = "Off";
 "Oil level" = "Oil level";
 "Pending" = "Pending";
 "Poor" = "Poor";
@@ -730,3 +727,183 @@
 "Cost" = "Cost";
 "Projected" = "Projected";
 "Live" = "Live";
+
+/* Added: TPMS, location, and vehicle health polish */
+"All Normal" = "All Normal";
+"Check Pressure" = "Check Pressure";
+"Parked" = "Parked";
+"Moving" = "Moving";
+"Copy Coordinates" = "Copy Coordinates";
+"Copied" = "Copied";
+"Google Maps" = "Google Maps";
+"Speed" = "Speed";
+"Doors & Openings" = "Doors & Openings";
+"Vehicle Health & Lighting" = "Vehicle Health & Lighting";
+"Fluid Levels" = "Fluid Levels";
+"Lighting Systems" = "Lighting Systems";
+"All 16 Systems OK" = "All 16 Systems OK";
+"Exterior Light" = "Exterior Light";
+"Low Level" = "Low Level";
+"Open" = "Open";
+"Closed" = "Closed";
+"All Closed & Locked" = "All Closed & Locked";
+"All Closed" = "All Closed";
+"%d Open" = "%d Open";
+"FL Window" = "FL Window";
+"FR Window" = "FR Window";
+"RL Window" = "RL Window";
+"RR Window" = "RR Window";
+"Charge Lid" = "Charge Lid";
+"Start Climate" = "Start Climate";
+"Stop Climate" = "Stop Climate";
+"Active" = "Active";
+"Off" = "Off";
+
+/* Added: Appearance Mode & Liquid Glass */
+"Appearance Mode" = "Appearance Mode";
+"Mode" = "Mode";
+"System (Automatic)" = "System (Automatic)";
+"Light" = "Light";
+"Dark" = "Dark";
+"Liquid Glass" = "Liquid Glass";
+
+/* Added: New Telemetry, Studio Angles & Controls */
+"Icon Only (Minimal)" = "Icon Only (Minimal)";
+"Lock Status and Battery" = "Lock Status and Battery";
+"Front Three-Quarter" = "Front Three-Quarter";
+"Rear Three-Quarter" = "Rear Three-Quarter";
+"Side Profile" = "Side Profile";
+"Overhead" = "Overhead";
+"Wheels" = "Wheels";
+"Factory Packages" = "Factory Packages";
+"Outside PM2.5" = "Outside PM2.5";
+"Air Filter Life" = "Air Filter Life";
+"Cabin" = "Cabin";
+"elevation" = "elevation";
+"Brake Set" = "Brake Set";
+"Export CSV" = "Export CSV";
+"Export History (.csv)" = "Export History (.csv)";
+"Quick Controls" = "Quick Controls";
+"Lock Doors" = "Lock Doors";
+"Unlock Doors" = "Unlock Doors";
+"Start Climate (%@)" = "Start Climate (%@)";
+"Honk Horn" = "Honk Horn";
+"Honk and Flash" = "Honk and Flash";
+"Modem Wake Reason" = "Modem Wake Reason";
+"Modem Synced" = "Modem Synced";
+"Remote controls restricted to paired mobile devices" = "Remote controls restricted to paired mobile devices";
+"Command Restricted" = "Command Restricted";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar restricts remote write commands to paired mobile devices.";
+"Factory Build & Options" = "Factory Build & Options";
+"Exterior Paint" = "Exterior Paint";
+"Vehicle Perspective" = "Vehicle Perspective";
+"PEAK POWER" = "PEAK POWER";
+"Power Curve" = "Power Curve";
+"Peak" = "Peak";
+"Exterior & Styling" = "Exterior & Styling";
+"Wheels & Rims" = "Wheels & Rims";
+"Body Style" = "Body Style";
+"%d Doors" = "%d Doors";
+"Parking Brake" = "Parking Brake";
+"Engaged" = "Engaged";
+"Released" = "Released";
+"Cabin Seating Matrix" = "Cabin Seating Matrix";
+"Rear Center" = "Rear Center";
+"Interior & Cabin" = "Interior & Cabin";
+"Steering Orientation" = "Steering Orientation";
+"Comfort Target" = "Comfort Target";
+"Driver Seat Heating" = "Driver Seat Heating";
+"Passenger Seat Heating" = "Passenger Seat Heating";
+"Steering Wheel Heating" = "Steering Wheel Heating";
+"Level %d" = "Level %d";
+"Air Filtration" = "Air Filtration";
+"Active Purifying" = "Active Purifying";
+"CleanZone Ready" = "CleanZone Ready";
+"Cabin AQI" = "Cabin AQI";
+"Powertrain & Specs" = "Powertrain & Specs";
+"Max DC Fast Charge" = "Max DC Fast Charge";
+"Max AC Charge" = "Max AC Charge";
+"Fuel Level" = "Fuel Level";
+"Service & Health" = "Service & Health";
+"Total Odometer" = "Total Odometer";
+"Factory Build & Identity" = "Factory Build & Identity";
+"Factory Build Week" = "Factory Build Week";
+"Factory Spec (PNO34)" = "Factory Spec (PNO34)";
+"Market Delivery" = "Market Delivery";
+"Software Release" = "Software Release";
+
+
+/* Vehicle software & OTA */
+"Polestar Remote Commands" = "Polestar Remote Commands";
+"Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices." = "Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices.";
+"Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices." = "Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices.";
+"Install or cancel a pending software update" = "Install or cancel a pending software update";
+"Software status is unavailable for this vehicle." = "Software status is unavailable for this vehicle.";
+"Software update %@ is ready to install." = "Software update %@ is ready to install.";
+"A software update is ready to install." = "A software update is ready to install.";
+"Downloading software update %@…" = "Downloading software update %@…";
+"Downloading a software update…" = "Downloading a software update…";
+"Installing software update %@…" = "Installing software update %@…";
+"Installing a software update…" = "Installing a software update…";
+"Installation is scheduled for %@." = "Installation is scheduled for %@.";
+"An installation is scheduled." = "An installation is scheduled.";
+"The last software update failed." = "The last software update failed.";
+"Software is up to date (%@)." = "Software is up to date (%@).";
+"Cancel Scheduled Installation" = "Cancel Scheduled Installation";
+"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
+"The last refresh could not read: %@" = "The last refresh could not read: %@";
+
+/* Remote Engine Start (RES) & Warranty */
+"Remote Engine Start (RES)" = "Remote Engine Start (RES)";
+"Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes." = "Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes.";
+"Start Engine (15 min)" = "Start Engine (15 min)";
+"Stop Engine" = "Stop Engine";
+"Engine Running" = "Engine Running";
+"Engine Stopped" = "Engine Stopped";
+"Start engine (%d min)" = "Start engine (%d min)";
+"Warranty & Protection" = "Warranty & Protection";
+"Manufacturer Warranty" = "Manufacturer Warranty";
+"EV Battery (8 yr / 160k km)" = "EV Battery (8 yr / 160k km)";
+"Roadside Assistance" = "Roadside Assistance";
+"Scheduled Maintenance" = "Scheduled Maintenance";
+"Included (3 Years / 50,000 km)" = "Included (3 Years / 50,000 km)";
+"Connected Services" = "Connected Services";
+"Active Unlimited" = "Active Unlimited";
+"Remote engine start (RES)" = "Remote engine start (RES)";
+"Digital Services & Data" = "Digital Services & Data";
+"Corrosion Protection (12 yr)" = "Corrosion Protection (12 yr)";
+"Polestar Assistance" = "Polestar Assistance";
+"Volvo Assistance" = "Volvo Assistance";
+"Model badge position" = "Model badge position";
+"Placement of model & year label" = "Placement of model & year label";
+"License plate position" = "License plate position";
+"Placement of registration plate" = "Placement of registration plate";
+"License Plate Style (Below Greeting)" = "License Plate Style (Below Greeting)";
+"Inline with Greeting (Top Right)" = "Inline with Greeting (Top Right)";
+"Over Vehicle Image (Top Right)" = "Over Vehicle Image (Top Right)";
+"Over Vehicle Image (Top Left)" = "Over Vehicle Image (Top Left)";
+"Below Greeting" = "Below Greeting";
+"Hidden" = "Hidden";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings.";
+"Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors." = "Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors.";
+
+
+
+
+
+/* OTA install preconditions & gRPC command failures */
+"This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards." = "This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards.";
+"The update is still downloading to the vehicle. Try again once it has finished." = "The update is still downloading to the vehicle. Try again once it has finished.";
+"The vehicle is already installing this update." = "The vehicle is already installing this update.";
+"The last update attempt failed, and the vehicle has not made it available to install again." = "The last update attempt failed, and the vehicle has not made it available to install again.";
+"There is no software update waiting to be installed on this vehicle." = "There is no software update waiting to be installed on this vehicle.";
+"The vehicle cannot install a software update right now." = "The vehicle cannot install a software update right now.";
+"A software installation can only be scheduled between %d minutes and %d days from now." = "A software installation can only be scheduled between %d minutes and %d days from now.";
+"The vehicle service rejected the request as invalid." = "The vehicle service rejected the request as invalid.";
+"The vehicle service has no such update to act on." = "The vehicle service has no such update to act on.";
+"Your Polestar account is not permitted to run this command." = "Your Polestar account is not permitted to run this command.";
+"The vehicle is not in a state where this command can run right now." = "The vehicle is not in a state where this command can run right now.";
+"The vehicle service refused the command (gRPC status %@)." = "The vehicle service refused the command (gRPC status %@).";
+"The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it." = "The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.";
+"Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes." = "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.";
+"A software update is available. The vehicle downloads it automatically." = "A software update is available. The vehicle downloads it automatically.";
