@@ -1840,6 +1840,251 @@ struct LivePolestarRemoteCommandIntegrationTests {
         try? await api.signOut()
     }
 
+    /// Comprehensive live verification of all remote commands and Chronos write endpoints against the car.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testVerifyAllLiveRemoteCommandsAndChronosWrites() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        for f in AppFeature.allCases { features.set(f, enabled: true) }
+
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: features)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+
+        print("\n========================================================")
+        print("🎮 LIVE REMOTE COMMANDS & CHRONOS WRITES EXECUTION PROBE")
+        print("   Target VIN: \(vin)")
+        print("========================================================")
+
+        let state = try await api.fetchVehicleState(vin: vin, features: features)
+        let currentTarget = state.chargeTargetPercentage ?? 90
+        let currentAmps = state.chargingCurrentAmps ?? 16
+
+        // 1. Chronos: SetTargetSoc
+        print("\n⚡️ 1. Chronos: SetTargetSoc(\(currentTarget)%)")
+        do {
+            let res = try await api.executeRemoteCommand(.setChargeTarget(currentTarget), vin: vin)
+            print("   ✅ SetTargetSoc -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ SetTargetSoc error: \(error)")
+        }
+
+        // 2. Chronos: SetAmpLimit
+        print("\n⚡️ 2. Chronos: SetAmpLimit(\(currentAmps) A)")
+        do {
+            let res = try await api.executeRemoteCommand(.setAmpLimit(currentAmps), vin: vin)
+            print("   ✅ SetAmpLimit -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ SetAmpLimit error: \(error)")
+        }
+
+        // 3. Chronos: Charge Now Overrides
+        print("\n⚡️ 3. Chronos: Start & Stop Charge Override")
+        do {
+            let resStart = try await api.executeRemoteCommand(.startChargingOverride, vin: vin)
+            print("   ✅ StartChargingOverride -> \(resStart.outcome) (msg: \(resStart.message ?? "none"))")
+            let resStop = try await api.executeRemoteCommand(.stopChargingOverride, vin: vin)
+            print("   ✅ StopChargingOverride -> \(resStop.outcome) (msg: \(resStop.message ?? "none"))")
+        } catch {
+            print("   ✗ Charge Override error: \(error)")
+        }
+
+        // 4. Chronos: Global Charge Timer
+        print("\n⚡️ 4. Chronos: SetGlobalChargeTimer")
+        let globalSchedule = VehicleSchedule(
+            kind: .globalCharging, startHour: 23, startMinute: 0,
+            endHour: 6, endMinute: 0, weekdays: [], isActive: false
+        )
+        do {
+            let res = try await api.executeRemoteCommand(.setGlobalChargeTimer(globalSchedule), vin: vin)
+            print("   ✅ SetGlobalChargeTimer -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ SetGlobalChargeTimer error: \(error)")
+        }
+
+        // 5. C3 Invocation: Lock
+        print("\n🔒 5. C3: Lock Vehicle")
+        do {
+            let res = try await api.executeRemoteCommand(.lock, vin: vin)
+            print("   ✅ Lock -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ Lock error: \(error)")
+        }
+
+        // 6. C3 Invocation: Flash Lights
+        print("\n💡 6. C3: Flash Lights")
+        do {
+            let res = try await api.executeRemoteCommand(.flashLights, vin: vin)
+            print("   ✅ FlashLights -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ FlashLights error: \(error)")
+        }
+
+        // 7. C3 Invocation: Window Close
+        print("\n🪟 7. C3: Close Windows")
+        do {
+            let res = try await api.executeRemoteCommand(.closeWindows, vin: vin)
+            print("   ✅ CloseWindows -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ CloseWindows error: \(error)")
+        }
+
+        // 8. C3 Invocation: Pre-Cleaning Start & Stop
+        print("\n💨 8. C3: Pre-Cleaning Start & Stop")
+        do {
+            let resStart = try await api.executeRemoteCommand(.startPreCleaning, vin: vin)
+            print("   ✅ StartPreCleaning -> \(resStart.outcome) (msg: \(resStart.message ?? "none"))")
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let resStop = try await api.executeRemoteCommand(.stopPreCleaning, vin: vin)
+            print("   ✅ StopPreCleaning -> \(resStop.outcome) (msg: \(resStop.message ?? "none"))")
+        } catch {
+            print("   ✗ Pre-Cleaning error: \(error)")
+        }
+
+        // 9. C3 Invocation: Stop Climate
+        print("\n❄️ 9. C3: Stop Climate")
+        do {
+            let res = try await api.executeRemoteCommand(.stopClimate, vin: vin)
+            print("   ✅ StopClimate -> \(res.outcome) (msg: \(res.message ?? "none"))")
+        } catch {
+            print("   ✗ StopClimate error: \(error)")
+        }
+
+        print("\n========================================================")
+        print("✅ ALL LIVE COMMANDS COMPLETED")
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// Diagnoses exact protobuf wire formats and response frames for SetAmpLimit and StartOverrideChargeTimer.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDiagnoseChronosSetAmpLimitAndChargeNow() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let webTokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let webToken = try XCTUnwrap(webTokens["access_token"] as? String)
+        let vin = preferredVIN ?? "YSMVSEDE6PL147228"
+
+        func sendPccs(path: String, payload: Data) async -> (Int, [String: String], Data) {
+            var request = URLRequest(url: URL(string: "https://api.pccs-prod.plstr.io:443" + path)!)
+            request.httpMethod = "POST"
+            request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+            request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+            request.setValue("Bearer \(webToken)", forHTTPHeaderField: "Authorization")
+            request.setValue(vin, forHTTPHeaderField: "vin")
+            request.setValue("trailers", forHTTPHeaderField: "TE")
+
+            var framed = Data([0x00, 0x00, 0x00, 0x00, 0x00])
+            var count = UInt32(payload.count).bigEndian
+            withUnsafeBytes(of: &count) { framed.replaceSubrange(1...4, with: $0) }
+            framed.append(payload)
+            request.httpBody = framed
+
+            guard let (bytes, response) = try? await URLSession.shared.bytes(for: request),
+                  let http = response as? HTTPURLResponse else {
+                return (0, [:], Data())
+            }
+            var headers: [String: String] = [:]
+            for (k, v) in http.allHeaderFields { headers[String(describing: k)] = String(describing: v) }
+
+            var body = Data()
+            do {
+                for try await byte in bytes {
+                    body.append(byte)
+                    if body.count >= 5 {
+                        let len = body[1...4].withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.bigEndian
+                        if body.count >= 5 + Int(len) { break }
+                    }
+                }
+            } catch {}
+            let unFramed = body.count >= 5 ? body.subdata(in: 5..<body.count) : body
+            return (http.statusCode, headers, unFramed)
+        }
+
+        print("\n========================================================")
+        print("🔬 DIAGNOSE CHRONOS SET AMP LIMIT & CHARGE NOW")
+        print("========================================================")
+
+        // Envelope
+        var env = Data()
+        env.append(Protobuf.stringField(1, UUID().uuidString))
+        env.append(Protobuf.stringField(2, vin))
+        env.append(Protobuf.stringField(3, "RCS"))
+        env.append(Protobuf.messageField(4, Protobuf.intField(1, TimeZone.current.secondsFromGMT() / 60)))
+        let envelope = Protobuf.messageField(1, env)
+
+        // 1. GetAmpLimit read
+        let (getAmpStatus, getAmpHeaders, getAmpBody) = await sendPccs(
+            path: "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit", payload: envelope)
+        print("\n📖 GetAmpLimit: HTTP \(getAmpStatus), grpc-status: \(getAmpHeaders["grpc-status"] ?? "none")")
+        print("   Body Hex: \(getAmpBody.map { String(format: "%02x", $0) }.joined())")
+        for f in Protobuf.fields(getAmpBody) {
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            if f.wire == 2 {
+                for sub in Protobuf.fields(f.data) {
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                }
+            }
+        }
+
+        // 2. SetAmpLimit Variants
+        // Shape A: {1: envelope, 2: 16}
+        var pA = envelope
+        pA.append(Protobuf.intField(2, 16))
+        let (setAmpAStatus, setAmpAHeaders, setAmpABody) = await sendPccs(
+            path: "/pccs.chronos.services.v1.AmpLimitService/SetAmpLimit", payload: pA)
+        print("\n✏️ SetAmpLimit (Shape A: {2: 16}): HTTP \(setAmpAStatus), grpc-status: \(setAmpAHeaders["grpc-status"] ?? "none") (msg: \(setAmpAHeaders["grpc-message"] ?? "none"))")
+        print("   Body Hex: \(setAmpABody.map { String(format: "%02x", $0) }.joined())")
+        for f in Protobuf.fields(setAmpABody) {
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            if f.wire == 2 {
+                for sub in Protobuf.fields(f.data) {
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                }
+            }
+        }
+
+        // Shape B: {1: envelope, 2: 16, 3: 1}
+        var pB = envelope
+        pB.append(Protobuf.intField(2, 16))
+        pB.append(Protobuf.intField(3, 1))
+        let (setAmpBStatus, setAmpBHeaders, setAmpBBody) = await sendPccs(
+            path: "/pccs.chronos.services.v1.AmpLimitService/SetAmpLimit", payload: pB)
+        print("\n✏️ SetAmpLimit (Shape B: {2: 16, 3: 1}): HTTP \(setAmpBStatus), grpc-status: \(setAmpBHeaders["grpc-status"] ?? "none") (msg: \(setAmpBHeaders["grpc-message"] ?? "none"))")
+        print("   Body Hex: \(setAmpBBody.map { String(format: "%02x", $0) }.joined())")
+        for f in Protobuf.fields(setAmpBBody) {
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            if f.wire == 2 {
+                for sub in Protobuf.fields(f.data) {
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                }
+            }
+        }
+
+        // 3. StartOverrideChargeTimer
+        let (nowStatus, nowHeaders, nowBody) = await sendPccs(
+            path: "/pccs.chronos.services.v1.ChargeNowService/StartOverrideChargeTimer", payload: envelope)
+        print("\n⚡️ StartOverrideChargeTimer: HTTP \(nowStatus), grpc-status: \(nowHeaders["grpc-status"] ?? "none") (msg: \(nowHeaders["grpc-message"] ?? "none"))")
+        print("   Body Hex: \(nowBody.map { String(format: "%02x", $0) }.joined())")
+        for f in Protobuf.fields(nowBody) {
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+        }
+
+        print("========================================================\n")
+    }
+
     /// Enumerates the GraphQL **type namespace** rather than field names.
     ///
     /// `__schema.types` and `__Type.fields` are filtered to empty on both backends, but

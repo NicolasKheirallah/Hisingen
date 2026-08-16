@@ -369,6 +369,23 @@ struct RemoteCommandTests {
     }
 
     @Test
+    func testChronosSetAmpLimitAndChargeNowResponseParsing() throws {
+        // SetAmpLimit returns status = 1 at field 3 (varint)
+        var setAmpBody = Data()
+        setAmpBody.append(Protobuf.stringField(1, "56e88e65-e8ab-469d-aa34-5881caac61a5"))
+        setAmpBody.append(Protobuf.stringField(2, "YSMVSEDE6PL147228"))
+        setAmpBody.append(Protobuf.intField(3, 1))
+        let setAmpResult = try PolestarGRPC.chronosResult(setAmpBody, statusField: 3)
+        XCTAssertEqual(setAmpResult.outcome, .accepted)
+
+        // StartOverrideChargeTimer returns status = 2 at top-level field 1 (varint)
+        let chargeNowBody = Data([0x08, 0x02])
+        let fields = Protobuf.fields(chargeNowBody)
+        let status = fields.first(where: { $0.number == 1 && $0.wire == 0 })?.varint
+        XCTAssertEqual(status, 2)
+    }
+
+    @Test
     func testCommandErrorStatusMapping() {
         let err3 = PolestarGRPC.commandError(status: "3", message: "relativeTime%20out%20of%20bounds", path: "SchedulerService/Schedule")
         guard case RemoteCommandError.rejected(let msg3) = err3 else {

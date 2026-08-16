@@ -33,7 +33,7 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
         XCTAssertEqual(profile.support(for: .locks), .supported)
         XCTAssertEqual(profile.support(for: .windows), .supported)
-        XCTAssertEqual(profile.support(for: .honkAndFlash), .supported)
+        XCTAssertEqual(profile.support(for: .honkAndFlash), .unavailable)
     }
 
     @Test

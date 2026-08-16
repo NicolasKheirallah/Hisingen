@@ -603,18 +603,18 @@ struct ControlsTabView: View {
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
                         Button {
-                            onRemoteCommand(.flashLights)
+                            onRemoteCommand(profile.model == .polestar2 ? .honkAndFlash : .flashLights)
                         } label: {
                             VStack(spacing: 3) {
-                                Image(systemName: "flashlight.on.fill")
+                                Image(systemName: profile.model == .polestar2 ? "light.beacon.max.fill" : "flashlight.on.fill")
                                     .font(.system(size: 13))
-                                Text(L10n.text("Flash Lights"))
+                                Text(profile.model == .polestar2 ? L10n.text("Honk & Flash") : L10n.text("Flash Lights"))
                                     .font(.system(size: 10, weight: .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(isDisabled(.flashLights))
+                        .disabled(isDisabled(.honkAndFlash))
 
                         Button {
                             onRemoteCommand(.honkHorn)
@@ -629,20 +629,6 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(isDisabled(.honkHorn))
-
-                        Button {
-                            onRemoteCommand(.honkAndFlash)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "horn.blast.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk & Flash"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkAndFlash))
                     }
                 }
             }
