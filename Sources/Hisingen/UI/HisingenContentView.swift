@@ -912,16 +912,21 @@ struct VehicleTabView: View {
                             Divider().opacity(0.4)
                             HStack {
                                 Spacer()
-                                Button {
-                                    exportChargingHistoryCSV(sessions: state.chargingSessions)
+                                Menu {
+                                    Button(L10n.text("Export as CSV...")) {
+                                        exportChargingHistoryCSV(sessions: state.chargingSessions)
+                                    }
+                                    Button(L10n.text("Export as JSON...")) {
+                                        exportChargingHistoryJSON(sessions: state.chargingSessions)
+                                    }
                                 } label: {
                                     HStack(spacing: 4) {
                                         Image(systemName: "square.and.arrow.up")
-                                        Text(L10n.text("Export CSV"))
+                                        Text(L10n.text("Export"))
                                     }
                                     .font(.system(size: 10, weight: .medium))
                                 }
-                                .buttonStyle(.bordered)
+                                .menuStyle(.borderlessButton)
                                 .controlSize(.mini)
                             }
                         }
@@ -1066,6 +1071,12 @@ struct VehicleTabView: View {
         if features.contains(.vehicleIdentity), let upholstery = state.upholstery, !upholstery.isEmpty {
             rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
         }
+        if features.contains(.vehicleIdentity), let wheels = state.wheels, !wheels.isEmpty {
+            rows.append(KVRow(L10n.text("Wheels"), wheels, symbol: "circle.circle.fill"))
+        }
+        if features.contains(.vehicleIdentity), !state.packages.isEmpty {
+            rows.append(KVRow(L10n.text("Factory Packages"), state.packages.joined(separator: " · "), symbol: "shippingbox.and.arrow.backward.fill"))
+        }
         if features.contains(.vehicleIdentity), let steering = state.formattedSteeringOrientation, !steering.isEmpty {
             rows.append(KVRow(L10n.text("Steering"), steering, symbol: "steeringwheel"))
         }
@@ -1165,6 +1176,13 @@ struct VehicleTabView: View {
             rows.append(KVRow(L10n.text("Cabin Air Purifier"), airVal, symbol: "sparkles", valueWarning: air.hasError))
             if let aqi = air.airQualityIndex { rows.append(KVRow(L10n.text("Air Quality Index"), "\(aqi) AQI", symbol: "wind")) }
             if let pm = air.particulateMatter25 { rows.append(KVRow(L10n.text("PM2.5 Concentration"), "\(pm) µg/m³", symbol: "aqi.medium")) }
+            if let extPm = air.externalParticulateMatter25 {
+                let comparison = air.particulateMatter25.map { " (\(L10n.text("Cabin")): \($0) µg/m³)" } ?? ""
+                rows.append(KVRow(L10n.text("Outside PM2.5"), "\(extPm) µg/m³\(comparison)", symbol: "leaf.fill"))
+            }
+            if let filterLife = air.filterRemainingPercent {
+                rows.append(KVRow(L10n.text("Air Filter Life"), "\(filterLife)%", symbol: "allergens", valueWarning: filterLife < 15))
+            }
         }
         if features.contains(.vehicleWeather), let weather = state.weather {
             if let t = weather.temperatureCelsius {
@@ -1282,6 +1300,10 @@ struct VehicleTabView: View {
         return AnyView(LocationCardView(
             lat: lat, lon: lon, speed: loc.speed, heading: loc.heading,
             timestamp: loc.timestamp,
+            altitude: loc.altitudeMeters,
+            accuracy: loc.accuracyMeters,
+            parkingBrake: loc.parkingBrakeEngaged,
+            gear: loc.gear,
             isLive: !state.isStale(), freshnessText: state.freshnessDescription
         ))
     }
@@ -1356,7 +1378,13 @@ struct VehicleTabView: View {
         if features.contains(.connectivityDiagnostics), let conn = state.connectivity {
             rows.append(KVRow(L10n.text("Vehicle Network"), conn.state.displayName, symbol: "antenna.radiowaves.left.and.right", valueWarning: conn.state == .disconnected))
             if let n = conn.networkType { rows.append(KVRow(L10n.text("Network Type"), L10n.text(n), symbol: "network")) }
-            if let s = conn.signalStrength { rows.append(KVRow(L10n.text("Signal Strength"), L10n.text(s), symbol: "cellularbars")) }
+            if let s = conn.signalStrength {
+                let barsStr = conn.signalBars.map { " (\($0)/4)" } ?? ""
+                rows.append(KVRow(L10n.text("Signal Strength"), "\(L10n.text(s))\(barsStr)", symbol: "cellularbars"))
+            }
+            if let wake = conn.wakeReason {
+                rows.append(KVRow(L10n.text("Modem Wake Reason"), wake, symbol: "bolt.badge.clock"))
+            }
             if let updated = conn.updatedAt {
                 rows.append(KVRow(L10n.text("Modem Synced"), Format.dateTimeFormatter.string(from: updated), symbol: "clock.arrow.circlepath"))
             }
@@ -1415,6 +1443,22 @@ struct VehicleTabView: View {
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 try? csvData.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
+    private func exportChargingHistoryJSON(sessions: [ChargingSession]) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let jsonData = try? encoder.encode(sessions) else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "charging_history_\(state.vin.prefix(8)).json"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? jsonData.write(to: url)
             }
         }
     }
@@ -1690,6 +1734,10 @@ struct LocationCardView: View {
     let speed: Double?
     let heading: Double?
     var timestamp: Date? = nil
+    var altitude: Double? = nil
+    var accuracy: Double? = nil
+    var parkingBrake: Bool? = nil
+    var gear: String? = nil
     let isLive: Bool
     let freshnessText: String
 
@@ -1713,6 +1761,20 @@ struct LocationCardView: View {
                 HStack {
                     CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
                     Spacer()
+                    if let parkingBrake, parkingBrake {
+                        Pill(
+                            text: L10n.text("Brake Set"),
+                            color: .orange,
+                            symbol: "parkingsign.circle.fill"
+                        )
+                    }
+                    if let gear, !gear.isEmpty {
+                        Pill(
+                            text: gear,
+                            color: HisingenTheme.accent,
+                            symbol: "gearshape.fill"
+                        )
+                    }
                     Pill(
                         text: isMoving ? L10n.text("Moving") : L10n.text("Parked"),
                         color: isMoving ? HisingenTheme.semanticActive : .secondary,
@@ -1775,6 +1837,21 @@ struct LocationCardView: View {
                                     .foregroundStyle(.secondary)
                                 if let heading {
                                     Text("· \(Int(heading))°")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+
+                        if altitude != nil || accuracy != nil {
+                            HStack(spacing: 6) {
+                                if let altitude {
+                                    Text(String(format: "%.0f m %@", altitude, L10n.text("elevation")))
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let accuracy {
+                                    Text(String(format: "±%.1f m", accuracy))
                                         .font(.system(size: 9.5))
                                         .foregroundStyle(.tertiary)
                                 }

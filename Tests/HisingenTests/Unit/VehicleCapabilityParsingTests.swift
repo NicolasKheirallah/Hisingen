@@ -368,6 +368,73 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(CarRenderAngle.overhead.rawValue, 3)
     }
 
+    @Test
+    func testLocationParsesAltitudeAccuracyParkingBrakeAndGear() {
+        var payload = Data()
+        payload.append(Protobuf.doubleField(1, 11.9746)) // lon
+        payload.append(Protobuf.doubleField(2, 57.7089)) // lat
+        payload.append(Protobuf.doubleField(4, 180.0))   // heading
+        payload.append(Protobuf.doubleField(5, 45.0))    // speed
+        payload.append(Protobuf.doubleField(6, 142.5))   // altitude
+        payload.append(Protobuf.doubleField(7, 3.2))     // accuracy
+        payload.append(Protobuf.intField(8, 1))          // parking brake set
+        payload.append(Protobuf.intField(9, 4))          // gear D
+
+        let loc = PolestarGRPC.parseLocation(payload)
+        XCTAssertNotNil(loc)
+        XCTAssertEqual(loc?.longitude, 11.9746)
+        XCTAssertEqual(loc?.latitude, 57.7089)
+        XCTAssertEqual(loc?.heading, 180.0)
+        XCTAssertEqual(loc?.speed, 45.0)
+        XCTAssertEqual(loc?.altitudeMeters, 142.5)
+        XCTAssertEqual(loc?.accuracyMeters, 3.2)
+        XCTAssertEqual(loc?.parkingBrakeEngaged, true)
+        XCTAssertEqual(loc?.gear, "D")
+    }
+
+    @Test
+    func testVehicleStateBuildSpecsWheelsAndPackages() throws {
+        var state = VehicleState(
+            batteryPercentage: 80,
+            rangeKm: 350,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 90,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .none,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: "PST 002",
+            vin: "YS3E9999999999999",
+            ownerFirstName: "Nico",
+            odometerKm: 12000,
+            daysToService: 200,
+            distanceToServiceKm: 15000,
+            serviceWarning: false,
+            fluidWarnings: [],
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+        state.externalColour = "Thunder"
+        state.upholstery = "WeaveTech Slate"
+        state.wheels = "19\" 5-Double Spoke"
+        state.packages = ["Pilot Pack", "Plus Pack"]
+
+        let encoded = try JSONEncoder().encode(state)
+        let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
+
+        XCTAssertEqual(decoded.externalColour, "Thunder")
+        XCTAssertEqual(decoded.upholstery, "WeaveTech Slate")
+        XCTAssertEqual(decoded.wheels, "19\" 5-Double Spoke")
+        XCTAssertEqual(decoded.packages, ["Pilot Pack", "Plus Pack"])
+    }
+
     private func dailyTime(hour: Int, minute: Int) -> Data {
         var data = Data()
         data.append(Protobuf.intField(1, hour))

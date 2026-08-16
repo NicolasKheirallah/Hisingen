@@ -203,6 +203,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     var pno34: String? = nil
     var accountMarket: String? = nil
     var upholstery: String? = nil
+    var wheels: String? = nil
+    var packages: [String] = []
     var steeringOrientation: String? = nil
     var serviceTrigger: String? = nil
     var tripComputerElectricRangeKm: Int? = nil
@@ -300,7 +302,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH
         case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
-        case upholstery, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
+        case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
     }
 
     init(from decoder: Decoder) throws {
@@ -366,6 +368,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.pno34 = try values.decodeIfPresent(String.self, forKey: .pno34)
         self.accountMarket = try values.decodeIfPresent(String.self, forKey: .accountMarket)
         self.upholstery = try values.decodeIfPresent(String.self, forKey: .upholstery)
+        self.wheels = try values.decodeIfPresent(String.self, forKey: .wheels)
+        self.packages = try values.decodeIfPresent([String].self, forKey: .packages) ?? []
         self.steeringOrientation = try values.decodeIfPresent(String.self, forKey: .steeringOrientation)
         self.serviceTrigger = try values.decodeIfPresent(String.self, forKey: .serviceTrigger)
         self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
@@ -675,6 +679,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.pno34 = pno34 ?? previous.pno34
         merged.accountMarket = accountMarket ?? previous.accountMarket
         merged.upholstery = upholstery ?? previous.upholstery
+        merged.wheels = wheels ?? previous.wheels
+        merged.packages = !packages.isEmpty ? packages : previous.packages
         merged.steeringOrientation = steeringOrientation ?? previous.steeringOrientation
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm

@@ -186,13 +186,32 @@ extension PolestarGRPC {
         case 3: status = .connected
         default: status = .unknown
         }
-        let network = [1: "Unknown", 2: "CDMA 1X", 3: "CDMA EVDO", 4: "WCDMA", 5: "GSM", 6: "LTE"]
+        let network = [1: "Unknown", 2: "CDMA 1X", 3: "CDMA EVDO", 4: "WCDMA", 5: "GSM", 6: "LTE", 7: "5G"]
         let signal = [1: "Unknown", 2: "Poor", 3: "Good", 4: "Strong"]
+        let signalRaw = Self.varint(fields, 4)
+        let bars: Int? = signalRaw.flatMap {
+            switch $0 {
+            case 2: return 1
+            case 3: return 3
+            case 4: return 4
+            default: return nil
+            }
+        }
+        let wake = Self.varint(fields, 6).flatMap { val -> String? in
+            switch val {
+            case 1: return L10n.text("Scheduled Climate")
+            case 2: return L10n.text("Charging Active")
+            case 3: return L10n.text("Telemetry Poll")
+            default: return nil
+            }
+        }
         return VehicleConnectivity(
             state: status,
             networkType: Self.varint(fields, 3).flatMap { network[Int($0)] },
-            signalStrength: Self.varint(fields, 4).flatMap { signal[Int($0)] },
-            updatedAt: Self.timestamp(Self.message(fields, field: 2))
+            signalStrength: signalRaw.flatMap { signal[Int($0)] },
+            updatedAt: Self.timestamp(Self.message(fields, field: 2)),
+            signalBars: bars,
+            wakeReason: wake
         )
     }
 
@@ -212,6 +231,9 @@ extension PolestarGRPC {
             cleaningState: state,
             airQualityIndex: Self.positiveInt(Self.varint(fields, 9)),
             particulateMatter25: Self.positiveInt(Self.varint(fields, 10)),
+            particulateMatter10: Self.positiveInt(Self.varint(fields, 14)),
+            externalParticulateMatter25: Self.positiveInt(Self.varint(fields, 15)),
+            filterRemainingPercent: Self.positiveInt(Self.varint(fields, 16)),
             runtimeRemainingMinutes: Self.positiveInt(Self.varint(fields, 11)),
             hasError: (Self.varint(fields, 13) ?? 0) > 0
         )
@@ -595,8 +617,30 @@ extension PolestarGRPC {
         let heading = numeric(fields, 4).flatMap { $0 >= 0 ? $0 : nil }
         let speed = numeric(fields, 5).flatMap { $0 >= 0 ? $0 : nil }
         let ts = timestamp(message(fields, field: 3))
-        return VehicleLocation(latitude: latitude, longitude: longitude,
-                               heading: heading, speed: speed, timestamp: ts)
+        let altitude = numeric(fields, 6)
+        let accuracy = numeric(fields, 7)
+        let parkingBrake = varint(fields, 8).map { $0 != 0 }
+        let gear: String? = {
+            guard let g = varint(fields, 9) else { return nil }
+            switch g {
+            case 1: return "P"
+            case 2: return "R"
+            case 3: return "N"
+            case 4: return "D"
+            default: return nil
+            }
+        }()
+        return VehicleLocation(
+            latitude: latitude,
+            longitude: longitude,
+            heading: heading,
+            speed: speed,
+            timestamp: ts,
+            altitudeMeters: altitude,
+            accuracyMeters: accuracy,
+            parkingBrakeEngaged: parkingBrake,
+            gear: gear
+        )
     }
 
 

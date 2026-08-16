@@ -394,6 +394,24 @@ struct VehicleConnectivity: Codable, Equatable, Sendable {
     let networkType: String?
     let signalStrength: String?
     let updatedAt: Date?
+    let signalBars: Int?
+    let wakeReason: String?
+
+    init(
+        state: ConnectivityState,
+        networkType: String? = nil,
+        signalStrength: String? = nil,
+        updatedAt: Date? = nil,
+        signalBars: Int? = nil,
+        wakeReason: String? = nil
+    ) {
+        self.state = state
+        self.networkType = networkType
+        self.signalStrength = signalStrength
+        self.updatedAt = updatedAt
+        self.signalBars = signalBars
+        self.wakeReason = wakeReason
+    }
 }
 
 
@@ -417,8 +435,31 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     let cleaningState: AirCleaningState
     let airQualityIndex: Int?
     let particulateMatter25: Int?
+    let particulateMatter10: Int?
+    let externalParticulateMatter25: Int?
+    let filterRemainingPercent: Int?
     let runtimeRemainingMinutes: Int?
     let hasError: Bool
+
+    init(
+        cleaningState: AirCleaningState,
+        airQualityIndex: Int? = nil,
+        particulateMatter25: Int? = nil,
+        particulateMatter10: Int? = nil,
+        externalParticulateMatter25: Int? = nil,
+        filterRemainingPercent: Int? = nil,
+        runtimeRemainingMinutes: Int? = nil,
+        hasError: Bool = false
+    ) {
+        self.cleaningState = cleaningState
+        self.airQualityIndex = airQualityIndex
+        self.particulateMatter25 = particulateMatter25
+        self.particulateMatter10 = particulateMatter10
+        self.externalParticulateMatter25 = externalParticulateMatter25
+        self.filterRemainingPercent = filterRemainingPercent
+        self.runtimeRemainingMinutes = runtimeRemainingMinutes
+        self.hasError = hasError
+    }
 }
 
 
@@ -458,6 +499,32 @@ struct VehicleLocation: Codable, Equatable, Sendable {
     let heading: Double?
     let speed: Double?
     let timestamp: Date?
+    let altitudeMeters: Double?
+    let accuracyMeters: Double?
+    let parkingBrakeEngaged: Bool?
+    let gear: String?
+
+    init(
+        latitude: Double?,
+        longitude: Double?,
+        heading: Double? = nil,
+        speed: Double? = nil,
+        timestamp: Date? = nil,
+        altitudeMeters: Double? = nil,
+        accuracyMeters: Double? = nil,
+        parkingBrakeEngaged: Bool? = nil,
+        gear: String? = nil
+    ) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.heading = heading
+        self.speed = speed
+        self.timestamp = timestamp
+        self.altitudeMeters = altitudeMeters
+        self.accuracyMeters = accuracyMeters
+        self.parkingBrakeEngaged = parkingBrakeEngaged
+        self.gear = gear
+    }
 }
 
 

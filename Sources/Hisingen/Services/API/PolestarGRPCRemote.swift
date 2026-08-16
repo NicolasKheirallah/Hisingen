@@ -57,6 +57,9 @@ extension PolestarGRPC {
         case .honkAndFlash:
             return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 0),
                                         vin: vin, token: accessToken)
+        case .honkHorn:
+            return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 1),
+                                        vin: vin, token: accessToken)
         case .setChargeTarget(let target):
             guard (40...100).contains(target) else { throw RemoteCommandError.rejected(nil) }
             var payload = Data()

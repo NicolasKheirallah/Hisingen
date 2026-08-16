@@ -51,6 +51,10 @@ actor PolestarAPI {
     private var registrationNo: String?
     private var pno34: String?
     private var structureWeek: String?
+    private var exteriorColorName: String?
+    private var upholsteryName: String?
+    private var wheelsName: String?
+    private var packageNames: [String] = []
     private var ownerFirstName: String?
     private var market: String?
     private var carImageData: Data?
@@ -401,6 +405,10 @@ actor PolestarAPI {
         state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
         state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
         state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil
+        state.externalColour = features.contains(.vehicleIdentity) ? exteriorColorName : nil
+        state.upholstery = features.contains(.vehicleIdentity) ? upholsteryName : nil
+        state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
+        state.packages = features.contains(.vehicleIdentity) ? packageNames : []
         state.accountMarket = market
         return state
     }
@@ -820,7 +828,13 @@ actor PolestarAPI {
           vdms {
             getVehiclesInformation {
               vin internalVehicleIdentifier registrationNo modelYear
-              content { model { name } }
+              content {
+                model { name }
+                exteriorColor { name }
+                upholstery { name }
+                wheels { name }
+                packages { name }
+              }
             }
           }
         }
@@ -875,6 +889,10 @@ actor PolestarAPI {
         registrationNo = car.registrationNo
         pno34 = car.pno34
         structureWeek = car.structureWeek?.value
+        exteriorColorName = car.exteriorColorName
+        upholsteryName = car.upholsteryName
+        wheelsName = car.wheelsName
+        packageNames = car.packageNames
     }
 
     private func fetchOwnerInfo() async {
@@ -1058,6 +1076,10 @@ actor PolestarAPI {
         registrationNo = nil
         pno34 = nil
         structureWeek = nil
+        exteriorColorName = nil
+        upholsteryName = nil
+        wheelsName = nil
+        packageNames = []
         ownerFirstName = nil
         market = nil
         carImageData = nil
