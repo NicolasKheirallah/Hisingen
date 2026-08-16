@@ -873,11 +873,15 @@
 "Volvo Assistance" = "Volvo Assistance";
 "Model badge position" = "Placering av modellmärke";
 "Placement of model & year label" = "Placering av bilmodell och årsmodell";
+"License plate position" = "Placering av registreringsskylt";
+"Placement of registration plate" = "Placering av bilens registreringsskylt";
+"License Plate Style (Below Greeting)" = "Nummerskyltsstil (under hälsning)";
 "Inline with Greeting (Top Right)" = "I linje med hälsning (uppe till höger)";
 "Over Vehicle Image (Top Right)" = "Över bilbild (uppe till höger)";
 "Over Vehicle Image (Top Left)" = "Över bilbild (uppe till vänster)";
 "Below Greeting" = "Under hälsning";
 "Hidden" = "Dold";
+
 
 
 

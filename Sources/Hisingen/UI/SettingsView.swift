@@ -23,6 +23,7 @@ struct SettingsView: View {
     @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
     @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
     @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
+    @State private var registrationBadgePosition: RegistrationNumberBadgePosition = Preferences.registrationBadgePosition
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
     @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
@@ -417,6 +418,31 @@ struct SettingsView: View {
                         .frame(maxWidth: 160)
                         .onChange(of: vehicleModelBadgePosition) { _ in
                             Preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("License plate position"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Placement of registration plate"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $registrationBadgePosition) {
+                            ForEach(RegistrationNumberBadgePosition.allCases, id: \.self) { pos in
+                                Text(pos.title).tag(pos)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: registrationBadgePosition) { _ in
+                            Preferences.registrationBadgePosition = registrationBadgePosition
                             onSettingsChanged(.presentation)
                         }
                     }

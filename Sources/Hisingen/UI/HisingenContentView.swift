@@ -469,13 +469,69 @@ struct VehicleTabView: View {
             ?? CarImageCache.shared.image(for: state.vin)
     }
 
+    @ViewBuilder
+    private func licensePlateBadge(_ plate: String, style: RegistrationNumberBadgePosition) -> some View {
+        switch style {
+        case .platePill:
+            HStack(spacing: 4) {
+                if state.accountMarket?.uppercased() == "SE" || state.vin.uppercased().hasPrefix("YS") || state.vin.uppercased().hasPrefix("YV") {
+                    Text("🇸🇪")
+                        .font(.system(size: 9))
+                }
+                Text(plate.uppercased())
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(1.0)
+                    .foregroundStyle(HisingenTheme.ink)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 0.8)
+            )
+        case .belowGreeting, .inlineHeader:
+            Text(plate.uppercased())
+                .font(.system(size: 13, weight: HisingenTheme.valueWeight))
+                .monospaced()
+                .foregroundStyle(HisingenTheme.ink)
+        case .topRightOverlay, .topLeftOverlay:
+            HStack(spacing: 4) {
+                if state.accountMarket?.uppercased() == "SE" || state.vin.uppercased().hasPrefix("YS") || state.vin.uppercased().hasPrefix("YV") {
+                    Text("🇸🇪")
+                        .font(.system(size: 9))
+                }
+                Text(plate.uppercased())
+                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(HisingenTheme.ink)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4.5)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(
+                Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6)
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+        case .hidden:
+            EmptyView()
+        }
+    }
+
     private var heroCard: some View {
         Card {
             VStack(spacing: 10) {
 
                 let badgePosition = Preferences.vehicleModelBadgePosition
+                let regPosition = Preferences.registrationBadgePosition
                 let modelIdentity = features.contains(.vehicleIdentity)
                     ? [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " · ") : ""
+                let plate = features.contains(.vehicleIdentity) ? state.registrationNo : nil
+
+                let showModelTopLeft = !modelIdentity.isEmpty && badgePosition == .topLeftOverlay
+                let showModelTopRight = !modelIdentity.isEmpty && badgePosition == .topRightOverlay
+                let showPlateTopLeft = (plate != nil && !plate!.isEmpty) && regPosition == .topLeftOverlay
+                let showPlateTopRight = (plate != nil && !plate!.isEmpty) && regPosition == .topRightOverlay
 
                 if features.contains(.vehicleImage), let imageData = heroImageData,
                    let nsImage = NSImage(data: imageData) {
@@ -500,22 +556,46 @@ struct VehicleTabView: View {
                             .frame(height: 205)
                             .padding(.horizontal, 8)
 
-                        if !modelIdentity.isEmpty && (badgePosition == .topRightOverlay || badgePosition == .topLeftOverlay) {
+                        if showModelTopLeft || showModelTopRight || showPlateTopLeft || showPlateTopRight {
                             VStack {
-                                HStack {
-                                    if badgePosition == .topRightOverlay { Spacer() }
-                                    Text(modelIdentity)
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(HisingenTheme.ink)
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 4.5)
-                                        .background(.ultraThinMaterial, in: Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(Color.primary.opacity(0.14), lineWidth: 0.6)
-                                        )
-                                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
-                                    if badgePosition == .topLeftOverlay { Spacer() }
+                                HStack(alignment: .top, spacing: 6) {
+                                    HStack(spacing: 6) {
+                                        if showModelTopLeft {
+                                            Text(modelIdentity)
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(HisingenTheme.ink)
+                                                .padding(.horizontal, 9)
+                                                .padding(.vertical, 4.5)
+                                                .background(.ultraThinMaterial, in: Capsule())
+                                                .overlay(
+                                                    Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6)
+                                                )
+                                                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+                                        }
+                                        if let plate, showPlateTopLeft {
+                                            licensePlateBadge(plate, style: .topLeftOverlay)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    HStack(spacing: 6) {
+                                        if let plate, showPlateTopRight {
+                                            licensePlateBadge(plate, style: .topRightOverlay)
+                                        }
+                                        if showModelTopRight {
+                                            Text(modelIdentity)
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(HisingenTheme.ink)
+                                                .padding(.horizontal, 9)
+                                                .padding(.vertical, 4.5)
+                                                .background(.ultraThinMaterial, in: Capsule())
+                                                .overlay(
+                                                    Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6)
+                                                )
+                                                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+                                        }
+                                    }
                                 }
                                 .padding(.horizontal, HisingenTheme.cardPadding + 8)
                                 .padding(.top, HisingenTheme.cardPadding + 8)
@@ -534,12 +614,13 @@ struct VehicleTabView: View {
                 let nickname = Preferences.vehicleNickname(for: state.vin)
                 let greeting = features.contains(.ownerGreeting)
                     ? state.ownerFirstName.map { Format.greeting($0) } : nil
-                let plate = features.contains(.vehicleIdentity) ? state.registrationNo : nil
                 let primaryTitle = greeting
                     ?? (!nickname.isEmpty ? nickname : nil)
                     ?? (modelIdentity.isEmpty ? "Hisingen" : modelIdentity)
 
                 let showModelInline = (badgePosition == .inlineHeader) && !modelIdentity.isEmpty && modelIdentity != primaryTitle
+                let showPlateInline = (regPosition == .inlineHeader) && (plate != nil && !plate!.isEmpty)
+                let showPlateBelow = (plate != nil && !plate!.isEmpty) && (regPosition == .belowGreeting || regPosition == .platePill)
                 let showModelSubheadline = (badgePosition == .subheadline) && !modelIdentity.isEmpty && modelIdentity != primaryTitle
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -554,6 +635,12 @@ struct VehicleTabView: View {
                             .tracking(HisingenTheme.displayTracking * 0.3)
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
+                        if showPlateInline, let plate {
+                            Text(plate.uppercased())
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .tracking(0.5)
+                                .foregroundStyle(HisingenTheme.ink)
+                        }
                         if showModelInline {
                             Text(modelIdentity)
                                 .font(.system(size: 11.5, weight: .medium))
@@ -561,15 +648,11 @@ struct VehicleTabView: View {
                         }
                     }
 
-                    let hasPlate = plate != nil && !plate!.isEmpty
                     let hasNickname = greeting != nil && !nickname.isEmpty
-                    if hasPlate || hasNickname || showModelSubheadline {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            if let plate, !plate.isEmpty {
-                                Text(plate)
-                                    .font(.system(size: 13, weight: HisingenTheme.valueWeight))
-                                    .monospaced()
-                                    .foregroundStyle(HisingenTheme.ink)
+                    if showPlateBelow || hasNickname || showModelSubheadline {
+                        HStack(alignment: .center, spacing: 8) {
+                            if showPlateBelow, let plate {
+                                licensePlateBadge(plate, style: regPosition)
                             }
                             if greeting != nil, !nickname.isEmpty {
                                 Text(nickname)

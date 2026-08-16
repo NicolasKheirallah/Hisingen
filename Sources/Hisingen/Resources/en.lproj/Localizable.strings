@@ -880,11 +880,15 @@
 "Volvo Assistance" = "Volvo Assistance";
 "Model badge position" = "Model badge position";
 "Placement of model & year label" = "Placement of model & year label";
+"License plate position" = "License plate position";
+"Placement of registration plate" = "Placement of registration plate";
+"License Plate Style (Below Greeting)" = "License Plate Style (Below Greeting)";
 "Inline with Greeting (Top Right)" = "Inline with Greeting (Top Right)";
 "Over Vehicle Image (Top Right)" = "Over Vehicle Image (Top Right)";
 "Over Vehicle Image (Top Left)" = "Over Vehicle Image (Top Left)";
 "Below Greeting" = "Below Greeting";
 "Hidden" = "Hidden";
+
 
 
 
