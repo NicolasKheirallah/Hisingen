@@ -25,10 +25,11 @@ private let volvoProbesEnabled: Bool = {
         && environment["VOLVO_VCC_API_KEY"]?.isEmpty == false
 }()
 
-private let volvoProbeDisabledReason =
-    "Volvo probe tests are opt-in: set HISINGEN_ENABLE_VOLVO_PROBES plus VOLVO_CLIENT_ID, "
-    + "VOLVO_CLIENT_SECRET and VOLVO_VCC_API_KEY. They burn failed-login attempts against "
-    + "the shared OAuth client and can lock it out."
+private let volvoProbeDisabledReason: Comment = """
+Volvo probe tests are opt-in: set HISINGEN_ENABLE_VOLVO_PROBES plus VOLVO_CLIENT_ID, \
+VOLVO_CLIENT_SECRET and VOLVO_VCC_API_KEY. They burn failed-login attempts against \
+the shared OAuth client and can lock it out.
+"""
 
 @MainActor
 struct LiveVolvoReadOnlyIntegrationTests {
@@ -82,7 +83,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
     }
 
     /// Comprehensive live probe of all Volvo Developer APIs, OIDC discovery, and Connected Vehicle endpoints.
-    @Test
+    @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testProbeVolvoOAuthAuthorizeURL() async throws {
         let environment = ProcessInfo.processInfo.environment
         let clientID = environment["VOLVO_CLIENT_ID"] ?? "dc-3spjins2tdf9cbxsq16xjha14"
@@ -152,7 +153,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
         print("========================================================\n")
     }
 
-    @Test
+    @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testComprehensiveVolvoAllAPIsProbeAndDump() async throws {
         let environment = ProcessInfo.processInfo.environment
         let clientID = environment["VOLVO_CLIENT_ID"] ?? environment["HISINGEN_TEST_VOLVO_CLIENT_ID"] ?? "dc-3spjins2tdf9cbxsq16xjha14"
