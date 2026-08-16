@@ -795,10 +795,11 @@ enum Preferences {
     static var features: FeatureSelection {
         get {
             if let values = d.array(forKey: "enabled_features_v2") as? [String] {
-                return FeatureSelection(
-                    enabled: Set(values.compactMap(AppFeature.init(rawValue:)))
-                        .intersection(AppFeature.permittedFeatures)
-                )
+                var enabled = Set(values.compactMap(AppFeature.init(rawValue:)))
+                    .intersection(AppFeature.permittedFeatures)
+                let coreDefaults: Set<AppFeature> = [.vehicleLocation, .vehicleWeather, .ownerGreeting]
+                enabled.formUnion(coreDefaults)
+                return FeatureSelection(enabled: enabled)
             }
             if let legacy = d.array(forKey: "enabled_features_v1") as? [String] {
                 var enabled = Set(legacy.compactMap(AppFeature.init(rawValue:)))

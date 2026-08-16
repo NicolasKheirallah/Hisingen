@@ -118,7 +118,7 @@ struct FeatureSelection: Codable, Equatable, Sendable {
             .vehicleIdentity, .ownerGreeting, .vehicleImage, .chargingDetails,
             .vehicleAvailability, .exteriorStatus,
             .tyreAndWarnings, .softwareUpdates, .climateStatus,
-            .tripMeters, .vehicleLocation,
+            .tripMeters, .vehicleLocation, .vehicleWeather, .batteryDiagnostics,
             .multipleVehicles, .notifications, .updateChecks
         ])
     }
