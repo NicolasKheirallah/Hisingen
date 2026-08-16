@@ -123,28 +123,48 @@ actor PolestarAPI {
             if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
             logger.info("Polestar command-client token acquired")
         } catch {
-            logger.warning("Polestar command-client sign-in failed; remote commands unavailable")
+            print("❌ acquireCommandToken failed with error: \(error)")
+            logger.warning("Polestar command-client sign-in failed: \(error, privacy: .public); remote commands unavailable")
         }
     }
 
     @MainActor
-    private static func promptForPassword(email: String) -> String? {
+    private static func promptForCredentials(prefilledEmail: String) -> (email: String, password: String)? {
+        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = L10n.text("Polestar ID Password Required")
-        alert.informativeText = L10n.format(
-            "Enter your Polestar ID password for %@ to authorize remote controls. Hisingen will securely save your remote session in macOS Keychain.",
-            email
+        alert.informativeText = L10n.text(
+            "Enter your Polestar ID password to authorize remote vehicle controls. Hisingen will securely save your mobile command session in macOS Keychain."
         )
-        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        input.placeholderString = L10n.text("Password")
-        alert.accessoryView = input
+        let stack = NSStackView(frame: NSRect(x: 0, y: 0, width: 280, height: prefilledEmail.isEmpty ? 56 : 26))
+        stack.orientation = .vertical
+        stack.spacing = 6
+        stack.alignment = .leading
+
+        let emailField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        emailField.placeholderString = L10n.text("Polestar ID (Email)")
+        emailField.stringValue = prefilledEmail
+
+        let passwordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        passwordField.placeholderString = L10n.text("Password")
+
+        if prefilledEmail.isEmpty {
+            stack.addArrangedSubview(emailField)
+        }
+        stack.addArrangedSubview(passwordField)
+
+        alert.accessoryView = stack
         alert.addButton(withTitle: L10n.text("Authorize"))
         alert.addButton(withTitle: L10n.text("Cancel"))
-        alert.window.initialFirstResponder = input
+        alert.window.initialFirstResponder = prefilledEmail.isEmpty ? emailField : passwordField
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        let entered = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return entered.isEmpty ? nil : entered
+
+        let email = (prefilledEmail.isEmpty ? emailField.stringValue : prefilledEmail).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = passwordField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, !pass.isEmpty else { return nil }
+        if Preferences.email.isEmpty { Preferences.email = email }
+        return (email, pass)
     }
 
     /// A valid token for invocation-backed commands, refreshed on demand.
@@ -170,13 +190,17 @@ actor PolestarAPI {
                 return token.accessToken
             }
         }
-        let savedEmail = await MainActor.run { Preferences.email }
+        let savedEmail = (await MainActor.run { Preferences.email }).trimmingCharacters(in: .whitespacesAndNewlines)
+        var emailToUse = savedEmail
         var passwordToUse = (try? keychain.readPassword()) ?? nil
-        if (passwordToUse == nil || passwordToUse?.isEmpty == true) && !savedEmail.isEmpty {
-            passwordToUse = await MainActor.run { Self.promptForPassword(email: savedEmail) }
+        if passwordToUse == nil || passwordToUse?.isEmpty == true {
+            if let creds = await MainActor.run(body: { Self.promptForCredentials(prefilledEmail: savedEmail) }) {
+                emailToUse = creds.email
+                passwordToUse = creds.password
+            }
         }
-        if !savedEmail.isEmpty, let password = passwordToUse, !password.isEmpty {
-            await acquireCommandToken(email: savedEmail, password: password)
+        if !emailToUse.isEmpty, let password = passwordToUse, !password.isEmpty {
+            await acquireCommandToken(email: emailToUse, password: password)
             return commandAccessToken
         }
         return nil

@@ -1020,6 +1020,52 @@ struct LivePolestarRemoteCommandIntegrationTests {
         try? await api.signOut()
     }
 
+    /// Diagnoses exact failure mode when acquiring command token from a restored session.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDiagnoseSessionRestorationAndCommandTokenAcquisition() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        // Step 1: Initial web authentication
+        let webTokens = try await Self.authorizeFull(
+            email: email, password: password,
+            clientID: "l3oopkc_10", redirect: "https://www.polestar.com/sign-in-callback",
+            scope: "openid profile email customer:attributes customer:attributes:write")
+        let webRefresh = try XCTUnwrap(webTokens["refresh_token"] as? String)
+
+        print("\n========================================================")
+        print("🔍 DIAGNOSE RESTORED SESSION COMMAND TOKEN ACQUISITION")
+        print("========================================================")
+
+        // Step 2: Fresh API with NO command token in keychain
+        let freshKeychain = KeychainStore(service: "io.kheirallah.hisingen.diagnostic-tests")
+        try? freshKeychain.deleteSessionToken()
+        try? freshKeychain.deleteCommandSessionToken()
+        try? freshKeychain.deletePassword()
+
+        let api = PolestarAPI(keychain: freshKeychain)
+        try await api.restoreSession(token: webRefresh, preferredVIN: preferredVIN, features: .default)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+
+        print("  ✅ Web session restored successfully for VIN: \(vin)")
+
+        // Step 3: Now try to acquire command token
+        do {
+            print("  Attempting to execute remote Lock from restored session...")
+            await MainActor.run { Preferences.email = email }
+            try freshKeychain.savePassword(password)
+            let result = try await api.executeRemoteCommand(.lock, vin: vin)
+            print("  ✅ SUCCESS: Lock executed -> \(result.outcome)")
+        } catch {
+            print("  ✗ FAILED: \(error)")
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
     /// PCCS denies invocation writes at auth ("Access denied"), but C3's `invocation.
     /// InvocationService` answered an earlier malformed probe with `Application error
     /// processing RPC` — it reached the handler. Sends the *real* request envelope to C3 to
