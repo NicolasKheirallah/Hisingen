@@ -1103,7 +1103,6 @@ actor PolestarAPI {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
             transparent { url angle }
             opaque { url angle }
-            interior { url angle }
           }
         }
         """
