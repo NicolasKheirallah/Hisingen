@@ -9,15 +9,31 @@ final class VehicleOutlineImageProvider {
 
     init() {
         var loaded: NSImage? = nil
-        #if SWIFT_PACKAGE
-        if let url = Bundle.module.url(forResource: "polestar_outline", withExtension: "svg") {
+
+        let rootBundlePath = Bundle.main.bundleURL.appendingPathComponent("Hisingen_Hisingen.bundle").path
+        if FileManager.default.fileExists(atPath: rootBundlePath),
+           let resBundle = Bundle(path: rootBundlePath),
+           let url = resBundle.url(forResource: "polestar_outline", withExtension: "svg") {
             loaded = NSImage(contentsOf: url)
         }
-        #endif
+
+        if loaded == nil,
+           let resourceBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
+           let resBundle = Bundle(path: resourceBundlePath),
+           let url = resBundle.url(forResource: "polestar_outline", withExtension: "svg") {
+            loaded = NSImage(contentsOf: url)
+        }
+
+        if loaded == nil, let url = Bundle.main.url(forResource: "polestar_outline", withExtension: "svg") {
+            loaded = NSImage(contentsOf: url)
+        }
+
         if loaded == nil {
             let possiblePaths = [
-                "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/assets/polestar_outline.svg",
-                "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Sources/Hisingen/Resources/polestar_outline.svg"
+                ".build/arm64-apple-macosx/debug/Hisingen_Hisingen.bundle/polestar_outline.svg",
+                ".build/arm64-apple-macosx/release/Hisingen_Hisingen.bundle/polestar_outline.svg",
+                "Sources/Hisingen/Resources/polestar_outline.svg",
+                "assets/polestar_outline.svg"
             ]
             for path in possiblePaths {
                 if FileManager.default.fileExists(atPath: path), let img = NSImage(contentsOfFile: path) {
@@ -26,6 +42,7 @@ final class VehicleOutlineImageProvider {
                 }
             }
         }
+
         if let loaded {
             loaded.isTemplate = true
             self.image = loaded

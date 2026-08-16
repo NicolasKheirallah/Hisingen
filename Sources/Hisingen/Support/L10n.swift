@@ -2,11 +2,26 @@ import Foundation
 
 enum L10n {
     private static var bundle: Bundle {
-        #if SWIFT_PACKAGE
-        return .module
-        #else
+        if let resBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
+           let bundle = Bundle(path: resBundlePath) {
+            return bundle
+        }
+        if Bundle.main.path(forResource: "en", ofType: "lproj") != nil {
+            return .main
+        }
+        let buildCandidates = [
+            ".build/arm64-apple-macosx/debug/Hisingen_Hisingen.bundle",
+            ".build/arm64-apple-macosx/release/Hisingen_Hisingen.bundle",
+            ".build/x86_64-apple-macosx/debug/Hisingen_Hisingen.bundle",
+            ".build/x86_64-apple-macosx/release/Hisingen_Hisingen.bundle",
+            "Sources/Hisingen/Resources"
+        ]
+        for path in buildCandidates {
+            if let bundle = Bundle(path: path), bundle.path(forResource: "en", ofType: "lproj") != nil {
+                return bundle
+            }
+        }
         return .main
-        #endif
     }
 
     private static var selectedLanguageCode: String? {
