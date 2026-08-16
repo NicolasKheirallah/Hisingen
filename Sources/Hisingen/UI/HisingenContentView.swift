@@ -59,7 +59,7 @@ struct HisingenContentView: View {
                                  }
                                  onSettingsChanged(change)
                              }, onSignOut: onSignOut)
-                    .id(activeVin ?? Preferences.vin)
+                    .id(Preferences.vin.isEmpty ? activeVin : Preferences.vin)
             } else if !authenticated {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged)
             } else if let state {
@@ -71,8 +71,10 @@ struct HisingenContentView: View {
                         case .vehicle:
                             VehicleTabView(state: state, cars: cars, activeVin: activeVin,
                                            onSelectCar: onSelectCar, error: error)
+                                .id(state.vin)
                         case .info:
                             InfoTabView(state: state)
+                                .id(state.vin)
                         case .controls:
                             ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
                                             onRemoteCommand: onRemoteCommand)
@@ -85,7 +87,7 @@ struct HisingenContentView: View {
                                              }
                                              onSettingsChanged(change)
                                          }, onSignOut: onSignOut)
-                                .id(activeVin ?? Preferences.vin)
+                                .id(Preferences.vin.isEmpty ? activeVin : Preferences.vin)
                         }
                     }
                     .padding(HisingenTheme.sectionSpacing)
@@ -422,7 +424,7 @@ struct VehicleTabView: View {
 
     private var moreDetailsSection: some View {
         let cards: [AnyView] = [
-            factoryBuildCard, vehicleIdentityCard, openingsCard, tireSchematicCard, lightingAndFluidCard,
+            vehicleIdentityCard, openingsCard, tireSchematicCard, lightingAndFluidCard,
             climateCard, locationCard, softwareCard, diagnosticsCard
         ].compactMap { $0 }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
@@ -459,11 +461,17 @@ struct VehicleTabView: View {
     }
 
 
+    private var heroImageData: Data? {
+        state.imageData
+            ?? CarImageCache.shared.image(for: state.vin, angle: Preferences.carRenderAngle.rawValue)
+            ?? CarImageCache.shared.image(for: state.vin)
+    }
+
     private var heroCard: some View {
         Card {
             VStack(spacing: 10) {
 
-                if features.contains(.vehicleImage), let imageData = state.imageData,
+                if features.contains(.vehicleImage), let imageData = heroImageData,
                    let nsImage = NSImage(data: imageData) {
                     ZStack {
 
@@ -1044,53 +1052,6 @@ struct VehicleTabView: View {
         })
     }
 
-
-    private var factoryBuildCard: AnyView? {
-        guard features.contains(.vehicleIdentity) else { return nil }
-        var rows: [KVRow] = []
-
-        if let colour = state.externalColour, !colour.isEmpty {
-            rows.append(KVRow(L10n.text("Exterior Paint"), colour, symbol: "paintpalette.fill"))
-        }
-        if let upholstery = state.upholstery, !upholstery.isEmpty {
-            rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
-        }
-        if let wheels = state.wheels, !wheels.isEmpty {
-            rows.append(KVRow(L10n.text("Wheels"), wheels, symbol: "circle.circle.fill"))
-        }
-        if !state.packages.isEmpty {
-            rows.append(KVRow(L10n.text("Factory Packages"), state.packages.joined(separator: " · "), symbol: "shippingbox.fill"))
-        }
-        if let buildWeek = state.formattedBuildWeek, !buildWeek.isEmpty {
-            rows.append(KVRow(L10n.text("Production Week"), buildWeek, symbol: "calendar.badge.clock"))
-        }
-        if let options = state.pno34, !options.isEmpty {
-            rows.append(KVRow(L10n.text("Factory Code (PNO34)"), options, symbol: "tag.fill"))
-        }
-        if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
-            rows.append(KVRow(L10n.text("Steering"), steering, symbol: "steeringwheel"))
-        }
-        if let cap = state.reportedBatteryCapacityKwh, cap > 0 {
-            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", cap), symbol: "battery.100.bolt"))
-        }
-        if let gearbox = state.gearbox, !gearbox.isEmpty {
-            rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
-        }
-        if let market = state.accountMarket, !market.isEmpty {
-            rows.append(KVRow(L10n.text("Market"), market, symbol: "globe"))
-        }
-        if let internalID = state.internalVehicleIdentifier, !internalID.isEmpty {
-            rows.append(KVRow(L10n.text("Vehicle ID"), internalID, symbol: "barcode"))
-        }
-
-        guard !rows.isEmpty else { return nil }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.2.square.on.square", title: L10n.text("Factory Build & Options"), color: HisingenTheme.accent)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        })
-    }
 
     private var vehicleIdentityCard: AnyView? {
         var rows: [KVRow] = []

@@ -53,6 +53,7 @@ actor VolvoAPI {
     private var endpointBackoff: [String: Date] = [:]
     private var remoteCommandsInFlight: Set<String> = []
     private var carImageData: [String: Data] = [:]
+    private var interiorImageData: [String: Data] = [:]
 
     init(keychain: KeychainStore = .app) {
         self.keychain = keychain
@@ -256,6 +257,7 @@ actor VolvoAPI {
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
+            await fetchInteriorImage(vin: vin, imageUrlString: details.images?.interiorImageUrl)
         }
 
         let vehicleLocation: VehicleLocation? = location.flatMap { (loc: VolvoLocationDTO) -> VehicleLocation? in
@@ -425,6 +427,8 @@ actor VolvoAPI {
         let isEngineRunning: Bool? = engineStatus?.isRunning
         let batteryCap: Double? = details.batteryCapacityKWH
         let carImg: Data? = features.contains(.vehicleImage) ? (carImageData[vin] ?? CarImageCache.shared.image(for: vin)) : nil
+        let interiorImg: Data? = features.contains(.vehicleImage)
+            ? (interiorImageData[vin] ?? CarImageCache.shared.interiorImage(for: vin)) : nil
         let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
 
         var state = VehicleState(
@@ -481,6 +485,7 @@ actor VolvoAPI {
         state.serviceTrigger = diagnostics?.serviceTrigger?.value
         state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBattery?.value
         state.chargingCurrentLimitAmps = currentLimitAmps
+        state.interiorImageData = interiorImg
         return state
     }
 
@@ -492,6 +497,16 @@ actor VolvoAPI {
               bytes.count <= 5_000_000 else { return }
         carImageData[vin] = bytes
         CarImageCache.shared.save(bytes, for: vin)
+    }
+
+    private func fetchInteriorImage(vin: String, imageUrlString: String?) async {
+        if interiorImageData[vin] != nil || CarImageCache.shared.interiorImage(for: vin) != nil { return }
+        guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle interior image"),
+              response.statusCode == 200,
+              bytes.count <= 5_000_000 else { return }
+        interiorImageData[vin] = bytes
+        CarImageCache.shared.saveInterior(bytes, for: vin)
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {

@@ -807,6 +807,10 @@
 "Parking Brake" = "Parking Brake";
 "Engaged" = "Engaged";
 "Released" = "Released";
+"Cabin Seating Matrix" = "Cabin Seating Matrix";
+"Rear Left" = "Rear Left";
+"Rear Center" = "Rear Center";
+"Rear Right" = "Rear Right";
 "Interior & Cabin" = "Interior & Cabin";
 "Steering Orientation" = "Steering Orientation";
 "Comfort Target" = "Comfort Target";

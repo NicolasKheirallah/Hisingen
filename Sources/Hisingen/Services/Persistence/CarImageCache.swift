@@ -20,7 +20,29 @@ final class CarImageCache: @unchecked Sendable {
         let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !cleanVIN.isEmpty else { return nil }
         let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN
+        return read(key: key)
+    }
 
+    func save(_ data: Data, for vin: String, angle: Int? = nil) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return }
+        let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN
+        write(data, key: key)
+    }
+
+    func interiorImage(for vin: String) -> Data? {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return nil }
+        return read(key: "\(cleanVIN)_interior")
+    }
+
+    func saveInterior(_ data: Data, for vin: String) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return }
+        write(data, key: "\(cleanVIN)_interior")
+    }
+
+    private func read(key: String) -> Data? {
         lock.lock()
         if let mem = memoryCache[key] {
             lock.unlock()
@@ -39,10 +61,8 @@ final class CarImageCache: @unchecked Sendable {
         return nil
     }
 
-    func save(_ data: Data, for vin: String, angle: Int? = nil) {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty, !data.isEmpty else { return }
-        let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN
+    private func write(_ data: Data, key: String) {
+        guard !data.isEmpty else { return }
 
         lock.lock()
         memoryCache[key] = data

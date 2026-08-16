@@ -834,10 +834,9 @@ actor PolestarAPI {
               vin internalVehicleIdentifier registrationNo modelYear
               content {
                 model { name }
-                exteriorColor { name }
-                upholstery { name }
+                exterior { name }
+                interior { name }
                 wheels { name }
-                packages { name }
               }
             }
           }
@@ -852,12 +851,14 @@ actor PolestarAPI {
         var request = URLRequest(url: appBackendURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/graphql-response+json, application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/mixed;deferSpec=20220824, application/graphql-response+json, application/json",
+                         forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "X-PolestarId-Authorization")
         request.setValue("GetVDMSCars", forHTTPHeaderField: "X-APOLLO-OPERATION-NAME")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-APOLLO-REQUEST-UUID")
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
-        request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("5.5.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        request.setValue("PolestarApp/5.5.0b1102 Android/14", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
         try validateHTTP(response, operation: "VDMS vehicle discovery")
