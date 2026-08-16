@@ -250,19 +250,20 @@ extension PolestarGRPC {
             ("/services.vehiclestates.location.LocationService/GetLocation", .c3)
         ]
 
+        let message = Protobuf.stringField(1, vin)
         for (path, host) in paths {
             do {
                 let body = try await firstMessage(path: path,
-                                                  message: Self.vehicleRequest(vin),
+                                                  message: message,
                                                   vin: vin, accessToken: accessToken, host: host)
 
                 let candidates = [
-                    Self.message(body, field: 3),
-                    Self.message(body, field: 1),
+                    body,
                     Self.message(body, field: 5),
+                    Self.message(body, field: 1),
+                    Self.message(body, field: 3),
                     Self.message(body, field: 2),
-                    Self.message(body, field: 4),
-                    body
+                    Self.message(body, field: 4)
                 ].compactMap { $0 }
 
                 for candidate in candidates {
@@ -293,16 +294,17 @@ extension PolestarGRPC {
             ("/weather.WeatherService/GetWeatherReport", .pccs)
         ]
 
+        let message = Protobuf.stringField(1, vin)
         for (path, host) in weatherPaths {
             do {
                 let body = try await firstMessage(path: path,
-                                                  message: Self.vehicleRequest(vin),
+                                                  message: message,
                                                   vin: vin, accessToken: accessToken, host: host)
                 let candidates = [
+                    body,
                     Self.message(body, field: 1),
                     Self.message(body, field: 3),
-                    Self.message(body, field: 2),
-                    body
+                    Self.message(body, field: 2)
                 ].compactMap { $0 }
                 for candidate in candidates {
                     if let weather = Self.parseWeather(candidate) {
@@ -663,15 +665,30 @@ extension PolestarGRPC {
 
     static func parseLocation(_ data: Data) -> VehicleLocation? {
         let fields = Protobuf.fields(data)
-        var lon = numeric(fields, 1)
-        var lat = numeric(fields, 2)
+
+        var lon = numeric(fields, 2)
+        var lat = numeric(fields, 3)
+        var tsMillis = varint(fields, 4)
+
+        if (lat == nil || lon == nil), let subData = message(fields, field: 5) ?? message(fields, field: 1) ?? message(fields, field: 3) {
+            let subFields = Protobuf.fields(subData)
+            lon = lon ?? numeric(subFields, 1) ?? numeric(subFields, 2)
+            lat = lat ?? numeric(subFields, 2) ?? numeric(subFields, 3)
+            if tsMillis == nil {
+                if let tsSub = message(subFields, field: 3) {
+                    let tsFields = Protobuf.fields(tsSub)
+                    if let sec = varint(tsFields, 1) {
+                        tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
+                    }
+                } else {
+                    tsMillis = varint(subFields, 3) ?? varint(subFields, 4)
+                }
+            }
+        }
 
         if lat == nil && lon == nil {
-            if let sub = message(fields, field: 1) ?? message(fields, field: 2) ?? message(fields, field: 3) {
-                let subFields = Protobuf.fields(sub)
-                lon = numeric(subFields, 1) ?? numeric(subFields, 2)
-                lat = numeric(subFields, 2) ?? numeric(subFields, 1)
-            }
+            lon = numeric(fields, 1)
+            lat = numeric(fields, 2)
         }
 
         if let rawLat = lat, abs(rawLat) > 180 {
@@ -685,14 +702,18 @@ extension PolestarGRPC {
             return nil
         }
 
-        let heading = numeric(fields, 4).flatMap { $0 >= 0 ? $0 : nil }
-        let speed = numeric(fields, 5).flatMap { $0 >= 0 ? $0 : nil }
-        let ts = timestamp(message(fields, field: 3)) ?? timestamp(message(fields, field: 1))
-        let altitude = numeric(fields, 6)
-        let accuracy = numeric(fields, 7)
-        let parkingBrake = varint(fields, 8).map { $0 != 0 }
+        let heading = [numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
+            .compactMap { $0 }
+            .first(where: { $0 >= 0 && $0 <= 360 })
+        let speed = [numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
+            .compactMap { $0 }
+            .first(where: { $0 >= 0 && $0 <= 300 })
+        let date = tsMillis.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1_000) : nil }
+        let altitude = numeric(fields, 8) ?? numeric(fields, 6)
+        let accuracy = numeric(fields, 9) ?? numeric(fields, 7)
+        let parkingBrake = varint(fields, 10).map { $0 != 0 } ?? varint(fields, 8).map { $0 != 0 }
         let gear: String? = {
-            guard let g = varint(fields, 9) else { return nil }
+            guard let g = varint(fields, 11) ?? varint(fields, 9) else { return nil }
             switch g {
             case 1: return "P"
             case 2: return "R"
@@ -701,12 +722,13 @@ extension PolestarGRPC {
             default: return nil
             }
         }()
+
         return VehicleLocation(
             latitude: validLat,
             longitude: validLon,
             heading: heading,
             speed: speed,
-            timestamp: ts,
+            timestamp: date,
             altitudeMeters: altitude,
             accuracyMeters: accuracy,
             parkingBrakeEngaged: parkingBrake,
@@ -717,11 +739,17 @@ extension PolestarGRPC {
 
     static func parseWeather(_ data: Data) -> VehicleWeather? {
         let fields = Protobuf.fields(data)
-        let millis = varint(fields, 1).flatMap { $0 > 0 ? $0 : nil }
+        let subData = message(fields, field: 1) ?? data
+        let subFields = Protobuf.fields(subData)
+
+        let millis = varint(subFields, 1).flatMap { $0 > 0 ? $0 : nil }
         let timestamp = millis.map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000) }
-        let temp = numeric(fields, 2)
+        let temp = numeric(subFields, 2)
+        let code = varint(subFields, 3).map(Int.init)
+        let condition = code.map(Self.wmoWeatherDescription)
+
         guard timestamp != nil || temp != nil else { return nil }
-        return VehicleWeather(temperatureCelsius: temp, timestamp: timestamp)
+        return VehicleWeather(temperatureCelsius: temp, condition: condition, timestamp: timestamp)
     }
 
 

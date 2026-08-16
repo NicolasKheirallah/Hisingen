@@ -3019,6 +3019,61 @@ struct LivePolestarRemoteCommandIntegrationTests {
             return ([], nil)
         }
     }
+
+    @Test("Live Location and Weather Resolution Probe")
+    func testLiveLocationAndWeatherResolution() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let rawEmail = env["POLESTAR_LOGIN"] ?? env["HISINGEN_TEST_EMAIL"] ?? Preferences.email
+        let rawPassword = env["POLESTAR_PASS"] ?? env["HISINGEN_TEST_PASSWORD"] ?? (try? KeychainStore.app.readPassword())
+        let preferredVIN = env["POLESTAR_VIN"] ?? env["HISINGEN_TEST_VIN"] ?? (Preferences.vin.isEmpty ? nil : Preferences.vin)
+
+        let email = (rawEmail.isEmpty) ? nil : rawEmail
+        let password = (rawPassword?.isEmpty ?? true) ? nil : rawPassword
+
+        guard let email, let password else {
+            print("ℹ️ Skipping live location/weather probe: no live credentials in env or KeychainStore.app")
+            return
+        }
+
+        print("\n========================================================")
+        print("🛰 PROBING LIVE LOCATION & WEATHER RESOLUTION")
+        print("User: \(email), VIN: \(preferredVIN ?? "auto")")
+        print("========================================================")
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        features.set(.vehicleLocation, enabled: true)
+        features.set(.vehicleWeather, enabled: true)
+
+        try await api.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+
+        let state = try await api.fetchVehicleState(vin: vin, features: features)
+        print("🚗 Model: \(state.modelName ?? "Unknown"), Year: \(state.modelYear ?? "—"), Plate: \(state.registrationNo ?? "—")")
+        print("🔋 Battery: \(state.batteryPercentage.map { String(format: "%.1f%%", $0) } ?? "—"), Range: \(state.rangeKm.map { "\($0) km" } ?? "—")")
+
+        print("\n📍 RESOLVED VEHICLE STATE LOCATION & WEATHER:")
+        if let loc = state.location {
+            print("  ✅ Latitude:   \(loc.latitude.map { String(format: "%.4f° N", $0) } ?? "nil")")
+            print("  ✅ Longitude:  \(loc.longitude.map { String(format: "%.4f° E", $0) } ?? "nil")")
+            print("  ✅ Heading:    \(loc.heading.map { "\($0)°" } ?? "—")")
+            print("  ✅ Speed:      \(loc.speed.map { "\($0) km/h" } ?? "—")")
+            print("  ✅ Timestamp:  \(loc.timestamp.map { "\($0)" } ?? "—")")
+        } else {
+            print("  ⚠️ Location was nil in VehicleState")
+        }
+
+        if let weather = state.weather {
+            print("  🌤 Temperature:\(weather.temperatureCelsius.map { String(format: "%.1f °C", $0) } ?? "—")")
+            print("  🌤 Condition:  \(weather.condition ?? "—")")
+            print("  🌤 Feels Like: \(weather.apparentTemperatureCelsius.map { String(format: "%.1f °C", $0) } ?? "—")")
+            print("  🌤 Humidity:   \(weather.relativeHumidity.map { "\($0)%" } ?? "—")")
+        } else {
+            print("  ⚠️ Weather was nil in VehicleState")
+        }
+        print("========================================================\n")
+    }
 }
 #endif
 
