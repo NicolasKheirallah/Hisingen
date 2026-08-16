@@ -35,19 +35,61 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 ## Screenshots
 
-The screenshots show the current native popover with Apple Liquid Glass styling. Hisingen supports extensive multilingual localization across 16+ languages and can follow macOS system appearance or be set to Light Mode or Dark Mode independently.
+The screenshots below showcase the native macOS popover with Apple Liquid Glass styling, dark & light modes, multi-brand Polestar & Volvo telemetry, 3D studio angles, and live capability matrices.
 
-| Vehicle overview | Telemetry details |
-| --- | --- |
-| ![Vehicle overview with studio image, owner greeting, registration, battery, range, status and odometer](assets/hisingen-vehicle-overview.png) | ![Telemetry cards for charging, vehicle state, climate and connectivity](assets/hisingen-telemetry-details.png) |
+### 🌟 Polestar Vehicle Dashboard & Telemetry
 
-| Controls status | Display settings |
-| --- | --- |
-| ![Controls tab explaining that remote commands are unavailable](assets/hisingen-controls-unavailable.png) | ![Language, charging history, menu bar, unit, startup and electricity settings](assets/hisingen-settings-display.png) |
+| Vehicle Overview & 3D Render | Charging & Openings Schematic |
+| :---: | :---: |
+| ![Polestar 2 Hero Card](assets/hisingen-polestar-hero-card.png) | ![Charging and Openings](assets/hisingen-polestar-charging-openings.png) |
 
-| Telemetry features | Diagnostics and notifications |
-| --- | --- |
-| ![Individual read-only telemetry feature switches](assets/hisingen-settings-telemetry.png) | ![Diagnostics and notification settings](assets/hisingen-settings-diagnostics-notifications.png) |
+| Expanded Openings Monitor | 4-Wheel iTPMS Tire Status |
+| :---: | :---: |
+| ![Doors, Windows and Lids](assets/hisingen-polestar-openings-expanded.png) | ![4-Wheel Tire Status](assets/hisingen-polestar-tpms-schematic.png) |
+
+| Health, Fluids & 12V Battery | OTA Software & Range Health |
+| :---: | :---: |
+| ![Vehicle Health and Fluids](assets/hisingen-polestar-identity-health-climate.png) | ![Software OTA and Battery Health](assets/hisingen-polestar-software-diagnostics.png) |
+
+### ℹ️ Vehicle Info, CleanZone & Factory Build Metadata
+
+| 3D Perspective & Dimensions | CleanZone AQI & Diagnostics |
+| :---: | :---: |
+| ![Multi-Angle 3D Render](assets/hisingen-polestar-info-tab-top.png) | ![CleanZone Air Quality and Trip Meters](assets/hisingen-polestar-info-cleanzone-trips.png) |
+
+| Powertrain Specs & Polestar Care | Factory Build Week & Market Spec |
+| :---: | :---: |
+| ![Battery Specs and Warranty](assets/hisingen-polestar-info-specs-warranty.png) | ![Factory Build Week and PNO34 Spec](assets/hisingen-polestar-info-build-metadata.png) |
+
+### 🎮 Remote Controls & Live Capability Matrix
+
+| Remote Climate & Charging Limits | Lock, Unlock, Locate & OTA Controls |
+| :---: | :---: |
+| ![Climate and Charging Controls](assets/hisingen-polestar-controls-climate-charging.png) | ![Locks, Locate and Software Controls](assets/hisingen-polestar-controls-locks-software.png) |
+
+| Live Capability Matrix (Part 1) | Live Capability Matrix (Part 2) |
+| :---: | :---: |
+| ![Capability Matrix Overview](assets/hisingen-polestar-settings-capability-matrix-top.png) | ![Sensor and Remote Capabilities](assets/hisingen-polestar-settings-capability-matrix-bottom.png) |
+
+### 🚗 Volvo Integration & Experience
+
+| Volvo Telemetry & Health | Volvo Remote Controls |
+| :---: | :---: |
+| ![Volvo Vehicle Overview](assets/hisingen-volvo-vehicle-tab-top.png) | ![Volvo Remote Controls](assets/hisingen-volvo-controls-tab.png) |
+
+| Volvo Account & 3D Studio Renders | Volvo XC40 Capability Matrix |
+| :---: | :---: |
+| ![Volvo 3D Studio Render](assets/hisingen-volvo-settings-account-themes.png) | ![Volvo Capability Matrix](assets/hisingen-volvo-settings-capability-matrix.png) |
+
+### ⚙️ Settings, Customization & Notification Engine
+
+| Camera Perspective & 9 Themes | Units, Menu Bar & General Settings |
+| :---: | :---: |
+| ![Theme Selector and Camera Perspectives](assets/hisingen-polestar-settings-perspective-themes.png) | ![Units and Menu Bar Customization](assets/hisingen-polestar-settings-general-units.png) |
+
+| Security & Granular Feature Toggles | Charging & Vehicle Alert Notifications |
+| :---: | :---: |
+| ![Touch ID and Telemetry Toggles](assets/hisingen-polestar-settings-security-toggles.png) | ![Notification Controls](assets/hisingen-polestar-settings-notifications.png) |
 
 ## At A Glance
 
