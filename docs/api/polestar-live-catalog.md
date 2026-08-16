@@ -119,17 +119,19 @@ query GetVDMSCars {
 | Service Path | RPC Method | Live Data Returned |
 | :--- | :--- | :--- |
 | `services.vehiclestates.battery.BatteryService` | `GetLatestBattery` | Battery SoC % (e.g. `75.0%`), Estimated Range (`270 km`), Charging Status (`IDLE`, `CHARGING`, `DONE`), Charger Connection (`UNCONNECTED`, `CONNECTED`), Power kW, Voltage V, Amps A, Time to full. |
-| `services.vehiclestates.doors.DoorsService` | `GetLatestDoors` | Central lock state (`LOCKED` / `UNLOCKED`), Alarm status, 4 doors (`CLOSED` / `OPEN` / `AJAR`), 4 windows, tailgate, hood, charge lid, sunroof. |
-| `services.vehiclestates.health.HealthService` | `GetLatestHealth` | Total odometer km (`121,376 km`), Service due countdown (`347 days`, `5,726 km`), Service warning boolean, Brake fluid, Washer fluid, Engine coolant, 4 tyre pressure statuses (`OK` / `LOW` / `VERY_LOW`) & kPa values. |
-| `services.vehiclestates.odometer.OdometerService` | `GetLatestOdometer` | High-precision trip meters: Manual trip (`1,287.4 km`), Automatic trip (`1.9 km`), Average speed km/h. |
-| `services.vehiclestates.climate.ClimateService` | `GetLatestClimate` | HVAC running state, Timer triggered flag, Driver seat heat level (0–3), Front passenger seat heat level (0–3), Steering wheel heat level (0–3), Defrost active, Target setpoint °C, Cabin temp °C. |
-| `services.vehiclestates.airquality.AirQualityService` | `GetLatestAirQuality` | CleanZone purifier state (`ON` / `OFF`), Cabin PM2.5 (`µg/m³`), Outdoor PM2.5, Cabin AQI (0–500), CleanZone filter remaining life %. |
+| `services.vehiclestates.exterior.ExteriorService` | `GetLatestExterior` | Central lock state (`LOCKED` / `UNLOCKED`), Alarm status, 4 doors (`CLOSED` / `OPEN` / `AJAR`), 4 windows, tailgate, hood, charge lid, sunroof. |
+| `services.vehiclestates.health.HealthService` | `GetHealth` | Total odometer km (`121,376 km`), Service due countdown (`347 days`, `5,726 km`), Service warning boolean, Brake fluid, Washer fluid, Engine coolant, 4 tyre pressure statuses (`OK` / `LOW` / `VERY_LOW`) & kPa values, 22 exterior bulb warning indicators, 12V battery warning. |
+| `services.vehiclestates.odometer.OdometerService` | `GetOdometer` | High-precision trip meters: Manual trip (`1,287.4 km`), Automatic trip (`1.9 km`), Average speed km/h. |
+| `services.vehiclestates.parkingclimatization.ParkingClimatizationService` | `GetLatestParkingClimatization` | HVAC running state, Timer triggered flag, Driver seat heat level (0–3), Front passenger seat heat level (0–3), Steering wheel heat level (0–3), Defrost active, Target setpoint °C, Cabin temp °C. |
+| `services.vehiclestates.precleaning.PreCleaningService` | `GetPreCleaning` | CleanZone purifier state (`ON` / `OFF`), Cabin PM2.5 (`µg/m³`), Outdoor PM2.5, Cabin AQI (0–500), CleanZone filter remaining life %. |
 | `ota_mobcache.OtaDiscoveryService` | `GetSoftwareInfo` | Current running OS version, Target OTA update version (e.g. `5.0.10`), Rollout state (`AVAILABLE`, `DOWNLOADING`, `INSTALLING`, `COMPLETED`), Release changelog title. |
-| `services.vehiclestates.location.LocationService` | `GetLatestLocation` | GPS coordinates (Latitude, Longitude), Altitude meters, Heading degrees, Accuracy meters, Parking brake (`ENGAGED` / `RELEASED`), Gear selector (`P`, `D`, `R`, `N`). |
-| `services.vehiclestates.weather.WeatherService` | `GetLatestWeather` | Hyper-local weather at vehicle location, Ambient temperature °C, Precipitation / Rain detection. |
-| `services.vehiclestates.schedules.ScheduleService` | `GetSchedules` | Pre-conditioning departure timers (Mon–Sun, Hour:Min) and smart charging windows. |
-| `chronos.services.v1.TargetSocService` | `GetTargetSoc` | Charging limit SoC target (50% – 100%). |
-| `chronos.services.v1.AmpLimitService` | `GetAmpLimit` | AC charging current limiter (6A – 32A). |
+| `dtlinternet.DtlInternetService` | `GetLastKnownLocation` | GPS coordinates (Latitude, Longitude), Altitude meters, Heading degrees, Accuracy meters, Parking brake (`ENGAGED` / `RELEASED`), Gear selector (`P`, `D`, `R`, `N`). |
+| `weather.WeatherService` | `GetWeatherReport` | Hyper-local weather at vehicle location, Ambient temperature °C, Precipitation / Rain detection. |
+| `pccs.chronos.services.v2.GlobalChargeTimerService` | `GetGlobalChargeTimer` | Pre-conditioning departure timers (Mon–Sun, Hour:Min) and smart charging windows. |
+| `pccs.chronos.services.v1.TargetSocService` | `GetTargetSoc` / `SetTargetSoc` | Charging limit SoC target (50% – 100%). |
+| `pccs.chronos.services.v1.AmpLimitService` | `GetAmpLimit` / `SetAmpLimit` | AC charging current limiter (6A – 32A). |
+| `pccs.chronos.services.v1.ChargeNowService` | `StartOverrideChargeTimer` | Immediate charging override bypassing scheduled timers. |
+| `pccs.chronos.services.v1.ParkingClimateTimerService` | `GetTimers` / `SetTimers` | Climate preconditioning schedules. |
 
 ---
 

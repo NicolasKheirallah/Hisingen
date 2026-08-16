@@ -296,6 +296,99 @@ struct RemoteCommandTests {
         XCTAssertEqual(polestarWarranty.includedMaintenance, true)
     }
 
+    @Test
+    func testLockAndUnlockWireRequests() throws {
+        let lockData = PolestarGRPC.lockRequest("VIN123")
+        let lockFields = Protobuf.fields(lockData)
+        let lockEnvelope = try XCTUnwrap(lockFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        XCTAssertEqual(string(lockEnvelope, field: 1), "VIN123")
+        XCTAssertEqual(lockFields.first { $0.number == 2 }?.varint, 0)
+
+        let unlockAllData = PolestarGRPC.unlockRequest("VIN123", trunkOnly: false)
+        let unlockAllFields = Protobuf.fields(unlockAllData)
+        let unlockAllEnvelope = try XCTUnwrap(unlockAllFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        XCTAssertEqual(string(unlockAllEnvelope, field: 1), "VIN123")
+        XCTAssertEqual(unlockAllFields.first { $0.number == 2 }?.varint, 0)
+
+        let unlockTrunkData = PolestarGRPC.unlockRequest("VIN123", trunkOnly: true)
+        let unlockTrunkFields = Protobuf.fields(unlockTrunkData)
+        let unlockTrunkEnvelope = try XCTUnwrap(unlockTrunkFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        XCTAssertEqual(string(unlockTrunkEnvelope, field: 1), "VIN123")
+        XCTAssertEqual(unlockTrunkFields.first { $0.number == 2 }?.varint, 1)
+    }
+
+    @Test
+    func testWindowControlAndPreCleaningWireRequests() throws {
+        let openData = PolestarGRPC.windowRequest("VIN123", action: 1)
+        let openFields = Protobuf.fields(openData)
+        XCTAssertEqual(openFields.first { $0.number == 2 }?.varint, 1)
+
+        let closeData = PolestarGRPC.windowRequest("VIN123", action: 2)
+        let closeFields = Protobuf.fields(closeData)
+        XCTAssertEqual(closeFields.first { $0.number == 2 }?.varint, 2)
+
+        let startPreclean = PolestarGRPC.preCleaningRequest(vin: "VIN123", start: true)
+        let startFields = Protobuf.fields(startPreclean)
+        XCTAssertEqual(startFields.first { $0.number == 2 }?.varint, 1)
+
+        let stopPreclean = PolestarGRPC.preCleaningRequest(vin: "VIN123", start: false)
+        let stopFields = Protobuf.fields(stopPreclean)
+        XCTAssertEqual(stopFields.first { $0.number == 2 }?.varint, 0)
+    }
+
+    @Test
+    func testChronosEnvelopeConstruction() throws {
+        var payload = Data()
+        payload.append(Protobuf.intField(2, 90))
+        let chronosData = PolestarGRPC.chronosRequest("VIN123", payload: payload)
+        let fields = Protobuf.fields(chronosData)
+        let envelope = try XCTUnwrap(fields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        let envFields = Protobuf.fields(envelope)
+        XCTAssertFalse(string(envelope, field: 1)?.isEmpty ?? true)
+        XCTAssertEqual(string(envelope, field: 2), "VIN123")
+        XCTAssertEqual(string(envelope, field: 3), "RCS")
+        XCTAssertNotNil(envFields.first { $0.number == 4 && $0.wire == 2 })
+        XCTAssertEqual(fields.first { $0.number == 2 }?.varint, 90)
+    }
+
+    @Test
+    func testFetchAmpLimitResponseParsing() {
+        var validInner = Data()
+        validInner.append(Protobuf.intField(1, 32))
+        var validBody = Data()
+        validBody.append(Protobuf.messageField(3, validInner))
+        XCTAssertEqual(PolestarGRPC.fetchAmpLimitResponse(validBody), 32)
+
+        var invalidInner = Data()
+        invalidInner.append(Protobuf.intField(1, 100))
+        var invalidBody = Data()
+        invalidBody.append(Protobuf.messageField(3, invalidInner))
+        XCTAssertNil(PolestarGRPC.fetchAmpLimitResponse(invalidBody))
+
+        XCTAssertNil(PolestarGRPC.fetchAmpLimitResponse(Data()))
+    }
+
+    @Test
+    func testCommandErrorStatusMapping() {
+        let err3 = PolestarGRPC.commandError(status: "3", message: "relativeTime%20out%20of%20bounds", path: "SchedulerService/Schedule")
+        guard case RemoteCommandError.rejected(let msg3) = err3 else {
+            return XCTFail("Expected rejected error for status 3")
+        }
+        XCTAssertEqual(msg3, "relativeTime out of bounds")
+
+        let err12 = PolestarGRPC.commandError(status: "12", message: nil, path: "ota_mobcache.SchedulerService/Download")
+        XCTAssertTrue(err12 is PolestarError)
+
+        let err14 = PolestarGRPC.commandError(status: "14", message: nil, path: "services.vehiclestates.battery.BatteryService")
+        XCTAssertTrue(err14 is PolestarError)
+
+        let err16 = PolestarGRPC.commandError(status: "16", message: nil, path: "invocation.InvocationService/Lock")
+        guard case RemoteCommandError.rejected(let msg16) = err16 else {
+            return XCTFail("Expected rejected error for status 16")
+        }
+        XCTAssertTrue(msg16?.contains("mobile app") == true)
+    }
+
     private func invocation(status: Int) -> Data {
         var response = Data()
         response.append(Protobuf.intField(3, status))
