@@ -6,6 +6,7 @@ import Testing
 /// app on its on-disk snapshot indefinitely: the refresh loop stopped rescheduling, and because
 /// `cacheableCopy` keeps only a handful of fields, every card backed by live telemetry silently
 /// vanished — indistinguishable from a vehicle that does not support those features.
+@MainActor
 struct DegradedStateResilienceTests {
 
     // MARK: - The refresh loop must not give up on recoverable errors

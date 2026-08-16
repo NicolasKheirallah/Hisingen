@@ -399,25 +399,36 @@ final class RefreshCoordinator {
     }
 
     private func installSystemObservers() {
-        let center = NSWorkspace.shared.notificationCenter
-        observerTokens.append(center.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.sleeping = true
-                self?.cancelCurrentWork()
-            }
+        observerTokens.append(addMainActorObserver(for: NSWorkspace.willSleepNotification) { coordinator in
+            coordinator.sleeping = true
+            coordinator.cancelCurrentWork()
         })
-        observerTokens.append(center.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        observerTokens.append(addMainActorObserver(for: NSWorkspace.didWakeNotification) { coordinator in
+            coordinator.sleeping = false
+            if coordinator.sessionReady { coordinator.refresh(trigger: .wake) }
+            else { coordinator.beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+        })
+    }
+
+    /// `MainActor.assumeIsolated` is a runtime assertion, not a compiler-checked guarantee: it
+    /// traps if the notification is ever delivered off the main thread. What makes it sound is
+    /// `queue: .main` on the registration — so the two must never drift apart. Binding them
+    /// together here means the delivery queue cannot be changed independently of the
+    /// assumption that depends on it. The body stays synchronous deliberately: `willSleep`
+    /// must cancel in-flight work *before* the machine suspends, which an async hop onto the
+    /// main actor could miss.
+    private func addMainActorObserver(
+        for name: Notification.Name,
+        handler: @escaping @MainActor (RefreshCoordinator) -> Void
+    ) -> any NSObjectProtocol {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: name, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.sleeping = false
-                if self.sessionReady { self.refresh(trigger: .wake) }
-                else { self.beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+                handler(self)
             }
-        })
+        }
     }
 
     private func cancelCurrentWork() {

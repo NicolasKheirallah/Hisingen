@@ -433,7 +433,7 @@ Vehicular telemetry arrives in drastically different formats across brands and p
 ### 4. Hardware-Backed Security & Cryptography
 
 - **PKCE Implementation (RFC 7636)**: Generates 32-byte cryptographically secure random verifiers using Apple's `SecRandomCopyBytes`, computing `CC_SHA256` digests formatted as base64url strings.
-- **Isolated Keychain Partitioning**: Access tokens and refresh tokens are stored in the macOS Keychain (`kSecClassGenericPassword`) bound strictly to `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. Polestar and Volvo credentials reside in completely segregated service domains (`io.kheirallah.hisingen`).
+- **Isolated Keychain Partitioning**: Refresh tokens and credentials are stored in the macOS Keychain (`kSecClassGenericPassword`) bound to `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — never synced to iCloud Keychain, never leaves the device. `AfterFirstUnlock` rather than `WhenUnlocked` is deliberate: a menu-bar app has to refresh vehicle state while the screen is locked, which `WhenUnlocked` would prevent. Polestar and Volvo credentials reside in separate Keychain accounts under the `io.kheirallah.hisingen` service.
 - **Privacy-Scrubbed Persistence Pipeline**: Before writing cached snapshots to disk, Hisingen's `VehicleStateStore` strips all raw GPS coordinates, VIN details, owner names, license plates, and schedule location strings.
 
 ### 5. Hybrid AppKit / SwiftUI Menu Bar Engine

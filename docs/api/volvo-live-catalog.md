@@ -1,12 +1,12 @@
 # Volvo Connected Vehicle Live API Catalog & Technical Reference
 
-This document provides a comprehensive technical catalog of the Volvo Developer Portal APIs, Connected Vehicle V2 specifications, Energy V1 endpoints, Location API, Remote Commands, OAuth2 scopes, and payload schemas supported by Hisingen.
+This document provides a comprehensive technical catalog of the Volvo Developer Portal APIs, Connected Vehicle V2 specifications, Energy V1 endpoints, Location API, Remote Commands, OAuth2 scopes, live probe results, and payload schemas supported by Hisingen.
 
 ---
 
 ## 1. API Architecture Overview
 
-Volvo provides a modern REST API architecture via the Volvo Developer Portal (`developer.volvocars.com`):
+Volvo exposes a REST OpenAPI architecture via the Volvo Developer Portal (`developer.volvocars.com`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -29,9 +29,15 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 * **Authorization Endpoint**: `https://volvoid.eu.volvocars.com/as/authorization.oauth2`
 * **Token Endpoint**: `https://volvoid.eu.volvocars.com/as/token.oauth2`
 * **UserInfo Endpoint**: `https://volvoid.eu.volvocars.com/idp/userinfo.openid`
-* **Supported Grant Types**: `authorization_code`, `refresh_token`, `client_credentials`, `urn:ietf:params:oauth:grant-type:jwt-bearer`
+* **Supported Grant Types (Verified Live)**:
+  * `authorization_code` (Primary mobile and web client PKCE flow)
+  * `refresh_token` (Long-lived session restoration)
+  * `client_credentials`
+  * `password` (ROPC)
+  * `urn:ietf:params:oauth:grant-type:jwt-bearer`
+  * `urn:ietf:params:oauth:grant-type:device_code`
 
-### Verified Scopes Matrix
+### Verified Scopes Matrix (112 Supported Scopes)
 | Scope Group | Scopes |
 | :--- | :--- |
 | **Core Identity** | `openid`, `profile`, `email`, `customer:attributes`, `customer:attributes:write` |
@@ -51,12 +57,12 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
   * `Authorization`: `Bearer {access_token}`
   * `Accept`: `application/vnd.volvocars.api.connected-vehicle.vehicledata.v2+json` (or `application/json`)
 
-### Verified Endpoints & Schemas
+### Verified Endpoints & Live Payload Schemas
 
 #### 1. Vehicle Discovery & Specification
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles`
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -73,7 +79,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 2. Battery & Charging Level
 * **Endpoint**: `GET /energy/v1/vehicles/{vin}/battery-charge-level`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -93,7 +99,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 3. Recharge & Plug Status
 * **Endpoint**: `GET /energy/v1/vehicles/{vin}/recharge-status`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -120,7 +126,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 4. Doors & Central Lock
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/doors`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -140,7 +146,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 5. Windows Status
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/windows`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -155,7 +161,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 6. Tyres & TPMS Pressure
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/tyres`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -169,7 +175,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 7. Odometer & Distance
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/odometer`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -184,7 +190,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 8. Climatization Status
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/climatization-status`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -199,7 +205,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 #### 9. Vehicle Warnings & Fluid Diagnostics
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/warnings`
 * **Endpoint**: `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -213,7 +219,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 
 #### 10. GPS Location & Parking Position
 * **Endpoint**: `GET /location/v1/vehicles/{vin}/location`
-* **Response**:
+* **Response Payload**:
 ```json
 {
   "data": {
@@ -233,7 +239,7 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 ## 4. Remote Commands API
 
 | Command | HTTP Method | Endpoint |
-| :--- | :--- | :--- |
+| :--- | :---: | :--- |
 | **Lock Vehicle** | `POST` | `/connected-vehicle/v2/vehicles/{vin}/doors/lock` |
 | **Unlock Vehicle** | `POST` | `/connected-vehicle/v2/vehicles/{vin}/doors/unlock` |
 | **Start Climatization** | `POST` | `/connected-vehicle/v2/vehicles/{vin}/climatization/start` |
@@ -241,3 +247,16 @@ Volvo provides a modern REST API architecture via the Volvo Developer Portal (`d
 | **Flash Hazard Lights**| `POST` | `/connected-vehicle/v2/vehicles/{vin}/flash` |
 | **Honk Horn** | `POST` | `/connected-vehicle/v2/vehicles/{vin}/honk` |
 | **Honk & Flash** | `POST` | `/connected-vehicle/v2/vehicles/{vin}/honk-flash` |
+
+---
+
+## 5. Architectural Comparison: Polestar vs Volvo
+
+| Aspect | Polestar Ecosystem | Volvo Developer Ecosystem |
+| :--- | :--- | :--- |
+| **Identity Provider** | `polestarid.eu.polestar.com` (PingFederate) | `volvoid.eu.volvocars.com` (PingFederate) |
+| **Auth Mechanism** | OAuth2 + PKCE Mobile App flow | OAuth2 + PKCE Developer Portal flow |
+| **API Architecture** | AWS AppSync GraphQL + CNEP HTTP/2 gRPC | OpenAPI 3.0 REST Gateways |
+| **API Key Header** | `x-api-key: da2-...` (Public AppSync) | `vcc-api-key: {key}` (Developer Portal) |
+| **Live Telemetry** | Real-time Protobuf streams via gRPC | REST polling with timestamp envelopes |
+| **Render Renders** | Multi-angle studio camera renders via GraphQL CDN | Vehicle assets and CAS catalog URLs |
