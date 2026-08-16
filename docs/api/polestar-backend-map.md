@@ -184,15 +184,15 @@ stateDiagram-v2
 
 ## Chronos / PCCS Writes Master Matrix
 
-| Command | Host | Service | Method | Token | Request Protobuf | Response Protobuf | Live Verified |
+| Command | Host | Service | Method | Token | Request Protobuf | Response Protobuf | Live Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Set Target SOC** | PCCS | `pccs.chronos.services.v1.TargetSocService` | `SetTargetSoc` | Web (`l3oopkc_10`) | `{1: envelope, 2: target (40..100), 3: 1}` | `{3: status (1..8)}` | ✅ `SetTargetSoc(90) → completed` |
-| **Set Amp Limit** | PCCS | `pccs.chronos.services.v1.AmpLimitService` | `SetAmpLimit` | Web (`l3oopkc_10`) | `{1: envelope, 2: amps (1..64)}` | `{3: {1: amps}}` | ✅ Verified schema & readback |
-| **Start Charge Override** | PCCS | `pccs.chronos.services.v1.ChargeNowService` | `StartOverrideChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope}` | `{3: {1: status}}` | ✅ Verified schema |
-| **Stop Charge Override** | PCCS | `pccs.chronos.services.v1.ChargeNowService` | `StopOverrideChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope}` | `{3: {1: status}}` | ✅ Verified schema |
-| **Set Global Charge Timer** | PCCS | `pccs.chronos.services.v2.GlobalChargeTimerService` | `SetGlobalChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope, 2: {1: start, 2: stop, 3: active}, 3: 0}` | `{2: status}` | ✅ Verified schema |
-| **Set Climate Timer** | PCCS | `pccs.chronos.services.v1.ParkingClimateTimerService` | `SetTimers` | Web (`l3oopkc_10`) | `{1: envelope, 2: {1: id, 2: idx, 3: time, 4: active, 5: hasWeek, 6: [days]}}` | `{3: status}` | ✅ Verified schema |
-| **Delete Climate Timer** | PCCS | `pccs.chronos.services.v1.ParkingClimateTimerService` | `DeleteTimer` | Web (`l3oopkc_10`) | `{1: envelope, 2: id_str}` | `{1: status}` | ✅ Verified schema |
+| **Set Target SOC** | PCCS | `pccs.chronos.services.v1.TargetSOCService` | `SetTargetSoc` | Web (`l3oopkc_10`) | `{1: envelope, 2: target (50..100), 3: 1}` | `{3: status (1=ACCEPTED)}` | ✅ `completed` |
+| **Set Amp Limit** | PCCS | `pccs.chronos.services.v1.AmpLimitService` | `SetAmpLimit` | Web (`l3oopkc_10`) | `{1: envelope, 2: amps (6..32)}` | `{3: status (1=ACCEPTED)}` | ✅ `completed` |
+| **Start Charge Override** | PCCS | `pccs.chronos.services.v1.ChargeNowService` | `StartOverrideChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope}` | `{1: status (2=COMPLETED)}` | ✅ `accepted` |
+| **Stop Charge Override** | PCCS | `pccs.chronos.services.v1.ChargeNowService` | `StopOverrideChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope}` | `{1: status (2=COMPLETED)}` | ✅ `accepted` |
+| **Set Global Charge Timer** | PCCS | `pccs.chronos.services.v2.ChargeTimerService` | `SetGlobalChargeTimer` | Web (`l3oopkc_10`) | `{1: envelope, 2: {1: start, 2: stop, 3: active}, 3: 0}` | `{2: status (1=ACCEPTED)}` | ✅ `accepted` |
+| **Set Climate Timer** | PCCS | `pccs.chronos.services.v1.ParkingClimateTimerService` | `SetTimer` | Web (`l3oopkc_10`) | `{1: envelope, 2: {1: id, 2: idx, 3: time, 4: active, 5: hasWeek, 6: [days]}}` | `{2: status}` | ✅ `accepted` |
+| **Delete Climate Timer** | PCCS | `pccs.chronos.services.v1.ParkingClimateTimerService` | `DeleteTimer` | Web (`l3oopkc_10`) | `{1: envelope, 2: id_str}` | `{2: status}` | ✅ `accepted` |
 
 ---
 
