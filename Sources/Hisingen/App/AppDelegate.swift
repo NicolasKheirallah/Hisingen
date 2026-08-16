@@ -459,7 +459,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 resumeStoredSession()
                 statusController.dismissSettings()
             case .volvo:
-                beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
+                if Preferences.hasResumableSession(for: .volvo) {
+                    switchActiveBrand(to: .volvo)
+                    resumeStoredSession()
+                    statusController.dismissSettings()
+                } else {
+                    beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
+                }
             }
         case .closeSettings:
             statusController.dismissSettings()

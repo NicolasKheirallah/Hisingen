@@ -44,6 +44,7 @@ struct SettingsView: View {
     @State private var electricityPrice = String(format: "%.2f", Preferences.electricityPricePerKwh)
     @State private var currencySymbol = Preferences.currencySymbol
     @State private var storeChargingHistory = Preferences.storeChargingHistory
+    @State private var requireBiometrics = Preferences.requireBiometricsForRemoteControls
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -574,6 +575,26 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Require Touch ID"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Authenticate before running remote commands"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $requireBiometrics)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: requireBiometrics) { _ in
+                                Preferences.requireBiometricsForRemoteControls = requireBiometrics
+                            }
+                    }
                 }
             }
         }
@@ -637,6 +658,7 @@ struct SettingsView: View {
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: false, badgeText: "Not in API")
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: false, badgeText: isVolvo ? "Elevated Permission" : "Mobile Only")
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: false, badgeText: isVolvo ? "In-Car Only" : "Mobile Only")
+                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : "Experimental — dev build only")
                 }
             }
         }

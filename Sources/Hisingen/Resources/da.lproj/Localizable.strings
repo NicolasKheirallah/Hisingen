@@ -764,3 +764,32 @@
 "Dark" = "Mørkt";
 "Liquid Glass" = "Flydende glas";
 
+/* Tilføjet: Ny telemetri, studievinkler og betjening */
+"Icon Only (Minimal)" = "Kun ikon (minimal)";
+"Lock Status and Battery" = "Låsestatus og batteri";
+"Front Three-Quarter" = "Forfra trekvart";
+"Rear Three-Quarter" = "Bagfra trekvart";
+"Side Profile" = "Sideprofil";
+"Overhead" = "Fugleperspektiv";
+"Wheels" = "Fælge";
+"Factory Packages" = "Fabrikspakker";
+"Outside PM2.5" = "Udendørs PM2.5";
+"Air Filter Life" = "Luftfilterlevetid";
+"Cabin" = "Kabine";
+"elevation" = "højde";
+"Brake Set" = "Parkeringsbremse aktiveret";
+"Export CSV" = "Eksportér CSV";
+"Export History (.csv)" = "Eksportér historik (.csv)";
+"Quick Controls" = "Hurtigbetjening";
+"Lock Doors" = "Lås døre";
+"Unlock Doors" = "Lås døre op";
+"Start Climate (%@)" = "Start klimastyring (%@)";
+"Flash Lights" = "Blink med lygter";
+"Honk Horn" = "Dyt";
+"Honk and Flash" = "Dyt og blink";
+"Modem Wake Reason" = "Modemmets vækkeårsag";
+"Modem Synced" = "Modem synkroniseret";
+"Remote controls restricted to paired mobile devices" = "Fjernbetjening er begrænset til parrede mobile enheder";
+"Command Restricted" = "Kommando begrænset";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar begrænser fjernskrivekommandoer til parrede mobile enheder.";
+

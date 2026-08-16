@@ -271,6 +271,22 @@ final class StatusItemController: NSObject {
                 )
                 flashItem.target = self
                 controlsMenu.addItem(flashItem)
+
+                let honkItem = NSMenuItem(
+                    title: L10n.text("Honk Horn"),
+                    action: #selector(contextHonkHorn),
+                    keyEquivalent: ""
+                )
+                honkItem.target = self
+                controlsMenu.addItem(honkItem)
+
+                let honkFlashItem = NSMenuItem(
+                    title: L10n.text("Honk & Flash"),
+                    action: #selector(contextHonkAndFlash),
+                    keyEquivalent: ""
+                )
+                honkFlashItem.target = self
+                controlsMenu.addItem(honkFlashItem)
             } else {
                 let infoItem = NSMenuItem(
                     title: L10n.text("Remote controls restricted to paired mobile devices"),
@@ -283,6 +299,15 @@ final class StatusItemController: NSObject {
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
             remoteSection.submenu = controlsMenu
+
+            if !state.chargingSessions.isEmpty {
+                let exportItem = menu.addItem(
+                    withTitle: L10n.text("Export Charging History (CSV)…"),
+                    action: #selector(contextExportChargingCSV),
+                    keyEquivalent: ""
+                )
+                exportItem.target = self
+            }
         }
 
         menu.addItem(.separator())
@@ -362,6 +387,37 @@ final class StatusItemController: NSObject {
     @objc private func contextFlashLights() {
         guard Preferences.activeBrand == .volvo else { return }
         onRemoteCommand(.flashLights)
+    }
+
+    @objc private func contextHonkHorn() {
+        guard Preferences.activeBrand == .volvo else { return }
+        onRemoteCommand(.honkHorn)
+    }
+
+    @objc private func contextHonkAndFlash() {
+        guard Preferences.activeBrand == .volvo else { return }
+        onRemoteCommand(.honkAndFlash)
+    }
+
+    @objc private func contextExportChargingCSV() {
+        guard let state = latestState, !state.chargingSessions.isEmpty else { return }
+        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
+        let rows = state.chargingSessions.map { s in
+            let dateStr = ISO8601DateFormatter().string(from: s.startDate)
+            let costStr = s.estimatedCost(tariff: Preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
+            let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
+            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(Preferences.currencySymbol)"
+        }.joined(separator: "\n")
+        let csvData = headers + rows
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "charging_history_\(state.vin.prefix(8)).csv"
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? csvData.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     func showSettings() {

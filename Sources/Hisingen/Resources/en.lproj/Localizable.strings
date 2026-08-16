@@ -766,3 +766,32 @@
 "Dark" = "Dark";
 "Liquid Glass" = "Liquid Glass";
 
+/* Added: New Telemetry, Studio Angles & Controls */
+"Icon Only (Minimal)" = "Icon Only (Minimal)";
+"Lock Status and Battery" = "Lock Status and Battery";
+"Front Three-Quarter" = "Front Three-Quarter";
+"Rear Three-Quarter" = "Rear Three-Quarter";
+"Side Profile" = "Side Profile";
+"Overhead" = "Overhead";
+"Wheels" = "Wheels";
+"Factory Packages" = "Factory Packages";
+"Outside PM2.5" = "Outside PM2.5";
+"Air Filter Life" = "Air Filter Life";
+"Cabin" = "Cabin";
+"elevation" = "elevation";
+"Brake Set" = "Brake Set";
+"Export CSV" = "Export CSV";
+"Export History (.csv)" = "Export History (.csv)";
+"Quick Controls" = "Quick Controls";
+"Lock Doors" = "Lock Doors";
+"Unlock Doors" = "Unlock Doors";
+"Start Climate (%@)" = "Start Climate (%@)";
+"Flash Lights" = "Flash Lights";
+"Honk Horn" = "Honk Horn";
+"Honk and Flash" = "Honk and Flash";
+"Modem Wake Reason" = "Modem Wake Reason";
+"Modem Synced" = "Modem Synced";
+"Remote controls restricted to paired mobile devices" = "Remote controls restricted to paired mobile devices";
+"Command Restricted" = "Command Restricted";
+"Polestar restricts remote write commands to paired mobile devices." = "Polestar restricts remote write commands to paired mobile devices.";
+
