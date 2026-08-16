@@ -108,6 +108,16 @@ struct ControlsTabView: View {
                 isInitialized = true
             }
         }
+        .onChange(of: state.chargeTargetPercentage) { newTarget in
+            if let newTarget {
+                chargeTarget = newTarget
+            }
+        }
+        .onChange(of: state.chargingCurrentAmps) { newAmps in
+            if let newAmps, newAmps > 0 {
+                ampLimit = newAmps
+            }
+        }
     }
 
     private var restrictedNoticeBanner: some View {
@@ -399,7 +409,7 @@ struct ControlsTabView: View {
                                 onRemoteCommand(.setChargeTarget(newValue))
                             }
                         )) {
-                            ForEach([50, 60, 70, 80, 90, 100], id: \.self) { v in
+                            ForEach([40, 50, 60, 70, 80, 90, 100], id: \.self) { v in
                                 Text("\(v)%").tag(v)
                             }
                         }

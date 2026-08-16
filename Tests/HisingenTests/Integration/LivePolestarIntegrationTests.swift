@@ -2506,6 +2506,48 @@ struct LivePolestarRemoteCommandIntegrationTests {
         try? await api.signOut()
     }
 
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testLiveTargetSocSetAndReadback() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        var features = FeatureSelection.default
+        features.set(.remoteCharging, enabled: true)
+        features.set(.chargingDetails, enabled: true)
+        try await api.authenticate(email: email, password: password,
+                                   preferredVIN: preferredVIN, features: features)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolved)
+
+        print("\n========================================================")
+        print("⚡️ LIVE TARGET SOC PROGRESSION (70% -> 80% -> 90%)")
+        print("   VIN: \(vin)")
+
+        let initialState = try await api.fetchVehicleState(vin: vin, features: features)
+        print("   Initial Reported Target SoC: \(initialState.chargeTargetPercentage.map { "\($0)%" } ?? "nil")")
+
+        // Target steps: 70%, 80%, 90%
+        let steps = [70, 80, 90]
+        for target in steps {
+            print("\n--------------------------------------------------------")
+            print("🚀 Executing SetTargetSoc(\(target)%)...")
+            let result = try await api.executeRemoteCommand(.setChargeTarget(target), vin: vin)
+            print("   Outcome: \(result.outcome) (message: \(result.message ?? "none"))")
+
+            print("   Waiting 4 seconds for vehicle sync...")
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+
+            let stateAfter = try await api.fetchVehicleState(vin: vin, features: features)
+            print("   Readback Target SoC from vehicle/Chronos: \(stateAfter.chargeTargetPercentage.map { "\($0)%" } ?? "nil")")
+        }
+
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
     private static func otaReadProbes(vin: String) -> [(String, String, Data)] {
         var softwareInfo = Data()
         softwareInfo.append(Protobuf.stringField(1, vin))
