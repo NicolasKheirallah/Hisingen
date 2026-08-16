@@ -8,8 +8,14 @@ final class VolvoSignInPresenter: NSObject, ASWebAuthenticationPresentationConte
     private var authSession: ASWebAuthenticationSession?
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        DispatchQueue.main.sync {
-            NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSWindow()
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSWindow()
+            }
+        } else {
+            return DispatchQueue.main.sync {
+                NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSWindow()
+            }
         }
     }
 
