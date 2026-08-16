@@ -148,6 +148,64 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(state.reportedBatteryCapacityKwh, 78.0)
     }
 
+    @Test
+    func testVehicleInfoTabFieldCompleteness() {
+        var state = makeVehicleState(vin: "YS2ED400000000002", modelName: "Polestar 2 Long Range Dual Motor", battery: 72.0)
+        state.externalColour = "Thunder"
+        state.upholstery = "Charcoal Embossed Textile"
+        state.wheels = "19\" 5-Double Spoke Black Diamond Cut"
+        state.packages = ["Pilot Pack", "Plus Pack"]
+        state.structureWeek = "202401"
+        state.pno34 = "P20412"
+        state.internalVehicleIdentifier = "V-12345"
+        state.accountMarket = "SE"
+        state.gearbox = "automatic"
+        state.steeringOrientation = "LEFT_HAND_DRIVE"
+        state.reportedBatteryCapacityKwh = 78.0
+        state.airQuality = VehicleAirQuality(
+            cleaningState: .on,
+            airQualityIndex: 12,
+            particulateMatter25: 3,
+            externalParticulateMatter25: 18,
+            filterRemainingPercent: 94
+        )
+        state.location = VehicleLocation(
+            latitude: 57.7089,
+            longitude: 11.9746,
+            altitudeMeters: 45.0,
+            accuracyMeters: 3.5,
+            parkingBrakeEngaged: true,
+            gear: "P"
+        )
+        state.climateStatus = VehicleClimateStatus(
+            activity: .heating,
+            timeRemainingMinutes: 15,
+            timerTriggered: false,
+            interiorTemperatureCelsius: 19.5,
+            requestedTemperatureCelsius: 21.0,
+            driverSeatHeatingLevel: 2,
+            passengerSeatHeatingLevel: 1,
+            steeringWheelHeatingLevel: 1
+        )
+
+        XCTAssertEqual(state.externalColour, "Thunder")
+        XCTAssertEqual(state.upholstery, "Charcoal Embossed Textile")
+        XCTAssertEqual(state.wheels, "19\" 5-Double Spoke Black Diamond Cut")
+        XCTAssertEqual(state.packages.count, 2)
+        XCTAssertEqual(state.formattedBuildWeek, "2024 · W01")
+        XCTAssertEqual(state.pno34, "P20412")
+        XCTAssertEqual(state.formattedSteeringOrientation, "Left_Hand_Drive")
+        XCTAssertEqual(state.airQuality?.airQualityIndex, 12)
+        XCTAssertEqual(state.airQuality?.particulateMatter25, 3)
+        XCTAssertEqual(state.airQuality?.externalParticulateMatter25, 18)
+        XCTAssertEqual(state.airQuality?.filterRemainingPercent, 94)
+        XCTAssertEqual(state.location?.parkingBrakeEngaged, true)
+        XCTAssertEqual(state.climateStatus?.requestedTemperatureCelsius, 21.0)
+        XCTAssertEqual(state.climateStatus?.driverSeatHeatingLevel, 2)
+        XCTAssertEqual(state.model.nominalWltpRangeKm, 480.0)
+        XCTAssertEqual(state.model.nominalBatteryCapacityKwh, 78.0)
+    }
+
     private func makeVehicleState(vin: String, modelName: String, battery: Double) -> VehicleState {
         VehicleState(
             batteryPercentage: battery,
@@ -178,5 +236,6 @@ struct VehicleCrossModelTests {
         )
     }
 }
+
 
 
