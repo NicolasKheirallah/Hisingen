@@ -523,43 +523,141 @@ struct VehicleState: Codable, Equatable, Sendable {
         )
     }
 
-    var effectiveNominalBatteryCapacityKwh: Double {
+    var factoryNominalBatteryCapacityKwh: Double {
         if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
             if explicit >= 77.0 { return 82.0 }
             if explicit >= 72.0 { return 78.0 }
             if explicit >= 60.0 { return 69.0 }
+            if explicit >= 14.0 { return 18.8 }
+            if explicit >= 8.0 { return 11.6 }
+            return explicit
         }
         let yearInt = Int(modelYear ?? "") ?? 2023
         if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
             return 82.0
         }
+        if powertrain == .phev {
+            return yearInt >= 2022 ? 18.8 : 11.6
+        }
         return model.nominalBatteryCapacityKwh > 0 ? model.nominalBatteryCapacityKwh : 78.0
+    }
+
+    var factoryUsableBatteryCapacityKwh: Double {
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            if explicit >= 77.0 { return 79.0 }
+            if explicit >= 72.0 { return 75.0 }
+            if explicit >= 60.0 { return 64.0 }
+            if explicit >= 14.0 { return 14.9 }
+            if explicit >= 8.0 { return 9.1 }
+        }
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+            return 79.0
+        }
+        if powertrain == .phev {
+            return yearInt >= 2022 ? 14.9 : 9.1
+        }
+        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
+    }
+
+    var effectiveNominalBatteryCapacityKwh: Double {
+        factoryNominalBatteryCapacityKwh
+    }
+
+    var batteryDegradationPercent: Double? {
+        guard powertrain.hasElectricRange else { return nil }
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            let factoryUsable = factoryUsableBatteryCapacityKwh
+            let measuredDeg = max(0.0, ((factoryUsable - explicit) / factoryUsable) * 100.0)
+            return ((measuredDeg * 10).rounded()) / 10.0
+        }
+
+        // Empirical degradation calculation based on vehicle calendar age and odometer cycle throughput
+        var calendarDegradation = 0.0
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        var vehicleAgeYears = max(0.5, Double(Calendar.current.component(.year, from: Date()) - yearInt))
+        if let sw = structureWeek, sw.count >= 6, let swYear = Double(sw.prefix(4)), let swWeek = Double(sw.suffix(2)) {
+            let approximateBuildDate = swYear + (swWeek / 52.0)
+            let currentYearFraction = Double(Calendar.current.component(.year, from: Date())) + (Double(Calendar.current.component(.month, from: Date())) / 12.0)
+            vehicleAgeYears = max(0.2, currentYearFraction - approximateBuildDate)
+        }
+        // Lithium-ion NMC calendar aging curve (~1.35% * sqrt(years))
+        calendarDegradation = min(8.0, 1.35 * sqrt(vehicleAgeYears))
+
+        var cycleDegradation = 0.0
+        if let odo = odometerKm, odo > 0 {
+            // High-voltage pack cycle aging (~4.2% per 100,000 km for Polestar 2 / Volvo CMA & SPA platform)
+            cycleDegradation = min(12.0, (Double(odo) / 100_000.0) * 4.2)
+        }
+
+        let totalDeg = calendarDegradation + cycleDegradation
+        return max(0.2, ((totalDeg * 10).rounded()) / 10.0)
+    }
+
+    var batteryStateOfHealthPercent: Double? {
+        guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else { return nil }
+        let soh = max(50.0, min(100.0, 100.0 - deg))
+        return ((soh * 10).rounded()) / 10.0
     }
 
     var effectiveUsableBatteryCapacityKwh: Double {
         if let reported = reportedBatteryCapacityKwh, reported > 0 {
             return reported
         }
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
-            return 79.0
+        let factoryUsable = factoryUsableBatteryCapacityKwh
+        guard let soh = batteryStateOfHealthPercent else { return factoryUsable }
+        let currentUsable = factoryUsable * (soh / 100.0)
+        return ((currentUsable * 10).rounded()) / 10.0
+    }
+
+    var batteryPackDescription: String {
+        let nominal = factoryNominalBatteryCapacityKwh
+        switch model {
+        case .polestar2:
+            if nominal >= 80.0 {
+                return "82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)"
+            } else if nominal >= 75.0 {
+                return "78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)"
+            } else {
+                return "69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)"
+            }
+        case .polestar3:
+            return "111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)"
+        case .polestar4:
+            return "100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)"
+        case .polestar1:
+            return "34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)"
+        case .volvoEX30:
+            if nominal >= 65.0 {
+                return "69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)"
+            } else {
+                return "51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)"
+            }
+        case .volvoEX90, .volvoES90:
+            return "111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)"
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
+            if nominal >= 80.0 {
+                return "82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)"
+            } else if nominal >= 75.0 {
+                return "78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)"
+            } else {
+                return "69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)"
+            }
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
+            if powertrain == .phev {
+                if nominal >= 16.0 {
+                    return "18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)"
+                } else {
+                    return "11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)"
+                }
+            }
+            return "\(String(format: "%.1f", nominal)) kWh High-Voltage Pack"
+        default:
+            if nominal > 0 {
+                return "\(String(format: "%.1f", nominal)) kWh Lithium-ion Pack"
+            }
+            return "High-Voltage Traction Battery"
         }
-        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
-    }
-
-    var batteryStateOfHealthPercent: Double? {
-        guard powertrain.hasElectricRange else { return nil }
-        let nominal = effectiveNominalBatteryCapacityKwh
-        guard nominal > 0 else { return nil }
-        let usable = effectiveUsableBatteryCapacityKwh
-        let factoryUsable = nominal * 0.9615
-        let soh = (usable / factoryUsable) * 100.0
-        return min(100.0, max(50.0, (soh * 10).rounded() / 10))
-    }
-
-    var batteryDegradationPercent: Double? {
-        guard let soh = batteryStateOfHealthPercent else { return nil }
-        return max(0.0, ((100.0 - soh) * 10).rounded() / 10)
     }
 
     var batteryHealthStatus: String {

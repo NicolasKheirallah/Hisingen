@@ -525,7 +525,9 @@ struct InfoTabView: View {
         let deg = state.batteryDegradationPercent ?? 0.0
         let status = state.batteryHealthStatus
         let usable = state.effectiveUsableBatteryCapacityKwh
+        let factoryUsable = state.factoryUsableBatteryCapacityKwh
         let nominal = state.effectiveNominalBatteryCapacityKwh
+        let packDesc = state.batteryPackDescription
         let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
 
         return AnyView(Card {
@@ -541,6 +543,8 @@ struct InfoTabView: View {
                 }
 
                 VStack(spacing: 6) {
+                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill")
+
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "heart.fill")
@@ -565,8 +569,8 @@ struct InfoTabView: View {
                     .padding(.vertical, 2)
 
                     KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0)
-                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh", usable, nominal), symbol: "battery.100")
-                    KVRow(L10n.text("Warranty Minimum Target"), "70% / 160,000 km", symbol: "shield.lefthalf.filled")
+                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100")
+                    KVRow(L10n.text("Warranty Threshold"), "70% / 160,000 km (8 Years)", symbol: "shield.lefthalf.filled")
                 }
             }
         })
