@@ -70,7 +70,7 @@ struct VolvoVehicleDetailsDTO: Decodable, Sendable {
 
     struct Images: Decodable, Sendable {
         let exteriorImageUrl: String?
-        let internalImageUrl: String?
+        let interiorImageUrl: String?
     }
 }
 

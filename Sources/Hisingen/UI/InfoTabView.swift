@@ -10,6 +10,8 @@ struct InfoTabView: View {
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             heroVisualSection
+            interiorVisualSection
+            cabinSeatingMatrixCard
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
@@ -26,11 +28,28 @@ struct InfoTabView: View {
         return Card {
             VStack(spacing: 10) {
                 if let imageData, let nsImage = NSImage(data: imageData) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 150)
-                        .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+                    ZStack {
+                        RadialGradient(
+                            colors: [Color.primary.opacity(0.06), Color.clear],
+                            center: .center,
+                            startRadius: 40,
+                            endRadius: 170
+                        )
+
+                        Image(nsImage: nsImage)
+                            .interpolation(.high)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .scaleEffect(1.33, anchor: .center)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 205)
+                            .padding(.horizontal, 8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
+                    .padding(.horizontal, -HisingenTheme.cardPadding)
+                    .padding(.top, -HisingenTheme.cardPadding)
+                    .clipped()
                 } else {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
@@ -64,6 +83,45 @@ struct InfoTabView: View {
                 }
             }
         }
+    }
+
+    private var interiorVisualSection: AnyView? {
+        let imageData = state.interiorImageData ?? CarImageCache.shared.interiorImage(for: state.vin)
+        guard let imageData, let nsImage = NSImage(data: imageData) else { return nil }
+
+        return AnyView(Card {
+            VStack(spacing: 10) {
+                HStack {
+                    Text(L10n.text("Interior"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    Spacer()
+                }
+
+                ZStack {
+                    RadialGradient(
+                        colors: [Color.primary.opacity(0.06), Color.clear],
+                        center: .center,
+                        startRadius: 40,
+                        endRadius: 170
+                    )
+
+                    Image(nsImage: nsImage)
+                        .interpolation(.high)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(1.33, anchor: .center)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 205)
+                        .padding(.horizontal, 8)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 220)
+                .padding(.horizontal, -HisingenTheme.cardPadding)
+                .padding(.bottom, -HisingenTheme.cardPadding)
+                .clipped()
+            }
+        })
     }
 
     private var exteriorStylingCard: some View {
@@ -119,6 +177,23 @@ struct InfoTabView: View {
         }
     }
 
+    private var cabinSeatingMatrixCard: some View {
+        let climate = state.climateStatus
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "carseat.left.fill", title: L10n.text("Cabin Seating Matrix"), color: .orange)
+                CabinSeatingMatrixView(
+                    isRightHandDrive: state.isRightHandDrive,
+                    driverSeatHeatingLevel: climate?.driverSeatHeatingLevel ?? 0,
+                    passengerSeatHeatingLevel: climate?.passengerSeatHeatingLevel ?? 0,
+                    steeringWheelHeatingLevel: climate?.steeringWheelHeatingLevel ?? 0,
+                    targetTemperatureCelsius: climate?.requestedTemperatureCelsius ?? climate?.interiorTemperatureCelsius,
+                    isAirPurifying: state.airQuality?.cleaningState == .on
+                )
+            }
+        }
+    }
+
     private var interiorCabinCard: some View {
         var rows: [KVRow] = []
 
@@ -127,20 +202,6 @@ struct InfoTabView: View {
         }
         if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
             rows.append(KVRow(L10n.text("Steering Orientation"), steering, symbol: "steeringwheel"))
-        }
-        if let climate = state.climateStatus {
-            if let temp = climate.requestedTemperatureCelsius ?? climate.interiorTemperatureCelsius {
-                rows.append(KVRow(L10n.text("Comfort Target"), String(format: "%.1f °C", temp), symbol: "thermometer.medium"))
-            }
-            if let dSeat = climate.driverSeatHeatingLevel, dSeat > 0 {
-                rows.append(KVRow(L10n.text("Driver Seat Heating"), L10n.format("Level %d", dSeat), symbol: "carseat.left.fill"))
-            }
-            if let pSeat = climate.passengerSeatHeatingLevel, pSeat > 0 {
-                rows.append(KVRow(L10n.text("Passenger Seat Heating"), L10n.format("Level %d", pSeat), symbol: "carseat.right.fill"))
-            }
-            if let stHeat = climate.steeringWheelHeatingLevel, stHeat > 0 {
-                rows.append(KVRow(L10n.text("Steering Wheel Heating"), L10n.format("Level %d", stHeat), symbol: "steeringwheel"))
-            }
         }
         if let air = state.airQuality {
             let airVal = air.cleaningState == .on ? L10n.text("Active Purifying") : L10n.text("CleanZone Ready")

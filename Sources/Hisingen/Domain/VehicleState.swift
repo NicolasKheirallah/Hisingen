@@ -209,6 +209,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     var serviceTrigger: String? = nil
     var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
+    var interiorImageData: Data? = nil
     let imageData: Data?
     let fetchedAt: Date
     let vehicleReportedAt: Date?
@@ -303,6 +304,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
+        case interiorImageData
     }
 
     init(from decoder: Decoder) throws {
@@ -374,6 +376,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.serviceTrigger = try values.decodeIfPresent(String.self, forKey: .serviceTrigger)
         self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
         self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
+        self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
     }
 
     var formattedBuildWeek: String? {
@@ -410,6 +413,13 @@ struct VehicleState: Codable, Equatable, Sendable {
             return L10n.text("Right-hand drive")
         }
         return raw.capitalized
+    }
+
+    var isRightHandDrive: Bool {
+        guard let raw = steeringOrientation?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !raw.isEmpty else {
+            return false
+        }
+        return raw == "RIGHT" || raw.contains("RHD")
     }
 
     var isCharging: Bool { chargingState.isActivelyCharging }
@@ -685,6 +695,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
         merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
+        merged.interiorImageData = interiorImageData
+            ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {
