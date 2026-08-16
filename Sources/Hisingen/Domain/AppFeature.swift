@@ -115,7 +115,7 @@ struct FeatureSelection: Codable, Equatable, Sendable {
 
     static var `default`: FeatureSelection {
         FeatureSelection(enabled: [
-            .vehicleIdentity, .vehicleImage, .chargingDetails,
+            .vehicleIdentity, .ownerGreeting, .vehicleImage, .chargingDetails,
             .vehicleAvailability, .exteriorStatus,
             .tyreAndWarnings, .softwareUpdates, .climateStatus,
             .tripMeters, .vehicleLocation,
