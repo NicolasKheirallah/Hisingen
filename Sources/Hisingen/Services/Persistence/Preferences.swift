@@ -335,7 +335,11 @@ enum Preferences {
 
 
     static var volvoClientID: String {
-        get { d.string(forKey: "volvo_client_id") ?? "" }
+        get {
+            let saved = d.string(forKey: "volvo_client_id") ?? ""
+            if !saved.isEmpty { return saved }
+            return BuiltinVolvoSecrets.clientID
+        }
         set { d.set(newValue, forKey: "volvo_client_id") }
     }
 

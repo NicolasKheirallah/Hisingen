@@ -11,7 +11,7 @@ AUTODETECTED_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/nu
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
-.PHONY: all dist doctor build universal app app-universal dmg run test clean release setup-cert
+.PHONY: all dist doctor build universal app app-universal dmg run test clean release setup-cert inject-secrets
 
 ## Default target: build both .app bundle and .dmg installer
 all: app dmg
@@ -21,16 +21,19 @@ dist: app dmg
 doctor:
 	sh Scripts/doctor.sh
 
+inject-secrets:
+	sh Scripts/inject-secrets.sh
+
 setup-cert:
 	sh Scripts/setup-dev-cert.sh
 
 ## Build the release binary
-build: doctor
+build: doctor inject-secrets
 	swift build -c release $(SWIFT_FLAGS)
 
 ## Build a universal binary for distribution. Separate scratch directories
 ## avoid SwiftPM reusing artifacts from the other target architecture.
-universal: doctor
+universal: doctor inject-secrets
 	swift build -c release --arch arm64 --scratch-path .build-arm64 $(SWIFT_FLAGS)
 	swift build -c release --arch x86_64 --scratch-path .build-x86_64 $(SWIFT_FLAGS)
 	mkdir -p .build/release

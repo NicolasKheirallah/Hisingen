@@ -86,6 +86,10 @@ jobs:
           rm -f "$CERTIFICATE_PATH"
 
       - name: Build signed universal app
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
         run: >-
           make app-universal IDENTITY="$IDENTITY"
           SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"

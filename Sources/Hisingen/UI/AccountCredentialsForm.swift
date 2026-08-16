@@ -38,6 +38,7 @@ struct AccountCredentialsForm: View {
     @State private var volvoNickname = AccountDraftState.shared.volvoNickname
 
     @State private var volvoSigningIn = false
+    @State private var showCustomVolvoApp = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
     @State private var testConnectionResult: (success: Bool, message: String)?
@@ -254,36 +255,80 @@ struct AccountCredentialsForm: View {
 
     private var volvoFields: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.text(
-                "Register a free API application at developer.volvocars.com to get a Client ID, "
-                + "Client Secret, and VCC API Key, then sign in with your Volvo ID below. "
-                + "Hisingen never sees your Volvo ID password directly — sign-in happens in a "
-                + "system browser window."
-            ))
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            if BuiltinVolvoSecrets.isConfigured && !showCustomVolvoApp {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                        .font(.system(size: 14))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.text("Developer Access Ready"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text(L10n.text("Default developer application credentials configured."))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        showCustomVolvoApp = true
+                    } label: {
+                        Text(L10n.text("Custom App"))
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HisingenTheme.accent)
+                }
+                .padding(8)
+                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            } else {
+                Text(L10n.text(
+                    "Register a free API application at developer.volvocars.com to get a Client ID, "
+                    + "Client Secret, and VCC API Key, then sign in with your Volvo ID below. "
+                    + "Hisingen never sees your Volvo ID password directly — sign-in happens in a "
+                    + "system browser window."
+                ))
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            labeledField(L10n.text("Client ID")) {
-                TextField("Client ID", text: $volvoClientID)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoClientID) { AccountDraftState.shared.volvoClientID = $0 }
-            }
+                if BuiltinVolvoSecrets.isConfigured {
+                    HStack {
+                        Spacer()
+                        Button {
+                            showCustomVolvoApp = false
+                            volvoClientID = ""
+                            volvoClientSecret = ""
+                            volvoApiKey = ""
+                        } label: {
+                            Text(L10n.text("Use Default Developer Keys"))
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(HisingenTheme.accent)
+                    }
+                }
 
-            labeledField(L10n.text("Client Secret")) {
-                SecureField(hasResumableVolvoSession && volvoClientSecret.isEmpty
-                            ? L10n.text("•••••••• (Saved in Keychain)")
-                            : L10n.text("Client Secret"), text: $volvoClientSecret)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoClientSecret) { AccountDraftState.shared.volvoClientSecret = $0 }
-            }
+                labeledField(L10n.text("Client ID")) {
+                    TextField("Client ID", text: $volvoClientID)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: volvoClientID) { AccountDraftState.shared.volvoClientID = $0 }
+                }
 
-            labeledField(L10n.text("VCC API Key")) {
-                SecureField(hasResumableVolvoSession && volvoApiKey.isEmpty
-                            ? L10n.text("•••••••• (Saved in Keychain)")
-                            : L10n.text("VCC API Key"), text: $volvoApiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: volvoApiKey) { AccountDraftState.shared.volvoApiKey = $0 }
+                labeledField(L10n.text("Client Secret")) {
+                    SecureField(hasResumableVolvoSession && volvoClientSecret.isEmpty
+                                ? L10n.text("•••••••• (Saved in Keychain)")
+                                : L10n.text("Client Secret"), text: $volvoClientSecret)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: volvoClientSecret) { AccountDraftState.shared.volvoClientSecret = $0 }
+                }
+
+                labeledField(L10n.text("VCC API Key")) {
+                    SecureField(hasResumableVolvoSession && volvoApiKey.isEmpty
+                                ? L10n.text("•••••••• (Saved in Keychain)")
+                                : L10n.text("VCC API Key"), text: $volvoApiKey)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: volvoApiKey) { AccountDraftState.shared.volvoApiKey = $0 }
+                }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
@@ -316,7 +361,7 @@ struct AccountCredentialsForm: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled(volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || volvoSigningIn)
+            .disabled((!BuiltinVolvoSecrets.isConfigured && volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || volvoSigningIn)
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
@@ -376,10 +421,13 @@ struct AccountCredentialsForm: View {
                 Preferences.setVehicleNickname(volvoNickname, for: existingVIN)
             }
         }
+        let idToSend = !trimmedClientID.isEmpty ? trimmedClientID : BuiltinVolvoSecrets.clientID
+        let secretToSend = !volvoClientSecret.isEmpty ? volvoClientSecret : BuiltinVolvoSecrets.clientSecret
+        let apiKeyToSend = !volvoApiKey.isEmpty ? volvoApiKey : BuiltinVolvoSecrets.vccApiKey
         onSettingsChanged(.volvoSignIn(
-            clientID: trimmedClientID,
-            clientSecret: volvoClientSecret,
-            vccApiKey: volvoApiKey,
+            clientID: idToSend,
+            clientSecret: secretToSend,
+            vccApiKey: apiKeyToSend,
             nickname: volvoNickname
         ))
         volvoClientSecret = ""
