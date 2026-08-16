@@ -512,6 +512,52 @@ struct VehicleState: Codable, Equatable, Sendable {
         )
     }
 
+    var effectiveNominalBatteryCapacityKwh: Double {
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            if explicit >= 77.0 { return 82.0 }
+            if explicit >= 72.0 { return 78.0 }
+            if explicit >= 60.0 { return 69.0 }
+        }
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+            return 82.0
+        }
+        return model.nominalBatteryCapacityKwh > 0 ? model.nominalBatteryCapacityKwh : 78.0
+    }
+
+    var effectiveUsableBatteryCapacityKwh: Double {
+        if let reported = reportedBatteryCapacityKwh, reported > 0 {
+            return reported
+        }
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+            return 79.0
+        }
+        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
+    }
+
+    var batteryStateOfHealthPercent: Double? {
+        guard powertrain.hasElectricRange else { return nil }
+        let nominal = effectiveNominalBatteryCapacityKwh
+        guard nominal > 0 else { return nil }
+        let usable = effectiveUsableBatteryCapacityKwh
+        let factoryUsable = nominal * 0.9615
+        let soh = (usable / factoryUsable) * 100.0
+        return min(100.0, max(50.0, (soh * 10).rounded() / 10))
+    }
+
+    var batteryDegradationPercent: Double? {
+        guard let soh = batteryStateOfHealthPercent else { return nil }
+        return max(0.0, ((100.0 - soh) * 10).rounded() / 10)
+    }
+
+    var batteryHealthStatus: String {
+        guard let soh = batteryStateOfHealthPercent else { return L10n.text("Normal") }
+        if soh >= 95.0 { return L10n.text("Optimal") }
+        if soh >= 85.0 { return L10n.text("Good") }
+        if soh >= 75.0 { return L10n.text("Normal") }
+        return L10n.text("Service Advised")
+    }
 
     var stateSummary: VehicleStateSummary {
         if exteriorStatus?.alarmTriggered == true {

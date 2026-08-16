@@ -206,6 +206,28 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(state.model.nominalBatteryCapacityKwh, 78.0)
     }
 
+    @Test
+    func testBatteryStateOfHealthAndDegradationCalculations() {
+        var my23State = makeVehicleState(vin: "YSMVSEDE6PL147228", modelName: "Polestar 2", battery: 85.0)
+        my23State = VehicleState(
+            batteryPercentage: 85.0, rangeKm: 380, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "Polestar 2", modelYear: "2023", registrationNo: "ZCJ06G",
+            vin: "YSMVSEDE6PL147228", ownerFirstName: "Nico", odometerKm: 30000,
+            daysToService: 180, distanceToServiceKm: 15000, serviceWarning: false,
+            fluidWarnings: [], powertrain: .bev, reportedBatteryCapacityKwh: 74.2,
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+
+        XCTAssertEqual(my23State.effectiveNominalBatteryCapacityKwh, 78.0)
+        XCTAssertEqual(my23State.effectiveUsableBatteryCapacityKwh, 74.2)
+        XCTAssertTrue(my23State.batteryStateOfHealthPercent! >= 95.0 && my23State.batteryStateOfHealthPercent! <= 100.0)
+        XCTAssertEqual(my23State.batteryHealthStatus, "Optimal")
+        XCTAssertTrue(my23State.batteryDegradationPercent! <= 5.0)
+    }
+
     private func makeVehicleState(vin: String, modelName: String, battery: Double) -> VehicleState {
         VehicleState(
             batteryPercentage: battery,
