@@ -1089,7 +1089,6 @@ actor PolestarAPI {
         let requestedAngle = await MainActor.run { Preferences.carRenderAngle.rawValue }
         if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin, angle: requestedAngle) {
             carImageData = cached
-            return
         }
         guard let pno34, let structureWeek, let modelYear else { return }
         let query = """
@@ -1097,7 +1096,6 @@ actor PolestarAPI {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
             transparent { url angle }
             opaque { url angle }
-            interior { url angle }
           }
         }
         """
@@ -1122,21 +1120,27 @@ actor PolestarAPI {
         let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
             ?? pool.first(where: { ($0["angle"] as? Int) == 1 })
             ?? pool.first(where: { ($0["angle"] as? Int) == 0 }) ?? pool.first
-        guard let string = pick?["url"] as? String, let url = URL(string: string),
-              url.scheme == "https" else { return }
-        guard let (bytes, imageResponse) = try? await HTTPBodyReader.data(
-                  for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
-              let http = imageResponse as? HTTPURLResponse,
-              http.statusCode == 200,
-              http.mimeType?.hasPrefix("image/") == true,
-              bytes.count <= 5_000_000 else { return }
-        carImageData = bytes
-        if let vin = selectedVIN {
-            let angle = (pick?["angle"] as? Int) ?? requestedAngle
-            CarImageCache.shared.save(bytes, for: vin, angle: angle)
 
+        if carImageData == nil, let string = pick?["url"] as? String, let url = URL(string: string),
+           url.scheme == "https" {
+            if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
+                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
+                  let http = imageResponse as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  http.mimeType?.hasPrefix("image/") == true,
+                  bytes.count <= 5_000_000 {
+                carImageData = bytes
+                if let vin = selectedVIN {
+                    let angle = (pick?["angle"] as? Int) ?? requestedAngle
+                    CarImageCache.shared.save(bytes, for: vin, angle: angle)
+                    CarImageCache.shared.save(bytes, for: vin)
+                }
+            }
+        }
+
+        if let vin = selectedVIN {
             for other in pool {
-                guard let otherAngle = other["angle"] as? Int, otherAngle != angle,
+                guard let otherAngle = other["angle"] as? Int,
                       let otherUrlStr = other["url"] as? String,
                       let otherUrl = URL(string: otherUrlStr),
                       otherUrl.scheme == "https",
@@ -1147,21 +1151,6 @@ actor PolestarAPI {
                         (otherResp as? HTTPURLResponse)?.statusCode == 200,
                         otherBytes.count <= 5_000_000 else { return }
                     CarImageCache.shared.save(otherBytes, for: vin, angle: otherAngle)
-                }
-            }
-
-            if let interiorPool = images["interior"] as? [[String: Any]],
-               let interiorPick = interiorPool.first,
-               let interiorUrlStr = interiorPick["url"] as? String,
-               let interiorUrl = URL(string: interiorUrlStr),
-               interiorUrl.scheme == "https",
-               CarImageCache.shared.interiorImage(for: vin) == nil {
-                Task.detached { [session] in
-                    guard let (intBytes, intResp) = try? await HTTPBodyReader.data(
-                        for: URLRequest(url: interiorUrl), using: session, limit: 5_000_000, operation: "vehicle interior image"),
-                        (intResp as? HTTPURLResponse)?.statusCode == 200,
-                        intBytes.count <= 5_000_000 else { return }
-                    CarImageCache.shared.saveInterior(intBytes, for: vin)
                 }
             }
         }
