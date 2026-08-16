@@ -18,3 +18,4 @@ DerivedData/
 !.env.example
 *.secret
 
+Hisingen.dmg.sha256
