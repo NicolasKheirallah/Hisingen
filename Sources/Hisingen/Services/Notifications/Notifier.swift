@@ -78,8 +78,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 post(event, state: state, title: L10n.text("Charging interrupted"),
                      body: privateBody(L10n.text("Charging stopped before the target was reached.")))
             case .lowBattery(let threshold) where Preferences.notifyLowBattery:
+                let brandName = state.model.brand.displayName
                 post(event, state: state, title: L10n.format("Battery at %d%%", threshold),
-                     body: privateBody(L10n.text("Your Polestar battery is low.")))
+                     body: privateBody(L10n.format("Your %@ battery is low.", brandName)))
             default:
                 break
             }
@@ -181,9 +182,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
               Self.eveningUnlockedCondition(current),
               !Self.eveningUnlockedCondition(previous) else { return }
 
+        let brandName = current.model.brand.displayName
         let content = UNMutableNotificationContent()
         content.title = "🔒 " + L10n.text("Security Reminder")
-        content.body = L10n.text("Your Polestar is parked and currently unlocked.")
+        content.body = L10n.format("Your %@ is parked and currently unlocked.", brandName)
         content.threadIdentifier = "hisingen.security.\(current.vin)"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).evening-unlocked", content: content, trigger: nil)
@@ -216,9 +218,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard Preferences.features.contains(.notifications), available, authorized,
               !authenticationNoticePosted else { return }
         authenticationNoticePosted = true
+        let brandName = Preferences.activeBrand.displayName
         let content = UNMutableNotificationContent()
         content.title = L10n.text("Hisingen needs you to sign in")
-        content.body = L10n.text("Open Hisingen Settings to reconnect your Polestar account.")
+        content.body = L10n.format("Open Hisingen Settings to reconnect your %@ account.", brandName)
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.authentication-required",
                                   content: content, trigger: nil)
@@ -241,23 +244,25 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func chargingBody(_ state: VehicleState) -> String {
-        guard !Preferences.privateNotificationDetails else { return L10n.text("Your Polestar started charging.") }
+        let brandName = state.model.brand.displayName
+        guard !Preferences.privateNotificationDetails else { return L10n.format("Your %@ started charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
         if let minutes = state.estimatedChargingTimeToFullMinutes {
             values.append(L10n.format("full in %@", Format.shortDuration(minutes: minutes)))
         }
-        return values.isEmpty ? L10n.text("Your Polestar started charging.") : values.joined(separator: " · ")
+        return values.isEmpty ? L10n.format("Your %@ started charging.", brandName) : values.joined(separator: " · ")
     }
 
     private func completionBody(_ state: VehicleState) -> String {
-        guard !Preferences.privateNotificationDetails else { return L10n.text("Your Polestar finished charging.") }
+        let brandName = state.model.brand.displayName
+        guard !Preferences.privateNotificationDetails else { return L10n.format("Your %@ finished charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
         if let range = state.rangeKm {
             values.append(L10n.format("%@ range", Format.distance(km: range, unit: Preferences.distanceUnit)))
         }
-        return values.isEmpty ? L10n.text("Your Polestar finished charging.") : values.joined(separator: " · ")
+        return values.isEmpty ? L10n.format("Your %@ finished charging.", brandName) : values.joined(separator: " · ")
     }
 
     private func privateBody(_ detailed: String) -> String {
