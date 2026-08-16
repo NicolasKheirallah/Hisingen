@@ -1120,8 +1120,8 @@ actor PolestarAPI {
         let opaque = images["opaque"] as? [[String: Any]] ?? []
         let pool = transparent.isEmpty ? opaque : transparent
         let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 0 })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 1 }) ?? pool.first
+            ?? pool.first(where: { ($0["angle"] as? Int) == 1 })
+            ?? pool.first(where: { ($0["angle"] as? Int) == 0 }) ?? pool.first
         guard let string = pick?["url"] as? String, let url = URL(string: string),
               url.scheme == "https" else { return }
         guard let (bytes, imageResponse) = try? await HTTPBodyReader.data(

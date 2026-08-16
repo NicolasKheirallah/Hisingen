@@ -56,12 +56,12 @@ struct InfoTabView: View {
                 HStack(spacing: 4) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
-                            angleButton(title: L10n.text("3/4 Front"), angle: 0, icon: "car.side.front.open.fill")
-                            angleButton(title: L10n.text("Side"), angle: 2, icon: "car.side.fill")
-                            angleButton(title: L10n.text("3/4 Rear"), angle: 1, icon: "car.side.rear.open.fill")
-                            angleButton(title: L10n.text("Top"), angle: 3, icon: "car.top.door.front.left.open.fill")
-                            angleButton(title: L10n.text("Front"), angle: 4, icon: "car.front.waves.up.fill")
-                            angleButton(title: L10n.text("Rear"), angle: 5, icon: "car.rear.and.tire.marks")
+                            angleButton(title: L10n.text("3/4 Front"), angle: 1, icon: "car.side.front.open.fill")
+                            angleButton(title: L10n.text("Front"), angle: 2, icon: "car.front.waves.up.fill")
+                            angleButton(title: L10n.text("Side"), angle: 0, icon: "car.side.fill")
+                            angleButton(title: L10n.text("3/4 Rear"), angle: 3, icon: "car.side.rear.open.fill")
+                            angleButton(title: L10n.text("Rear"), angle: 4, icon: "car.rear.and.tire.marks")
+                            angleButton(title: L10n.text("Top"), angle: 5, icon: "car.top.door.front.left.open.fill")
                             if hasInterior {
                                 angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
                             }
