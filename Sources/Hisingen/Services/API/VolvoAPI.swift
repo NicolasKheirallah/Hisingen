@@ -796,7 +796,10 @@ actor VolvoAPI {
         } catch {
             if Self.isGlobalFailure(error) { throw error }
             endpointBackoff[backoffKey] = Date().addingTimeInterval(5 * 60)
-            logger.debug("Optional Volvo endpoint unavailable: \(key, privacy: .public)")
+            logger.error("""
+                Optional Volvo endpoint unavailable: \(key, privacy: .public) — \
+                \(String(describing: error), privacy: .public)
+                """)
             return nil
         }
     }

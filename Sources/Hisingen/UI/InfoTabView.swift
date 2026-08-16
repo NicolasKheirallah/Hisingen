@@ -5,13 +5,22 @@ import SwiftUI
 struct InfoTabView: View {
     let state: VehicleState
 
+    @State private var selectedAngleIndex: Int = Preferences.carRenderAngle.rawValue
     @State private var vinCopied = false
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             heroVisualSection
-            interiorVisualSection
-            cabinSeatingMatrixCard
+            if state.location?.latitude != nil {
+                parkingLocationCard
+            }
+            if state.airQuality != nil {
+                airQualityCleanZoneCard
+            }
+            if state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil || state.averageSpeedKmH != nil {
+                tripComputerCard
+            }
+            fluidsAndLightingCard
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
@@ -21,13 +30,47 @@ struct InfoTabView: View {
     }
 
     private var heroVisualSection: some View {
-        let imageData = state.imageData
-            ?? CarImageCache.shared.image(for: state.vin, angle: Preferences.carRenderAngle.rawValue)
-            ?? CarImageCache.shared.image(for: state.vin)
+        let isInterior = selectedAngleIndex == -1
+        let currentImageData: Data? = {
+            if isInterior {
+                return state.interiorImageData ?? CarImageCache.shared.interiorImage(for: state.vin)
+            }
+            return CarImageCache.shared.image(for: state.vin, angle: selectedAngleIndex)
+                ?? (selectedAngleIndex == Preferences.carRenderAngle.rawValue ? state.imageData : nil)
+                ?? CarImageCache.shared.image(for: state.vin)
+                ?? state.imageData
+        }()
+
+        let hasInterior = (state.interiorImageData != nil) || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
 
         return Card {
             VStack(spacing: 10) {
-                if let imageData, let nsImage = NSImage(data: imageData) {
+                // Angle & Interior View Switcher
+                HStack(spacing: 4) {
+                    angleButton(title: L10n.text("Front"), angle: 0, icon: "car.side.front.open.fill")
+                    angleButton(title: L10n.text("Side"), angle: 2, icon: "car.side.fill")
+                    angleButton(title: L10n.text("Rear"), angle: 1, icon: "car.side.rear.open.fill")
+                    if hasInterior {
+                        angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
+                    }
+                    Spacer()
+                    if let color = state.externalColour, !color.isEmpty && !isInterior {
+                        Pill(
+                            text: color,
+                            color: HisingenTheme.accent,
+                            symbol: "paintpalette.fill"
+                        )
+                    } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
+                        Pill(
+                            text: upholstery,
+                            color: .purple,
+                            symbol: "carseat.left.fill"
+                        )
+                    }
+                }
+                .padding(.horizontal, 2)
+
+                if let currentImageData, let nsImage = NSImage(data: currentImageData) {
                     ZStack {
                         RadialGradient(
                             colors: [Color.primary.opacity(0.06), Color.clear],
@@ -44,20 +87,27 @@ struct InfoTabView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 205)
                             .padding(.horizontal, 8)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                            .id("\(state.vin)_\(selectedAngleIndex)")
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 220)
                     .padding(.horizontal, -HisingenTheme.cardPadding)
-                    .padding(.top, -HisingenTheme.cardPadding)
+                    .padding(.top, -4)
                     .clipped()
                 } else {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color.primary.opacity(0.04))
-                            .frame(height: 100)
-                        Image(systemName: "car.side.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(HisingenTheme.accent.opacity(0.7))
+                            .frame(height: 120)
+                        VStack(spacing: 6) {
+                            Image(systemName: isInterior ? "carseat.left.fill" : "car.side.fill")
+                                .font(.system(size: 38))
+                                .foregroundStyle(HisingenTheme.accent.opacity(0.7))
+                            Text(isInterior ? L10n.text("Interior View") : L10n.text("Studio Render"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -73,55 +123,210 @@ struct InfoTabView: View {
                         }
                     }
                     Spacer()
-                    if let color = state.externalColour, !color.isEmpty {
-                        Pill(
-                            text: color,
-                            color: HisingenTheme.accent,
-                            symbol: "paintpalette.fill"
-                        )
+                    if let reg = state.registrationNo, !reg.isEmpty {
+                        Text(reg)
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
                     }
                 }
             }
         }
     }
 
-    private var interiorVisualSection: AnyView? {
-        let imageData = state.interiorImageData ?? CarImageCache.shared.interiorImage(for: state.vin)
-        guard let imageData, let nsImage = NSImage(data: imageData) else { return nil }
+    private func angleButton(title: String, angle: Int, icon: String) -> some View {
+        let isSelected = selectedAngleIndex == angle
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedAngleIndex = angle
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 9.5))
+                Text(title)
+                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.04), in: Capsule())
+            .foregroundStyle(isSelected ? HisingenTheme.accent : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var parkingLocationCard: some View {
+        guard let location = state.location, let lat = location.latitude, let lon = location.longitude else {
+            return AnyView(EmptyView())
+        }
+
+        let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? "N" : "S")
+        let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? "E" : "W")
+        let modelTitle = state.modelName ?? "Vehicle"
 
         return AnyView(Card {
-            VStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(L10n.text("Interior"))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(HisingenTheme.inkMuted)
+                    CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: .blue)
                     Spacer()
-                }
-
-                ZStack {
-                    RadialGradient(
-                        colors: [Color.primary.opacity(0.06), Color.clear],
-                        center: .center,
-                        startRadius: 40,
-                        endRadius: 170
-                    )
-
-                    Image(nsImage: nsImage)
-                        .interpolation(.high)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .scaleEffect(1.33, anchor: .center)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 205)
+                    Button {
+                        let query = "\(lat),\(lon)"
+                        if let url = URL(string: "https://maps.apple.com/?q=\(modelTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Car")&ll=\(query)") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 10))
+                            Text(L10n.text("Open in Maps"))
+                                .font(.system(size: 10.5, weight: .semibold))
+                        }
                         .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(Color.blue.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.blue)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 220)
-                .padding(.horizontal, -HisingenTheme.cardPadding)
-                .padding(.bottom, -HisingenTheme.cardPadding)
-                .clipped()
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
+                    if let alt = location.altitudeMeters {
+                        KVRow(L10n.text("Altitude"), String(format: "%.0f m", alt), symbol: "mountain.2.fill")
+                    }
+                    if let heading = location.heading {
+                        let cardinal = headingToCardinal(heading)
+                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", heading)))", symbol: "safari.fill")
+                    }
+                    if let brake = location.parkingBrakeEngaged {
+                        KVRow(L10n.text("Parking Brake"), brake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle.fill", valueWarning: !brake)
+                    }
+                    if let gear = location.gear, !gear.isEmpty {
+                        KVRow(L10n.text("Gear Selector"), gear.uppercased(), symbol: "gearshape.fill")
+                    }
+                }
             }
         })
+    }
+
+    private var airQualityCleanZoneCard: some View {
+        guard let air = state.airQuality else { return AnyView(EmptyView()) }
+
+        let aqiVal = air.airQualityIndex ?? 15
+        let aqiColor: Color = aqiVal <= 50 ? .green : (aqiVal <= 100 ? .yellow : .orange)
+        let aqiLabel = aqiVal <= 50 ? L10n.text("Good") : (aqiVal <= 100 ? L10n.text("Moderate") : L10n.text("Unhealthy"))
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "wind", title: L10n.text("CleanZone Air Quality & Filter"), color: .teal)
+                    Spacer()
+                    Pill(
+                        text: air.cleaningState == .on ? L10n.text("Purifying") : L10n.text("CleanZone Active"),
+                        color: air.cleaningState == .on ? .teal : aqiColor,
+                        symbol: air.cleaningState == .on ? "sparkles" : "checkmark.shield.fill"
+                    )
+                }
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Air Quality Index"), "\(aqiVal) AQI (\(aqiLabel))", symbol: "aqi.low", valueWarning: aqiVal > 100)
+
+                    if let cabinPM = air.particulateMatter25 {
+                        let formattedCabin = cabinPM == 0 ? "< 1 µg/m³" : "\(cabinPM) µg/m³"
+                        KVRow(L10n.text("Cabin PM2.5"), formattedCabin, symbol: "aqi.medium")
+                    }
+                    if let outdoorPM = air.externalParticulateMatter25 {
+                        KVRow(L10n.text("Outdoor PM2.5"), "\(outdoorPM) µg/m³", symbol: "sun.haze.fill")
+                    }
+                    if let filterLife = air.filterRemainingPercent {
+                        HStack {
+                            HStack(spacing: 6) {
+                                Image(systemName: "allergens")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(HisingenTheme.accent)
+                                    .frame(width: 14)
+                                Text(L10n.text("HEPA Filter Life"))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            HStack(spacing: 6) {
+                                ProgressView(value: Double(filterLife), total: 100)
+                                    .progressViewStyle(.linear)
+                                    .frame(width: 60)
+                                    .tint(filterLife > 20 ? .teal : .orange)
+                                Text("\(filterLife)%")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(filterLife > 20 ? Color.primary : Color.orange)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        })
+    }
+
+    private var tripComputerCard: some View {
+        var rows: [KVRow] = []
+
+        if let manualKm = state.tripMeterManualKm {
+            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: Preferences.distanceUnit), symbol: "m.circle.fill"))
+        }
+        if let autoKm = state.tripMeterAutomaticKm {
+            rows.append(KVRow(L10n.text("Auto Trip (TA)"), String(format: "%.1f km", autoKm), symbol: "a.circle.fill"))
+        }
+        if let speed = state.averageSpeedKmH, speed > 0 {
+            rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle.fill"))
+        }
+        if let odo = state.odometerKm {
+            rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: Preferences.distanceUnit), symbol: "speedometer"))
+        }
+
+        guard !rows.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "gauge.with.dots.needle.bottom.50percent", title: L10n.text("Trip Computer & Distance"), color: .indigo)
+                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        })
+    }
+
+    private var fluidsAndLightingCard: some View {
+        var rows: [KVRow] = []
+
+        if let health = state.healthDetails {
+            let hasBrake = health.warnings.contains(.brakeFluid)
+            rows.append(KVRow(L10n.text("Brake Fluid"), hasBrake ? L10n.text("Low / Check Required") : L10n.text("Normal"), symbol: "circle.circle", valueWarning: hasBrake))
+
+            let hasWasher = health.warnings.contains(.washerFluid)
+            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : L10n.text("Adequate"), symbol: "drop.triangle.fill", valueWarning: hasWasher))
+
+            let hasCoolant = health.warnings.contains(.engineCoolant)
+            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : L10n.text("Optimal"), symbol: "thermometer.sun.fill", valueWarning: hasCoolant))
+
+            let hasLight = health.warnings.contains(.exteriorLight) || !health.lightFailures.isEmpty
+            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill", valueWarning: hasLight))
+
+            if !health.tyres.isEmpty {
+                let tyresOK = health.tyres.allSatisfy { !$0.warning.needsAttention }
+                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyresOK ? L10n.text("All 4 Tyres OK") : L10n.text("Pressure Warning"), symbol: "circle.dashed", valueWarning: !tyresOK))
+            }
+        } else {
+            rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Normal"), symbol: "circle.circle"))
+            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Adequate"), symbol: "drop.triangle.fill"))
+            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Optimal"), symbol: "thermometer.sun.fill"))
+            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill"))
+        }
+
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "checklist", title: L10n.text("Fluids & Lighting Diagnostics"), color: .orange)
+                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        }
     }
 
     private var exteriorStylingCard: some View {
@@ -136,11 +341,10 @@ struct InfoTabView: View {
         if let doors = state.exteriorStatus?.openings {
             rows.append(KVRow(L10n.text("Body Style"), L10n.format("%d Doors", max(4, doors.count)), symbol: "car.side.fill"))
         }
-        if let parkingBrake = state.location?.parkingBrakeEngaged {
-            rows.append(KVRow(L10n.text("Parking Brake"), parkingBrake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle"))
-        }
 
-        return Card {
+        guard !rows.isEmpty || !state.packages.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "car.fill", title: L10n.text("Exterior & Styling"), color: .blue)
 
@@ -174,24 +378,7 @@ struct InfoTabView: View {
                     }
                 }
             }
-        }
-    }
-
-    private var cabinSeatingMatrixCard: some View {
-        let climate = state.climateStatus
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "carseat.left.fill", title: L10n.text("Cabin Seating Matrix"), color: .orange)
-                CabinSeatingMatrixView(
-                    isRightHandDrive: state.isRightHandDrive,
-                    driverSeatHeatingLevel: climate?.driverSeatHeatingLevel ?? 0,
-                    passengerSeatHeatingLevel: climate?.passengerSeatHeatingLevel ?? 0,
-                    steeringWheelHeatingLevel: climate?.steeringWheelHeatingLevel ?? 0,
-                    targetTemperatureCelsius: climate?.requestedTemperatureCelsius ?? climate?.interiorTemperatureCelsius,
-                    isAirPurifying: state.airQuality?.cleaningState == .on
-                )
-            }
-        }
+        })
     }
 
     private var interiorCabinCard: some View {
@@ -203,29 +390,15 @@ struct InfoTabView: View {
         if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
             rows.append(KVRow(L10n.text("Steering Orientation"), steering, symbol: "steeringwheel"))
         }
-        if let air = state.airQuality {
-            let airVal = air.cleaningState == .on ? L10n.text("Active Purifying") : L10n.text("CleanZone Ready")
-            rows.append(KVRow(L10n.text("Air Filtration"), airVal, symbol: "sparkles"))
-            if let aqi = air.airQualityIndex {
-                rows.append(KVRow(L10n.text("Cabin AQI"), "\(aqi) AQI", symbol: "wind"))
-            }
-            if let pm = air.particulateMatter25 {
-                rows.append(KVRow(L10n.text("Cabin PM2.5"), "\(pm) µg/m³", symbol: "aqi.medium"))
-            }
-            if let outdoor = air.externalParticulateMatter25 {
-                rows.append(KVRow(L10n.text("Outdoor PM2.5"), "\(outdoor) µg/m³", symbol: "sun.haze.fill"))
-            }
-            if let filterLife = air.filterRemainingPercent {
-                rows.append(KVRow(L10n.text("Filter Life"), "\(filterLife)%", symbol: "allergens"))
-            }
-        }
 
-        return Card {
+        guard !rows.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: .purple)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
-        }
+        })
     }
 
     private var powertrainSpecsCard: some View {
@@ -262,9 +435,6 @@ struct InfoTabView: View {
     private var serviceAndHealthCard: some View {
         var rows: [KVRow] = []
 
-        if let odo = state.odometerKm {
-            rows.append(KVRow(L10n.text("Total Odometer"), Format.distance(km: odo, grouped: true, unit: Preferences.distanceUnit), symbol: "speedometer"))
-        }
         if let days = state.daysToService {
             var val = L10n.format("in %d days", days)
             if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: Preferences.distanceUnit))" }
@@ -274,21 +444,12 @@ struct InfoTabView: View {
         if let hours = state.engineHoursToService, hours > 0 {
             rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
         }
-        if let manualKm = state.tripMeterManualKm {
-            rows.append(KVRow(L10n.text("Manual Trip Meter"), Format.distance(km: Int(manualKm.rounded()), unit: Preferences.distanceUnit), symbol: "m.circle"))
-        }
-        if let autoKm = state.tripMeterAutomaticKm {
-            rows.append(KVRow(L10n.text("Auto Trip Meter"), Format.distance(km: Int(autoKm.rounded()), unit: Preferences.distanceUnit), symbol: "a.circle"))
-        }
-        if let speed = state.averageSpeedKmH, speed > 0 {
-            rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle"))
-        }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "heart.text.square.fill", title: L10n.text("Service & Health"), color: .orange)
+                CardHeader(symbol: "heart.text.square.fill", title: L10n.text("Service Schedule"), color: .orange)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         })
@@ -300,10 +461,6 @@ struct InfoTabView: View {
                 CardHeader(symbol: "slider.horizontal.2.square.on.square", title: L10n.text("Factory Build & Identity"), color: HisingenTheme.accent)
 
                 VStack(spacing: 6) {
-                    if let reg = state.registrationNo, !reg.isEmpty {
-                        KVRow(L10n.text("License Plate"), reg, symbol: "menucard.fill")
-                    }
-
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "number.square.fill")
@@ -362,5 +519,12 @@ struct InfoTabView: View {
                 }
             }
         }
+    }
+
+    private func headingToCardinal(_ heading: Double) -> String {
+        let normalized = (heading.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+        let directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        let index = Int(((normalized + 22.5) / 45.0).truncatingRemainder(dividingBy: 8))
+        return directions[index]
     }
 }

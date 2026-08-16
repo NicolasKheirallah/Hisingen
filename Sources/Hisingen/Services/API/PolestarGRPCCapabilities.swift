@@ -76,51 +76,47 @@ extension PolestarGRPC {
             let body = try await firstMessage(path: Self.softwarePath, message: request,
                                               vin: vin, accessToken: accessToken)
             if let payload = Self.message(body, field: 1) {
-                let fields = Protobuf.fields(payload)
-                let softwareID = Self.string(fields, 1)
-                if !softwareID.isEmpty { otaSoftwareIDs[vin] = softwareID }
+                rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
                 info = Self.parseSoftware(payload)
             }
         } catch { firstError = error }
 
+        // `Scheduler`: 1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by.
+        // This is a second source of the software id — it stays populated for a scheduled
+        // install even when GetSoftwareInfo has nothing to report, which is what makes
+        // "cancel a scheduled installation" reachable.
         var scheduledAt: Date?
         do {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
                                               vin: vin, accessToken: accessToken)
             if let scheduler = Self.message(body, field: 1) {
-                scheduledAt = Self.timestamp(Self.message(scheduler, field: 3))
+                let fields = Protobuf.fields(scheduler)
+                scheduledAt = Self.timestamp(Self.message(fields, field: 3))
+                rememberSoftwareID(Self.string(fields, 4), vin: vin)
             }
         } catch {
             if firstError == nil { firstError = error }
         }
 
         if let info {
-            return VehicleSoftwareInfo(
-                version: info.version,
-                title: info.title,
-                state: info.state,
-                scheduledAt: scheduledAt ?? info.scheduledAt,
-                updatedAt: info.updatedAt,
-                installedVersion: info.installedVersion,
-                latestAvailableVersion: info.latestAvailableVersion
-            )
+            var merged = info
+            merged.scheduledAt = info.scheduledAt ?? scheduledAt
+            return merged
         }
         if let scheduledAt {
-            // Only a schedule was found, with no accompanying GetSoftwareInfo payload; "5.1.17"
-            // here is a pending target version, not something known to be already installed.
-            return VehicleSoftwareInfo(
-                version: "5.1.17",
-                title: "5.1.17",
-                state: .scheduled,
-                scheduledAt: scheduledAt,
-                updatedAt: nil,
-                installedVersion: nil,
-                latestAvailableVersion: "5.1.17"
-            )
+            // A schedule exists but GetSoftwareInfo returned nothing, so the target version is
+            // genuinely unknown here. Report the schedule and leave every version field nil
+            // rather than inventing one.
+            return VehicleSoftwareInfo(state: .scheduled, scheduledAt: scheduledAt)
         }
         if let firstError { throw firstError }
         return nil
+    }
+
+    private func rememberSoftwareID(_ id: String, vin: String) {
+        guard !id.isEmpty else { return }
+        otaSoftwareIDs[vin] = id
     }
 
     func fetchChargingSchedules(vin: String, accessToken: String) async throws -> [VehicleSchedule] {
@@ -456,51 +452,60 @@ extension PolestarGRPC {
     }
 
 
+    /// Parses an `ota_mobcache` `CarSoftwareInfo`:
+    /// `1 software_id`, `2 description{1 name, 2 short, 3 long}`, `3 qb_code`, `4 state`,
+    /// `6 new_sw_version`, `8 schedule_info{2 scheduled_at}`, `10 state_timestamp`.
     static func parseSoftware(_ data: Data) -> VehicleSoftwareInfo {
         let fields = Protobuf.fields(data)
         let description = message(fields, field: 2).map(Protobuf.fields)
-        let stateValue = varint(fields, 4) ?? 0
-        let state: SoftwareUpdateState
-        switch stateValue {
-        case 1, 15: state = .available
-        case 2: state = .downloading
-        case 3: state = .downloaded
-        case 4, 7, 8, 11: state = .failed
-        case 5, 6, 13: state = .installing
-        case 9: state = .completed
-        case 10: state = .deferred
-        case 12: state = .scheduled
-        default: state = .unknown
-        }
+        let state = softwareState(varint(fields, 4) ?? 0)
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
-        let parsedVersion = string(fields, 6).nilIfEmpty ?? "5.1.17"
-        let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? parsedVersion
+        let advertisedVersion = string(fields, 6).nilIfEmpty
+        let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? advertisedVersion
 
-        // GetSoftwareInfo only ever reports one version string. When an update is pending
-        // (available/downloading/downloaded/installing/scheduled/deferred), that string is the
-        // target version being offered, not what's currently running — Polestar's backend does
-        // not expose the installed version in that case, so leave it unknown rather than
-        // duplicating the target version into it. When nothing is pending, the string reflects
-        // whatever is already on the car.
-        let updatePending: Bool
+        // `new_sw_version` is the only version string the backend returns, and its meaning
+        // depends on `state`: while an update is pending it is the *target* version, and the
+        // running version is not reported at all. Only in the settled states does it describe
+        // what is actually on the car. Anything not settled leaves `installedVersion` nil —
+        // `VehicleState.merged` carries the last settled reading forward so the UI can still
+        // show "installed → available" during a rollout.
+        let describesInstalled: Bool
         switch state {
-        case .available, .downloading, .downloaded, .installing, .scheduled, .deferred:
-            updatePending = true
-        case .completed, .failed, .unknown:
-            updatePending = false
+        case .unknown, .completed:
+            describesInstalled = true
+        case .available, .downloading, .downloaded, .installing, .scheduled, .deferred, .failed:
+            describesInstalled = false
         }
-        let installedVersion = updatePending ? nil : parsedVersion
-        let latestAvailableVersion = updatePending ? parsedVersion : nil
 
         return VehicleSoftwareInfo(
-            version: parsedVersion,
+            version: advertisedVersion,
             title: parsedTitle,
             state: state,
             scheduledAt: timestamp(schedule),
             updatedAt: timestamp(message(fields, field: 10)),
-            installedVersion: installedVersion,
-            latestAvailableVersion: latestAvailableVersion
+            installedVersion: describesInstalled ? advertisedVersion : nil,
+            latestAvailableVersion: describesInstalled ? nil : advertisedVersion
         )
+    }
+
+    /// `ota_mobcache.SoftwareState`. The enum it mirrors runs 0…14; 15 is an extra value this
+    /// backend has been observed emitting for an offered update (pinned by
+    /// `testSoftwareVersionRepresentsAvailableUpdateNotInstalledVersion`). Anything else is
+    /// reported as unknown rather than guessed at.
+    static func softwareState(_ value: UInt64) -> SoftwareUpdateState {
+        switch value {
+        case 1, 15: return .available // DOWNLOAD_READY, UPDATE_AVAILABLE
+        case 2: return .downloading   // DOWNLOAD_STARTED
+        case 3: return .downloaded    // DOWNLOAD_COMPLETED
+        case 4: return .failed        // DOWNLOAD_FAILED
+        case 5, 6: return .installing // INSTALLATION_INITIATED, INSTALLATION_STARTED
+        case 7, 8, 11: return .failed // ABORTED, FAILED, FAILED_CRITICAL
+        case 9: return .completed     // INSTALLATION_COMPLETED
+        case 10: return .deferred     // INSTALLATION_DEFERRED
+        case 12: return .scheduled    // INSTALLATION_SCHEDULED
+        case 13: return .installing   // INSTALLATION_SCHEDULE_TRIGGERED
+        default: return .unknown      // 0 UNKNOWN, 14 INSTALLATION_UNKNOWN
+        }
     }
 
     static func parseGlobalChargeTimer(_ data: Data) -> VehicleSchedule? {

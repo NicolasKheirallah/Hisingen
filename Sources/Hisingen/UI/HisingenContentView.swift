@@ -1201,8 +1201,32 @@ struct VehicleTabView: View {
         })
     }
 
+    /// Placeholder for a card whose data is missing *because the fetch did not happen* — either
+    /// the endpoint reported unavailable, or we are rendering the on-disk snapshot, which
+    /// `cacheableCopy` strips down to a handful of fields.
+    ///
+    /// Returning `nil` in that case makes a failed refresh look identical to a vehicle that
+    /// simply does not report the data: the card silently vanishes and the dashboard appears to
+    /// have lost features. Only vanish when the vehicle genuinely has nothing to say.
+    private func unavailableCard(_ feature: AppFeature?, symbol: String,
+                                 title: String, color: Color, badge: String) -> AnyView? {
+        let reportedUnavailable = feature.map { state.unavailableFeatures.contains($0) } ?? false
+        guard state.isCachedSnapshot || reportedUnavailable else { return nil }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: symbol, title: title, color: color)
+                CapabilityBadge(title: badge, state: .unavailable)
+            }
+        })
+    }
+
     private var openingsCard: AnyView? {
-        guard features.contains(.exteriorStatus), let ext = state.exteriorStatus, !ext.openings.isEmpty else { return nil }
+        guard features.contains(.exteriorStatus) else { return nil }
+        guard let ext = state.exteriorStatus, !ext.openings.isEmpty else {
+            return unavailableCard(.exteriorStatus, symbol: "car.side.lock",
+                                   title: L10n.text("Doors & Openings"), color: .indigo,
+                                   badge: AppFeature.exteriorStatus.title)
+        }
         return AnyView(DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked))
     }
 
@@ -1249,7 +1273,12 @@ struct VehicleTabView: View {
     }
 
     private var tireSchematicCard: AnyView? {
-        guard features.contains(.tyreAndWarnings), let tyres = state.healthDetails?.tyres, !tyres.isEmpty else { return nil }
+        guard features.contains(.tyreAndWarnings) else { return nil }
+        guard let tyres = state.healthDetails?.tyres, !tyres.isEmpty else {
+            return unavailableCard(.tyreAndWarnings, symbol: "circle.grid.2x2",
+                                   title: L10n.text("Tire Status (iTPMS)"), color: .blue,
+                                   badge: AppFeature.tyreAndWarnings.title)
+        }
         let hasWarning = tyres.contains(where: { $0.warning.needsAttention })
         return AnyView(TireStatusCardView(tyres: tyres, hasWarning: hasWarning))
     }
@@ -1380,7 +1409,11 @@ struct VehicleTabView: View {
         if let hours = state.engineHoursToService {
             rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer"))
         }
-        guard !rows.isEmpty else { return nil }
+        guard !rows.isEmpty else {
+            return unavailableCard(nil, symbol: "stethoscope",
+                                   title: L10n.text("Diagnostics & Sensors"), color: .orange,
+                                   badge: L10n.text("Sensor readings"))
+        }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange)

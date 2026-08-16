@@ -285,7 +285,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     let version: String?
     let title: String?
     let state: SoftwareUpdateState
-    let scheduledAt: Date?
+    var scheduledAt: Date?
     let updatedAt: Date?
     var installedVersion: String?
     var latestAvailableVersion: String?

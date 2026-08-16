@@ -31,7 +31,9 @@ sequenceDiagram
 
 Failure detection is string-based: if the login page HTML contains the literal string `"ERR001"`, Hisingen maps it to `PolestarError.authenticationRequired(.invalidCredentials)`; any other failure to extract a code maps to `.callbackRejected`. There is no structured error response to parse — this is a genuinely brittle, reverse-engineered flow, and `Tests/HisingenTests/Unit/ResumePathTests.swift` exists specifically to pin down the HTML-parsing regexes against known page variants.
 
-**Redirect validation:** `oidcRedirectURL = https://www.polestar.com/sign-in-callback`. `OAuthRedirectDelegate` only captures a redirect whose scheme/host/path match this exactly — anything else continues following redirects normally.
+**Client and scopes:** Hisingen authenticates as the Polestar **mobile-app** OIDC client, `client_id = lp8dyrd_10`, requesting `openid profile email customer:attributes customer:attributes:write`. It formerly used the polestar.com **web** client (`l3oopkc_10`) without the `:write` scope, which is why every write RPC was rejected — see [polestar.md](polestar.md#remote-commands).
+
+**Redirect validation:** `oidcRedirectURL = polestar-explore://explore.polestar.com`, the app client's registered callback. Because it is a custom scheme rather than an `https` URL, `URLSession` cannot follow it: `OAuthRedirectDelegate` intercepts the redirect, captures the URL, and cancels the load by passing `nil` to the completion handler. Only a redirect whose scheme/host/path match the callback is captured — anything else continues following redirects normally. Path comparison normalizes `"/"` to `""`, since a scheme-only callback reports an empty path in one form and `/` in the other.
 
 **State validation:** the `state` query parameter on the captured callback is compared against the value generated before the authorize request; a mismatch throws `.callbackRejected` before any code exchange is attempted.
 

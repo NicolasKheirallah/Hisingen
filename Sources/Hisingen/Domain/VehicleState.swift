@@ -210,6 +210,13 @@ struct VehicleState: Codable, Equatable, Sendable {
     var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
     var interiorImageData: Data? = nil
+
+    /// True when this state came from the on-disk snapshot rather than a live fetch.
+    ///
+    /// `cacheableCopy` drops most telemetry, so a cached state is not "the vehicle has no
+    /// tyres data" — it is "we could not ask". Cards use this to show an unavailable badge
+    /// instead of silently disappearing.
+    var isCachedSnapshot: Bool = false
     let imageData: Data?
     let fetchedAt: Date
     let vehicleReportedAt: Date?
@@ -415,13 +422,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         return raw.capitalized
     }
 
-    var isRightHandDrive: Bool {
-        guard let raw = steeringOrientation?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !raw.isEmpty else {
-            return false
-        }
-        return raw == "RIGHT" || raw.contains("RHD")
-    }
-
     var isCharging: Bool { chargingState.isActivelyCharging }
 
     var isClimateActive: Bool {
@@ -579,12 +579,24 @@ struct VehicleState: Codable, Equatable, Sendable {
             registrationNo: nil,
             vin: vin,
             ownerFirstName: nil,
-            odometerKm: nil,
-            daysToService: nil,
-            distanceToServiceKm: nil,
-            serviceWarning: false,
-            fluidWarnings: [],
-            weather: nil,
+            odometerKm: odometerKm,
+            daysToService: daysToService,
+            distanceToServiceKm: distanceToServiceKm,
+            serviceWarning: serviceWarning,
+            fluidWarnings: fluidWarnings,
+            exteriorStatus: exteriorStatus,
+            healthDetails: healthDetails,
+            softwareInfo: softwareInfo,
+            chargingSchedules: chargingSchedules,
+            climateStatus: climateStatus,
+            climateTimers: climateTimers,
+            tripMeterManualKm: tripMeterManualKm,
+            tripMeterAutomaticKm: tripMeterAutomaticKm,
+            connectivity: connectivity,
+            airQuality: airQuality,
+            batteryDiagnostics: batteryDiagnostics,
+            weather: weather,
+            location: nil,
             unavailableFeatures: [],
             probedCapabilities: probedCapabilities,
             chargingSamples: chargingSamples,
@@ -598,10 +610,25 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: vehicleReportedAt,
             dataWarnings: dataWarnings
         )
+        copy.externalColour = externalColour
+        copy.gearbox = gearbox
+        copy.engineHoursToService = engineHoursToService
+        copy.averageSpeedKmH = averageSpeedKmH
         copy.fuelAmountLiters = fuelAmountLiters
         copy.averageFuelConsumptionLPer100Km = averageFuelConsumptionLPer100Km
         copy.isEngineRunning = isEngineRunning
         copy.fuelType = fuelType
+        copy.structureWeek = structureWeek
+        copy.internalVehicleIdentifier = internalVehicleIdentifier
+        copy.pno34 = pno34
+        copy.accountMarket = accountMarket
+        copy.upholstery = upholstery
+        copy.wheels = wheels
+        copy.packages = packages
+        copy.steeringOrientation = steeringOrientation
+        copy.serviceTrigger = serviceTrigger
+        copy.tripComputerElectricRangeKm = tripComputerElectricRangeKm
+        copy.chargingCurrentLimitAmps = chargingCurrentLimitAmps
         return copy
     }
 
@@ -622,6 +649,19 @@ struct VehicleState: Codable, Equatable, Sendable {
         let mergedProbes: VehicleProbedCapabilities? = {
             guard let probedCapabilities else { return previous.probedCapabilities }
             return previous.probedCapabilities?.merging(newerProbe: probedCapabilities) ?? probedCapabilities
+        }()
+        // Polestar reports a single version string whose meaning flips once an update is
+        // pending, so the running version drops out of the payload for the whole rollout.
+        // Carry the last settled reading forward — otherwise "Installed Version" disappears
+        // from the moment an update is offered until it finishes installing.
+        let mergedSoftware: VehicleSoftwareInfo? = {
+            guard var current = softwareInfo else {
+                return keep(.softwareUpdates) ? previous.softwareInfo : nil
+            }
+            if current.installedVersion == nil {
+                current.installedVersion = previous.softwareInfo?.installedVersion
+            }
+            return current
         }()
         var merged = VehicleState(
             batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
@@ -649,21 +689,22 @@ struct VehicleState: Codable, Equatable, Sendable {
 
             serviceWarning: !serviceWarning && keep(.vehicleHealth) ? previous.serviceWarning : serviceWarning,
             fluidWarnings: fluidWarnings.isEmpty && keep(.vehicleHealth) ? previous.fluidWarnings : fluidWarnings,
-            exteriorStatus: exteriorStatus ?? (keep(.exteriorStatus) ? previous.exteriorStatus : nil),
-            healthDetails: healthDetails ?? (keep(.tyreAndWarnings) ? previous.healthDetails : nil),
-            softwareInfo: softwareInfo ?? (keep(.softwareUpdates) ? previous.softwareInfo : nil),
-            chargingSchedules: chargingSchedules.isEmpty && keep(.chargingSchedule)
-                ? previous.chargingSchedules : chargingSchedules,
+            exteriorStatus: exteriorStatus ?? (features.contains(.exteriorStatus) ? previous.exteriorStatus : nil),
+            healthDetails: healthDetails ?? (features.contains(.tyreAndWarnings) ? previous.healthDetails : nil),
+            softwareInfo: mergedSoftware,
+            chargingSchedules: !chargingSchedules.isEmpty ? chargingSchedules
+                : (features.contains(.chargingSchedule) ? previous.chargingSchedules : []),
             climateStatus: climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil),
-            climateTimers: climateTimers.isEmpty && keep(.climateStatus) ? previous.climateTimers : climateTimers,
-            tripMeterManualKm: tripMeterManualKm ?? (keep(.tripMeters) ? previous.tripMeterManualKm : nil),
-            tripMeterAutomaticKm: tripMeterAutomaticKm ?? (keep(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
-            connectivity: connectivity ?? (keep(.connectivityDiagnostics) ? previous.connectivity : nil),
-            airQuality: airQuality ?? (keep(.airQuality) ? previous.airQuality : nil),
+            climateTimers: !climateTimers.isEmpty ? climateTimers
+                : (features.contains(.climateStatus) ? previous.climateTimers : []),
+            tripMeterManualKm: tripMeterManualKm ?? (features.contains(.tripMeters) ? previous.tripMeterManualKm : nil),
+            tripMeterAutomaticKm: tripMeterAutomaticKm ?? (features.contains(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
+            connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) ? previous.connectivity : nil),
+            airQuality: airQuality ?? (features.contains(.airQuality) ? previous.airQuality : nil),
             batteryDiagnostics: batteryDiagnostics
-                ?? (keep(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
-            weather: weather ?? (keep(.vehicleWeather) ? previous.weather : nil),
-            location: location ?? (keep(.vehicleLocation) ? previous.location : nil),
+                ?? (features.contains(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
+            weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),
+            location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             unavailableFeatures: unavailableFeatures,
             probedCapabilities: mergedProbes,
             chargingSessions: previous.chargingSessions,

@@ -71,6 +71,22 @@ struct VolvoVehicleDetailsDTO: Decodable, Sendable {
     struct Images: Decodable, Sendable {
         let exteriorImageUrl: String?
         let interiorImageUrl: String?
+
+        // Volvo's own docs disagree with themselves on this key: the Connected Vehicle API v2
+        // OpenAPI schema names it "internalImageUrl", but the endpoint reference page's example
+        // response uses "interiorImageUrl" with a real (non-placeholder) CDN URL. Decode either.
+        private enum CodingKeys: String, CodingKey {
+            case exteriorImageUrl
+            case interiorImageUrl
+            case internalImageUrl
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            exteriorImageUrl = try container.decodeIfPresent(String.self, forKey: .exteriorImageUrl)
+            interiorImageUrl = try container.decodeIfPresent(String.self, forKey: .interiorImageUrl)
+                ?? (try container.decodeIfPresent(String.self, forKey: .internalImageUrl))
+        }
     }
 }
 

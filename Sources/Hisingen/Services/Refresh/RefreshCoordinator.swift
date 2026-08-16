@@ -11,6 +11,12 @@ struct DiagnosticsSnapshot: Sendable {
     let sessionValid: Bool
     let networkAvailable: Bool
     let refreshInProgress: Bool
+
+    /// Features the last fetch could not retrieve, and whether the displayed state came off
+    /// disk rather than the network. Surfaced so a degraded dashboard can be explained in the
+    /// app instead of only in the unified log.
+    var unavailableFeatures: [AppFeature] = []
+    var servingCachedSnapshot: Bool = false
 }
 
 enum RefreshPolicy {
@@ -18,9 +24,13 @@ enum RefreshPolicy {
         (isCharging || isClimateActive) ? 60 : 300
     }
 
-    static func retryDelay(failureCount: Int, retryAfter: TimeInterval?) -> TimeInterval {
+    static func retryDelay(failureCount: Int, retryAfter: TimeInterval?,
+                           requiresNewSession: Bool = false) -> TimeInterval {
         if let retryAfter { return min(max(retryAfter, 30), 3_600) }
-        return min(30 * pow(2, Double(min(max(failureCount - 1, 0), 5))), 900)
+        let base = min(30 * pow(2, Double(min(max(failureCount - 1, 0), 5))), 900)
+        // Re-establishing a session hits the identity provider rather than the telemetry API,
+        // so back off harder and allow a longer ceiling before trying again.
+        return requiresNewSession ? min(max(base, 60) * 2, 1_800) : base
     }
 }
 
@@ -340,7 +350,7 @@ final class RefreshCoordinator {
         failureCount += 1
         logger.error("Refresh failed: \(error.localizedDescription, privacy: .public)")
         onError?(error)
-        guard error.isTransient else {
+        guard error.allowsAutomaticRetry else {
             timer?.invalidate()
             nextRefresh = nil
             publishDiagnostics()
@@ -348,9 +358,12 @@ final class RefreshCoordinator {
         }
         let retryAfter: TimeInterval?
         if case .rateLimited(let value) = error { retryAfter = value } else { retryAfter = nil }
-        let delay = RefreshPolicy.retryDelay(failureCount: failureCount, retryAfter: retryAfter)
+        let needsSession = retrySession || error.requiresNewSession
+        let delay = RefreshPolicy.retryDelay(
+            failureCount: failureCount, retryAfter: retryAfter, requiresNewSession: needsSession
+        )
         if case .rateLimited = error { rateLimitedUntil = Date().addingTimeInterval(delay) }
-        schedule(after: delay, retrySession: retrySession)
+        schedule(after: delay, retrySession: needsSession)
         publishDiagnostics()
     }
 
@@ -424,7 +437,9 @@ final class RefreshCoordinator {
             nextRefresh: nextRefresh,
             sessionValid: sessionReady,
             networkAvailable: networkAvailable,
-            refreshInProgress: task != nil
+            refreshInProgress: task != nil,
+            unavailableFeatures: latest?.unavailableFeatures ?? [],
+            servingCachedSnapshot: latest?.isCachedSnapshot ?? false
         ))
     }
 }

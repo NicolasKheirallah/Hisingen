@@ -22,7 +22,8 @@ The static per-model fallback table from `VehicleCapabilityProfile.support(for:)
 | Connectivity diagnostics | Best effort | Expected (supported) | Best effort | **Unsupported** | Best effort |
 | Software status | Best effort | Expected (supported) | Expected (supported) | Best effort | Best effort |
 | Software install control | Best effort | Best effort | Best effort | **Unsupported** | Best effort |
-| Remote command execution | Experimental, disabled by default | Experimental, disabled by default | Experimental, disabled by default | Experimental, disabled by default | Experimental, disabled by default |
+| Software install/cancel (OTA writes) | Best effort | **Reachable** | Best effort | **Unsupported** | Best effort |
+| Other remote commands | Disabled in UI | Disabled in UI | Disabled in UI | Disabled in UI | Disabled in UI |
 
 Per Hisingen's own README: Polestar 1 needs "broad live verification"; Polestar 2 is "model-aware... direct tyre pressure and selectable climate temperature are not assumed"; Polestar 3 has "runtime confirmation for backend-dependent capabilities"; Polestar 4 has "Digital Twin support; current limit, pre-cleaning, legacy connectivity, and remote OTA are not assumed"; Polestar 5/6 are "conservative backend-dependent" with only positive runtime observations trusted. Future/unrecognized Polestar models preserve their name and remain fully probeable rather than being rejected.
 

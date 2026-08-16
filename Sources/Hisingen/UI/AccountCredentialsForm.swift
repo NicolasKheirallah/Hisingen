@@ -46,15 +46,17 @@ struct AccountCredentialsForm: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 12) {
+        VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 10) {
             brandPicker
 
             accountStatusBanner
 
-            if selectedBrand == .polestar {
-                polestarFields
-            } else {
-                volvoFields
+            if style == .welcoming || !isCurrentlyConnected || showUpdateFields {
+                if selectedBrand == .polestar {
+                    polestarFields
+                } else {
+                    volvoFields
+                }
             }
         }
     }
@@ -150,18 +152,33 @@ struct AccountCredentialsForm: View {
                 Spacer()
 
                 if isBrandConnected && style != .welcoming {
-                    Button {
-                        testCurrentConnection()
-                    } label: {
-                        if isTestingConnection {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text(L10n.text("Test"))
-                                .font(.system(size: 10, weight: .medium))
+                    HStack(spacing: 6) {
+                        Button {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                                showUpdateFields.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
+                                Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit"))
+                            }
+                            .font(.system(size: 10, weight: .medium))
                         }
+                        .controlSize(.mini)
+
+                        Button {
+                            testCurrentConnection()
+                        } label: {
+                            if isTestingConnection {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Text(L10n.text("Test"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                        }
+                        .controlSize(.mini)
+                        .disabled(isTestingConnection)
                     }
-                    .controlSize(.mini)
-                    .disabled(isTestingConnection)
                 }
             }
 

@@ -118,27 +118,37 @@ extension PolestarGRPC {
             }
             return RemoteCommandResult(outcome: .completed, message: nil)
         case .scheduleOTA(let minutes):
-            guard (1...1_440).contains(minutes), let softwareID = otaSoftwareIDs[vin] else {
-                throw RemoteCommandError.missingContext
-            }
+            guard (1...1_440).contains(minutes) else { throw RemoteCommandError.rejected(nil) }
+            let softwareID = try await softwareID(vin: vin, accessToken: accessToken)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.intField(2, minutes * 60))
             request.append(Protobuf.stringField(3, softwareID))
             return try await ota(method: "Schedule", request: request, vin: vin, token: accessToken)
         case .installOTANow:
-            guard let softwareID = otaSoftwareIDs[vin] else { throw RemoteCommandError.missingContext }
+            let softwareID = try await softwareID(vin: vin, accessToken: accessToken)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.stringField(2, softwareID))
             return try await ota(method: "InstallNow", request: request, vin: vin, token: accessToken)
         case .cancelOTA:
-            guard let softwareID = otaSoftwareIDs[vin] else { throw RemoteCommandError.missingContext }
+            let softwareID = try await softwareID(vin: vin, accessToken: accessToken)
             var request = Data()
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.stringField(2, softwareID))
             return try await ota(method: "CancelSchedule", request: request, vin: vin, token: accessToken)
         }
+    }
+
+    /// Every OTA write is addressed to a specific `software_id`, which only ever arrives on a
+    /// `GetSoftwareInfo`/`GetSchedule` read. The id is cached per VIN, but a command issued
+    /// before the first successful software read — or after the app restarted — would otherwise
+    /// fail with "missing context", so fetch it on demand instead of giving up.
+    private func softwareID(vin: String, accessToken: String) async throws -> String {
+        if let cached = otaSoftwareIDs[vin] { return cached }
+        _ = try? await fetchSoftware(vin: vin, accessToken: accessToken, locale: "en")
+        guard let resolved = otaSoftwareIDs[vin] else { throw RemoteCommandError.missingContext }
+        return resolved
     }
 
     private func invocation(method: String, request: Data, vin: String,
@@ -148,6 +158,9 @@ extension PolestarGRPC {
         return try Self.parseInvocationResult(body)
     }
 
+    /// All three scheduler writes answer with the same `Scheduler` message
+    /// (`1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by`), where
+    /// `status` is 0 UNKNOWN, 1 IDLE, 2 SCHEDULED, 3 INSTALL.
     private func ota(method: String, request: Data, vin: String,
                      token: String) async throws -> RemoteCommandResult {
         let body = try await lastMessage(path: Self.otaSchedulerService + "/\(method)",
@@ -156,7 +169,13 @@ extension PolestarGRPC {
               let status = Self.varint(scheduler, field: 1), status > 0 else {
             throw RemoteCommandError.rejected(nil)
         }
-        return RemoteCommandResult(outcome: status == 3 ? .delivered : .accepted, message: nil)
+        let returnedID = Self.string(scheduler, field: 4)
+        if !returnedID.isEmpty { otaSoftwareIDs[vin] = returnedID }
+        switch status {
+        case 3: return RemoteCommandResult(outcome: .delivered, message: nil)   // INSTALL
+        case 2: return RemoteCommandResult(outcome: .completed, message: nil)   // SCHEDULED
+        default: return RemoteCommandResult(outcome: .completed, message: nil)  // IDLE (cancelled)
+        }
     }
 
     static func parseInvocationResult(_ data: Data) throws -> RemoteCommandResult {

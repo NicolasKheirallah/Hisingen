@@ -12,11 +12,15 @@ final class VehicleStateStore {
     }
 
     func snapshot(for vin: String) -> VehicleState? {
-        guard let snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
+        guard var snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
         guard Date().timeIntervalSince(snapshot.fetchedAt) <= 7 * 24 * 60 * 60 else {
             clear(vin: vin)
             return nil
         }
+        // Flagged on read rather than on write, so anything served from disk is marked
+        // regardless of which build wrote it. `cacheableCopy` strips most telemetry, and the
+        // UI must be able to tell "not fetched" apart from "not supported".
+        snapshot.isCachedSnapshot = true
         return snapshot
     }
 

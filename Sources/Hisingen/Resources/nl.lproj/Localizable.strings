@@ -828,3 +828,21 @@
 "Factory Spec (PNO34)" = "Fabrieksspecificatie (PNO34)";
 "Market Delivery" = "Marktlevering";
 "Software Release" = "Softwareversie";
+
+/* Vehicle software & OTA */
+"Polestar Remote Commands" = "Polestar-afstandsopdrachten";
+"Software installation is active. Locks, climate, and charging commands are restricted to paired mobile devices." = "Software-installatie is actief. Vergrendelings-, klimaat- en laadopdrachten zijn beperkt tot gekoppelde mobiele apparaten.";
+"Software installation is dispatched through Polestar's OTA scheduler. The remaining commands are routed via a backend that only accepts paired mobile devices." = "Software-installatie wordt verzonden via de OTA-planner van Polestar. De overige opdrachten lopen via een backend die alleen gekoppelde mobiele apparaten accepteert.";
+"Install or cancel a pending software update" = "Een openstaande software-update installeren of annuleren";
+"Software status is unavailable for this vehicle." = "De softwarestatus is niet beschikbaar voor dit voertuig.";
+"Software update %@ is ready to install." = "Software-update %@ is klaar om te installeren.";
+"A software update is ready to install." = "Er is een software-update klaar om te installeren.";
+"Downloading software update %@…" = "Software-update %@ wordt gedownload …";
+"Downloading a software update…" = "Er wordt een software-update gedownload …";
+"Installing software update %@…" = "Software-update %@ wordt geïnstalleerd …";
+"Installing a software update…" = "Er wordt een software-update geïnstalleerd …";
+"Installation is scheduled for %@." = "De installatie staat gepland voor %@.";
+"An installation is scheduled." = "Er staat een installatie gepland.";
+"The last software update failed." = "De laatste software-update is mislukt.";
+"Software is up to date (%@)." = "De software is up-to-date (%@).";
+"Cancel Scheduled Installation" = "Geplande installatie annuleren";
