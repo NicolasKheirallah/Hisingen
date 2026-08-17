@@ -29,6 +29,8 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
     case remoteWindows = "remote-windows"
     case remoteHonkFlash = "remote-honk-flash"
     case remoteOTA = "remote-ota"
+    case vehicleErrors = "vehicle-errors"
+    case realTimeUpdates = "real-time-updates"
 
     var title: String {
         switch self {
@@ -60,6 +62,8 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .remoteWindows: return L10n.text("Window controls")
         case .remoteHonkFlash: return L10n.text("Honk & flash controls")
         case .remoteOTA: return L10n.text("Vehicle software controls")
+        case .vehicleErrors: return L10n.text("Vehicle errors")
+        case .realTimeUpdates: return L10n.text("Real-time updates")
         }
     }
 
@@ -93,6 +97,8 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .remoteWindows: return L10n.text("Open or close all windows; opening requires authentication.")
         case .remoteHonkFlash: return L10n.text("Flash the lights or honk and flash on explicit request.")
         case .remoteOTA: return L10n.text("Schedule, install, or cancel vehicle software updates with confirmation.")
+        case .vehicleErrors: return L10n.text("Fetch charging and climate service errors from the vehicle backend.")
+        case .realTimeUpdates: return L10n.text("Use server-streaming gRPC for live battery and exterior updates instead of polling.")
         }
     }
 

@@ -448,6 +448,321 @@ struct LivePolestarRemoteCommandIntegrationTests {
         try? await api.signOut()
     }
 
+    /// E2 (OTA investigation): captures the *complete* `GetSoftwareInfo` frame and recursively
+    /// decodes every protobuf field — including unknown wire-types and nested messages — to find
+    /// any hidden campaign/assignment/eligibility fields beyond the 8 currently parsed by
+    /// `PolestarGRPC.parseSoftware`. Also prints the raw hex for offline analysis.
+    ///
+    /// Read-only. The single piece of information this can't get is HTTP/2 trailers (URLSession
+    /// hides them), but for a successful response the entire `CarSoftwareInfo` message is in the
+    /// first frame, which is fully captured here.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDecodeGetSoftwareInfoRecursively() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let host = try XCTUnwrap(c3["grpcHost"] as? String)
+        let base = try XCTUnwrap(URL(string: "https://\(host):443"))
+
+        var req = Data()
+        req.append(Protobuf.stringField(1, vin))
+        req.append(Protobuf.stringField(2, "en"))
+        let result = await Self.callGRPC(base: base,
+                                         path: "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo",
+                                         body: req, vin: vin, token: token, label: "GetSoftwareInfo (recursive)")
+        guard let frame = result.frames.first else {
+            print("  ⚠️ no frame returned — nothing to decode")
+            try? await api.signOut()
+            return
+        }
+
+        print("\n=== RECURSIVE FIELD DECODE (frame \(frame.count) bytes) ===")
+        print("raw hex: \(frame.map { String(format: "%02x", $0) }.joined())")
+        Self.recursiveDecode(frame, depth: 0)
+        print("=== END RECURSIVE DECODE ===\n")
+        try? await api.signOut()
+    }
+
+    /// Recursively prints every protobuf field in `data`, attempting nested-message decode for
+    /// length-delimited fields that aren't printable UTF-8. Surfaces unknown wire-types rather
+    /// than silently dropping them.
+    static func recursiveDecode(_ data: Data, depth: Int, fieldNumber: Int? = nil) {
+        let indent = String(repeating: "  ", count: depth)
+        let fields = Protobuf.fields(data)
+        for f in fields {
+            let tag = "f\(f.number)"
+            switch f.wire {
+            case 0:
+                let zigzag = Int64(bitPattern: f.varint) >> 1 ^ -(Int64(bitPattern: f.varint) & 1)
+                print("\(indent)\(tag): varint = \(f.varint) (zigzag=\(zigzag))")
+            case 1:
+                let v = f.data.withUnsafeBytes { $0.load(as: UInt64.self) }
+                print("\(indent)\(tag): i64 = \(v) (0x\(String(v, radix: 16)))")
+            case 5:
+                let v = f.data.withUnsafeBytes { $0.load(as: UInt32.self) }
+                print("\(indent)\(tag): i32 = \(v) (0x\(String(v, radix: 16)))")
+            case 2:
+                if let s = String(data: f.data, encoding: .utf8),
+                   !s.isEmpty, s.unicodeScalars.allSatisfy({ $0.value >= 0x20 || $0 == "\n" || $0 == "\r" || $0 == "\t" }) {
+                    print("\(indent)\(tag): str(\(f.data.count)) = \(s.debugDescription)")
+                } else if f.data.isEmpty {
+                    print("\(indent)\(tag): bytes(0) = empty")
+                } else {
+                    let sub = Protobuf.fields(f.data)
+                    if sub.isEmpty {
+                        print("\(indent)\(tag): bytes(\(f.data.count)) = \(f.data.map { String(format: "%02x", $0) }.joined())")
+                    } else {
+                        print("\(indent)\(tag): msg(\(f.data.count)) {")
+                        recursiveDecode(f.data, depth: depth + 1, fieldNumber: f.number)
+                        print("\(indent)}")
+                    }
+                }
+            default:
+                print("\(indent)\(tag): WT\(f.wire) ?? (raw=\(f.data.map { String(format: "%02x", $0) }.joined()))")
+            }
+        }
+    }
+
+    /// E3 (OTA investigation): differential capture. Polls `GetSoftwareInfo` at a configurable
+    /// interval and logs full recursive field diffs each iteration, flagging any state change.
+    /// Designed to catch the exact moment `state 15 → 1` and what field changed first.
+    ///
+    /// Read-only. Configure with:
+    ///   HISINGEN_OTA_POLL_SECONDS (default 60)
+    ///   HISINGEN_OTA_POLL_ITERATIONS (default 5)
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDifferentialOtaCapture() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+        let pollSeconds = Int(environment["HISINGEN_OTA_POLL_SECONDS"] ?? "60") ?? 60
+        let iterations = Int(environment["HISINGEN_OTA_POLL_ITERATIONS"] ?? "5") ?? 5
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let host = try XCTUnwrap(c3["grpcHost"] as? String)
+        let base = try XCTUnwrap(URL(string: "https://\(host):443"))
+
+        var req = Data()
+        req.append(Protobuf.stringField(1, vin))
+        req.append(Protobuf.stringField(2, "en"))
+
+        print("\n========================================================")
+        print("🔁 DIFFERENTIAL OTA CAPTURE — VIN \(vin)")
+        print("  interval: \(pollSeconds)s, iterations: \(iterations)")
+        print("========================================================")
+
+        var lastHex: String?
+        var lastState: UInt64?
+        for i in 1...iterations {
+            let result = await Self.callGRPC(base: base,
+                                             path: "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo",
+                                             body: req, vin: vin, token: token,
+                                             label: "poll #\(i)")
+            guard let frame = result.frames.first else {
+                print("  ⚠️ poll #\(i): no frame")
+                try? await Task.sleep(nanoseconds: UInt64(pollSeconds) * 1_000_000_000)
+                continue
+            }
+            let hex = frame.map { String(format: "%02x", $0) }.joined()
+            let outer = Protobuf.fields(frame)
+            let info = outer.first(where: { $0.number == 1 && $0.wire == 2 })?.data ?? frame
+            let fields = Protobuf.fields(info)
+            let state = fields.first(where: { $0.number == 4 })?.varint
+
+            if hex == lastHex {
+                print("  poll #\(i): identical (state=\(state ?? 0))")
+            } else {
+                print("  poll #\(i): CHANGED — state=\(state ?? 0) (prev=\(lastState ?? 0))")
+                if let lastHex {
+                    print("  --- previous hex: \(lastHex)")
+                }
+                print("  --- current  hex: \(hex)")
+                print("  --- recursive decode:")
+                Self.recursiveDecode(frame, depth: 2)
+                if let lastState, lastState != state {
+                    print("  🎯 STATE TRANSITION DETECTED: \(lastState) → \(state ?? 0)")
+                }
+            }
+            lastHex = hex
+            lastState = state
+            if i < iterations {
+                try? await Task.sleep(nanoseconds: UInt64(pollSeconds) * 1_000_000_000)
+            }
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// E5 (OTA investigation): probe the VCA gateway (`vca-api-gateway.weu-prod.ecpaz.volvocars.biz`)
+    /// discovered in the v2 discovery doc. The VCA gateway is a catch-all UNIMPLEMENTED upstream,
+    /// so blind probing is impossible — but we can test whether the known-real C3 OTA paths
+    /// resolve here (which would mean VCA mirrors C3) and whether the web token authenticates
+    /// differently on VCA than C3. Uses the known-real/known-fake control discipline.
+    ///
+    /// Read-only. Probes only:
+    ///   - known-real: `ota_mobcache.OtaDiscoveryService/GetSoftwareInfo` (works on C3)
+    ///   - known-fake: `totally.Nonsense.Xyz/Nope` (control)
+    ///   - the same OTA path with the app token (to test allowlist differences)
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testProbeVCAGateway() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+
+        // Discover VCA via v2 discovery
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v2+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let vca = try XCTUnwrap(json["vca-api-gateway"] as? [String: Any])
+        let host = try XCTUnwrap(vca["grpcHost"] as? String)
+        let vcaBase = try XCTUnwrap(URL(string: "https://\(host):443"))
+        let c3Host = (json["c3"] as? [String: Any])?["grpcHost"] as? String ?? "cepmobtoken.eu.prod.c3.volvocars.com"
+        let c3Base = try XCTUnwrap(URL(string: "https://\(c3Host):443"))
+
+        print("\n========================================================")
+        print("🌐 VCA GATEWAY PROBE — VIN \(vin)")
+        print("  VCA: \(vcaBase.absoluteString)")
+        print("  C3:  \(c3Base.absoluteString)")
+        print("========================================================")
+
+        var softwareInfo = Data()
+        softwareInfo.append(Protobuf.stringField(1, vin))
+        softwareInfo.append(Protobuf.stringField(2, "en"))
+        let nonsense = Data([0x0a, 0x03, 0x66, 0x6f, 0x6f])
+
+        let probes: [(String, URL, String, Data)] = [
+            ("VCA known-real GetSoftwareInfo (web token)", vcaBase,
+             "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo", softwareInfo),
+            ("VCA known-fake Nonsense (control)", vcaBase,
+             "/totally.Nonsense.Xyz/Nope", nonsense),
+            ("C3 known-real GetSoftwareInfo (web token, baseline)", c3Base,
+             "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo", softwareInfo),
+            ("VCA SchedulerService/GetSchedule", vcaBase,
+             "/ota_mobcache.SchedulerService/GetSchedule", Protobuf.stringField(1, vin)),
+            ("VCA AvailabilityService/GetLatestAvailability", vcaBase,
+             "/services.vehiclestates.availability.AvailabilityService/GetLatestAvailability", softwareInfo),
+        ]
+
+        for (label, base, path, body) in probes {
+            let result = await Self.callGRPC(base: base, path: path, body: body,
+                                              vin: vin, token: token, label: label)
+            print("  → grpc-status=\(result.status ?? "nil"), frames=\(result.frames.count)")
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// E8 (OTA investigation): probe the `service-offer-and-warranty/api/graphql` endpoint
+    /// discovered in the Polestar web account SPA. This GraphQL surface has never been tested
+    /// for OTA/campaign/software types. Uses the `__type(name:)` oracle (the strongest
+    /// available — enumerates the type namespace directly) with known-real and known-fake
+    /// controls. Read-only.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testProbeServiceOfferWarrantyGraphQL() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+
+        let url = URL(string: "https://pc-api.polestar.com/eu-north-1/service-offer-and-warranty/api/graphql")!
+        print("\n========================================================")
+        print("🔍 SERVICE-OFFER-AND-WARRANTY GraphQL PROBE")
+        print("========================================================")
+
+        func gql(_ query: String, label: String) async {
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            req.setValue("5.5.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+            req.setValue("SE", forHTTPHeaderField: "X-Polestar-Locale")
+            req.setValue("PolestarApp/5.5.0b1102 Android/14", forHTTPHeaderField: "User-Agent")
+            req.httpBody = Data(query.utf8)
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                let http = resp as! HTTPURLResponse
+                let body = String(data: data, encoding: .utf8) ?? "<binary>"
+                print("  \(label): HTTP \(http.statusCode) → \(body.prefix(300))")
+            } catch {
+                print("  \(label): error \(error)")
+            }
+        }
+
+        // Baseline: does it authenticate and respond?
+        await gql("{\"query\":\"{__typename}\"}", label: "__typename")
+
+        // Controls: known-real and known-fake type names (to validate the oracle)
+        await gql("{\"query\":\"{__type(name:\\\"String\\\"){name}}\"}", label: "control: String (real)")
+        await gql("{\"query\":\"{__type(name:\\\"TotallyFakeTypeXYZ\\\"){name}}\"}", label: "control: TotallyFakeTypeXYZ (fake)")
+
+        // OTA/software/campaign type probes
+        let typeNames = [
+            "SoftwareUpdate", "SoftwareState", "SoftwareInfo", "CarSoftwareInfo",
+            "OtaStatus", "OtaUpdate", "Campaign", "CampaignAssignment",
+            "RolloutStatus", "UpdateEligibility", "DownloadTicket",
+            "SoftwareOffer", "VehicleSoftware", "FirmwareUpdate",
+            "UpdateConsent", "SoftwareRelease", "DeploymentStatus",
+            "Entitlement", "VehicleUpdate", "SoftwareCampaign",
+        ]
+        for name in typeNames {
+            await gql("{\"query\":\"{__type(name:\\\"\(name)\\\"){name}}\"}", label: "type: \(name)")
+        }
+
+        // Root query fields
+        await gql("{\"query\":\"{__schema{queryType{fields{name}}}}\"}", label: "schema queryType fields")
+        await gql("{\"query\":\"{__schema{mutationType{fields{name}}}}\"}", label: "schema mutationType fields")
+
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
     /// Drives the real `PolestarAPI` OTA path end to end and asserts the failure it produces is
     /// specific and actionable rather than the old catch-all
     /// "Polestar's vehicle service returned an unexpected response."
@@ -3073,6 +3388,213 @@ struct LivePolestarRemoteCommandIntegrationTests {
             print("  ⚠️ Weather was nil in VehicleState")
         }
         print("========================================================\n")
+    }
+
+    /// Live test for `ErrorService/GetErrors` — fetches vehicle service errors from PCCS.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testFetchVehicleErrors() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let validToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(validToken)
+
+        print("\n========================================================")
+        print("⚠️ VEHICLE ERRORS — VIN \(vin)")
+        do {
+            let errors = try await api.grpc.fetchErrors(vin: vin, accessToken: token)
+            if errors.isEmpty {
+                print("  ✅ No service errors reported")
+            } else {
+                for e in errors {
+                    print("  • \(e.service.displayName): \(e.errorCode.displayName)" +
+                          (e.actionCode.map { " (action=\($0))" } ?? ""))
+                }
+            }
+        } catch {
+            print("  ⚠️ ErrorService not available: \(error)")
+        }
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// Live test for streaming gRPC methods (`GetBattery` stream, `GetExterior` stream).
+    /// Verifies the streaming endpoints return the same first-frame data as the one-shot methods.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testStreamingEndpoints() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let validToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(validToken)
+
+        print("\n========================================================")
+        print("📡 STREAMING gRPC TEST — VIN \(vin)")
+
+        // Test streaming battery (GetBattery vs GetLatestBattery)
+        do {
+            await api.grpc.setUseStreaming(true)
+            let streamBattery = try await api.grpc.fetchBattery(vin: vin, accessToken: token)
+            await api.grpc.setUseStreaming(false)
+            let latestBattery = try await api.grpc.fetchBattery(vin: vin, accessToken: token)
+            print("  GetBattery (stream): SOC=\(streamBattery.batteryPercentage ?? -1)%")
+            print("  GetLatestBattery:    SOC=\(latestBattery.batteryPercentage ?? -1)%")
+            print("  ✅ Streaming battery returned data")
+        } catch {
+            print("  ⚠️ Streaming battery failed: \(error)")
+        }
+
+        // Test streaming exterior (GetExterior vs GetLatestExterior)
+        do {
+            await api.grpc.setUseStreaming(true)
+            let streamExterior = try await api.grpc.fetchExterior(vin: vin, accessToken: token)
+            await api.grpc.setUseStreaming(false)
+            let latestExterior = try await api.grpc.fetchExterior(vin: vin, accessToken: token)
+            print("  GetExterior (stream): locked=\(streamExterior?.isLocked.map { String(describing: $0) } ?? "nil")")
+            print("  GetLatestExterior:    locked=\(latestExterior?.isLocked.map { String(describing: $0) } ?? "nil")")
+            print("  ✅ Streaming exterior returned data")
+        } catch {
+            print("  ⚠️ Streaming exterior failed: \(error)")
+        }
+
+        print("========================================================\n")
+        try? await api.signOut()
+    }
+
+    /// Deep dive: GetSchedule full decode, car_information.CarInformation/GetMyCars (gRPC),
+    /// and GraphQL GetVDMSCars — comparing all three car-discovery surfaces and the schedule
+    /// response.  Read-only.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testGetScheduleAndCarDiscoveryDeepDive() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+
+        // C3 discovery
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let host = try XCTUnwrap(c3["grpcHost"] as? String)
+        let base = try XCTUnwrap(URL(string: "https://\(host):443"))
+
+        print("\n========================================================")
+        print("🔬 GET SCHEDULE + CAR DISCOVERY DEEP DIVE — VIN \(vin)")
+
+        // ── 1. GetSchedule full decode ──
+        print("\n── 1. GetSchedule (full recursive decode) ──")
+        let scheduleResult = await Self.callGRPC(base: base,
+            path: "/ota_mobcache.SchedulerService/GetSchedule",
+            body: Protobuf.stringField(1, vin), vin: vin, token: token, label: "GetSchedule")
+        if let frame = scheduleResult.frames.first {
+            print("  raw: \(frame.map { String(format: "%02x", $0) }.joined())")
+            // GetScheduleResponse: {1: Scheduler}
+            // Scheduler: {1: status (Status enum), 2: relativeTime (int), 3: scheduledTime (Timestamp),
+            //             4: softwareId (string), 5: setBy (SetBy enum)}
+            // Status: 0=UNKNOWN, 1=IDLE, 2=SCHEDULED, 3=INSTALL
+            // SetBy: 0=UNKNOWN, 1=APP, 2=HMI, 3=CLOUD
+            let outer = Protobuf.fields(frame)
+            if let schedulerData = outer.first(where: { $0.number == 1 && $0.wire == 2 })?.data {
+                let scheduler = Protobuf.fields(schedulerData)
+                let status = scheduler.first(where: { $0.number == 1 })?.varint
+                let relativeTime = scheduler.first(where: { $0.number == 2 })?.varint
+                let scheduledTimeData = scheduler.first(where: { $0.number == 3 && $0.wire == 2 })?.data
+                let softwareId = scheduler.first(where: { $0.number == 4 && $0.wire == 2 })
+                    .flatMap { String(data: $0.data, encoding: .utf8) }
+                let setBy = scheduler.first(where: { $0.number == 5 })?.varint
+
+                let statusName = ["UNKNOWN", "IDLE", "SCHEDULED", "INSTALL"]
+                let setByName = ["SET_BY_UNKNOWN", "APP", "HMI", "CLOUD"]
+                print("  status: \(status ?? 0) (\(statusName[min(Int(status ?? 0), 3)]))")
+                print("  relativeTime: \(relativeTime ?? 0)")
+                if let st = scheduledTimeData {
+                    let ts = Protobuf.fields(st)
+                    let seconds = ts.first(where: { $0.number == 1 })?.varint
+                    print("  scheduledTime: seconds=\(seconds ?? 0)")
+                } else { print("  scheduledTime: nil") }
+                print("  softwareId: \(softwareId ?? "nil")")
+                print("  setBy: \(setBy ?? 0) (\(setByName[min(Int(setBy ?? 0), 3)]))")
+            } else {
+                print("  ⚠️ no Scheduler field in response")
+            }
+        } else {
+            print("  ⚠️ no frame returned")
+        }
+
+        // ── 2. car_information.CarInformation/GetMyCars (gRPC) ──
+        print("\n── 2. car_information.CarInformation/GetMyCars (gRPC) ──")
+        // GetMyCarsRequest is empty (no fields). GetMyCarsResponse: {1: [MyCar]}.
+        // MyCar: {1: Car, 2: userIsLinked (bool), 3: userIsOwner (bool), 4: registrationPlate (string)}.
+        // Car has 87+ fields including:
+        //   9: consumerSoftwareVersion (string)
+        //  32: supportsUpdateStatus (bool)
+        //  33: supportsRemoteOtaInstallSchedule (bool)
+        //  57: supportsFullOtaUpdates (bool)
+        //  62: supportsCloudBasedOtaDownloadConsent (bool)  ← KEY
+        //  70: hasPerformanceSoftwareUpgrade (bool)
+        let myCarsResult = await Self.callGRPC(base: base,
+            path: "/car_information.CarInformation/GetMyCars",
+            body: Data(), vin: vin, token: token, label: "GetMyCars")
+        if let frame = myCarsResult.frames.first {
+            print("  raw (\(frame.count) bytes): \(frame.map { String(format: "%02x", $0) }.joined().prefix(200))...")
+            // Recursively decode to find Car fields
+            Self.recursiveDecode(frame, depth: 1)
+        } else {
+            print("  ⚠️ no frame returned (grpc-status=\(myCarsResult.status ?? "nil"))")
+        }
+
+        // ── 3. GraphQL GetVDMSCars ──
+        print("\n── 3. GraphQL GetVDMSCars (app-backend) ──")
+        let gqlURL = URL(string: "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!
+        let query = "{\"query\":\"query GetVDMSCars { vdms { getVehiclesInformation { vin internalVehicleIdentifier registrationNo modelYear content { model { name } exterior { name } interior { name } wheels { name } } } } }\"}"
+        var gqlReq = URLRequest(url: gqlURL)
+        gqlReq.httpMethod = "POST"
+        gqlReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        gqlReq.setValue("Bearer \(token)", forHTTPHeaderField: "X-PolestarId-Authorization")
+        gqlReq.setValue("5.5.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        gqlReq.setValue("SE", forHTTPHeaderField: "X-Polestar-Locale")
+        gqlReq.setValue("PolestarApp/5.5.0b1102 Android/14", forHTTPHeaderField: "User-Agent")
+        gqlReq.httpBody = Data(query.utf8)
+        let (gqlData, gqlResp) = try await URLSession.shared.data(for: gqlReq)
+        let gqlHttp = gqlResp as! HTTPURLResponse
+        let gqlBody = String(data: gqlData, encoding: .utf8) ?? "<binary>"
+        print("  HTTP \(gqlHttp.statusCode)")
+        // Pretty-print if JSON
+        if let parsed = try? JSONSerialization.jsonObject(with: gqlData),
+           let pretty = try? JSONSerialization.data(withJSONObject: parsed, options: .prettyPrinted),
+           let prettyStr = String(data: pretty, encoding: .utf8) {
+            print("  \(prettyStr.prefix(1500))")
+        } else {
+            print("  \(gqlBody.prefix(500))")
+        }
+
+        print("========================================================\n")
+        try? await api.signOut()
     }
 }
 #endif

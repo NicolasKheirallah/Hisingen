@@ -13,6 +13,30 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     let averagePowerKw: Double
     let locationName: String?
     let createdAt: Date
+
+    func toDomainSession(database: VehicleDatabase = .shared) -> ChargingSession {
+        let dbSamples = database.chargingSamples(for: id)
+        let domainSamples = dbSamples.map {
+            ChargingSample(
+                timestamp: $0.timestamp,
+                batteryPercentage: $0.soc,
+                powerWatts: $0.powerKw.map { Int($0 * 1000.0) }
+            )
+        }
+        return ChargingSession(
+            id: UUID(uuidString: id) ?? UUID(),
+            vin: vin,
+            startDate: startedAt,
+            endDate: endedAt ?? Date(),
+            startBatteryPercentage: startSoc,
+            endBatteryPercentage: endSoc ?? startSoc,
+            kwhDelivered: energyDeliveredKwh,
+            peakPowerWatts: peakPowerKw > 0 ? Int(peakPowerKw * 1000.0) : nil,
+            cost: nil,
+            targetPercentage: nil,
+            samples: domainSamples
+        )
+    }
 }
 
 /// Represents a time-series charging sample point.
@@ -271,7 +295,59 @@ final class VehicleDatabase: @unchecked Sendable {
         } process: { _ in }
     }
 
-    func recentChargingSessions(for vin: String, limit: Int = 10) -> [HistoricalChargingSession] {
+    func activeChargingSession(for vin: String) -> HistoricalChargingSession? {
+        let sql = """
+        SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
+        FROM charging_sessions WHERE vin = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1;
+        """
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> HistoricalChargingSession? in
+            guard stmt.step(),
+                  let id = stmt.columnText(at: 0),
+                  let vin = stmt.columnText(at: 1),
+                  let startedAt = stmt.columnDate(at: 2),
+                  let startSoc = stmt.columnDouble(at: 4),
+                  let createdAt = stmt.columnDate(at: 10) else { return nil }
+            return HistoricalChargingSession(
+                id: id, vin: vin, startedAt: startedAt, endedAt: nil,
+                startSoc: startSoc, endSoc: stmt.columnDouble(at: 5),
+                energyDeliveredKwh: stmt.columnDouble(at: 6) ?? 0.0,
+                peakPowerKw: stmt.columnDouble(at: 7) ?? 0.0,
+                averagePowerKw: stmt.columnDouble(at: 8) ?? 0.0,
+                locationName: stmt.columnText(at: 9),
+                createdAt: createdAt
+            )
+        }) ?? nil
+    }
+
+    func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {
+        let sql = """
+        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps
+        FROM charging_samples WHERE session_id = ? ORDER BY timestamp ASC;
+        """
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(sessionId, at: 1)
+        } process: { stmt -> [HistoricalChargingSample] in
+            var list: [HistoricalChargingSample] = []
+            while stmt.step() {
+                guard let id = stmt.columnInt64(at: 0),
+                      let sess = stmt.columnText(at: 1),
+                      let vin = stmt.columnText(at: 2),
+                      let ts = stmt.columnDate(at: 3),
+                      let soc = stmt.columnDouble(at: 4) else { continue }
+                list.append(HistoricalChargingSample(
+                    id: id, sessionId: sess, vin: vin, timestamp: ts, soc: soc,
+                    powerKw: stmt.columnDouble(at: 5),
+                    voltageVolts: stmt.columnDouble(at: 6),
+                    currentAmps: stmt.columnDouble(at: 7)
+                ))
+            }
+            return list
+        }) ?? []
+    }
+
+    func recentChargingSessions(for vin: String, limit: Int = 20) -> [HistoricalChargingSession] {
         let sql = """
         SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
         FROM charging_sessions WHERE vin = ? ORDER BY started_at DESC LIMIT ?;
@@ -390,6 +466,138 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindText(error, at: 7)
             try stmt.executeUpdate()
         } process: { _ in }
+    }
+
+    // MARK: - Database Diagnostics & Maintenance
+
+    var databaseSizeBytes: Int64 {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Hisingen", isDirectory: true)
+        let main = appSupport.appendingPathComponent("hisingen.sqlite3")
+        let wal = appSupport.appendingPathComponent("hisingen.sqlite3-wal")
+        let shm = appSupport.appendingPathComponent("hisingen.sqlite3-shm")
+        let files = [main, wal, shm]
+        return files.reduce(0) { total, url in
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+            return total + size
+        }
+    }
+
+    func recordCounts() -> (snapshots: Int, chargingSessions: Int, chargingSamples: Int, batteryHealth: Int, telemetry: Int, commands: Int) {
+        func count(table: String) -> Int {
+            let sql = "SELECT COUNT(*) FROM \(table);"
+            let c = try? db.query(sql: sql) { _ in } process: { stmt -> Int in
+                stmt.step() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
+            }
+            return c ?? 0
+        }
+        return (
+            snapshots: count(table: "vehicle_snapshots"),
+            chargingSessions: count(table: "charging_sessions"),
+            chargingSamples: count(table: "charging_samples"),
+            batteryHealth: count(table: "battery_health_history"),
+            telemetry: count(table: "telemetry_logs"),
+            commands: count(table: "remote_commands_log")
+        )
+    }
+
+    func vacuum() {
+        try? db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE);")
+        try? db.execute(sql: "VACUUM;")
+    }
+
+    func pruneHistoricalSamples(olderThanDays: Int = 90) {
+        let cutoff = Date().addingTimeInterval(-Double(olderThanDays * 86400))
+        try? db.query(sql: "DELETE FROM charging_samples WHERE timestamp < ?;") { stmt in
+            try stmt.bindDate(cutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        try? db.query(sql: "DELETE FROM telemetry_logs WHERE timestamp < ?;") { stmt in
+            try stmt.bindDate(cutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        vacuum()
+    }
+
+    // MARK: - CSV Exporters
+
+    func exportChargingSessionsCSV(for vin: String? = nil) -> String {
+        let sessions: [HistoricalChargingSession]
+        if let vin {
+            sessions = recentChargingSessions(for: vin, limit: 1000)
+        } else {
+            let sql = """
+            SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
+            FROM charging_sessions ORDER BY started_at DESC LIMIT 1000;
+            """
+            sessions = (try? db.query(sql: sql) { _ in } process: { stmt -> [HistoricalChargingSession] in
+                var list: [HistoricalChargingSession] = []
+                while stmt.step() {
+                    guard let id = stmt.columnText(at: 0),
+                          let vin = stmt.columnText(at: 1),
+                          let startedAt = stmt.columnDate(at: 2),
+                          let startSoc = stmt.columnDouble(at: 4),
+                          let createdAt = stmt.columnDate(at: 10) else { continue }
+                    list.append(HistoricalChargingSession(
+                        id: id, vin: vin, startedAt: startedAt,
+                        endedAt: stmt.columnDate(at: 3),
+                        startSoc: startSoc,
+                        endSoc: stmt.columnDouble(at: 5),
+                        energyDeliveredKwh: stmt.columnDouble(at: 6) ?? 0.0,
+                        peakPowerKw: stmt.columnDouble(at: 7) ?? 0.0,
+                        averagePowerKw: stmt.columnDouble(at: 8) ?? 0.0,
+                        locationName: stmt.columnText(at: 9),
+                        createdAt: createdAt
+                    ))
+                }
+                return list
+            }) ?? []
+        }
+
+        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Energy Delivered (kWh),Peak Power (kW),Avg Power (kW),Location\n"
+        let df = ISO8601DateFormatter()
+        for s in sessions {
+            let start = df.string(from: s.startedAt)
+            let end = s.endedAt.map { df.string(from: $0) } ?? ""
+            let endSoc = s.endSoc.map { String(format: "%.1f", $0) } ?? ""
+            let loc = (s.locationName ?? "").replacingOccurrences(of: ",", with: " ")
+            csv += "\(s.id),\(s.vin),\(start),\(end),\(String(format: "%.1f", s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc)\n"
+        }
+        return csv
+    }
+
+    func exportBatteryHealthCSV(for vin: String? = nil) -> String {
+        let sql = vin != nil
+            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE vin = ? ORDER BY timestamp DESC;"
+            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history ORDER BY timestamp DESC;"
+
+        let records = (try? db.query(sql: sql) { stmt in
+            if let vin { try stmt.bindText(vin, at: 1) }
+        } process: { stmt -> [BatteryHealthRecord] in
+            var list: [BatteryHealthRecord] = []
+            while stmt.step() {
+                guard let id = stmt.columnInt64(at: 0),
+                      let vin = stmt.columnText(at: 1),
+                      let ts = stmt.columnDate(at: 2),
+                      let odo = stmt.columnDouble(at: 3),
+                      let soh = stmt.columnDouble(at: 4),
+                      let deg = stmt.columnDouble(at: 5),
+                      let usable = stmt.columnDouble(at: 6) else { continue }
+                list.append(BatteryHealthRecord(
+                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
+                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable
+                ))
+            }
+            return list
+        }) ?? []
+
+        var csv = "Record ID,VIN,Date,Odometer (km),State of Health (%),Degradation (%),Effective Usable (kWh)\n"
+        let df = ISO8601DateFormatter()
+        for r in records {
+            let date = df.string(from: r.timestamp)
+            csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh))\n"
+        }
+        return csv
     }
 
     // MARK: - Wipe / Purge

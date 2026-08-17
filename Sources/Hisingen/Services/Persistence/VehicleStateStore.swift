@@ -35,7 +35,7 @@ final class VehicleStateStore {
     func save(_ state: VehicleState) {
         database.saveSnapshot(state)
 
-        if let odo = state.odometerKm, let _ = state.batteryPercentage {
+        if let odo = state.odometerKm, let batteryPct = state.batteryPercentage {
             let soh = state.batteryStateOfHealthPercent ?? 98.0
             let deg = state.batteryDegradationPercent ?? (100.0 - soh)
             let usable = state.effectiveUsableBatteryCapacityKwh
@@ -52,6 +52,39 @@ final class VehicleStateStore {
                 latitude: state.location?.latitude,
                 longitude: state.location?.longitude
             )
+
+            let powerKw = state.chargingPowerWatts.map { Double($0) / 1000.0 }
+            let voltage = state.chargingVoltageVolts.map(Double.init)
+            let current = state.chargingCurrentAmps.map(Double.init)
+
+            if state.chargingState.isActivelyCharging {
+                let session = database.activeChargingSession(for: state.vin)
+                let sessionId: String
+                if let session {
+                    sessionId = session.id
+                } else {
+                    let locName: String? = {
+                        guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else { return nil }
+                        return String(format: "%.4f°, %.4f°", lat, lon)
+                    }()
+                    sessionId = database.startChargingSession(vin: state.vin, startSoc: batteryPct, location: locName)
+                }
+                database.recordChargingSample(
+                    sessionId: sessionId, vin: state.vin, soc: batteryPct,
+                    powerKw: powerKw, voltage: voltage, current: current
+                )
+            } else if let active = database.activeChargingSession(for: state.vin) {
+                let samples = database.chargingSamples(for: active.id)
+                let peak = samples.compactMap(\.powerKw).max() ?? (powerKw ?? 0.0)
+                let avg = samples.isEmpty ? peak : (samples.compactMap(\.powerKw).reduce(0, +) / Double(samples.count))
+                let socDelta = max(0, batteryPct - active.startSoc)
+                let capacity = state.effectiveUsableBatteryCapacityKwh
+                let energy = (socDelta / 100.0) * capacity
+                database.completeChargingSession(
+                    id: active.id, endSoc: batteryPct, energyDeliveredKwh: energy,
+                    peakPowerKw: peak, averagePowerKw: avg
+                )
+            }
         }
 
         var values = load([String: VehicleState].self, key: snapshotsKey) ?? [:]

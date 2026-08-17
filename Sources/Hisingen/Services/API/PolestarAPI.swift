@@ -318,6 +318,8 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
 
+        await grpc.setUseStreaming(features.contains(.realTimeUpdates))
+
         let query = Self.telematicsQuery(features: features)
         let response: GraphQLResponse<TelematicsPayloadDTO>? = try? await graphQL(
             query: query,
@@ -404,6 +406,15 @@ actor PolestarAPI {
             .chargingDetails, key: "amp-limit",
             enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
+        async let errorsTask: OptionalCapability<[VehicleChronosError]> = optionalCapability(
+            .vehicleErrors, enabled: features.contains(.vehicleErrors), vin: vin
+        ) { try await self.grpc.fetchErrors(vin: vin, accessToken: serviceToken) }
+        // GetMyCars runs whenever softwareUpdates or remoteOTA is enabled — it provides the
+        // authoritative installed version and OTA capability flags.
+        async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
+            .softwareUpdates, key: "my-cars",
+            enabled: features.contains(.softwareUpdates) || features.contains(.remoteOTA), vin: vin
+        ) { try await self.grpc.fetchMyCars(vin: vin, accessToken: serviceToken) }
 
         let extras = try await batteryExtrasTask
         let vehicleAvailability = try await availabilityTask
@@ -420,6 +431,7 @@ actor PolestarAPI {
         let weather = try await weatherTask
         let location = try await locationTask
         let ampLimit = try await ampLimitTask
+        let serviceErrors = try await errorsTask
 
         let primaryReportedAt = battery?.timestamp?.date
         let extrasAreNewer = extras?.reportedAt.map { reported in
@@ -476,6 +488,7 @@ actor PolestarAPI {
             if features.contains(.remotePreCleaning) { optionalResults.append((.remotePreCleaning, air.unavailable)) }
         }
         if features.contains(.vehicleWeather) { optionalResults.append((.vehicleWeather, weather.unavailable)) }
+        if features.contains(.vehicleErrors) { optionalResults.append((.vehicleErrors, serviceErrors.unavailable)) }
         var seenUnavailable = Set<AppFeature>()
         let unavailable = optionalResults.compactMap { feature, failed in
             failed && seenUnavailable.insert(feature).inserted ? feature : nil
@@ -546,6 +559,7 @@ actor PolestarAPI {
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
         )
+        state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
         state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
         state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
         state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil

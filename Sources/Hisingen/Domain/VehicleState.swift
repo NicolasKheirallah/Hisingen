@@ -247,6 +247,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     var rearBrakePadStatus: String? = nil
     var preferredWorkshopId: String? = nil
     var preferredWorkshopName: String? = nil
+    var vehicleErrors: [VehicleChronosError] = []
+    var otaCapabilities: VehicleOTACapabilities? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///

@@ -17,18 +17,24 @@ private let liveVolvoCredentialsConfigured: Bool = {
 // scripted Volvo ID form post). PingFederate counts every rejection towards a per-client
 // lockout — running them unattended on every `swift test` locked the production client
 // out of the token endpoint. They stay opt-in, and never carry a credential fallback.
+private let volvoProbeRequiredVariables = [
+    "HISINGEN_ENABLE_VOLVO_PROBES",
+    "VOLVO_CLIENT_ID",
+    "VOLVO_CLIENT_SECRET",
+    "VOLVO_VCC_API_KEY",
+    "VOLVO_VIN",
+    "POLESTAR_LOGIN",
+    "POLESTAR_PASS"
+]
+
 private let volvoProbesEnabled: Bool = {
     let environment = ProcessInfo.processInfo.environment
-    return environment["HISINGEN_ENABLE_VOLVO_PROBES"]?.isEmpty == false
-        && environment["VOLVO_CLIENT_ID"]?.isEmpty == false
-        && environment["VOLVO_CLIENT_SECRET"]?.isEmpty == false
-        && environment["VOLVO_VCC_API_KEY"]?.isEmpty == false
+    return volvoProbeRequiredVariables.allSatisfy { environment[$0]?.isEmpty == false }
 }()
 
 private let volvoProbeDisabledReason: Comment = """
-Volvo probe tests are opt-in: set HISINGEN_ENABLE_VOLVO_PROBES plus VOLVO_CLIENT_ID, \
-VOLVO_CLIENT_SECRET and VOLVO_VCC_API_KEY. They burn failed-login attempts against \
-the shared OAuth client and can lock it out.
+Volvo probe tests are opt-in: set \(volvoProbeRequiredVariables.joined(separator: ", ")). \
+They burn failed-login attempts against the shared OAuth client and can lock it out.
 """
 
 @MainActor
@@ -86,11 +92,11 @@ struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testProbeVolvoOAuthAuthorizeURL() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = environment["VOLVO_CLIENT_ID"] ?? "dc-3spjins2tdf9cbxsq16xjha14"
-        let clientSecret = environment["VOLVO_CLIENT_SECRET"] ?? "yPdq8K9SwgsZUB9AKMQ81"
-        let vccApiKey = environment["VOLVO_VCC_API_KEY"] ?? "dfda4ef83c304b2c8503897e72dc2966"
-        let email = environment["POLESTAR_LOGIN"] ?? "nicolas.kheirallah@gmail.com"
-        let password = environment["POLESTAR_PASS"] ?? "satdoj-4kowho-zuFbuf"
+        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
+        let email = try XCTUnwrap(environment["POLESTAR_LOGIN"])
+        let password = try XCTUnwrap(environment["POLESTAR_PASS"])
 
         let api = VolvoAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
         await api.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
@@ -156,12 +162,12 @@ struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testComprehensiveVolvoAllAPIsProbeAndDump() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = environment["VOLVO_CLIENT_ID"] ?? environment["HISINGEN_TEST_VOLVO_CLIENT_ID"] ?? "dc-3spjins2tdf9cbxsq16xjha14"
-        let clientSecret = environment["VOLVO_CLIENT_SECRET"] ?? environment["HISINGEN_TEST_VOLVO_CLIENT_SECRET"] ?? "yPdq8K9SwgsZUB9AKMQ81"
-        let vccApiKey = environment["VOLVO_VCC_API_KEY"] ?? environment["HISINGEN_TEST_VOLVO_VCC_API_KEY"] ?? "dfda4ef83c304b2c8503897e72dc2966"
-        let vin = environment["VOLVO_VIN"] ?? environment["HISINGEN_TEST_VOLVO_VIN"] ?? "YV1XZEHR2R2371256"
-        let login = environment["POLESTAR_LOGIN"] ?? environment["HISINGEN_TEST_EMAIL"] ?? "nicolas.kheirallah@gmail.com"
-        let pass = environment["POLESTAR_PASS"] ?? environment["HISINGEN_TEST_PASSWORD"] ?? "satdoj-4kowho-zuFbuf"
+        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
+        let vin = try XCTUnwrap(environment["VOLVO_VIN"])
+        let login = try XCTUnwrap(environment["POLESTAR_LOGIN"])
+        let pass = try XCTUnwrap(environment["POLESTAR_PASS"])
 
         print("\n========================================================")
         print("🔍 [1. VOLVO OIDC DISCOVERY & IDENTITY]")
