@@ -376,8 +376,42 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Battery Health History
 
+    /// What makes a battery-health row a *milestone* rather than a duplicate.
+    ///
+    /// `VehicleStateStore.save(_:)` runs on every refresh — minutes apart — but state of
+    /// health moves over months. Recording unconditionally produced ~15 rows/hour that
+    /// shared 3 distinct SoH values, and nothing prunes this table, so it grew without
+    /// bound. A row is now written only when it carries new information.
+    enum BatteryHealthMilestone {
+        /// Heartbeat, so a stationary vehicle still leaves a periodic trend point.
+        static let minimumInterval: TimeInterval = 7 * 24 * 60 * 60
+        /// Real SoH movement. Below this is measurement noise, not degradation.
+        static let sohDeltaPct: Double = 0.5
+        /// Degradation tracks mileage, so meaningful distance also earns a row.
+        static let odometerDeltaKm: Double = 500
+    }
+
+    /// Whether these readings differ enough from the last stored row to be worth keeping.
+    /// `nil` previous row means this VIN has no history yet, which always qualifies.
+    func isBatteryHealthMilestone(sohPct: Double, odometerKm: Double,
+                                  since previous: BatteryHealthRecord?,
+                                  now: Date = Date()) -> Bool {
+        guard let previous else { return true }
+        if now.timeIntervalSince(previous.timestamp) >= BatteryHealthMilestone.minimumInterval { return true }
+        if abs(sohPct - previous.stateOfHealthPct) >= BatteryHealthMilestone.sohDeltaPct { return true }
+        if odometerKm - previous.odometerKm >= BatteryHealthMilestone.odometerDeltaKm { return true }
+        return false
+    }
+
+    /// Records a battery-health milestone, skipping rows that duplicate the last one.
+    /// Returns whether a row was actually written.
+    @discardableResult
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
-                                      sohPct: Double, degPct: Double, usableKwh: Double) {
+                                      sohPct: Double, degPct: Double, usableKwh: Double) -> Bool {
+        let previous = batteryHealthHistory(for: vin, limit: 1).first
+        guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
+            return false
+        }
         let sql = """
         INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh)
         VALUES (?, ?, ?, ?, ?, ?);
@@ -391,6 +425,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(usableKwh, at: 6)
             try stmt.executeUpdate()
         } process: { _ in }
+        return true
     }
 
     func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
@@ -422,9 +457,40 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Telemetry Logging
 
+    /// Heartbeat for a vehicle that hasn't moved. Drive telemetry is only interesting when
+    /// the odometer or a trip meter changes; a parked car re-reported the same figures every
+    /// refresh, which is what filled this table.
+    static let telemetryHeartbeat: TimeInterval = 24 * 60 * 60
+
+    /// The odometer/trip readings of the most recent row, used to detect movement.
+    private func lastTelemetryReadings(
+        for vin: String
+    ) -> (timestamp: Date, odometerKm: Double?, tripManualKm: Double?, tripAutoKm: Double?)? {
+        let sql = """
+        SELECT timestamp, odometer_km, trip_manual_km, trip_auto_km
+        FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
+        """
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> (Date, Double?, Double?, Double?)? in
+            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2), stmt.columnDouble(at: 3))
+        } ?? nil
+    }
+
+    /// Records drive telemetry, skipping refreshes where the vehicle hasn't moved.
+    /// Returns whether a row was actually written.
+    @discardableResult
     func recordTelemetry(vin: String, odometerKm: Double?, tripManualKm: Double?,
                          tripAutoKm: Double?, avgConsumption: Double?, ambientTempC: Double?,
-                         latitude: Double?, longitude: Double?) {
+                         latitude: Double?, longitude: Double?) -> Bool {
+        if let last = lastTelemetryReadings(for: vin),
+           Date().timeIntervalSince(last.timestamp) < Self.telemetryHeartbeat,
+           last.odometerKm == odometerKm,
+           last.tripManualKm == tripManualKm,
+           last.tripAutoKm == tripAutoKm {
+            return false
+        }
         let sql = """
         INSERT INTO telemetry_logs (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -441,6 +507,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(longitude, at: 9)
             try stmt.executeUpdate()
         } process: { _ in }
+        return true
     }
 
     // MARK: - Remote Commands Audit
