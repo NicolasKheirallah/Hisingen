@@ -1237,3 +1237,12 @@
 "⚠︎ Service warning" = "⚠︎ Servicewarnung";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Fahrzeugalarm ausgelöst";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Fahrzeugdaten könnten veraltet sein";
+
+/* Added: Appearance Mode & Liquid Glass */
+
+/* Hinzugefügt: Neue Telemetrie, Studioperspektiven & Steuerungen */
+
+
+/* Vehicle software & OTA */
+
+/* OTA install preconditions & gRPC command failures */

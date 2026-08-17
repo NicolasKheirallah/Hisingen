@@ -1237,3 +1237,19 @@
 "⚠︎ Service warning" = "⚠︎ Servicevarning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Fordonslarm utlöst";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Fordonsdata kan vara inaktuella";
+
+/* Added: Appearance Mode & Liquid Glass */
+
+/* Tillagt: Ny telemetri, studiovinklar & reglage */
+
+
+/* Vehicle software & OTA */
+
+/* Remote Engine Start (RES) & Warranty */
+
+
+
+
+
+
+/* OTA install preconditions & gRPC command failures */
