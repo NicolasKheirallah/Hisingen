@@ -1,7 +1,3 @@
-"" = "";
-"%.0f °C" = "%.0f °C";
-"%.1f kWh High-Voltage Pack" = "%.1f kWh High-Voltage Pack";
-"%.1f kWh Lithium-ion Pack" = "%.1f kWh Lithium-ion Pack";
 "%.1f s request" = "%.1f s request";
 "%@ Capabilities" = "%@ Capabilities";
 "%@ Open" = "%@ Open";
@@ -1121,6 +1117,10 @@
 "Vehicle Dynamic Estimate. Real-time driving range estimated by the onboard computer based on recent driving speed, elevation profile, and climate consumption." = "Vehicle Dynamic Estimate. Real-time driving range estimated by the onboard computer based on recent driving speed, elevation profile, and climate consumption.";
 "Vehicle Heading" = "Vehicle Heading";
 "Vehicle Health & Lighting" = "Vehicle Health & Lighting";
+"" = "";
+"%.0f °C" = "%.0f °C";
+"%.1f kWh High-Voltage Pack" = "%.1f kWh High-Voltage Pack";
+"%.1f kWh Lithium-ion Pack" = "%.1f kWh Lithium-ion Pack";
 "Vehicle ID" = "Vehicle ID";
 "Vehicle Identity" = "Vehicle Identity";
 "Vehicle Image" = "Vehicle Image";
@@ -1237,3 +1237,18 @@
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Vehicle alarm triggered";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
+
+/* Added: Appearance Mode & Liquid Glass */
+
+/* Added: New Telemetry, Studio Angles & Controls */
+
+
+/* Vehicle software & OTA */
+
+/* Remote Engine Start (RES) & Warranty */
+
+
+
+
+
+/* OTA install preconditions & gRPC command failures */
