@@ -48,7 +48,7 @@ let package = Package(
         .executableTarget(
             name: "Hisingen",
             path: "Sources/Hisingen",
-            resources: [.process("Resources")]
+            exclude: ["Resources"]
         ),
         .testTarget(
             name: "HisingenTests",

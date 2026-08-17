@@ -3,6 +3,34 @@ import Foundation
 struct CarSummary: Codable, Equatable, Sendable {
     let vin: String
     let title: String
+    var modelName: String?
+    var modelYear: String?
+    var registrationNo: String?
+
+    init(
+        vin: String,
+        title: String,
+        modelName: String? = nil,
+        modelYear: String? = nil,
+        registrationNo: String? = nil
+    ) {
+        self.vin = vin
+        self.title = title
+        self.modelName = modelName
+        self.modelYear = modelYear
+        self.registrationNo = registrationNo
+    }
+
+    @MainActor
+    func displayTitle(format: VehicleLabelFormat? = nil) -> String {
+        Preferences.formattedVehicleTitle(
+            vin: vin,
+            modelName: modelName ?? (title.contains(" · ") ? title.components(separatedBy: " · ").first : title),
+            modelYear: modelYear ?? (title.contains(" · ") ? title.components(separatedBy: " · ").last : nil),
+            registrationNo: registrationNo,
+            format: format
+        )
+    }
 }
 
 enum ChargingState: Codable, Equatable, Sendable {
@@ -119,9 +147,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     let rangeKm: Int?
     let chargingState: ChargingState
     let estimatedChargingTimeToFullMinutes: Int?
-    let chargeTargetPercentage: Int?
+    var chargeTargetPercentage: Int?
     let chargingPowerWatts: Int?
-    let chargingCurrentAmps: Int?
+    var chargingCurrentAmps: Int?
     let chargingVoltageVolts: Int?
     let chargingType: ChargingType
     let chargerConnection: ChargerConnection
@@ -211,6 +239,16 @@ struct VehicleState: Codable, Equatable, Sendable {
     var chargingCurrentLimitAmps: Int? = nil
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
+    var optimisticCommandLockUntil: Date? = nil
+    var electricDistanceKm: Double? = nil
+    var fuelDistanceKm: Double? = nil
+    var regeneratedEnergyKwh: Double? = nil
+    var frontBrakePadStatus: String? = nil
+    var rearBrakePadStatus: String? = nil
+    var preferredWorkshopId: String? = nil
+    var preferredWorkshopName: String? = nil
+    var vehicleErrors: [VehicleChronosError] = []
+    var otaCapabilities: VehicleOTACapabilities? = nil
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -219,7 +257,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     /// instead of silently disappearing.
     var isCachedSnapshot: Bool = false
     let imageData: Data?
-    let fetchedAt: Date
+    var fetchedAt: Date
     let vehicleReportedAt: Date?
     let dataWarnings: [String]
 
@@ -313,6 +351,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
+        case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
+        case preferredWorkshopId, preferredWorkshopName
     }
 
     init(from decoder: Decoder) throws {
@@ -386,6 +426,13 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
         self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
         self.warrantyInfo = try values.decodeIfPresent(VehicleWarrantyInfo.self, forKey: .warrantyInfo)
+        self.electricDistanceKm = try values.decodeIfPresent(Double.self, forKey: .electricDistanceKm)
+        self.fuelDistanceKm = try values.decodeIfPresent(Double.self, forKey: .fuelDistanceKm)
+        self.regeneratedEnergyKwh = try values.decodeIfPresent(Double.self, forKey: .regeneratedEnergyKwh)
+        self.frontBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .frontBrakePadStatus)
+        self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
+        self.preferredWorkshopId = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopId)
+        self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
     }
 
     var formattedBuildWeek: String? {
@@ -483,6 +530,150 @@ struct VehicleState: Codable, Equatable, Sendable {
         )
     }
 
+    var factoryNominalBatteryCapacityKwh: Double {
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            if explicit >= 77.0 { return 82.0 }
+            if explicit >= 72.0 { return 78.0 }
+            if explicit >= 60.0 { return 69.0 }
+            if explicit >= 14.0 { return 18.8 }
+            if explicit >= 8.0 { return 11.6 }
+            return explicit
+        }
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+            return 82.0
+        }
+        if powertrain == .phev {
+            return yearInt >= 2022 ? 18.8 : 11.6
+        }
+        return model.nominalBatteryCapacityKwh > 0 ? model.nominalBatteryCapacityKwh : 78.0
+    }
+
+    var factoryUsableBatteryCapacityKwh: Double {
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            if explicit >= 77.0 { return 79.0 }
+            if explicit >= 72.0 { return 75.0 }
+            if explicit >= 60.0 { return 64.0 }
+            if explicit >= 14.0 { return 14.9 }
+            if explicit >= 8.0 { return 9.1 }
+        }
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+            return 79.0
+        }
+        if powertrain == .phev {
+            return yearInt >= 2022 ? 14.9 : 9.1
+        }
+        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
+    }
+
+    var effectiveNominalBatteryCapacityKwh: Double {
+        factoryNominalBatteryCapacityKwh
+    }
+
+    var batteryDegradationPercent: Double? {
+        guard powertrain.hasElectricRange else { return nil }
+        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
+            let factoryUsable = factoryUsableBatteryCapacityKwh
+            let measuredDeg = max(0.0, ((factoryUsable - explicit) / factoryUsable) * 100.0)
+            return ((measuredDeg * 10).rounded()) / 10.0
+        }
+
+        // Empirical degradation calculation based on vehicle calendar age and odometer cycle throughput
+        var calendarDegradation = 0.0
+        let yearInt = Int(modelYear ?? "") ?? 2023
+        var vehicleAgeYears = max(0.5, Double(Calendar.current.component(.year, from: Date()) - yearInt))
+        if let sw = structureWeek, sw.count >= 6, let swYear = Double(sw.prefix(4)), let swWeek = Double(sw.suffix(2)) {
+            let approximateBuildDate = swYear + (swWeek / 52.0)
+            let currentYearFraction = Double(Calendar.current.component(.year, from: Date())) + (Double(Calendar.current.component(.month, from: Date())) / 12.0)
+            vehicleAgeYears = max(0.2, currentYearFraction - approximateBuildDate)
+        }
+        // Lithium-ion NMC calendar aging curve (~1.35% * sqrt(years))
+        calendarDegradation = min(8.0, 1.35 * sqrt(vehicleAgeYears))
+
+        var cycleDegradation = 0.0
+        if let odo = odometerKm, odo > 0 {
+            // High-voltage pack cycle aging (~4.2% per 100,000 km for Polestar 2 / Volvo CMA & SPA platform)
+            cycleDegradation = min(12.0, (Double(odo) / 100_000.0) * 4.2)
+        }
+
+        let totalDeg = calendarDegradation + cycleDegradation
+        return max(0.2, ((totalDeg * 10).rounded()) / 10.0)
+    }
+
+    var batteryStateOfHealthPercent: Double? {
+        guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else { return nil }
+        let soh = max(50.0, min(100.0, 100.0 - deg))
+        return ((soh * 10).rounded()) / 10.0
+    }
+
+    var effectiveUsableBatteryCapacityKwh: Double {
+        if let reported = reportedBatteryCapacityKwh, reported > 0 {
+            return reported
+        }
+        let factoryUsable = factoryUsableBatteryCapacityKwh
+        guard let soh = batteryStateOfHealthPercent else { return factoryUsable }
+        let currentUsable = factoryUsable * (soh / 100.0)
+        return ((currentUsable * 10).rounded()) / 10.0
+    }
+
+    var batteryPackDescription: String {
+        let nominal = factoryNominalBatteryCapacityKwh
+        switch model {
+        case .polestar2:
+            if nominal >= 80.0 {
+                return L10n.text("82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)")
+            } else if nominal >= 75.0 {
+                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)")
+            } else {
+                return L10n.text("69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)")
+            }
+        case .polestar3:
+            return L10n.text("111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)")
+        case .polestar4:
+            return L10n.text("100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)")
+        case .polestar1:
+            return L10n.text("34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)")
+        case .volvoEX30:
+            if nominal >= 65.0 {
+                return L10n.text("69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)")
+            } else {
+                return L10n.text("51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)")
+            }
+        case .volvoEX90, .volvoES90:
+            return L10n.text("111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)")
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
+            if nominal >= 80.0 {
+                return L10n.text("82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)")
+            } else if nominal >= 75.0 {
+                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)")
+            } else {
+                return L10n.text("69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)")
+            }
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
+            if powertrain == .phev {
+                if nominal >= 16.0 {
+                    return L10n.text("18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)")
+                } else {
+                    return L10n.text("11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)")
+                }
+            }
+            return L10n.format("%.1f kWh High-Voltage Pack", nominal)
+        default:
+            if nominal > 0 {
+                return L10n.format("%.1f kWh Lithium-ion Pack", nominal)
+            }
+            return L10n.text("High-Voltage Traction Battery")
+        }
+    }
+
+    var batteryHealthStatus: String {
+        guard let soh = batteryStateOfHealthPercent else { return L10n.text("Normal") }
+        if soh >= 95.0 { return L10n.text("Optimal") }
+        if soh >= 85.0 { return L10n.text("Good") }
+        if soh >= 75.0 { return L10n.text("Normal") }
+        return L10n.text("Service Advised")
+    }
 
     var stateSummary: VehicleStateSummary {
         if exteriorStatus?.alarmTriggered == true {
@@ -634,9 +825,9 @@ struct VehicleState: Codable, Equatable, Sendable {
             availability: availability,
             modelName: modelName,
             modelYear: modelYear,
-            registrationNo: nil,
+            registrationNo: registrationNo,
             vin: vin,
-            ownerFirstName: nil,
+            ownerFirstName: ownerFirstName,
             odometerKm: odometerKm,
             daysToService: daysToService,
             distanceToServiceKm: distanceToServiceKm,
@@ -654,7 +845,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             airQuality: airQuality,
             batteryDiagnostics: batteryDiagnostics,
             weather: weather,
-            location: nil,
+            location: location,
             unavailableFeatures: [],
             probedCapabilities: probedCapabilities,
             chargingSamples: chargingSamples,
@@ -722,15 +913,51 @@ struct VehicleState: Codable, Equatable, Sendable {
             }
             return current
         }()
+
+        let isCommandLocked = (previous.optimisticCommandLockUntil ?? .distantPast) > Date()
+        let mergedClimate: VehicleClimateStatus? = {
+            guard let prevClimate = previous.climateStatus else {
+                return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
+            }
+            if isCommandLocked {
+                if prevClimate.activity == .heating || prevClimate.activity == .cooling || prevClimate.activity == .ventilating || prevClimate.activity == .active {
+                    if let incoming = climateStatus, incoming.activity == .heating || incoming.activity == .cooling || incoming.activity == .ventilating || incoming.activity == .active {
+                        return incoming
+                    }
+                    return prevClimate
+                } else if prevClimate.activity == .idle {
+                    if let incoming = climateStatus, incoming.activity == .idle {
+                        return incoming
+                    }
+                    return prevClimate
+                }
+            }
+            return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
+        }()
+
+        let mergedChargeTarget: Int? = {
+            if isCommandLocked, let prevTarget = previous.chargeTargetPercentage {
+                return prevTarget
+            }
+            return chargeTargetPercentage ?? previous.chargeTargetPercentage
+        }()
+
+        let mergedCurrentAmps: Int? = {
+            if isCommandLocked, let prevAmps = previous.chargingCurrentAmps {
+                return prevAmps
+            }
+            return chargingCurrentAmps ?? previous.chargingCurrentAmps
+        }()
+
         var merged = VehicleState(
             batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
             rangeKm: rangeKm ?? previous.rangeKm,
             chargingState: previousChargingState ?? chargingState,
             estimatedChargingTimeToFullMinutes: estimatedChargingTimeToFullMinutes
                 ?? previous.estimatedChargingTimeToFullMinutes,
-            chargeTargetPercentage: chargeTargetPercentage ?? previous.chargeTargetPercentage,
+            chargeTargetPercentage: mergedChargeTarget,
             chargingPowerWatts: chargingPowerWatts ?? previous.chargingPowerWatts,
-            chargingCurrentAmps: chargingCurrentAmps ?? previous.chargingCurrentAmps,
+            chargingCurrentAmps: mergedCurrentAmps,
             chargingVoltageVolts: chargingVoltageVolts ?? previous.chargingVoltageVolts,
             chargingType: chargingType == .unknown ? previous.chargingType : chargingType,
             chargerConnection: chargerConnection == .unknown ? previous.chargerConnection : chargerConnection,
@@ -753,7 +980,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             softwareInfo: mergedSoftware,
             chargingSchedules: !chargingSchedules.isEmpty ? chargingSchedules
                 : (features.contains(.chargingSchedule) ? previous.chargingSchedules : []),
-            climateStatus: climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil),
+            climateStatus: mergedClimate,
             climateTimers: !climateTimers.isEmpty ? climateTimers
                 : (features.contains(.climateStatus) ? previous.climateTimers : []),
             tripMeterManualKm: tripMeterManualKm ?? (features.contains(.tripMeters) ? previous.tripMeterManualKm : nil),
@@ -798,6 +1025,14 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
+        merged.optimisticCommandLockUntil = isCommandLocked ? previous.optimisticCommandLockUntil : nil
+        merged.electricDistanceKm = electricDistanceKm ?? previous.electricDistanceKm
+        merged.fuelDistanceKm = fuelDistanceKm ?? previous.fuelDistanceKm
+        merged.regeneratedEnergyKwh = regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh
+        merged.frontBrakePadStatus = frontBrakePadStatus ?? previous.frontBrakePadStatus
+        merged.rearBrakePadStatus = rearBrakePadStatus ?? previous.rearBrakePadStatus
+        merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId
+        merged.preferredWorkshopName = preferredWorkshopName ?? previous.preferredWorkshopName
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

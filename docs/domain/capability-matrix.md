@@ -16,14 +16,14 @@ The static per-model fallback table from `VehicleCapabilityProfile.support(for:)
 | Charging schedule / override | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Locks / trunk / windows / honk-flash | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Exterior status (doors/windows/lock) | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
-| Direct tyre-pressure values | Best effort | **Unsupported** | Expected (supported) | Expected (supported) | Best effort |
-| Service / vehicle warnings | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
-| Trip meters | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
-| Connectivity diagnostics | Best effort | Expected (supported) | Best effort | **Unsupported** | Best effort |
-| Software status | Best effort | Expected (supported) | Expected (supported) | Best effort | Best effort |
-| Software install control | Best effort | Best effort | Best effort | **Unsupported** | Best effort |
-| Software install/cancel (OTA writes) | Best effort | **Reachable** | Best effort | **Unsupported** | Best effort |
-| Other remote commands | Disabled in UI | Disabled in UI | Disabled in UI | Disabled in UI | Disabled in UI |
+| Direct tyre-pressure values | Best effort | **Verified** (kPa decoded) | Expected (supported) | Expected (supported) | Best effort |
+| Service / vehicle warnings | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
+| Trip meters | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
+| Connectivity diagnostics | Best effort | **Verified** (live decoded) | Best effort | **Unsupported** | Best effort |
+| Software status | Best effort | **Verified** (live decoded) | Expected (supported) | Best effort | Best effort |
+| Software install control | Best effort | **Verified** (state-gated) | Best effort | **Unsupported** | Best effort |
+| Software install/cancel (OTA writes) | Best effort | **Verified** (state-gated) | Best effort | **Unsupported** | Best effort |
+| Remote commands (climate/locks/windows/honk/charging/timers) | Best effort | **Verified** (all live verified) | Best effort | Best effort | Best effort |
 
 Per Hisingen's own README: Polestar 1 needs "broad live verification"; Polestar 2 is "model-aware... direct tyre pressure and selectable climate temperature are not assumed"; Polestar 3 has "runtime confirmation for backend-dependent capabilities"; Polestar 4 has "Digital Twin support; current limit, pre-cleaning, legacy connectivity, and remote OTA are not assumed"; Polestar 5/6 are "conservative backend-dependent" with only positive runtime observations trusted. Future/unrecognized Polestar models preserve their name and remain fully probeable rather than being rejected.
 

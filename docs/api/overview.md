@@ -36,9 +36,14 @@ Hisingen's own README puts it plainly: *"Polestar does not publish a supported t
 | Polestar GraphQL query/field names (`CarTelematicsV2`, `GetVDMSCars`, etc.) | **Strongly inferred** | Not documented by Polestar; reconstructed from observed client traffic; the `apollo-kotlin` client-library headers on `GetVDMSCars` are a deliberate mimicry of the official Android app |
 | Polestar gRPC service paths, protobuf field numbers | **Experimental** | Entirely reverse-engineered — no `.proto` schema exists in the repo; every field's meaning is inferred from observed values in code comments (e.g. `case 26:` = power state) |
 | Polestar capability/model behavior (per-model support table) | **Community documented** | Built from observed behavior across models, explicitly conservative where unverified (see [domain/capability-matrix.md](../domain/capability-matrix.md)) |
-| Polestar OTA dispatch (`ota_mobcache.SchedulerService`) | **Strongly inferred** | Request/response shapes cross-checked against an independent reverse-engineered client; requires the mobile-app OIDC client's `customer:attributes:write` scope. Compiled into all builds since [ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md) |
-| Polestar non-OTA remote commands (PCCS) | **Experimental / unverified** | Dispatch compiles, but the UI keeps these controls disabled and the PCCS package prefixes are unconfirmed — see [architecture/technical-debt.md](../architecture/technical-debt.md) |
+| Polestar OTA dispatch (`ota_mobcache.SchedulerService`) | **Verified live** | Request/response shapes, the full `SoftwareState` enum, and the `relative_time` unit (minutes, 2…10080) all confirmed against a real vehicle — see the internal-only `polestar-backend-map.md`, section "OTA & software" |
+| Polestar remote commands (`invocation.InvocationService`) | **Verified live** | Accepted on **C3** with the allowlisted `lp8dyrd_10` client (`Lock` → `outcome = completed`). PCCS refuses every write with `Access denied`, and the web client is not on the allowlist — see "OAuth clients — the two-client rule" in the internal-only `polestar-backend-map.md` |
+| Polestar PCCS chronos service paths | **Verified live** | All seven require a `pccs.` package prefix; the unprefixed spelling is `UNIMPLEMENTED`. Reads and a `SetTargetSoc` write both confirmed working — `SetTargetSoc(90) → completed` |
 | Volvo remote-command response contract | **Strongly inferred** | Parsed as an untyped JSON dictionary rather than a typed DTO — see [architecture/technical-debt.md](../architecture/technical-debt.md) |
+
+For the measured, per-service detail behind these ratings — including which OAuth client each
+endpoint accepts and how each conclusion was established — see
+`docs/api/polestar-backend-map.md` (internal-only, not published in this repository).
 
 None of the above is presented as an official guarantee anywhere in the app or in this documentation. Where the code makes a reverse-engineered assumption, that assumption is named as such in [polestar.md](polestar.md) and [volvo.md](volvo.md) rather than written up as settled fact.
 

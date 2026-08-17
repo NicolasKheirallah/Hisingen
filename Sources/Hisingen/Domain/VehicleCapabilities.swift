@@ -477,7 +477,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .tyrePressureValues:
+            case .tyrePressureValues, .honkAndFlash:
                 return .unavailable
             case .softwareInstallControl:
                 return .backendDependent
@@ -558,23 +558,6 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
 
     var hasEngineStart: Bool {
         support(for: .engineStart) == .supported
-    }
-
-    func supportsAnyCommand(in feature: AppFeature) -> Bool {
-        let capabilities: [VehicleCapability]
-        switch feature {
-        case .remoteClimate: capabilities = [.climateStartStop, .engineStart]
-        case .remotePreCleaning: capabilities = [.preCleaning]
-        case .remoteCharging:
-            capabilities = [.chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride]
-        case .remoteSchedules: capabilities = [.chargingSchedule, .climateTimers]
-        case .remoteLocks: capabilities = [.locks, .trunk]
-        case .remoteWindows: capabilities = [.windows]
-        case .remoteHonkFlash: capabilities = [.honkAndFlash]
-        case .remoteOTA: capabilities = [.softwareInstallControl]
-        default: return true
-        }
-        return capabilities.contains(where: permits)
     }
 
     func featureStatus(for capability: VehicleCapability, in state: VehicleState) -> VehicleFeatureStatus {

@@ -57,7 +57,10 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
         try save(password, account: Self.passwordAccount)
     }
-    func readPassword() throws -> String? { try read(account: Self.passwordAccount) }
+    func readPassword() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_password") || isTestService else { return nil }
+        return try read(account: Self.passwordAccount)
+    }
     func deletePassword() throws {
         UserDefaults.standard.set(false, forKey: "has_polestar_password")
         try delete(account: Self.passwordAccount)
@@ -67,7 +70,10 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
         try save(token, account: Self.sessionAccount)
     }
-    func readSessionToken() throws -> String? { try read(account: Self.sessionAccount) }
+    func readSessionToken() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_session") || isTestService else { return nil }
+        return try read(account: Self.sessionAccount)
+    }
     func deleteSessionToken() throws {
         UserDefaults.standard.set(false, forKey: "has_polestar_session")
         try delete(account: Self.sessionAccount)
@@ -76,10 +82,17 @@ struct KeychainStore: Sendable {
     /// Refresh token for the Polestar command client, kept separate from the primary session
     /// because the two are issued to different OAuth clients and expire independently.
     func saveCommandSessionToken(_ token: String) throws {
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
         try save(token, account: Self.commandSessionAccount)
     }
-    func readCommandSessionToken() throws -> String? { try read(account: Self.commandSessionAccount) }
-    func deleteCommandSessionToken() throws { try delete(account: Self.commandSessionAccount) }
+    func readCommandSessionToken() throws -> String? {
+        guard UserDefaults.standard.bool(forKey: "has_polestar_cmd_session") || isTestService else { return nil }
+        return try read(account: Self.commandSessionAccount)
+    }
+    func deleteCommandSessionToken() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
+        try delete(account: Self.commandSessionAccount)
+    }
 
     func saveVolvoSessionToken(_ token: String) throws {
         var bundle = readVolvoBundle()
@@ -134,39 +147,69 @@ struct KeychainStore: Sendable {
     private static let volvoApiKeyDraftAccount = "volvo-vcc-api-key-draft"
 
     func savePasswordDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_polestar_pw_draft")
         try save(value, account: Self.passwordDraftAccount)
     }
 
     func readPasswordDraft() throws -> String? {
-        try read(account: Self.passwordDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_polestar_pw_draft") || isTestService else { return nil }
+        return try read(account: Self.passwordDraftAccount)
     }
 
     func deletePasswordDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_pw_draft")
         try delete(account: Self.passwordDraftAccount)
     }
 
     func saveVolvoClientSecretDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_secret_draft")
         try save(value, account: Self.volvoClientSecretDraftAccount)
     }
 
     func readVolvoClientSecretDraft() throws -> String? {
-        try read(account: Self.volvoClientSecretDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_volvo_secret_draft") || isTestService else { return nil }
+        return try read(account: Self.volvoClientSecretDraftAccount)
     }
 
     func deleteVolvoClientSecretDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_volvo_secret_draft")
         try delete(account: Self.volvoClientSecretDraftAccount)
     }
 
     func saveVolvoApiKeyDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_key_draft")
         try save(value, account: Self.volvoApiKeyDraftAccount)
     }
 
     func readVolvoApiKeyDraft() throws -> String? {
-        try read(account: Self.volvoApiKeyDraftAccount)
+        guard UserDefaults.standard.bool(forKey: "has_volvo_key_draft") || isTestService else { return nil }
+        return try read(account: Self.volvoApiKeyDraftAccount)
     }
 
     func deleteVolvoApiKeyDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_volvo_key_draft")
         try delete(account: Self.volvoApiKeyDraftAccount)
+    }
+
+    /// Wipes all stored credentials, tokens, session state, and presence flags.
+    func wipeAll() {
+        try? deletePassword()
+        try? deleteSessionToken()
+        try? deleteCommandSessionToken()
+        try? deletePasswordDraft()
+        try? deleteVolvoSessionToken()
+        try? deleteVolvoClientSecret()
+        try? deleteVolvoApiKey()
+        try? deleteVolvoClientSecretDraft()
+        try? deleteVolvoApiKeyDraft()
+        try? delete(account: Self.volvoBundleAccount)
+        UserDefaults.standard.removeObject(forKey: "has_polestar_password")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_session")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_cmd_session")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_session")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_pw_draft")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_secret_draft")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_key_draft")
     }
 
     private func readVolvoBundle() -> VolvoSecretBundle {
@@ -174,6 +217,9 @@ struct KeychainStore: Sendable {
            let data = raw.data(using: .utf8),
            let bundle = try? JSONDecoder().decode(VolvoSecretBundle.self, from: data) {
             return bundle
+        }
+        guard UserDefaults.standard.bool(forKey: "has_volvo_session") || isTestService else {
+            return VolvoSecretBundle(clientSecret: nil, apiKey: nil, sessionToken: nil)
         }
         let legacySecret = try? read(account: "volvo-client-secret")
         let legacyApiKey = try? read(account: "volvo-vcc-api-key")
@@ -197,64 +243,120 @@ struct KeychainStore: Sendable {
         try save(str, account: Self.volvoBundleAccount)
     }
 
+    private var isTestService: Bool {
+        service.hasPrefix("io.kheirallah.hisingen.tests.") || service != "io.kheirallah.hisingen"
+    }
+
+    private static var testStore: [String: String] = [:]
+    private static let testLock = NSLock()
+
     private func cacheKey(account: String) -> String {
         "\(service)|\(account)"
     }
 
-    private func baseQuery(account: String) -> [String: Any] {
-        [
+    private func baseQuery(account: String, useDataProtection: Bool = true) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        if useDataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
     }
 
     private func save(_ value: String, account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: value)
+        if isTestService {
+            Self.testLock.lock()
+            Self.testStore[cacheKey(account: account)] = value
+            Self.testLock.unlock()
+            return
+        }
+
         let attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        let updateStatus = SecItemUpdate(
-            baseQuery(account: account) as CFDictionary,
-            attributes as CFDictionary
-        )
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else {
-            throw KeychainError.status(updateStatus)
+
+        let dpQuery = baseQuery(account: account, useDataProtection: true)
+        let dpUpdate = SecItemUpdate(dpQuery as CFDictionary, attributes as CFDictionary)
+        if dpUpdate == errSecSuccess {
+            _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+            return
+        }
+        if dpUpdate == errSecItemNotFound {
+            var dpAdd = dpQuery
+            attributes.forEach { dpAdd[$0.key] = $0.value }
+            let dpAddStatus = SecItemAdd(dpAdd as CFDictionary, nil)
+            if dpAddStatus == errSecSuccess {
+                _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+                return
+            }
         }
 
-        var add = baseQuery(account: account)
-        attributes.forEach { add[$0.key] = $0.value }
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw KeychainError.status(addStatus) }
+        let legacyQuery = baseQuery(account: account, useDataProtection: false)
+        let legacyUpdate = SecItemUpdate(legacyQuery as CFDictionary, attributes as CFDictionary)
+        if legacyUpdate == errSecSuccess { return }
+        guard legacyUpdate == errSecItemNotFound else {
+            throw KeychainError.status(legacyUpdate)
+        }
+
+        var legacyAdd = legacyQuery
+        attributes.forEach { legacyAdd[$0.key] = $0.value }
+        let legacyAddStatus = SecItemAdd(legacyAdd as CFDictionary, nil)
+        guard legacyAddStatus == errSecSuccess else { throw KeychainError.status(legacyAddStatus) }
     }
 
     private func read(account: String) throws -> String? {
         if let cached = InMemorySecretCache.shared.get(cacheKey(account: account)) {
             return cached
         }
-        var query = baseQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        if isTestService {
+            Self.testLock.lock()
+            let val = Self.testStore[cacheKey(account: account)]
+            Self.testLock.unlock()
+            return val
+        }
+
+        var dpQuery = baseQuery(account: account, useDataProtection: true)
+        dpQuery[kSecReturnData as String] = true
+        dpQuery[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data else {
-            throw KeychainError.status(status)
+        let dpStatus = SecItemCopyMatching(dpQuery as CFDictionary, &item)
+        if dpStatus == errSecSuccess, let data = item as? Data, let result = String(data: data, encoding: .utf8) {
+            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            return result
         }
-        let result = String(data: data, encoding: .utf8)
-        InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
-        return result
+
+        var legacyQuery = baseQuery(account: account, useDataProtection: false)
+        legacyQuery[kSecReturnData as String] = true
+        legacyQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var legacyItem: CFTypeRef?
+        let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
+        if legacyStatus == errSecSuccess, let data = legacyItem as? Data, let result = String(data: data, encoding: .utf8) {
+            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            try? save(result, account: account)
+            _ = SecItemDelete(legacyQuery as CFDictionary)
+            return result
+        }
+
+        return nil
     }
 
     private func delete(account: String) throws {
         InMemorySecretCache.shared.set(cacheKey(account: account), value: nil)
-        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.status(status)
+        if isTestService {
+            Self.testLock.lock()
+            Self.testStore.removeValue(forKey: cacheKey(account: account))
+            Self.testLock.unlock()
+            return
         }
+        _ = SecItemDelete(baseQuery(account: account, useDataProtection: true) as CFDictionary)
+        _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
     }
 }
 

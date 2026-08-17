@@ -4,16 +4,19 @@ import LocalAuthentication
 @MainActor
 final class RemoteActionAuthorizer {
     func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
-        let alert = NSAlert()
-        alert.alertStyle = command.risk == .routine ? .warning : .critical
-        alert.messageText = command.title
-        alert.informativeText = L10n.format(
-            "Send this command to %@? Hisingen will submit it once and then refresh vehicle state.",
-            vehicle
-        )
-        alert.addButton(withTitle: L10n.text("Send Command"))
-        alert.addButton(withTitle: L10n.text("Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        let requiresConfirmation = command.risk != .routine || Preferences.requireBiometricsForRemoteControls
+        if requiresConfirmation {
+            let alert = NSAlert()
+            alert.alertStyle = command.risk == .destructive ? .critical : .warning
+            alert.messageText = command.title
+            alert.informativeText = L10n.format(
+                "Send this command to %@? Hisingen will submit it once and then refresh vehicle state.",
+                vehicle
+            )
+            alert.addButton(withTitle: L10n.text("Send Command"))
+            alert.addButton(withTitle: L10n.text("Cancel"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        }
         guard Preferences.requireBiometricsForRemoteControls || command.risk.requiresDeviceOwnerAuthentication else { return true }
 
         let context = LAContext()

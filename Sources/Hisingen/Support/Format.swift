@@ -112,12 +112,23 @@ enum Format {
         return formatter
     }()
 
+    static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
     static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter
     }()
+
+    static func shortDate(date: Date) -> String {
+        dateFormatter.string(from: date)
+    }
 
     static func shortTime(date: Date) -> String {
         timeFormatter.string(from: date)

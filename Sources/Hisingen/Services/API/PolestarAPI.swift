@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 
@@ -49,7 +50,7 @@ actor PolestarAPI {
 
     private var session: URLSession
     private var redirectDelegate: OAuthRedirectDelegate
-    private let grpc = PolestarGRPC()
+    let grpc = PolestarGRPC()
     private let keychain: KeychainStore
 
     private var accessToken: String?
@@ -122,8 +123,48 @@ actor PolestarAPI {
             if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
             logger.info("Polestar command-client token acquired")
         } catch {
-            logger.warning("Polestar command-client sign-in failed; remote commands unavailable")
+            print("❌ acquireCommandToken failed with error: \(error)")
+            logger.warning("Polestar command-client sign-in failed: \(error, privacy: .public); remote commands unavailable")
         }
+    }
+
+    @MainActor
+    private static func promptForCredentials(prefilledEmail: String) -> (email: String, password: String)? {
+        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.text("Polestar ID Password Required")
+        alert.informativeText = L10n.text(
+            "Enter your Polestar ID password to authorize remote vehicle controls. Hisingen will securely save your mobile command session in macOS Keychain."
+        )
+        let stack = NSStackView(frame: NSRect(x: 0, y: 0, width: 280, height: prefilledEmail.isEmpty ? 56 : 26))
+        stack.orientation = .vertical
+        stack.spacing = 6
+        stack.alignment = .leading
+
+        let emailField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        emailField.placeholderString = L10n.text("Polestar ID (Email)")
+        emailField.stringValue = prefilledEmail
+
+        let passwordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        passwordField.placeholderString = L10n.text("Password")
+
+        if prefilledEmail.isEmpty {
+            stack.addArrangedSubview(emailField)
+        }
+        stack.addArrangedSubview(passwordField)
+
+        alert.accessoryView = stack
+        alert.addButton(withTitle: L10n.text("Authorize"))
+        alert.addButton(withTitle: L10n.text("Cancel"))
+        alert.window.initialFirstResponder = prefilledEmail.isEmpty ? emailField : passwordField
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+        let email = (prefilledEmail.isEmpty ? emailField.stringValue : prefilledEmail).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = passwordField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty, !pass.isEmpty else { return nil }
+        if Preferences.email.isEmpty { Preferences.email = email }
+        return (email, pass)
     }
 
     /// A valid token for invocation-backed commands, refreshed on demand.
@@ -131,24 +172,38 @@ actor PolestarAPI {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return token }
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        guard let refresh = stored, let tokenEndpoint else { return commandAccessToken }
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.formBody([
-            "grant_type": "refresh_token",
-            "client_id": commandClientID,
-            "refresh_token": refresh
-        ])
-        guard let token = try? await Self.requestToken(request: request, session: session,
-                                                       invalidReason: .expiredSession) else {
-            return nil
+        if let refresh = stored, let tokenEndpoint {
+            var request = URLRequest(url: tokenEndpoint)
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.formBody([
+                "grant_type": "refresh_token",
+                "client_id": commandClientID,
+                "refresh_token": refresh
+            ])
+            if let token = try? await Self.requestToken(request: request, session: session,
+                                                        invalidReason: .expiredSession) {
+                commandAccessToken = token.accessToken
+                commandRefreshToken = token.refreshToken ?? refresh
+                commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+                if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+                return token.accessToken
+            }
         }
-        commandAccessToken = token.accessToken
-        commandRefreshToken = token.refreshToken ?? refresh
-        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
-        return token.accessToken
+        let savedEmail = (await MainActor.run { Preferences.email }).trimmingCharacters(in: .whitespacesAndNewlines)
+        var emailToUse = savedEmail
+        var passwordToUse = (try? keychain.readPassword()) ?? nil
+        if passwordToUse == nil || passwordToUse?.isEmpty == true {
+            if let creds = await MainActor.run(body: { Self.promptForCredentials(prefilledEmail: savedEmail) }) {
+                emailToUse = creds.email
+                passwordToUse = creds.password
+            }
+        }
+        if !emailToUse.isEmpty, let password = passwordToUse, !password.isEmpty {
+            await acquireCommandToken(email: emailToUse, password: password)
+            return commandAccessToken
+        }
+        return nil
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -156,6 +211,9 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.noStoredSession)
         }
         clearAccountState(keepRefreshToken: true)
+        if let commandRefresh = (try? keychain.readCommandSessionToken()) ?? nil, !commandRefresh.isEmpty {
+            commandRefreshToken = commandRefresh
+        }
         try await discoverOIDCConfiguration()
         refreshToken = token
         do {
@@ -189,6 +247,22 @@ actor PolestarAPI {
     }
 
     func signOut() async throws {
+        // Two clients were signed in, so both refresh tokens have to go. Revoke the command
+        // client's first — it is the one that can act on the vehicle.
+        let commandToRevoke = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        if let commandToRevoke, let endpoint = revocationEndpoint {
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.formBody([
+                "client_id": commandClientID,
+                "token": commandToRevoke,
+                "token_type_hint": "refresh_token"
+            ])
+            _ = try? await perform(request, limit: 64_000, operation: "command session revocation")
+        }
+        try? keychain.deleteCommandSessionToken()
+
         let tokenToRevoke = refreshToken
         let endpoint = revocationEndpoint
         if let tokenToRevoke, let endpoint {
@@ -236,6 +310,8 @@ actor PolestarAPI {
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
+
+        await grpc.setUseStreaming(features.contains(.realTimeUpdates))
 
         let query = Self.telematicsQuery(features: features)
         let response: GraphQLResponse<TelematicsPayloadDTO>? = try? await graphQL(
@@ -323,6 +399,15 @@ actor PolestarAPI {
             .chargingDetails, key: "amp-limit",
             enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
+        async let errorsTask: OptionalCapability<[VehicleChronosError]> = optionalCapability(
+            .vehicleErrors, enabled: features.contains(.vehicleErrors), vin: vin
+        ) { try await self.grpc.fetchErrors(vin: vin, accessToken: serviceToken) }
+        // GetMyCars runs whenever softwareUpdates or remoteOTA is enabled — it provides the
+        // authoritative installed version and OTA capability flags.
+        async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
+            .softwareUpdates, key: "my-cars",
+            enabled: features.contains(.softwareUpdates) || features.contains(.remoteOTA), vin: vin
+        ) { try await self.grpc.fetchMyCars(vin: vin, accessToken: serviceToken) }
 
         let extras = try await batteryExtrasTask
         let vehicleAvailability = try await availabilityTask
@@ -339,6 +424,7 @@ actor PolestarAPI {
         let weather = try await weatherTask
         let location = try await locationTask
         let ampLimit = try await ampLimitTask
+        let serviceErrors = try await errorsTask
 
         let primaryReportedAt = battery?.timestamp?.date
         let extrasAreNewer = extras?.reportedAt.map { reported in
@@ -395,6 +481,7 @@ actor PolestarAPI {
             if features.contains(.remotePreCleaning) { optionalResults.append((.remotePreCleaning, air.unavailable)) }
         }
         if features.contains(.vehicleWeather) { optionalResults.append((.vehicleWeather, weather.unavailable)) }
+        if features.contains(.vehicleErrors) { optionalResults.append((.vehicleErrors, serviceErrors.unavailable)) }
         var seenUnavailable = Set<AppFeature>()
         let unavailable = optionalResults.compactMap { feature, failed in
             failed && seenUnavailable.insert(feature).inserted ? feature : nil
@@ -465,6 +552,7 @@ actor PolestarAPI {
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
         )
+        state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
         state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
         state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
         state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil
@@ -473,6 +561,7 @@ actor PolestarAPI {
         state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
         state.packages = features.contains(.vehicleIdentity) ? packageNames : []
         state.accountMarket = market
+        state.interiorImageData = features.contains(.vehicleImage) ? CarImageCache.shared.interiorImage(for: vin) : nil
         return state
     }
 
@@ -496,7 +585,35 @@ actor PolestarAPI {
             adaptedCommand, vin: vin, accessToken: token,
             commandToken: await validCommandToken()
         )
-        if case .setChargeTarget = adaptedCommand { targetCache[vin] = nil }
+        if case .setChargeTarget(let target) = adaptedCommand { targetCache[vin] = (target, Date()) }
+        if case .setAmpLimit(let amps) = adaptedCommand {
+            capabilityCache["\(vin)|amp-limit"] = CapabilityCacheEntry(value: amps, expiresAt: Date().addingTimeInterval(90))
+        }
+        if case .startClimate(let temp, let fl, let fr, _, _, let sw) = adaptedCommand {
+            let status = VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: nil,
+                requestedTemperatureCelsius: Double(temp > 0 ? temp : 22.0),
+                driverSeatHeatingLevel: fl.rawValue > 1 ? fl.rawValue - 1 : nil,
+                passengerSeatHeatingLevel: fr.rawValue > 1 ? fr.rawValue - 1 : nil,
+                steeringWheelHeatingLevel: sw.rawValue > 1 ? sw.rawValue - 1 : nil
+            )
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .stopClimate = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .startPreCleaning = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .ventilating, timeRemainingMinutes: 10, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        } else if case .stopPreCleaning = adaptedCommand {
+            let status = VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
+                                              interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil)
+            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
+        }
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }
@@ -916,7 +1033,13 @@ actor PolestarAPI {
         cars = accountCars.compactMap { car in
             guard let vin = car.vin else { return nil }
             let title = [car.modelName, car.modelYear?.value].compactMap { $0 }.joined(separator: " · ")
-            return CarSummary(vin: vin, title: title.isEmpty ? vin : title)
+            return CarSummary(
+                vin: vin,
+                title: title.isEmpty ? vin : title,
+                modelName: car.modelName,
+                modelYear: car.modelYear?.value,
+                registrationNo: car.registrationNo
+            )
         }
         let selected = preferredVIN.flatMap { wanted in
             accountCars.first(where: { $0.vin == wanted })
@@ -1015,7 +1138,6 @@ actor PolestarAPI {
         let requestedAngle = await MainActor.run { Preferences.carRenderAngle.rawValue }
         if let vin = selectedVIN, let cached = CarImageCache.shared.image(for: vin, angle: requestedAngle) {
             carImageData = cached
-            return
         }
         guard let pno34, let structureWeek, let modelYear else { return }
         let query = """
@@ -1023,7 +1145,6 @@ actor PolestarAPI {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
             transparent { url angle }
             opaque { url angle }
-            interior { url angle }
           }
         }
         """
@@ -1046,23 +1167,29 @@ actor PolestarAPI {
         let opaque = images["opaque"] as? [[String: Any]] ?? []
         let pool = transparent.isEmpty ? opaque : transparent
         let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 0 })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 1 }) ?? pool.first
-        guard let string = pick?["url"] as? String, let url = URL(string: string),
-              url.scheme == "https" else { return }
-        guard let (bytes, imageResponse) = try? await HTTPBodyReader.data(
-                  for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
-              let http = imageResponse as? HTTPURLResponse,
-              http.statusCode == 200,
-              http.mimeType?.hasPrefix("image/") == true,
-              bytes.count <= 5_000_000 else { return }
-        carImageData = bytes
-        if let vin = selectedVIN {
-            let angle = (pick?["angle"] as? Int) ?? requestedAngle
-            CarImageCache.shared.save(bytes, for: vin, angle: angle)
+            ?? pool.first(where: { ($0["angle"] as? Int) == 1 })
+            ?? pool.first(where: { ($0["angle"] as? Int) == 0 }) ?? pool.first
 
+        if carImageData == nil, let string = pick?["url"] as? String, let url = URL(string: string),
+           url.scheme == "https" {
+            if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
+                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
+                  let http = imageResponse as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  http.mimeType?.hasPrefix("image/") == true,
+                  bytes.count <= 5_000_000 {
+                carImageData = bytes
+                if let vin = selectedVIN {
+                    let angle = (pick?["angle"] as? Int) ?? requestedAngle
+                    CarImageCache.shared.save(bytes, for: vin, angle: angle)
+                    CarImageCache.shared.save(bytes, for: vin)
+                }
+            }
+        }
+
+        if let vin = selectedVIN {
             for other in pool {
-                guard let otherAngle = other["angle"] as? Int, otherAngle != angle,
+                guard let otherAngle = other["angle"] as? Int,
                       let otherUrlStr = other["url"] as? String,
                       let otherUrl = URL(string: otherUrlStr),
                       otherUrl.scheme == "https",
@@ -1116,7 +1243,7 @@ actor PolestarAPI {
 
     private func targetSOC(enabled: Bool, vin: String, token: String) async throws -> Int? {
         guard enabled else { return nil }
-        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 900 {
+        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
             return cached.value
         }
         let value: Int?
@@ -1140,21 +1267,21 @@ actor PolestarAPI {
         guard enabled else { return OptionalCapability(value: nil, unavailable: false) }
         let cacheKey = key ?? feature.rawValue
         let scopedCacheKey = "\(vin)|\(cacheKey)"
-        if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date() {
+        if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
             return OptionalCapability(value: cached.value as? Value, unavailable: false)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-
-
             return OptionalCapability(value: nil, unavailable: false)
         }
         do {
             let value = try await operation()
             capabilityBackoff[vin]?[cacheKey] = nil
-            capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
-                value: value,
-                expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
-            )
+            if value != nil {
+                capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
+                    value: value,
+                    expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
+                )
+            }
             return OptionalCapability(value: value, unavailable: false)
         } catch {
             if Self.isGlobalFailure(error) { throw error }
@@ -1368,8 +1495,14 @@ actor PolestarAPI {
     }
 
     private static func capabilityCacheLifetime(_ feature: AppFeature, key: String) -> TimeInterval {
-        if key == "climate-status" || feature == .exteriorStatus || feature == .airQuality {
-            return 10 * 60
+        if key == "climate-status" {
+            return 15
+        }
+        if feature == .exteriorStatus || feature == .airQuality || feature == .vehicleLocation {
+            return 30
+        }
+        if feature == .vehicleWeather {
+            return 300
         }
         return 60 * 60
     }

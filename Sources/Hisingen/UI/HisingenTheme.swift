@@ -29,21 +29,27 @@ enum HisingenTheme {
     static let popoverWidth: CGFloat = 430
 
 
+    // MARK: - Brand Core Colors
+
+    /// Polestar signature Swedish Gold & Amber highlight (#E56E23)
     static let polestarAmber = Color(red: 229/255, green: 110/255, blue: 35/255)
 
-
+    /// Official Volvo Digital / Electric Blue
     static let volvoBlue = Color(
-        light: NSColor(red: 0x1c/255, green: 0x6b/255, blue: 0xba/255, alpha: 1),
-        dark: NSColor(red: 0x1f/255, green: 0x78/255, blue: 0xd1/255, alpha: 1)
+        light: NSColor(red: 0x00/255, green: 0x5b/255, blue: 0x94/255, alpha: 1),
+        dark: NSColor(red: 0x38/255, green: 0xbd/255, blue: 0xf8/255, alpha: 1)
     )
 
-
-    static let volvoNavy = Color(red: 0x28/255, green: 0x4e/255, blue: 0x80/255)
+    /// Official Volvo Heritage Iron Navy (#003057)
+    static let volvoNavy = Color(
+        light: NSColor(red: 0x00/255, green: 0x30/255, blue: 0x57/255, alpha: 1),
+        dark: NSColor(red: 0x1e/255, green: 0x3a/255, blue: 0x5f/255, alpha: 1)
+    )
 
     static var canvas: Color {
         switch theme {
         case .volvo:
-            return Color(light: NSColor(red: 0.97, green: 0.98, blue: 0.99, alpha: 1), dark: NSColor(red: 0.05, green: 0.06, blue: 0.08, alpha: 1))
+            return Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1))
         case .nordicNight:
             return Color(light: NSColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1), dark: NSColor(red: 0.00, green: 0.00, blue: 0.00, alpha: 1))
         case .aurora:
@@ -59,14 +65,14 @@ enum HisingenTheme {
         case .hisingen:
             return Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1))
         case .polestar:
-            return Color(light: NSColor(white: 0.98, alpha: 1), dark: NSColor(white: 0.08, alpha: 1))
+            return Color(light: NSColor(red: 0.94, green: 0.95, blue: 0.96, alpha: 1), dark: NSColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1))
         }
     }
 
     static var ink: Color {
         switch theme {
-        case .polestar: return Color(light: NSColor(white: 0.05, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
-        case .volvo: return Color(light: NSColor(red: 0.08, green: 0.10, blue: 0.14, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
+        case .polestar: return Color(light: NSColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 1), dark: NSColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1))
+        case .volvo: return Color(light: NSColor(red: 0.06, green: 0.09, blue: 0.15, alpha: 1), dark: NSColor(red: 0.97, green: 0.98, blue: 1.0, alpha: 1))
         case .nordicNight: return Color(light: NSColor(red: 0.02, green: 0.12, blue: 0.20, alpha: 1), dark: NSColor.white)
         case .aurora: return Color(light: NSColor(red: 0.02, green: 0.18, blue: 0.12, alpha: 1), dark: NSColor.white)
         case .swedishGold: return Color(light: NSColor(red: 0.14, green: 0.11, blue: 0.04, alpha: 1), dark: NSColor.white)
@@ -80,9 +86,9 @@ enum HisingenTheme {
     static var inkMuted: Color {
         switch theme {
         case .polestar:
-            return Color(light: NSColor(white: 0.40, alpha: 1), dark: NSColor(white: 0.70, alpha: 1))
+            return Color(light: NSColor(red: 0.42, green: 0.42, blue: 0.46, alpha: 1), dark: NSColor(red: 0.65, green: 0.65, blue: 0.70, alpha: 1))
         case .volvo:
-            return Color(light: NSColor(red: 0.38, green: 0.44, blue: 0.52, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
+            return Color(light: NSColor(red: 0.35, green: 0.42, blue: 0.50, alpha: 1), dark: NSColor(red: 0.60, green: 0.68, blue: 0.76, alpha: 1))
         case .nordicNight:
             return Color(light: NSColor(red: 0.08, green: 0.42, blue: 0.58, alpha: 1), dark: NSColor(red: 0.30, green: 0.75, blue: 0.95, alpha: 1))
         case .aurora:
@@ -103,9 +109,9 @@ enum HisingenTheme {
     static var hairline: Color {
         switch theme {
         case .polestar:
-            return Color(light: NSColor(white: 0.88, alpha: 1), dark: NSColor(white: 0.20, alpha: 1))
+            return Color(light: NSColor(red: 0.85, green: 0.86, blue: 0.88, alpha: 1), dark: NSColor(red: 0.18, green: 0.18, blue: 0.22, alpha: 1))
         case .volvo:
-            return Color(light: NSColor(red: 0.88, green: 0.90, blue: 0.93, alpha: 1), dark: NSColor(red: 0.18, green: 0.20, blue: 0.24, alpha: 1))
+            return Color(light: NSColor(red: 0.86, green: 0.89, blue: 0.93, alpha: 1), dark: NSColor(red: 0.16, green: 0.20, blue: 0.28, alpha: 1))
         case .nordicNight:
             return Color(light: NSColor(red: 0.0, green: 0.60, blue: 0.80, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.90, blue: 1.0, alpha: 0.25))
         case .aurora:
@@ -125,9 +131,10 @@ enum HisingenTheme {
 
     static var accent: Color {
         switch theme {
-        case .polestar: return ink
+        case .polestar:
+            return Color(light: NSColor(red: 0.90, green: 0.43, blue: 0.14, alpha: 1), dark: NSColor(red: 1.0, green: 0.54, blue: 0.24, alpha: 1))
         case .volvo:
-            return Color(light: NSColor(red: 0.0, green: 0.38, blue: 0.75, alpha: 1), dark: NSColor(red: 0.15, green: 0.55, blue: 0.95, alpha: 1))
+            return Color(light: NSColor(red: 0.0, green: 0.36, blue: 0.58, alpha: 1), dark: NSColor(red: 0.22, green: 0.74, blue: 0.97, alpha: 1))
         case .hisingen:
             return Color(light: NSColor(red: 0.88, green: 0.38, blue: 0.05, alpha: 1), dark: NSColor(red: 0.96, green: 0.50, blue: 0.15, alpha: 1))
         case .nordicNight:
@@ -164,6 +171,8 @@ enum HisingenTheme {
     static var cardBackground: AnyShapeStyle {
         switch theme {
         case .hisingen: return AnyShapeStyle(.regularMaterial)
+        case .polestar: return AnyShapeStyle(Color(light: NSColor.white, dark: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1.0)))
+        case .volvo: return AnyShapeStyle(Color(light: NSColor.white, dark: NSColor(red: 0.07, green: 0.09, blue: 0.13, alpha: 1.0)))
         default: return AnyShapeStyle(canvas)
         }
     }
@@ -282,7 +291,13 @@ extension Color {
 
     init(light: NSColor, dark: NSColor) {
         self.init(NSColor(name: nil, dynamicProvider: { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+            let isDark: Bool
+            if let match = appearance.bestMatch(from: [.darkAqua, .aqua]) {
+                isDark = (match == .darkAqua)
+            } else {
+                isDark = appearance.name.rawValue.lowercased().contains("dark")
+            }
+            return isDark ? dark : light
         }))
     }
 
@@ -372,9 +387,24 @@ struct Card<Content: View>: View {
                                 )
                             )
                     } else if HisingenTheme.theme == .polestar {
-                        // Polestar stark minimalist panel
+                        // Polestar stark minimalist architectural panel
                         RoundedRectangle(cornerRadius: 0, style: .continuous)
-                            .fill(HisingenTheme.canvas)
+                            .fill(Color(light: NSColor.white, dark: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1.0)))
+                    } else if HisingenTheme.theme == .volvo {
+                        // Volvo Scandinavian luxury frosted glass card with subtle iron navy wash
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(.regularMaterial)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(light: NSColor(white: 1.0, alpha: 0.75), dark: NSColor(red: 0.08, green: 0.11, blue: 0.16, alpha: 0.65)),
+                                        Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.99, alpha: 0.45), dark: NSColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 0.45))
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                     } else {
                         // Translucent frosted glass tinted with theme canvas
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -445,22 +475,24 @@ struct Pill: View {
         self.symbol = symbol
     }
     var body: some View {
+        let isPolestar = HisingenTheme.cornerRadius == 0
+        let radius: CGFloat = isPolestar ? 0 : 5
         HStack(spacing: 4) {
             if let symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 9, weight: .semibold))
                     .accessibilityHidden(true)
             }
             Text(text)
-                .font(.system(size: 11, weight: HisingenTheme.valueWeight))
+                .font(.system(size: 10.5, weight: HisingenTheme.valueWeight))
         }
         .foregroundStyle(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.14), in: Capsule())
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2.5)
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(
-            Capsule()
-                .stroke(color.opacity(0.25), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(color.opacity(0.28), lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)

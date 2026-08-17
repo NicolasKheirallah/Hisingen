@@ -12,6 +12,14 @@ enum InterfaceLanguage: String, CaseIterable {
     case norwegian
     case danish
     case dutch
+    case french
+    case spanish
+    case italian
+    case finnish
+    case portuguese
+    case polish
+    case chinese
+    case korean
 
     var languageCode: String? {
         switch self {
@@ -22,6 +30,14 @@ enum InterfaceLanguage: String, CaseIterable {
         case .norwegian: return "nb"
         case .danish: return "da"
         case .dutch: return "nl"
+        case .french: return "fr"
+        case .spanish: return "es"
+        case .italian: return "it"
+        case .finnish: return "fi"
+        case .portuguese: return "pt"
+        case .polish: return "pl"
+        case .chinese: return "zh"
+        case .korean: return "ko"
         }
     }
 
@@ -34,6 +50,14 @@ enum InterfaceLanguage: String, CaseIterable {
         case .norwegian: return L10n.text("Norwegian")
         case .danish: return L10n.text("Danish")
         case .dutch: return L10n.text("Dutch")
+        case .french: return L10n.text("French")
+        case .spanish: return L10n.text("Spanish")
+        case .italian: return L10n.text("Italian")
+        case .finnish: return L10n.text("Finnish")
+        case .portuguese: return L10n.text("Portuguese")
+        case .polish: return L10n.text("Polish")
+        case .chinese: return L10n.text("Chinese (Simplified)")
+        case .korean: return L10n.text("Korean")
         }
     }
 
@@ -68,25 +92,31 @@ enum MenuBarStyle: String, CaseIterable, Codable {
 
 
 enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
-    case frontThreeQuarter = 0
-    case rearThreeQuarter = 1
-    case sideProfile = 2
-    case overhead = 3
+    case frontThreeQuarter = 1
+    case frontDirect = 2
+    case sideProfile = 0
+    case rearThreeQuarter = 3
+    case rearProfile = 4
+    case overhead = 5
 
     var title: String {
         switch self {
         case .frontThreeQuarter: return L10n.text("Front Three-Quarter")
-        case .rearThreeQuarter: return L10n.text("Rear Three-Quarter")
+        case .frontDirect: return L10n.text("Front Direct")
         case .sideProfile: return L10n.text("Side Profile")
-        case .overhead: return L10n.text("Overhead")
+        case .rearThreeQuarter: return L10n.text("Rear Three-Quarter")
+        case .rearProfile: return L10n.text("Rear Profile")
+        case .overhead: return L10n.text("Overhead (Top-Down)")
         }
     }
 
     var symbol: String {
         switch self {
         case .frontThreeQuarter: return "car.side.front.open.fill"
-        case .rearThreeQuarter: return "car.side.rear.open.fill"
+        case .frontDirect: return "car.front.waves.up.fill"
         case .sideProfile: return "car.side.fill"
+        case .rearThreeQuarter: return "car.side.rear.open.fill"
+        case .rearProfile: return "car.rear.and.tire.marks"
         case .overhead: return "car.top.door.front.left.open.fill"
         }
     }
@@ -130,6 +160,26 @@ enum RegistrationNumberBadgePosition: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum VehicleLabelFormat: String, CaseIterable, Codable, Sendable {
+    case registration = "registration"
+    case nickname = "nickname"
+    case modelAndYear = "model-and-year"
+    case modelOnly = "model-only"
+    case nicknameAndRegistration = "nickname-and-registration"
+    case registrationAndModel = "registration-and-model"
+
+    var title: String {
+        switch self {
+        case .registration: return L10n.text("Registration / License Plate")
+        case .nickname: return L10n.text("Nickname")
+        case .modelAndYear: return L10n.text("Model Name & Year")
+        case .modelOnly: return L10n.text("Model Name Only")
+        case .nicknameAndRegistration: return L10n.text("Nickname & Registration")
+        case .registrationAndModel: return L10n.text("Registration & Model")
+        }
+    }
+}
+
 enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     case system = "system"
     case light = "light"
@@ -156,6 +206,14 @@ enum AppearanceMode: String, CaseIterable, Codable, Sendable {
         case .system: return nil
         case .light: return .light
         case .dark: return .dark
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
         }
     }
 }
@@ -231,8 +289,8 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     var accentColorHex: String {
         switch self {
         case .hisingen: return "#E56E23"
-        case .polestar: return "#FFFFFF"
-        case .volvo: return "#1C6BBA"
+        case .polestar: return "#E56E23"
+        case .volvo: return "#005B94"
         case .nordicNight: return "#00E5FF"
         case .aurora: return "#00E676"
         case .swedishGold: return "#D4AF37"
@@ -247,9 +305,9 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         case .hisingen:
             return ["#E56E23", "#FFA726", "#424242"]
         case .polestar:
-            return ["#FFFFFF", "#888888", "#1A1A1A"]
+            return ["#E56E23", "#FFFFFF", "#141416"]
         case .volvo:
-            return ["#1C6BBA", "#284E80", "#333333"]
+            return ["#005B94", "#003057", "#F4F6F9"]
         case .nordicNight:
             return ["#00E5FF", "#0A192F", "#000000"]
         case .aurora:
@@ -499,6 +557,72 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "registration_badge_position") }
     }
 
+    static var vehicleLabelFormat: VehicleLabelFormat {
+        get {
+            let raw = d.string(forKey: "vehicle_label_format") ?? ""
+            return VehicleLabelFormat(rawValue: raw) ?? .modelAndYear
+        }
+        set { d.set(newValue.rawValue, forKey: "vehicle_label_format") }
+    }
+
+    static func formattedVehicleTitle(
+        vin: String,
+        modelName: String?,
+        modelYear: String?,
+        registrationNo: String?,
+        fallbackBrand: VehicleBrand? = nil,
+        format: VehicleLabelFormat? = nil
+    ) -> String {
+        let selectedFormat = format ?? vehicleLabelFormat
+        let brand = fallbackBrand ?? activeBrand
+        let nickname = vehicleNickname(for: vin).trimmingCharacters(in: .whitespacesAndNewlines)
+        let reg = registrationNo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = modelName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let year = modelYear?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let modelAndYr = [model.isEmpty ? nil : model, year.isEmpty ? nil : year].compactMap { $0 }.joined(separator: " · ")
+
+        switch selectedFormat {
+        case .registration:
+            if !reg.isEmpty { return reg }
+            if !nickname.isEmpty { return nickname }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !model.isEmpty ? model : brand.displayName
+
+        case .nickname:
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !model.isEmpty ? model : brand.displayName
+
+        case .modelAndYear:
+            if !modelAndYr.isEmpty { return modelAndYr }
+            if !model.isEmpty { return model }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            return brand.displayName
+
+        case .modelOnly:
+            if !model.isEmpty { return model }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            return brand.displayName
+
+        case .nicknameAndRegistration:
+            if !nickname.isEmpty && !reg.isEmpty { return "\(nickname) (\(reg))" }
+            if !nickname.isEmpty { return nickname }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return brand.displayName
+
+        case .registrationAndModel:
+            if !reg.isEmpty && !model.isEmpty { return "\(reg) · \(model)" }
+            if !reg.isEmpty { return reg }
+            if !modelAndYr.isEmpty { return modelAndYr }
+            return !nickname.isEmpty ? nickname : brand.displayName
+        }
+    }
+
     static var distanceUnit: DistanceUnit {
         get {
             let raw = d.string(forKey: "distance_unit") ?? ""
@@ -590,7 +714,25 @@ enum Preferences {
         }
         set {
             d.set(newValue.rawValue, forKey: "his_appearanceMode")
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    applyAppearance()
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        applyAppearance()
+                    }
+                }
+            }
         }
+    }
+
+    /// Applies the configured appearance mode (system, light, or dark) across AppKit
+    @MainActor
+    static func applyAppearance() {
+        let appearance = appearanceMode.nsAppearance
+        NSApplication.shared.appearance = appearance
     }
 
     static var interfaceLanguage: InterfaceLanguage {
@@ -653,10 +795,11 @@ enum Preferences {
     static var features: FeatureSelection {
         get {
             if let values = d.array(forKey: "enabled_features_v2") as? [String] {
-                return FeatureSelection(
-                    enabled: Set(values.compactMap(AppFeature.init(rawValue:)))
-                        .intersection(AppFeature.permittedFeatures)
-                )
+                var enabled = Set(values.compactMap(AppFeature.init(rawValue:)))
+                    .intersection(AppFeature.permittedFeatures)
+                let coreDefaults: Set<AppFeature> = [.vehicleLocation, .vehicleWeather, .ownerGreeting]
+                enabled.formUnion(coreDefaults)
+                return FeatureSelection(enabled: enabled)
             }
             if let legacy = d.array(forKey: "enabled_features_v1") as? [String] {
                 var enabled = Set(legacy.compactMap(AppFeature.init(rawValue:)))
@@ -708,6 +851,11 @@ enum Preferences {
     static var notifyLowBattery: Bool {
         get { boolDefaultTrue("notify_low_battery") }
         set { d.set(newValue, forKey: "notify_low_battery") }
+    }
+
+    static var notifyPlugInReminder: Bool {
+        get { boolDefaultTrue("notify_plugin_reminder") }
+        set { d.set(newValue, forKey: "notify_plugin_reminder") }
     }
 
     static var notifySoftwareUpdates: Bool {

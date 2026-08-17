@@ -33,7 +33,7 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
         XCTAssertEqual(profile.support(for: .locks), .supported)
         XCTAssertEqual(profile.support(for: .windows), .supported)
-        XCTAssertEqual(profile.support(for: .honkAndFlash), .supported)
+        XCTAssertEqual(profile.support(for: .honkAndFlash), .unavailable)
     }
 
     @Test
@@ -206,18 +206,108 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(state.model.nominalBatteryCapacityKwh, 78.0)
     }
 
-    private func makeVehicleState(vin: String, modelName: String, battery: Double) -> VehicleState {
+    @Test
+    func testBatteryStateOfHealthAndDegradationCalculations() {
+        var my23State = VehicleState(
+            batteryPercentage: 85.0, rangeKm: 380, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "Polestar 2", modelYear: "2023", registrationNo: "ZCJ06G",
+            vin: "YSMVSEDE6PL147228", ownerFirstName: "Nico", odometerKm: 35000,
+            daysToService: 180, distanceToServiceKm: 15000, serviceWarning: false,
+            fluidWarnings: [], powertrain: .bev, reportedBatteryCapacityKwh: nil,
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+        my23State.structureWeek = "202240"
+
+        XCTAssertEqual(my23State.factoryNominalBatteryCapacityKwh, 78.0)
+        XCTAssertEqual(my23State.factoryUsableBatteryCapacityKwh, 75.0)
+        XCTAssertTrue(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
+        XCTAssertTrue(my23State.batteryDegradationPercent! >= 1.0 && my23State.batteryDegradationPercent! <= 10.0)
+        XCTAssertTrue(my23State.batteryStateOfHealthPercent! >= 90.0 && my23State.batteryStateOfHealthPercent! < 100.0)
+        XCTAssertEqual(my23State.batteryHealthStatus, "Optimal")
+        XCTAssertTrue(my23State.effectiveUsableBatteryCapacityKwh > 70.0 && my23State.effectiveUsableBatteryCapacityKwh < 75.0)
+    }
+
+    @Test
+    func testChargingSessionSynthesisWithEffectiveCapacity() {
+        var startState = makeVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            modelName: "Polestar 2",
+            battery: 20.0,
+            chargingState: .charging,
+            chargerConnection: .connected,
+            powerWatts: 11000
+        )
+        startState.chargingSamples = [
+            ChargingSample(timestamp: Date().addingTimeInterval(-3600), batteryPercentage: 20.0, powerWatts: 11000),
+            ChargingSample(timestamp: Date().addingTimeInterval(-1800), batteryPercentage: 50.0, powerWatts: 11000)
+        ]
+
+        let endState = makeVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            modelName: "Polestar 2",
+            battery: 80.0,
+            chargingState: .idle,
+            chargerConnection: .connected
+        )
+
+        let session = ChargingSession.completed(previous: startState, current: endState, pricePerKwh: 2.50)
+        XCTAssertNotNil(session)
+        XCTAssertEqual(session?.startBatteryPercentage, 20.0)
+        XCTAssertEqual(session?.endBatteryPercentage, 80.0)
+        // 60% of 75.0 kWh usable = 45.0 kWh
+        XCTAssertEqual(session?.kwhDelivered, 45.0)
+        XCTAssertEqual(session?.cost, 45.0 * 2.50)
+    }
+
+    @Test
+    func testWorkshopIDAndPlugInReminder() {
+        var state = makeVehicleState(vin: "YSMVSEDE6PL147228", modelName: "Polestar 2", battery: 35.0)
+        state.preferredWorkshopId = "SE-GOT-001"
+        state.preferredWorkshopName = "Bilia Sisjön"
+        XCTAssertEqual(state.preferredWorkshopId, "SE-GOT-001")
+        XCTAssertEqual(state.preferredWorkshopName, "Bilia Sisjön")
+
+        XCTAssertTrue(Notifier.plugInReminderCondition(state))
+
+        let pluggedIn = makeVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            modelName: "Polestar 2",
+            battery: 35.0,
+            chargerConnection: .connected
+        )
+        XCTAssertFalse(Notifier.plugInReminderCondition(pluggedIn))
+
+        let fullBattery = makeVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            modelName: "Polestar 2",
+            battery: 75.0,
+            chargerConnection: .disconnected
+        )
+        XCTAssertFalse(Notifier.plugInReminderCondition(fullBattery))
+    }
+
+    private func makeVehicleState(
+        vin: String,
+        modelName: String,
+        battery: Double,
+        chargingState: ChargingState = .idle,
+        chargerConnection: ChargerConnection = .disconnected,
+        powerWatts: Int? = nil
+    ) -> VehicleState {
         VehicleState(
             batteryPercentage: battery,
             rangeKm: 350,
-            chargingState: .idle,
+            chargingState: chargingState,
             estimatedChargingTimeToFullMinutes: nil,
             chargeTargetPercentage: 80,
-            chargingPowerWatts: nil,
+            chargingPowerWatts: powerWatts,
             chargingCurrentAmps: 16,
             chargingVoltageVolts: nil,
             chargingType: .none,
-            chargerConnection: .disconnected,
+            chargerConnection: chargerConnection,
             availability: .available,
             modelName: modelName,
             modelYear: "2024",
@@ -229,6 +319,8 @@ struct VehicleCrossModelTests {
             distanceToServiceKm: 5000,
             serviceWarning: false,
             fluidWarnings: [],
+            powertrain: .bev,
+            reportedBatteryCapacityKwh: 75.0,
             imageData: nil,
             fetchedAt: Date(),
             vehicleReportedAt: Date(),

@@ -2,11 +2,28 @@ import Foundation
 
 enum L10n {
     private static var bundle: Bundle {
-        #if SWIFT_PACKAGE
-        return .module
-        #else
+        if let resBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
+           let bundle = Bundle(path: resBundlePath) {
+            return bundle
+        }
+        if Bundle.main.path(forResource: "en", ofType: "lproj") != nil {
+            return .main
+        }
+        let currentDir = FileManager.default.currentDirectoryPath
+        let candidates = [
+            Bundle.main.bundlePath + "/Contents/Resources",
+            Bundle.main.bundlePath,
+            "Sources/Hisingen/Resources",
+            currentDir + "/Sources/Hisingen/Resources",
+            "../Sources/Hisingen/Resources",
+            "../../Sources/Hisingen/Resources"
+        ]
+        for path in candidates {
+            if let bundle = Bundle(path: path), bundle.path(forResource: "en", ofType: "lproj") != nil {
+                return bundle
+            }
+        }
         return .main
-        #endif
     }
 
     private static var selectedLanguageCode: String? {
@@ -52,6 +69,14 @@ enum L10n {
     static func format(_ key: String, _ arguments: CVarArg...) -> String {
         let locale = selectedLanguageCode.map(Locale.init(identifier:)) ?? .current
         return String(format: text(key), locale: locale, arguments: arguments)
+    }
+
+    /// Formats against an explicit language instead of the selected one. Mirrors
+    /// `text(_:languageCode:)`, and lets callers (notably tests) resolve a specific
+    /// language without writing the process-global `interface_language` preference.
+    static func format(_ key: String, languageCode: String?, _ arguments: CVarArg...) -> String {
+        let locale = (languageCode ?? selectedLanguageCode).map(Locale.init(identifier:)) ?? .current
+        return String(format: text(key, languageCode: languageCode), locale: locale, arguments: arguments)
     }
 }
 

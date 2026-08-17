@@ -112,7 +112,12 @@ struct DegradedStateResilienceTests {
 
         let restored = try XCTUnwrap(store.snapshot(for: live.vin))
         XCTAssertTrue(restored.isCachedSnapshot)
-        XCTAssertNil(restored.location)
+        // `cacheableCopy` deliberately carries location now, so the vehicleLocation feature
+        // can render a position from cache before the first refresh completes. See
+        // RegressionFixTests.testCacheableCopyPreservesLocationAndRegistrationAndGreeting,
+        // which asserts the same thing from the other direction.
+        XCTAssertEqual(restored.location?.latitude, live.location?.latitude)
+        XCTAssertEqual(restored.location?.longitude, live.location?.longitude)
     }
 
     // MARK: - Helpers

@@ -96,8 +96,9 @@ The screenshots below showcase the native macOS popover with Apple Liquid Glass 
 Hisingen keeps the selected vehicle visible without opening a full application window:
 
 - **Electric, Hybrid & Combustion Powertrains**: Adaptive telemetry cards customized strictly for Pure Electric (BEV), Plug-in Hybrid (PHEV), or Combustion (Petrol/Diesel ICE);
-- **Multi-Angle Studio Renders**: Configurable 4-angle studio photography (Front 3/4, Rear 3/4, Side Profile, Overhead Top-Down) cached per angle;
+- **Multi-Angle Studio Renders & Interior View**: Full 6-angle studio perspectives (`3/4 Front`, `Front Direct`, `Side Profile`, `3/4 Rear`, `Rear Profile`, `Overhead Top-Down`) plus high-resolution interior cabin visualization with matching factory upholstery;
 - **Factory Build Specs & Options**: Real-time vehicle spec decoding showing exterior paint name, interior upholstery trim, wheel package, and factory option packages (*Pilot, Plus, Performance*);
+- **Remote Controls with State Stability**: Rock-solid climate preconditioning, door locks, windows, target SoC (40%–100%), and charging current limits with a 90-second optimistic state lock preventing cloud lag reversion;
 - **Apple Liquid Glass Materials**: Multi-layer frosted translucent cards (`.regularMaterial`) with specular top-leading light-catchers, subtle luminance sheens, and dual-layer ambient occlusion shadows;
 - **Light Mode & Dark Mode Architecture**: System (Automatic), Forced Light Mode (WCAG AAA high-contrast slate ink), or Forced Dark Mode (smoked obsidian OLED pitch black);
 - **9 Scalable Themes**: Hisingen Glass, Polestar Minimal, Volvo Iron, Nordic Night, Aurora Borealis, Swedish Gold, Cyan Racing, Gothenburg Forest, and Sand Dune;

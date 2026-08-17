@@ -471,11 +471,13 @@ struct VehicleCapabilityParsingTests {
 
     @Test
     func testCarRenderAnglePreferences() {
-        XCTAssertEqual(CarRenderAngle.allCases.count, 4)
-        XCTAssertEqual(CarRenderAngle.frontThreeQuarter.rawValue, 0)
-        XCTAssertEqual(CarRenderAngle.rearThreeQuarter.rawValue, 1)
-        XCTAssertEqual(CarRenderAngle.sideProfile.rawValue, 2)
-        XCTAssertEqual(CarRenderAngle.overhead.rawValue, 3)
+        XCTAssertEqual(CarRenderAngle.allCases.count, 6)
+        XCTAssertEqual(CarRenderAngle.sideProfile.rawValue, 0)
+        XCTAssertEqual(CarRenderAngle.frontThreeQuarter.rawValue, 1)
+        XCTAssertEqual(CarRenderAngle.frontDirect.rawValue, 2)
+        XCTAssertEqual(CarRenderAngle.rearThreeQuarter.rawValue, 3)
+        XCTAssertEqual(CarRenderAngle.rearProfile.rawValue, 4)
+        XCTAssertEqual(CarRenderAngle.overhead.rawValue, 5)
     }
 
     @Test

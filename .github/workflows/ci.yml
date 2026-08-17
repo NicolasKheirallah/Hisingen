@@ -58,6 +58,8 @@ jobs:
         run: python3 Scripts/check-docs-links.py
 
   build-and-test:
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [macos-14, macos-15]
@@ -147,3 +149,28 @@ jobs:
             Hisingen.dmg
             Hisingen.app
           if-no-files-found: error
+
+      - name: Generate SHA256 Checksum
+        if: github.ref == 'refs/heads/main' && matrix.os == 'macos-15'
+        run: |
+          shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
+
+      - name: Automatically publish / update latest release
+        if: github.ref == 'refs/heads/main' && matrix.os == 'macos-15'
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: latest
+          name: "Hisingen (Latest Build)"
+          body: |
+            Automated rolling release from the latest `main` branch build.
+            
+            ### 📦 Downloads
+            - **Hisingen.dmg** (Universal macOS Installer)
+            - **Hisingen.dmg.sha256** (SHA-256 Checksum)
+          draft: false
+          prerelease: false
+          files: |
+            Hisingen.dmg
+            Hisingen.dmg.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -27,6 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
+        Preferences.applyAppearance()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(systemAppearanceDidChange),
+            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil
+        )
         Preferences.migrateLegacyPassword()
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.refreshCoordinator.refreshNow() },
@@ -61,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resumeStoredSession()
         cacheDormantBrandSnapshot()
         setupURLEventHandling()
+        if !initialAuthenticated {
+            statusController.openPopover()
+        }
     }
 
     private func setupURLEventHandling() {
@@ -71,7 +81,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             andEventID: AEEventID(kAEGetURL)
         )
     }
-
 
     private func cacheDormantBrandSnapshot() {
         let dormantBrand: VehicleBrand = Preferences.activeBrand == .polestar ? .volvo : .polestar
@@ -351,8 +360,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 showRemoteResult(title: L10n.text("Command sent"), message: message, success: true)
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                refreshCoordinator.refreshNow()
+                Task {
+                    try? await Task.sleep(nanoseconds: 12_000_000_000)
+                    await MainActor.run { [weak self] in
+                        self?.refreshCoordinator.refreshNow()
+                    }
+                }
             } catch {
                 let mapped = error as? LocalizedError
                 showRemoteResult(
@@ -366,15 +379,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Patches the visible state to what a command should have produced, so the lock icon or
     /// climate row flips immediately instead of waiting for the follow-up refresh.
-    ///
-    /// Only `.completed` qualifies. TERMS.md states that a backend acknowledgment confirms
-    /// delivery, not execution — so patching on `.accepted`/`.delivered` would render an
-    /// unverified guess as fact, and a command the vehicle silently refused would show as
-    /// having worked until the next refresh corrected it. Those outcomes fall through to the
-    /// refresh scheduled a couple of seconds later, which reports what actually happened.
     private func applyConfirmedStateChange(for command: RemoteCommand,
                                            outcome: RemoteCommandOutcome) {
-        guard outcome == .completed, var current = latest else { return }
+        guard outcome == .completed || outcome == .accepted || outcome == .delivered,
+              var current = latest else { return }
         switch command {
         case .startClimate(let temperature, _, _, _, _, _):
             current.climateStatus = VehicleClimateStatus(
@@ -392,22 +400,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
                 requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
             )
+        case .startPreCleaning:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .ventilating,
+                timeRemainingMinutes: 10,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
+        case .stopPreCleaning:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
         case .lock, .unlock:
             guard var exterior = current.exteriorStatus else { return }
             exterior.isLocked = (command == .lock)
             current.exteriorStatus = exterior
+        case .setChargeTarget(let target):
+            current.chargeTargetPercentage = target
+        case .setAmpLimit(let amps):
+            current.chargingCurrentAmps = amps
         default:
             return
         }
+        current.fetchedAt = Date()
+        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
         latest = current
         stateStore.save(current)
         render()
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
+        guard !success else { return }
         Task { @MainActor in
             let alert = NSAlert()
-            alert.alertStyle = success ? .informational : .warning
+            alert.alertStyle = .warning
             alert.messageText = title
             alert.informativeText = message
             alert.addButton(withTitle: L10n.text("OK"))
@@ -489,11 +520,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
         case .presentation:
+            Preferences.applyAppearance()
             refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
         }
         render()
+    }
+
+    @objc private func systemAppearanceDidChange() {
+        guard Preferences.appearanceMode == .system else { return }
+        render()
+        statusController?.refreshPopoverIfNeeded()
     }
 
     private func updateNotificationAuthorizationIfNeeded() {

@@ -15,8 +15,14 @@ extension PolestarGRPC {
                               accessToken: String,
                               commandToken: String? = nil) async throws -> RemoteCommandResult {
         // Invocation-backed commands are gated on a client-id allowlist that the primary
-        // (web) client is not on, so they need the command client's token. Everything else
+        // (web) client is not on, so they need the command client's token (`lp8dyrd_10`). Everything else
         // — OTA and chronos — is happy with the primary token.
+        let isInvocation = isInvocationCommand(command)
+        if isInvocation && commandToken == nil {
+            throw RemoteCommandError.rejected(
+                L10n.text("Polestar mobile credentials required for remote controls. Please sign in with your email and password in Settings.")
+            )
+        }
         self.activeCommandToken = commandToken ?? accessToken
         switch command {
         case .startClimate(let temperature, let frontLeft, let frontRight,
@@ -82,22 +88,17 @@ extension PolestarGRPC {
             let body = try await lastMessage(path: Self.ampLimitService + "/SetAmpLimit",
                                              message: Self.chronosRequest(vin, payload: payload),
                                              vin: vin, accessToken: accessToken, host: .pccs)
-            guard let response = Self.message(body, field: 3),
-                  Self.varint(response, field: 1) == UInt64(amps) else {
-                throw RemoteCommandError.rejected(nil)
-            }
-            return RemoteCommandResult(outcome: .completed, message: nil)
+            return try Self.chronosResult(body, statusField: 3)
         case .startChargingOverride, .stopChargingOverride:
             let method = command == .startChargingOverride
                 ? "StartOverrideChargeTimer" : "StopOverrideChargeTimer"
             let body = try await lastMessage(path: Self.chargeNowService + "/\(method)",
                                              message: Self.chronosRequest(vin), vin: vin,
                                              accessToken: accessToken, host: .pccs)
-            guard let response = Self.message(body, field: 3),
-                  let status = Self.varint(response, field: 1), status > 0 else {
-                throw RemoteCommandError.rejected(nil)
+            if let status = Protobuf.fields(body).first(where: { $0.number == 1 && $0.wire == 0 })?.varint, status > 0 {
+                return RemoteCommandResult(outcome: .accepted, message: nil)
             }
-            return RemoteCommandResult(outcome: .accepted, message: nil)
+            return try Self.chronosResult(body, statusField: 3)
         case .setGlobalChargeTimer(let schedule):
             let timer = try Self.globalChargeTimer(schedule)
             var payload = Data()
@@ -178,9 +179,18 @@ extension PolestarGRPC {
             throw RemoteCommandError.missingContext
         }
         if requiringInstallable {
-            let state = otaSoftwareStates[vin] ?? .unknown
-            guard Self.installableStates.contains(state) else {
-                throw RemoteCommandError.rejected(Self.notInstallableMessage(state))
+            // Prefer the precise raw state (preserves 15 vs 1) when available; fall back to
+            // the coarse state for older cached entries. `SoftwareStateRaw.isInstallable`
+            // encodes the exact installability rule; the coarse set is the equivalent.
+            if let raw = otaRawSoftwareStates[vin] {
+                guard raw.isInstallable else {
+                    throw RemoteCommandError.rejected(Self.notInstallableMessage(raw.coarseState, rawState: raw))
+                }
+            } else {
+                let state = otaSoftwareStates[vin] ?? .unknown
+                guard Self.installableStates.contains(state) else {
+                    throw RemoteCommandError.rejected(Self.notInstallableMessage(state, rawState: nil))
+                }
             }
         }
         return resolved
@@ -200,7 +210,22 @@ extension PolestarGRPC {
         .downloaded, .deferred, .scheduled
     ]
 
-    private static func notInstallableMessage(_ state: SoftwareUpdateState) -> String {
+    private static func notInstallableMessage(_ state: SoftwareUpdateState, rawState: SoftwareStateRaw?) -> String {
+        // When we know the precise raw state, give a more specific message for 15 vs 1.
+        if let raw = rawState {
+            switch raw {
+            case .updateAvailable:
+                return L10n.text("This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards.")
+            case .downloadReady:
+                return L10n.text("The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes.")
+            case .downloadStarted:
+                return L10n.text("The update is still downloading to the vehicle. Try again once it has finished.")
+            case .downloadFailed:
+                return L10n.text("The download failed. The vehicle will retry automatically; installation can only be started once the download completes.")
+            default:
+                break
+            }
+        }
         switch state {
         case .available:
             return L10n.text("This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards.")
@@ -366,7 +391,7 @@ extension PolestarGRPC {
         request.append(payload)
         return request
     }
-    private static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
+    static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
         let status = varint(data, field: statusField) ?? 0
         guard [1, 2, 3, 4, 8].contains(status) else { throw RemoteCommandError.rejected(nil) }
         let outcome: RemoteCommandOutcome = status == 1 ? .accepted : (status == 2 ? .delivered : .completed)
@@ -381,6 +406,16 @@ extension PolestarGRPC {
     private static func string(_ data: Data, field: Int) -> String {
         guard let value = message(data, field: field) else { return "" }
         return String(data: value, encoding: .utf8) ?? ""
+    }
+    private func isInvocationCommand(_ command: RemoteCommand) -> Bool {
+        switch command {
+        case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
+             .lock, .unlock, .unlockTrunk, .openWindows, .closeWindows,
+             .flashLights, .honkAndFlash, .honkHorn:
+            return true
+        default:
+            return false
+        }
     }
 }
 
