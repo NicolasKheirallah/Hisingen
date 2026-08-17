@@ -83,6 +83,12 @@ final class SQLiteDatabase: @unchecked Sendable {
     }
 
     /// Prepares, binds parameters, and executes a statement within a thread lock.
+    ///
+    /// - Important: `bindings` and `process` run while the lock is held, and the lock is
+    ///   **not** recursive. Calling any other method on this database (directly, or via a
+    ///   repository method such as `VehicleDatabase.deleteSnapshot`) from inside either
+    ///   closure deadlocks the calling thread permanently. Collect what you need, return,
+    ///   and perform follow-up writes after this call returns.
     func query<T>(sql: String, bindings: (SQLiteStatement) throws -> Void = { _ in },
                   process: (SQLiteStatement) throws -> T) throws -> T {
         lock.lock()
