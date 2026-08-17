@@ -357,36 +357,37 @@ struct FormattingTests {
 
     @Test
     func testGreetingUsesSelectedInterfaceLanguage() {
-        let previousLanguage = Preferences.interfaceLanguage
-        defer { Preferences.interfaceLanguage = previousLanguage }
-
-        Preferences.interfaceLanguage = .english
-        XCTAssertEqual(Format.greeting("Nicolas"), "Hi, Nicolas")
-        Preferences.interfaceLanguage = .swedish
-        XCTAssertEqual(Format.greeting("Nicolas"), "Hej, Nicolas")
+        // Resolve through the explicit-language API rather than assigning
+        // Preferences.interfaceLanguage. That preference is process-global, and the suite
+        // runs in parallel, so mutating it here made unrelated tests read Swedish strings
+        // for the duration — see the macos-14 failures in VolvoDecodingTests and
+        // VehicleServiceErrorTests, which passed on macos-15 purely by scheduling luck.
+        XCTAssertEqual(InterfaceLanguage.english.languageCode, "en")
+        XCTAssertEqual(InterfaceLanguage.swedish.languageCode, "sv")
+        XCTAssertEqual(Format.greeting("Nicolas", languageCode: InterfaceLanguage.english.languageCode), "Hi, Nicolas")
+        XCTAssertEqual(Format.greeting("Nicolas", languageCode: InterfaceLanguage.swedish.languageCode), "Hej, Nicolas")
     }
 
     @Test
     func testSwedishVehicleCardsDoNotFallBackToEnglishKeys() {
-        let previousLanguage = Preferences.interfaceLanguage
-        defer { Preferences.interfaceLanguage = previousLanguage }
-        Preferences.interfaceLanguage = .swedish
+        // Explicit language, for the same reason as above: no process-global mutation.
+        func sv(_ key: String) -> String { L10n.text(key, languageCode: "sv") }
 
-        XCTAssertEqual(L10n.text("Charging & Energy"), "Laddning och energi")
-        XCTAssertEqual(L10n.text("Charger Connection"), "Laddkontakt")
-        XCTAssertEqual(L10n.text("Est. Charge Cost"), "Beräknad laddkostnad")
-        XCTAssertEqual(L10n.text("Power Module"), "Laddarmodul")
-        XCTAssertEqual(L10n.text("Vehicle Status"), "Fordonsstatus")
-        XCTAssertEqual(L10n.text("Odometer"), "Mätarställning")
-        XCTAssertEqual(L10n.text("Cloud Connectivity"), "Molnanslutning")
-        XCTAssertEqual(L10n.text("Climate & Timers"), "Klimat och timers")
-        XCTAssertEqual(L10n.text("Cabin Climate"), "Kupéklimat")
-        XCTAssertEqual(L10n.text("Complete"), "Fulladdad")
-        XCTAssertEqual(L10n.text("Securely Locked"), "Låst")
-        XCTAssertEqual(L10n.text("Current Limit"), "Maximal laddström")
-        XCTAssertEqual(L10n.text("Window controls"), "Rutreglage")
-        XCTAssertEqual(L10n.text("Range Health Estimate"), "Räckviddsbedömning")
-        XCTAssertEqual(L10n.text("System Default"), "Följ systemet")
+        XCTAssertEqual(sv("Charging & Energy"), "Laddning och energi")
+        XCTAssertEqual(sv("Charger Connection"), "Laddkontakt")
+        XCTAssertEqual(sv("Est. Charge Cost"), "Beräknad laddkostnad")
+        XCTAssertEqual(sv("Power Module"), "Laddarmodul")
+        XCTAssertEqual(sv("Vehicle Status"), "Fordonsstatus")
+        XCTAssertEqual(sv("Odometer"), "Mätarställning")
+        XCTAssertEqual(sv("Cloud Connectivity"), "Molnanslutning")
+        XCTAssertEqual(sv("Climate & Timers"), "Klimat och timers")
+        XCTAssertEqual(sv("Cabin Climate"), "Kupéklimat")
+        XCTAssertEqual(sv("Complete"), "Fulladdad")
+        XCTAssertEqual(sv("Securely Locked"), "Låst")
+        XCTAssertEqual(sv("Current Limit"), "Maximal laddström")
+        XCTAssertEqual(sv("Window controls"), "Rutreglage")
+        XCTAssertEqual(sv("Range Health Estimate"), "Räckviddsbedömning")
+        XCTAssertEqual(sv("System Default"), "Följ systemet")
     }
 
     @Test
