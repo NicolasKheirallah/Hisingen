@@ -17,7 +17,7 @@ struct RefreshCoordinatorTests {
         let provider = MockVehicleProvider()
         let coordinator = RefreshCoordinator(
             api: provider,
-            stateStore: VehicleStateStore(defaults: defaults),
+            stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             observesEnvironment: false,
             clearPasswordAfterSession: {}
         )

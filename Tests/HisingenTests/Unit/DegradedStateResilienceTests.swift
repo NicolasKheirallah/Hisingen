@@ -104,7 +104,7 @@ struct DegradedStateResilienceTests {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = VehicleStateStore(defaults: defaults)
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
 
         let live = stateWithFullTelemetry()
         XCTAssertFalse(live.isCachedSnapshot)
@@ -181,7 +181,7 @@ struct AuthFailureReschedulingTests {
 
         let coordinator = RefreshCoordinator(
             api: AuthFailingProvider(),
-            stateStore: VehicleStateStore(defaults: defaults),
+            stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             observesEnvironment: false,
             clearPasswordAfterSession: {}
         )

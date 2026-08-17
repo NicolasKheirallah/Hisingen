@@ -231,7 +231,7 @@ struct FormattingTests {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = VehicleStateStore(defaults: defaults)
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         let stale = vehicle(
             vin: "VIN-A", fetchedAt: Date().addingTimeInterval(-8 * 24 * 60 * 60), reportedAt: nil
         )
@@ -509,7 +509,7 @@ struct FormattingTests {
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_000), batteryPercentage: 61, powerWatts: 6_200),
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_060), batteryPercentage: 64, powerWatts: 6_100)
         ]
-        let store = VehicleStateStore(defaults: defaults)
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         store.save(state)
 
         let restored = try XCTUnwrap(store.snapshot(for: state.vin))
