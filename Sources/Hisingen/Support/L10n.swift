@@ -70,6 +70,14 @@ enum L10n {
         let locale = selectedLanguageCode.map(Locale.init(identifier:)) ?? .current
         return String(format: text(key), locale: locale, arguments: arguments)
     }
+
+    /// Formats against an explicit language instead of the selected one. Mirrors
+    /// `text(_:languageCode:)`, and lets callers (notably tests) resolve a specific
+    /// language without writing the process-global `interface_language` preference.
+    static func format(_ key: String, languageCode: String?, _ arguments: CVarArg...) -> String {
+        let locale = (languageCode ?? selectedLanguageCode).map(Locale.init(identifier:)) ?? .current
+        return String(format: text(key, languageCode: languageCode), locale: locale, arguments: arguments)
+    }
 }
 
 
