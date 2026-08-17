@@ -195,7 +195,11 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func loadSnapshot(for vin: String) -> VehicleState? {
         let sql = "SELECT payload, fetched_at FROM vehicle_snapshots WHERE vin = ? LIMIT 1;"
-        return try? db.query(sql: sql) { stmt in
+        // `query` runs `process` while holding the database's non-recursive lock, so
+        // nothing in the closure may call back into the database. Record that the row
+        // expired and delete it after the query returns, once the lock is released.
+        var snapshotExpired = false
+        let state = try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> VehicleState? in
             guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
@@ -203,13 +207,18 @@ final class VehicleDatabase: @unchecked Sendable {
             if let fetchedAt = stmt.columnDate(at: 1) {
                 // Drop expired snapshots older than 7 days
                 if Date().timeIntervalSince(fetchedAt) > 7 * 24 * 60 * 60 {
-                    deleteSnapshot(for: vin)
+                    snapshotExpired = true
                     return nil
                 }
             }
             state.isCachedSnapshot = true
             return state
         }
+        if snapshotExpired {
+            deleteSnapshot(for: vin)
+            return nil
+        }
+        return state
     }
 
     func deleteSnapshot(for vin: String) {

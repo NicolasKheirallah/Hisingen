@@ -115,41 +115,14 @@ jobs:
       - name: Build with complete concurrency checks
         run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
-      # TEMPORARY DIAGNOSTIC — revert once the hanging test is identified.
-      # Runs the suite serially so the last "started" event names the culprit,
-      # then samples the stuck process for stack traces before the job timeout
-      # kills it anonymously.
       - name: Test (deterministic suite only — live/remote-command tests excluded)
         run: |
-          set -uo pipefail
-          swift test --no-parallel --disable-xctest --enable-swift-testing --skip Live \
-            -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency > /tmp/test.log 2>&1 &
-          test_pid=$!
-          hung=1
-          for _ in $(seq 1 120); do
-            if ! kill -0 "$test_pid" 2>/dev/null; then
-              hung=0
-              break
-            fi
-            sleep 5
-          done
-          if [ "$hung" -eq 0 ]; then
-            wait "$test_pid"
-            status=$?
-            tail -60 /tmp/test.log
-            exit "$status"
+          set -euo pipefail
+          if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
+            swift test --disable-xctest --enable-swift-testing --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          else
+            swift test --filter "^((?!Live).)*$" -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
           fi
-          echo "::error::Suite still running after 10 minutes — capturing diagnostics"
-          echo "===== LAST 25 EVENTS (serial run: last started test is the culprit) ====="
-          grep -aE '◇|✔|✘' /tmp/test.log | tail -25 || true
-          pgrep -f 'swiftpm-testing|HisingenPackageTests' | while read -r p; do
-            echo "===== SAMPLE pid ${p} ====="
-            sample "${p}" 3 -file "/tmp/sample-${p}.txt" >/dev/null 2>&1 || true
-            head -150 "/tmp/sample-${p}.txt" || true
-          done
-          pkill -9 -f 'swiftpm-testing|HisingenPackageTests' || true
-          kill -9 "$test_pid" 2>/dev/null || true
-          exit 1
 
       - name: Build app bundle and DMG installer
         run: make all IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
