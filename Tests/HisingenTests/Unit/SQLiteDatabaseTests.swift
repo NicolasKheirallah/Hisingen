@@ -186,4 +186,95 @@ struct SQLiteDatabaseTests {
         }
         #expect(count == 1)
     }
+
+    @Test("VehicleDatabase computes record counts and diagnostic metrics")
+    func testRecordCountsAndDiagnostics() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "DIAG_VIN_004"
+
+        vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 12000, sohPct: 98.0, degPct: 2.0, usableKwh: 76.0)
+        let sId = vdb.startChargingSession(vin: vin, startSoc: 30.0)
+        vdb.recordChargingSample(sessionId: sId, vin: vin, soc: 35.0, powerKw: 11.0, voltage: 230.0, current: 16.0)
+        vdb.recordTelemetry(vin: vin, odometerKm: 12000, tripManualKm: 250, tripAutoKm: 45, avgConsumption: 18.5, ambientTempC: 18.0, latitude: 57.7, longitude: 11.9)
+        vdb.recordCommandAudit(vin: vin, command: "climate", status: "success")
+
+        let counts = vdb.recordCounts()
+        #expect(counts.batteryHealth == 1)
+        #expect(counts.chargingSessions == 1)
+        #expect(counts.chargingSamples == 1)
+        #expect(counts.telemetry == 1)
+        #expect(counts.commands == 1)
+
+        vdb.vacuum()
+    }
+
+    @Test("VehicleDatabase retrieves active charging session and samples")
+    func testActiveChargingSessionRetrieval() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "ACTIVE_VIN_005"
+
+        #expect(vdb.activeChargingSession(for: vin) == nil)
+
+        let sessionId = vdb.startChargingSession(vin: vin, startSoc: 15.0, location: "Fast Charger 150kW")
+        let active = vdb.activeChargingSession(for: vin)
+        #expect(active != nil)
+        #expect(active?.id == sessionId)
+        #expect(active?.startSoc == 15.0)
+        #expect(active?.endedAt == nil)
+
+        vdb.recordChargingSample(sessionId: sessionId, vin: vin, soc: 20.0, powerKw: 145.0, voltage: 400.0, current: 362.5)
+        vdb.recordChargingSample(sessionId: sessionId, vin: vin, soc: 40.0, powerKw: 110.0, voltage: 400.0, current: 275.0)
+
+        let samples = vdb.chargingSamples(for: sessionId)
+        #expect(samples.count == 2)
+        #expect(samples.first?.powerKw == 145.0)
+
+        let domainSession = active?.toDomainSession(database: vdb)
+        #expect(domainSession?.samples.count == 2)
+        #expect(domainSession?.startBatteryPercentage == 15.0)
+
+        vdb.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 52.0, peakPowerKw: 145.0, averagePowerKw: 95.0)
+        #expect(vdb.activeChargingSession(for: vin) == nil)
+    }
+
+    @Test("VehicleDatabase generates valid CSV exports for charging and health")
+    func testCSVExport() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "CSV_VIN_006"
+
+        let sessionId = vdb.startChargingSession(vin: vin, startSoc: 20.0, location: "Gothenburg Supercharger")
+        vdb.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 46.8, peakPowerKw: 150.0, averagePowerKw: 85.0)
+
+        vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 25000, sohPct: 97.2, degPct: 2.8, usableKwh: 75.8)
+
+        let chargingCSV = vdb.exportChargingSessionsCSV(for: vin)
+        #expect(chargingCSV.contains("Session ID,VIN,Started At,Ended At"))
+        #expect(chargingCSV.contains("Gothenburg Supercharger"))
+        #expect(chargingCSV.contains("46.80"))
+
+        let healthCSV = vdb.exportBatteryHealthCSV(for: vin)
+        #expect(healthCSV.contains("Record ID,VIN,Date,Odometer (km)"))
+        #expect(healthCSV.contains("25000.0"))
+        #expect(healthCSV.contains("97.20"))
+    }
+
+    @Test("VehicleDatabase prunes historical samples correctly")
+    func testPruneSamples() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "PRUNE_VIN_007"
+
+        let sId = vdb.startChargingSession(vin: vin, startSoc: 10.0)
+        vdb.recordChargingSample(sessionId: sId, vin: vin, soc: 20.0, powerKw: 10.0, voltage: 230.0, current: 16.0)
+
+        // Pruning older than 90 days should keep recent samples
+        vdb.pruneHistoricalSamples(olderThanDays: 90)
+        let counts = vdb.recordCounts()
+        #expect(counts.chargingSamples == 1)
+
+        // Pruning older than 0 days (i.e. everything in past) should remove samples
+        vdb.pruneHistoricalSamples(olderThanDays: 0)
+        let prunedCounts = vdb.recordCounts()
+        #expect(prunedCounts.chargingSamples == 0)
+        #expect(prunedCounts.chargingSessions == 1) // Session header is preserved!
+    }
 }

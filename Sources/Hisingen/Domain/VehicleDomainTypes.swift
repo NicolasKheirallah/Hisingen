@@ -281,10 +281,102 @@ enum SoftwareUpdateState: String, Codable, Sendable {
     }
 }
 
+/// The precise `ota_mobcache.SoftwareState` enum value as reported by the backend, before
+/// it is collapsed into the coarser `SoftwareUpdateState` used by the UI.
+///
+/// The backend enum (`com.volvocars.conncar.ota.mobcache.discovery.api.StateEnum`, recovered
+/// from the official Polestar APK v5.10.0 teardown) runs 0…14. **State 15 is NOT in the app's
+/// enum** — it is an undocumented backend extension observed for an update that has been
+/// *announced* to the vehicle but not yet *authorized for download*. State 1 is
+/// `DOWNLOAD_READY` (the update is ready to download/install). These are **distinct** states
+/// that `SoftwareUpdateState.available` collapses into one case — this raw enum preserves
+/// the distinction so the UI can show the exact rollout phase and the installability check
+/// can be precise.
+///
+/// Established by `testDecodeGetSoftwareInfoRecursively`, the official APK teardown (E1),
+/// and the OTA investigation — see `docs/api/ota-investigation.md`.
+enum SoftwareStateRaw: Int, Codable, Sendable {
+    case unknown = 0
+    case downloadReady = 1
+    case downloadStarted = 2
+    case downloadCompleted = 3
+    case downloadFailed = 4
+    case installationInitiated = 5
+    case installationStarted = 6
+    case aborted = 7
+    case failed = 8
+    case installationCompleted = 9
+    case installationDeferred = 10
+    case failedCritical = 11
+    case installationScheduled = 12
+    case installationScheduleTriggered = 13
+    case installationUnknown = 14
+    case updateAvailable = 15
+
+    var displayName: String {
+        switch self {
+        case .unknown: return L10n.text("Unknown")
+        case .downloadReady: return L10n.text("Download ready")
+        case .downloadStarted: return L10n.text("Downloading")
+        case .downloadCompleted: return L10n.text("Downloaded")
+        case .downloadFailed: return L10n.text("Download failed")
+        case .installationInitiated: return L10n.text("Installing")
+        case .installationStarted: return L10n.text("Installing")
+        case .aborted: return L10n.text("Aborted")
+        case .failed: return L10n.text("Failed")
+        case .installationCompleted: return L10n.text("Completed")
+        case .installationDeferred: return L10n.text("Deferred")
+        case .failedCritical: return L10n.text("Failed")
+        case .installationScheduled: return L10n.text("Scheduled")
+        case .installationScheduleTriggered: return L10n.text("Installing")
+        case .installationUnknown: return L10n.text("Unknown")
+        case .updateAvailable: return L10n.text("Update available")
+        }
+    }
+
+    /// Whether the `SchedulerService` will accept `Schedule`/`InstallNow` in this state.
+    /// Verified live: states 3, 10, 12 are accepted; 15 is rejected with
+    /// "The software with software id … is not ready to be scheduled!"
+    /// Note: `downloadReady` (1) means "ready to download" — the vehicle hasn't downloaded
+    /// the payload yet, so installation is NOT possible. Only `downloadCompleted` (3) and
+    /// the deferred/scheduled states are installable.
+    var isInstallable: Bool {
+        switch self {
+        case .downloadCompleted, .installationDeferred, .installationScheduled:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Collapse into the coarser `SoftwareUpdateState` used by the UI.
+    var coarseState: SoftwareUpdateState {
+        switch self {
+        case .unknown, .installationUnknown: return .unknown
+        case .downloadReady, .updateAvailable: return .available
+        case .downloadStarted: return .downloading
+        case .downloadCompleted: return .downloaded
+        case .downloadFailed: return .failed
+        case .installationInitiated, .installationStarted, .installationScheduleTriggered:
+            return .installing
+        case .aborted, .failed, .failedCritical: return .failed
+        case .installationCompleted: return .completed
+        case .installationDeferred: return .deferred
+        case .installationScheduled: return .scheduled
+        }
+    }
+}
+
 struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     let version: String?
     let title: String?
     let state: SoftwareUpdateState
+    /// The precise backend enum value (0…15), preserving the distinction between
+    /// `updateAvailable` (15) and `downloadReady` (1) that `state` collapses.
+    var rawState: SoftwareStateRaw?
+    /// Estimated installation duration in seconds, from `CarSoftwareInfo` field 5 sub-field 1
+    /// (observed: 5400 = 90 min). `nil` when not reported.
+    var estimatedInstallDurationSeconds: Int?
     var scheduledAt: Date?
     let updatedAt: Date?
     var installedVersion: String?
@@ -294,6 +386,8 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         version: String? = nil,
         title: String? = nil,
         state: SoftwareUpdateState = .unknown,
+        rawState: SoftwareStateRaw? = nil,
+        estimatedInstallDurationSeconds: Int? = nil,
         scheduledAt: Date? = nil,
         updatedAt: Date? = nil,
         installedVersion: String? = nil,
@@ -302,6 +396,8 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.version = version
         self.title = title
         self.state = state
+        self.rawState = rawState
+        self.estimatedInstallDurationSeconds = estimatedInstallDurationSeconds
         self.scheduledAt = scheduledAt
         self.updatedAt = updatedAt
         self.installedVersion = installedVersion
@@ -707,6 +803,129 @@ struct ChargingSample: Codable, Equatable, Sendable {
         self.timestamp = timestamp
         self.batteryPercentage = batteryPercentage
         self.powerWatts = powerWatts
+    }
+}
+
+
+/// A service-level error reported by the vehicle's Chronos backend (`ErrorService/GetErrors`).
+/// Recovered from the official Polestar APK v5.10.0 teardown — see
+/// `docs/api/ota-investigation.md` (E1). The `GetErrorsResponse` is a oneof-style message
+/// where exactly one of the per-service error fields (3-8) is populated, identified by
+/// `serviceErrorCase`. Each sub-error carries an `Error` enum (field 1) and optionally an
+/// `Action` enum (field 2).
+struct VehicleChronosError: Codable, Equatable, Sendable {
+    /// Which Chronos service reported the error. Maps to the `ServiceErrorCase` oneof field
+    /// numbers in `GetErrorsResponse`: 3=AmpLimit, 4=ChargeLocation, 5=ChargeNow,
+    /// 6=GlobalChargeTimer, 7=ParkingClimateTimer, 8=TargetSoc.
+    let service: Service
+    /// The error code from the `Error` enum (field 1 of each sub-error message).
+    let errorCode: Code
+    /// Optional action code from the `Action` enum (field 2), when the sub-error has one
+    /// (ChargeNow and ChargeLocation carry an action).
+    let actionCode: Int?
+
+    enum Service: Int, Codable, Sendable {
+        case ampLimit = 3
+        case chargeLocation = 4
+        case chargeNow = 5
+        case globalChargeTimer = 6
+        case parkingClimateTimer = 7
+        case targetSoc = 8
+
+        var displayName: String {
+            switch self {
+            case .ampLimit: return L10n.text("Amp Limit")
+            case .chargeLocation: return L10n.text("Charge Location")
+            case .chargeNow: return L10n.text("Charge Now")
+            case .globalChargeTimer: return L10n.text("Global Charge Timer")
+            case .parkingClimateTimer: return L10n.text("Parking Climate Timer")
+            case .targetSoc: return L10n.text("Target SOC")
+            }
+        }
+    }
+
+    /// `pccs.chronos.messages.error.v1.Error` enum: 0=UNSPECIFIED, 1=TIMEOUT, 2=CAR,
+    /// 3=WRONG_USAGE_MODE, 4=PRIVACY_SETTINGS_ENABLED.
+    enum Code: Int, Codable, Sendable {
+        case unspecified = 0
+        case timeout = 1
+        case car = 2
+        case wrongUsageMode = 3
+        case privacySettingsEnabled = 4
+        case unknown = -1
+
+        var displayName: String {
+            switch self {
+            case .unspecified: return L10n.text("Unspecified error")
+            case .timeout: return L10n.text("Request timed out")
+            case .car: return L10n.text("Vehicle reported an error")
+            case .wrongUsageMode: return L10n.text("Wrong usage mode")
+            case .privacySettingsEnabled: return L10n.text("Privacy settings blocked the request")
+            case .unknown: return L10n.text("Unknown error")
+            }
+        }
+    }
+
+    init(service: Service, errorCode: Code, actionCode: Int? = nil) {
+        self.service = service
+        self.errorCode = errorCode
+        self.actionCode = actionCode
+    }
+}
+
+/// OTA capability flags and installed software version recovered from
+/// `car_information.CarInformation/GetMyCars` (gRPC). These are **backend-authoritative**
+/// per-vehicle capability declarations from the `Car` proto — not heuristic probes.
+/// Recovered from the official Polestar APK v5.10.0 teardown — see
+/// `docs/api/ota-investigation.md` (E10).
+struct VehicleOTACapabilities: Codable, Equatable, Sendable {
+    /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
+    /// installed version from the `Car.consumerSoftwareVersion` field — `GetSoftwareInfo`
+    /// does not report the installed version during a rollout, only the target.
+    let installedSoftwareVersion: String?
+    /// Whether the vehicle supports full OTA updates (not just minor patches).
+    let supportsFullOtaUpdates: Bool
+    /// Whether remote OTA install scheduling is supported (`Schedule`/`InstallNow`).
+    let supportsRemoteOtaInstallSchedule: Bool
+    /// Whether the vehicle supports cloud-based OTA download consent. When `false`, the
+    /// download authorization cannot be triggered by a cloud API — the TCU must check in
+    /// autonomously and the backend must have the VIN in the rollout cohort.
+    let supportsCloudBasedOtaDownloadConsent: Bool
+    /// Whether the vehicle reports update status via the `supportsUpdateStatus` flag.
+    let supportsUpdateStatus: Bool
+    /// Whether a performance software upgrade is available.
+    let hasPerformanceSoftwareUpgrade: Bool
+
+    init(installedSoftwareVersion: String? = nil,
+         supportsFullOtaUpdates: Bool = false,
+         supportsRemoteOtaInstallSchedule: Bool = false,
+         supportsCloudBasedOtaDownloadConsent: Bool = false,
+         supportsUpdateStatus: Bool = false,
+         hasPerformanceSoftwareUpgrade: Bool = false) {
+        self.installedSoftwareVersion = installedSoftwareVersion
+        self.supportsFullOtaUpdates = supportsFullOtaUpdates
+        self.supportsRemoteOtaInstallSchedule = supportsRemoteOtaInstallSchedule
+        self.supportsCloudBasedOtaDownloadConsent = supportsCloudBasedOtaDownloadConsent
+        self.supportsUpdateStatus = supportsUpdateStatus
+        self.hasPerformanceSoftwareUpgrade = hasPerformanceSoftwareUpgrade
+    }
+}
+
+/// Who set the OTA schedule, from the `SetBy` enum in `SchedulerService`.
+/// Recovered from the APK's `ota_mobcache.schedule.api.SetBy` enum.
+enum ScheduleSetBy: Int, Codable, Sendable {
+    case unknown = 0
+    case app = 1
+    case hmi = 2
+    case cloud = 3
+
+    var displayName: String {
+        switch self {
+        case .unknown: return L10n.text("Unknown")
+        case .app: return L10n.text("App")
+        case .hmi: return L10n.text("Car display")
+        case .cloud: return L10n.text("Cloud")
+        }
     }
 }
 

@@ -179,9 +179,18 @@ extension PolestarGRPC {
             throw RemoteCommandError.missingContext
         }
         if requiringInstallable {
-            let state = otaSoftwareStates[vin] ?? .unknown
-            guard Self.installableStates.contains(state) else {
-                throw RemoteCommandError.rejected(Self.notInstallableMessage(state))
+            // Prefer the precise raw state (preserves 15 vs 1) when available; fall back to
+            // the coarse state for older cached entries. `SoftwareStateRaw.isInstallable`
+            // encodes the exact installability rule; the coarse set is the equivalent.
+            if let raw = otaRawSoftwareStates[vin] {
+                guard raw.isInstallable else {
+                    throw RemoteCommandError.rejected(Self.notInstallableMessage(raw.coarseState, rawState: raw))
+                }
+            } else {
+                let state = otaSoftwareStates[vin] ?? .unknown
+                guard Self.installableStates.contains(state) else {
+                    throw RemoteCommandError.rejected(Self.notInstallableMessage(state, rawState: nil))
+                }
             }
         }
         return resolved
@@ -201,7 +210,22 @@ extension PolestarGRPC {
         .downloaded, .deferred, .scheduled
     ]
 
-    private static func notInstallableMessage(_ state: SoftwareUpdateState) -> String {
+    private static func notInstallableMessage(_ state: SoftwareUpdateState, rawState: SoftwareStateRaw?) -> String {
+        // When we know the precise raw state, give a more specific message for 15 vs 1.
+        if let raw = rawState {
+            switch raw {
+            case .updateAvailable:
+                return L10n.text("This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards.")
+            case .downloadReady:
+                return L10n.text("The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes.")
+            case .downloadStarted:
+                return L10n.text("The update is still downloading to the vehicle. Try again once it has finished.")
+            case .downloadFailed:
+                return L10n.text("The download failed. The vehicle will retry automatically; installation can only be started once the download completes.")
+            default:
+                break
+            }
+        }
         switch state {
         case .available:
             return L10n.text("This update has been offered to the vehicle but not downloaded yet. The car downloads it on its own once conditions allow; installation can only be started afterwards.")

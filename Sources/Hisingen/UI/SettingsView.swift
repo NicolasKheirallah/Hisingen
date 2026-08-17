@@ -48,6 +48,8 @@ struct SettingsView: View {
     @State private var currencySymbol = Preferences.currencySymbol
     @State private var storeChargingHistory = Preferences.storeChargingHistory
     @State private var requireBiometrics = Preferences.requireBiometricsForRemoteControls
+    @State private var databaseVacuumed = false
+    @State private var databasePruned = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -62,6 +64,7 @@ struct SettingsView: View {
                 remoteControlsCard
                 capabilitiesCard
                 notificationsCard
+                databaseStorageCard
                 actionsCard
                 versionFooter
             }
@@ -1155,6 +1158,117 @@ struct SettingsView: View {
         .padding(.vertical, 3)
     }
 
+    private var databaseStorageCard: some View {
+        let counts = VehicleDatabase.shared.recordCounts()
+        let sizeBytes = VehicleDatabase.shared.databaseSizeBytes
+        let sizeStr = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: .blue)
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
+                    KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
+                    KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
+                    KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
+                    KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
+                    KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
+                }
+
+                Divider().opacity(0.4)
+                    .padding(.vertical, 2)
+
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button {
+                            VehicleDatabase.shared.vacuum()
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                databaseVacuumed = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    databaseVacuumed = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: databaseVacuumed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                                Text(databaseVacuumed ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(databaseVacuumed ? HisingenTheme.semanticGood : nil)
+
+                        Button {
+                            VehicleDatabase.shared.pruneHistoricalSamples(olderThanDays: 90)
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                databasePruned = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    databasePruned = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: databasePruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+                                Text(databasePruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(databasePruned ? HisingenTheme.semanticGood : nil)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button {
+                            let csv = VehicleDatabase.shared.exportChargingSessionsCSV(for: state?.vin)
+                            saveCSVWithPanel(suggestedFilename: "charging_sessions_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Charging (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state?.vin)
+                            saveCSVWithPanel(suggestedFilename: "battery_health_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Health (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private func saveCSVWithPanel(suggestedFilename: String, csvContent: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = suggestedFilename
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? csvContent.write(to: url, atomically: true, encoding: .utf8)
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            }
+        }
+    }
 
     private var actionsCard: some View {
         Card {

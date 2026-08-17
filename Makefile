@@ -92,7 +92,7 @@ dmg:
 run:
 	swift run
 
-test: doctor
+test: doctor inject-secrets
 	sh Scripts/test.sh
 
 clean:

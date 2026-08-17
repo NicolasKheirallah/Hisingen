@@ -575,6 +575,67 @@ struct InfoTabView: View {
                     KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
                     KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
                     KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
+
+                    let history = VehicleDatabase.shared.batteryHealthHistory(for: state.vin)
+                    if !history.isEmpty {
+                        Divider().opacity(0.4)
+                            .padding(.vertical, 2)
+
+                        DisclosureGroup {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(history.prefix(5)) { r in
+                                    HStack {
+                                        Text(Format.dateTimeFormatter.string(from: r.timestamp))
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text(String(format: "%.0f km", r.odometerKm))
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                        Text(String(format: "%.1f%% SoH", r.stateOfHealthPct))
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(HisingenTheme.semanticGood)
+                                    }
+                                    .padding(.vertical, 1)
+                                }
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state.vin)
+                                        let panel = NSSavePanel()
+                                        panel.allowedContentTypes = [.commaSeparatedText]
+                                        panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"
+                                        panel.begin { response in
+                                            if response == .OK, let url = panel.url {
+                                                try? csv.write(to: url, atomically: true, encoding: .utf8)
+                                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "square.and.arrow.up")
+                                            Text(L10n.text("Export Health Log (CSV)"))
+                                        }
+                                        .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .controlSize(.mini)
+                                }
+                                .padding(.top, 2)
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            HStack {
+                                Text(L10n.text("Recorded Degradation Milestones"))
+                                Spacer()
+                                Text(L10n.format("%d logs", history.count))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.system(size: 11, weight: .medium))
+                        }
+                        .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    }
                 }
             }
         })

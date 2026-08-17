@@ -21,6 +21,7 @@ actor PolestarGRPC {
 
     private let discoveryURL = URL(string: "https://cnepmob.volvocars.com")!
     private let batteryPath = "/services.vehiclestates.battery.BatteryService/GetLatestBattery"
+    private let batteryStreamPath = "/services.vehiclestates.battery.BatteryService/GetBattery"
     private let availabilityPath = "/services.vehiclestates.availability.AvailabilityService/GetLatestAvailability"
     private let targetSocPath = "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc"
     private let ampLimitReadPath = "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit"
@@ -36,6 +37,16 @@ actor PolestarGRPC {
     /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
     /// checked here instead of being discovered as an unexplained refusal.
     var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
+    /// Last observed raw OTA state per VIN, preserving the 15 vs 1 distinction.
+    var otaRawSoftwareStates: [String: SoftwareStateRaw] = [:]
+    /// When true, uses server-streaming gRPC methods (`GetBattery`, `GetExterior`) that the
+    /// server keeps open and pushes updates over, instead of the one-shot `GetLatest*` methods.
+    /// The streaming variants return the same first-frame data but may be fresher since the
+    /// server expects an ongoing connection. Recovered from the official Polestar APK v5.10.0
+    /// teardown — see `docs/api/ota-investigation.md` (E1).
+    var useStreaming = false
+
+    func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
     /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
     var activeCommandToken: String?
     let session: URLSession
@@ -53,7 +64,8 @@ actor PolestarGRPC {
         var message = Data()
         message.append(Protobuf.stringField(1, UUID().uuidString))
         message.append(Protobuf.stringField(2, vin))
-        let body = try await firstMessage(path: batteryPath, message: message,
+        let path = useStreaming ? batteryStreamPath : batteryPath
+        let body = try await firstMessage(path: path, message: message,
                                           vin: vin, accessToken: accessToken)
 
 
@@ -156,7 +168,7 @@ actor PolestarGRPC {
     }
 
 
-    private func resolvedHost(_ host: GRPCHost, accessToken: String) async throws -> URL {
+    func resolvedHost(_ host: GRPCHost, accessToken: String) async throws -> URL {
         switch host {
         case .c3: return try await c3Host(accessToken: accessToken)
         case .pccs: return pccsURL

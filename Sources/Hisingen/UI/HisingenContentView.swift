@@ -463,7 +463,7 @@ struct VehicleTabView: View {
     private var moreDetailsSection: some View {
         let cards: [AnyView] = [
             vehicleIdentityCard, lightingAndFluidCard,
-            climateCard, softwareCard, diagnosticsCard
+            climateCard, softwareCard, diagnosticsCard, errorsCard
         ].compactMap { $0 }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
@@ -1026,8 +1026,11 @@ struct VehicleTabView: View {
             }
             return []
         }()
+        let persistentSessions = VehicleDatabase.shared.recentChargingSessions(for: state.vin).map { $0.toDomainSession() }
+        let allChargingSessions = !state.chargingSessions.isEmpty ? state.chargingSessions : persistentSessions
+
         guard state.powertrain.hasElectricRange, (headline != nil || !details.isEmpty || !activeSamples.isEmpty
-            || !state.chargingSessions.isEmpty) else { return nil }
+            || !allChargingSessions.isEmpty) else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(
@@ -1079,10 +1082,10 @@ struct VehicleTabView: View {
                     .font(.system(size: 12, weight: .medium))
                 }
 
-                if !state.chargingSessions.isEmpty {
+                if !allChargingSessions.isEmpty {
                     DisclosureGroup {
                         VStack(spacing: 8) {
-                            ForEach(state.chargingSessions.reversed(), id: \.id) { session in
+                            ForEach(allChargingSessions.reversed(), id: \.id) { session in
                                 ChargingSessionRow(session: session)
                             }
                             Divider().opacity(0.4)
@@ -1090,10 +1093,10 @@ struct VehicleTabView: View {
                                 Spacer()
                                 Menu {
                                     Button(L10n.text("Export as CSV...")) {
-                                        exportChargingHistoryCSV(sessions: state.chargingSessions)
+                                        exportChargingHistoryCSV(sessions: allChargingSessions)
                                     }
                                     Button(L10n.text("Export as JSON...")) {
-                                        exportChargingHistoryJSON(sessions: state.chargingSessions)
+                                        exportChargingHistoryJSON(sessions: allChargingSessions)
                                     }
                                 } label: {
                                     HStack(spacing: 4) {
@@ -1112,7 +1115,7 @@ struct VehicleTabView: View {
                         HStack {
                             Text(L10n.text("Charging History"))
                             Spacer()
-                            Text(L10n.format("%d sessions", state.chargingSessions.count))
+                            Text(L10n.format("%d sessions", allChargingSessions.count))
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
@@ -1544,7 +1547,8 @@ struct VehicleTabView: View {
         if let title = software.title {
             rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text"))
         }
-        rows.append(KVRow(L10n.text("Update Status"), software.state.displayName,
+        rows.append(KVRow(L10n.text("Update Status"),
+                          software.rawState?.displayName ?? software.state.displayName,
                           symbol: "arrow.triangle.2.circlepath",
                           valueWarning: software.state == .failed))
         if let scheduledAt = software.scheduledAt {
@@ -1554,6 +1558,13 @@ struct VehicleTabView: View {
         if let updatedAt = software.updatedAt {
             rows.append(KVRow(L10n.text("Last Updated"),
                               Format.dateTimeFormatter.string(from: updatedAt), symbol: "clock.arrow.circlepath"))
+        }
+        if let duration = software.estimatedInstallDurationSeconds, duration > 0 {
+            let minutes = duration / 60
+            if minutes > 0 {
+                rows.append(KVRow(L10n.text("Install Duration"),
+                                  L10n.format("%d min", minutes), symbol: "timer"))
+            }
         }
         let updateAvailable = software.state == .available || software.state == .downloaded
         return AnyView(Card {
@@ -1569,6 +1580,30 @@ struct VehicleTabView: View {
                                         software.latestAvailableVersion ?? software.version ?? "—"))
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(HisingenTheme.ink)
+                    }
+                }
+                if software.rawState == .updateAvailable {
+                    Divider().opacity(0.4)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.badge.exclamationmark")
+                                .foregroundStyle(.orange)
+                                .font(.system(size: 10.5))
+                            Text(L10n.text("Waiting for backend authorization"))
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(.orange)
+                        }
+                        Text(L10n.text("The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                        if let updatedAt = software.updatedAt {
+                            Text(L10n.format("Announced: %@", Format.dateTimeFormatter.string(from: updatedAt)))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -1625,6 +1660,30 @@ struct VehicleTabView: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        })
+    }
+
+    private var errorsCard: AnyView? {
+        guard features.contains(.vehicleErrors) else { return nil }
+        let errors = state.vehicleErrors
+        guard !errors.isEmpty else {
+            if state.isVolvo { return nil }
+            return unavailableCard(.vehicleErrors, symbol: "exclamationmark.triangle",
+                                    title: L10n.text("Vehicle Errors"), color: .red,
+                                    badge: L10n.text("No errors reported"))
+        }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Vehicle Errors"), color: .red)
+                VStack(spacing: 6) {
+                    ForEach(errors.indices, id: \.self) { i in
+                        let e = errors[i]
+                        KVRow(L10n.text(e.service.displayName), e.errorCode.displayName,
+                              symbol: "exclamationmark.circle",
+                              valueWarning: e.errorCode != .unspecified)
+                    }
+                }
             }
         })
     }
