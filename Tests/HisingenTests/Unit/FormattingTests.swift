@@ -176,7 +176,9 @@ struct FormattingTests {
         XCTAssertTrue(features.contains(.chargingDetails))
         XCTAssertFalse(features.contains(.connectivityDiagnostics))
         XCTAssertFalse(features.contains(.airQuality))
-        XCTAssertFalse(features.contains(.batteryDiagnostics))
+        // batteryDiagnostics ships on by default now, alongside vehicleWeather and
+        // ownerGreeting — see FeatureSelection.default.
+        XCTAssertTrue(features.contains(.batteryDiagnostics))
         XCTAssertFalse(features.contains(.vehicleHealth))
         XCTAssertFalse(AppFeature.remoteFeatures.contains { features.contains($0) })
         features.set(.chargingDetails, enabled: false)
