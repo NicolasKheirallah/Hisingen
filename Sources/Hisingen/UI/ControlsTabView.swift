@@ -12,6 +12,7 @@ struct ControlsTabView: View {
     @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
     @State private var chargeTarget: Int = 80
     @State private var ampLimit: Int = 16
+    @State private var engineRuntimeMinutes: Int = 15
     @State private var showScheduleEditor = false
     @State private var isInitialized = false
 
@@ -108,6 +109,18 @@ struct ControlsTabView: View {
                 isInitialized = true
             }
         }
+        .onChange(of: state.chargeTargetPercentage) { newTarget in
+            guard !remoteCommandInProgress else { return }
+            if let newTarget {
+                chargeTarget = newTarget
+            }
+        }
+        .onChange(of: state.chargingCurrentAmps) { newAmps in
+            guard !remoteCommandInProgress else { return }
+            if let newAmps, newAmps > 0 {
+                ampLimit = newAmps
+            }
+        }
     }
 
     private var restrictedNoticeBanner: some View {
@@ -122,7 +135,7 @@ struct ControlsTabView: View {
                     .foregroundStyle(.primary)
                 Text(isBrandVolvo
                      ? L10n.text("Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.")
-                     : L10n.text("Climate, locks, windows and software installation are active. Charging commands are not yet verified."))
+                     : L10n.text("Remote climate, locks, windows, charging, timers and software installation are active."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -366,7 +379,7 @@ struct ControlsTabView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(true)
+                    .disabled(isDisabled(.startPreCleaning))
                 }
             }
         }
@@ -379,7 +392,7 @@ struct ControlsTabView: View {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: .green)
 
                 if profile.permits(.chargeTarget) && features.contains(.remoteCharging) {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(L10n.text("Target Limit"))
                                 .font(.system(size: 11, weight: .medium))
@@ -391,18 +404,81 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.primary)
                         }
 
-                        Picker("", selection: $chargeTarget) {
-                            ForEach([50, 60, 70, 80, 90, 100], id: \.self) { v in
+                        // One-Touch Quick Presets
+                        HStack(spacing: 6) {
+                            Button {
+                                chargeTarget = 80
+                                onRemoteCommand(.setChargeTarget(80))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "shield.fill")
+                                        .font(.system(size: 9))
+                                    Text("80% " + L10n.text("Daily"))
+                                        .font(.system(size: 10, weight: chargeTarget == 80 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 80 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 80 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(80)))
+
+                            Button {
+                                chargeTarget = 90
+                                onRemoteCommand(.setChargeTarget(90))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "battery.75percent")
+                                        .font(.system(size: 9))
+                                    Text("90% " + L10n.text("Standard"))
+                                        .font(.system(size: 10, weight: chargeTarget == 90 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 90 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 90 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(90)))
+
+                            Button {
+                                chargeTarget = 100
+                                onRemoteCommand(.setChargeTarget(100))
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "road.lanes")
+                                        .font(.system(size: 9))
+                                    Text("100% " + L10n.text("Road Trip"))
+                                        .font(.system(size: 10, weight: chargeTarget == 100 ? .bold : .medium))
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background(chargeTarget == 100 ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(chargeTarget == 100 ? HisingenTheme.accent : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isDisabled(.setChargeTarget(100)))
+                        }
+
+                        Picker("", selection: Binding(
+                            get: { chargeTarget },
+                            set: { newValue in
+                                guard newValue != chargeTarget else { return }
+                                chargeTarget = newValue
+                                onRemoteCommand(.setChargeTarget(newValue))
+                            }
+                        )) {
+                            ForEach([40, 50, 60, 70, 80, 90, 100], id: \.self) { v in
                                 Text("\(v)%").tag(v)
                             }
                         }
                         .pickerStyle(.segmented)
                         .controlSize(.small)
-                        .disabled(true)
-                        .onChange(of: chargeTarget) { [old = chargeTarget] _ in
-                            guard isInitialized, chargeTarget != old else { return }
-                            onRemoteCommand(.setChargeTarget(chargeTarget))
-                        }
+                        .disabled(isDisabled(.setChargeTarget(chargeTarget)))
                     }
                 }
 
@@ -419,18 +495,21 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.primary)
                         }
 
-                        Picker("", selection: $ampLimit) {
+                        Picker("", selection: Binding(
+                            get: { ampLimit },
+                            set: { newValue in
+                                guard newValue != ampLimit else { return }
+                                ampLimit = newValue
+                                onRemoteCommand(.setAmpLimit(newValue))
+                            }
+                        )) {
                             ForEach([6, 8, 10, 13, 16, 20, 25, 32], id: \.self) { v in
                                 Text("\(v)A").tag(v)
                             }
                         }
                         .pickerStyle(.segmented)
                         .controlSize(.small)
-                        .disabled(true)
-                        .onChange(of: ampLimit) { [old = ampLimit] _ in
-                            guard isInitialized, ampLimit != old else { return }
-                            onRemoteCommand(.setAmpLimit(ampLimit))
-                        }
+                        .disabled(isDisabled(.setAmpLimit(ampLimit)))
                     }
                 }
 
@@ -450,7 +529,7 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
-                        .disabled(true)
+                        .disabled(isDisabled(.startChargingOverride))
 
                         Button {
                             onRemoteCommand(.stopChargingOverride)
@@ -463,7 +542,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 30)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.stopChargingOverride))
                     }
                 }
 
@@ -484,7 +563,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(0.65)
+        .opacity(cardOpacity(.setChargeTarget(80)))
     }
 
     private var accessControlCard: some View {
@@ -542,15 +621,15 @@ struct ControlsTabView: View {
                             onRemoteCommand(.unlockTrunk)
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: "car.rear")
+                                Image(systemName: "car.side.rear.open.fill")
                                     .font(.system(size: 15))
-                                Text(L10n.text("Trunk"))
+                                Text(L10n.text("Unlock Trunk"))
                                     .font(.system(size: 11, weight: .medium))
                             }
                             .frame(maxWidth: .infinity, minHeight: 46)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.unlockTrunk))
                     }
                 }
             }
@@ -584,7 +663,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.closeWindows))
 
                         Button {
                             onRemoteCommand(.openWindows)
@@ -598,7 +677,7 @@ struct ControlsTabView: View {
                             .frame(maxWidth: .infinity, minHeight: 42)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(true)
+                        .disabled(isDisabled(.openWindows))
                     }
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
@@ -617,6 +696,20 @@ struct ControlsTabView: View {
                         .disabled(isDisabled(.flashLights))
 
                         Button {
+                            onRemoteCommand(.honkAndFlash)
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "light.beacon.max.fill")
+                                    .font(.system(size: 13))
+                                Text(L10n.text("Honk & Flash"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDisabled(.honkAndFlash))
+
+                        Button {
                             onRemoteCommand(.honkHorn)
                         } label: {
                             VStack(spacing: 3) {
@@ -629,20 +722,6 @@ struct ControlsTabView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(isDisabled(.honkHorn))
-
-                        Button {
-                            onRemoteCommand(.honkAndFlash)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "horn.blast.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk & Flash"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkAndFlash))
                     }
                 }
             }
@@ -786,24 +865,40 @@ struct ControlsTabView: View {
                     }
                 }
 
-                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure. Automatically runs for 15 minutes."))
+                Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
 
+                HStack {
+                    Text(L10n.text("Runtime"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("", selection: $engineRuntimeMinutes) {
+                        Text(L10n.format("%d min", 5)).tag(5)
+                        Text(L10n.format("%d min", 10)).tag(10)
+                        Text(L10n.format("%d min", 15)).tag(15)
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .frame(width: 170)
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: engineRuntimeMinutes)) || (state.isEngineRunning == true))
+                }
+
                 HStack(spacing: 10) {
                     Button {
-                        onRemoteCommand(.startEngine(runtimeMinutes: 15))
+                        onRemoteCommand(.startEngine(runtimeMinutes: engineRuntimeMinutes))
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "flame.fill")
-                            Text(L10n.text("Start Engine (15 min)"))
+                            Text(L10n.format("Start Engine (%d min)", engineRuntimeMinutes))
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
-                    .disabled(isDisabled(.startEngine(runtimeMinutes: 15)) || (state.isEngineRunning == true))
+                    .disabled(isDisabled(.startEngine(runtimeMinutes: engineRuntimeMinutes)) || (state.isEngineRunning == true))
 
                     Button {
                         onRemoteCommand(.stopEngine)
@@ -820,7 +915,7 @@ struct ControlsTabView: View {
                 }
             }
         }
-        .opacity(cardOpacity(.startEngine(runtimeMinutes: 15)))
+        .opacity(cardOpacity(.startEngine(runtimeMinutes: engineRuntimeMinutes)))
     }
 
     private var noControlsEnabledCard: some View {

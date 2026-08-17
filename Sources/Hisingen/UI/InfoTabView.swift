@@ -30,6 +30,7 @@ struct InfoTabView: View {
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
+            batteryHealthCard
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
@@ -44,38 +45,39 @@ struct InfoTabView: View {
             }
             return CarImageCache.shared.image(for: state.vin, angle: selectedAngleIndex)
                 ?? (selectedAngleIndex == Preferences.carRenderAngle.rawValue ? state.imageData : nil)
-                ?? CarImageCache.shared.image(for: state.vin)
-                ?? state.imageData
         }()
 
-        let hasInterior = (state.interiorImageData != nil) || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
+        let supportsMultipleAngles = Preferences.activeBrand == .polestar
+        let hasInterior = (state.interiorImageData != nil)
+            || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
 
         return Card {
-            VStack(spacing: 10) {
+            VStack(spacing: 12) {
                 // Angle & Interior View Switcher
-                HStack(spacing: 4) {
-                    angleButton(title: L10n.text("Front"), angle: 0, icon: "car.side.front.open.fill")
-                    angleButton(title: L10n.text("Side"), angle: 2, icon: "car.side.fill")
-                    angleButton(title: L10n.text("Rear"), angle: 1, icon: "car.side.rear.open.fill")
-                    if hasInterior {
-                        angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill")
+                if supportsMultipleAngles || hasInterior {
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 5) {
+                                if supportsMultipleAngles {
+                                    angleButton(title: L10n.text("3/4 Front"), angle: 1, icon: "car.side.front.open.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Front"), angle: 2, icon: "car.front.waves.up.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Side"), angle: 0, icon: "car.side.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("3/4 Rear"), angle: 3, icon: "car.side.rear.open.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Rear"), angle: 4, icon: "car.rear.and.tire.marks", proxy: proxy)
+                                    angleButton(title: L10n.text("Top"), angle: 5, icon: "car.top.door.front.left.open.fill", proxy: proxy)
+                                } else {
+                                    angleButton(title: L10n.text("Exterior"), angle: 0, icon: "car.side.fill", proxy: proxy)
+                                }
+                                if hasInterior {
+                                    angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill", proxy: proxy)
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 2)
+                        }
                     }
-                    Spacer()
-                    if let color = state.externalColour, !color.isEmpty && !isInterior {
-                        Pill(
-                            text: color,
-                            color: HisingenTheme.accent,
-                            symbol: "paintpalette.fill"
-                        )
-                    } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
-                        Pill(
-                            text: upholstery,
-                            color: .purple,
-                            symbol: "carseat.left.fill"
-                        )
-                    }
+                    .zIndex(10)
                 }
-                .padding(.horizontal, 2)
 
                 if let currentImageData, let nsImage = NSImage(data: currentImageData) {
                     ZStack {
@@ -102,6 +104,7 @@ struct InfoTabView: View {
                     .padding(.horizontal, -HisingenTheme.cardPadding)
                     .padding(.top, -4)
                     .clipped()
+                    .allowsHitTesting(false)
                 } else {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
@@ -116,21 +119,64 @@ struct InfoTabView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .allowsHitTesting(false)
                 }
 
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(state.modelName ?? "Vehicle")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(HisingenTheme.ink)
+                let primaryTitle = Preferences.formattedVehicleTitle(
+                    vin: state.vin,
+                    modelName: state.modelName,
+                    modelYear: state.modelYear,
+                    registrationNo: state.registrationNo
+                )
+                let showRegBadge: Bool = {
+                    guard let reg = state.registrationNo, !reg.isEmpty else { return false }
+                    return Preferences.vehicleLabelFormat != .registration
+                        && Preferences.vehicleLabelFormat != .nicknameAndRegistration
+                        && Preferences.vehicleLabelFormat != .registrationAndModel
+                }()
+                let subtitleText: String? = {
+                    switch Preferences.vehicleLabelFormat {
+                    case .registration, .nickname, .nicknameAndRegistration:
+                        let model = state.modelName
+                        let year = state.modelYear.map { L10n.format("Model Year %@", $0) }
+                        let combined = [model, year].compactMap { $0 }.joined(separator: " · ")
+                        return combined.isEmpty ? nil : combined
+                    case .modelAndYear, .modelOnly, .registrationAndModel:
                         if let year = state.modelYear {
-                            Text(L10n.format("Model Year %@", year))
+                            return L10n.format("Model Year %@", year)
+                        }
+                        return nil
+                    }
+                }()
+
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(primaryTitle)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(HisingenTheme.ink)
+                            if let color = state.externalColour, !color.isEmpty && !isInterior {
+                                Pill(
+                                    text: color,
+                                    color: HisingenTheme.accent,
+                                    symbol: "paintpalette.fill"
+                                )
+                            } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
+                                Pill(
+                                    text: upholstery,
+                                    color: HisingenTheme.accent,
+                                    symbol: "carseat.left.fill"
+                                )
+                            }
+                        }
+                        if let subtitleText, !subtitleText.isEmpty {
+                            Text(subtitleText)
                                 .font(.system(size: 11))
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
                     }
                     Spacer()
-                    if let reg = state.registrationNo, !reg.isEmpty {
+                    if showRegBadge, let reg = state.registrationNo, !reg.isEmpty {
                         Text(reg)
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .padding(.horizontal, 8)
@@ -142,11 +188,12 @@ struct InfoTabView: View {
         }
     }
 
-    private func angleButton(title: String, angle: Int, icon: String) -> some View {
+    private func angleButton(title: String, angle: Int, icon: String, proxy: ScrollViewProxy? = nil) -> some View {
         let isSelected = selectedAngleIndex == angle
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedAngleIndex = angle
+                proxy?.scrollTo(angle, anchor: .center)
             }
         } label: {
             HStack(spacing: 4) {
@@ -155,12 +202,19 @@ struct InfoTabView: View {
                 Text(title)
                     .font(.system(size: 10, weight: isSelected ? .bold : .medium))
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.04), in: Capsule())
-            .foregroundStyle(isSelected ? HisingenTheme.accent : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(isSelected ? HisingenTheme.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+            )
+            .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .withoutFocusRing()
+        .id(angle)
     }
 
     private var parkingLocationCard: some View {
@@ -170,7 +224,7 @@ struct InfoTabView: View {
 
         let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? "N" : "S")
         let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? "E" : "W")
-        let modelTitle = state.modelName ?? "Vehicle"
+        let modelTitle = state.modelName ?? L10n.text("Vehicle")
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -284,6 +338,15 @@ struct InfoTabView: View {
         if let autoKm = state.tripMeterAutomaticKm {
             rows.append(KVRow(L10n.text("Auto Trip (TA)"), String(format: "%.1f km", autoKm), symbol: "a.circle.fill"))
         }
+        if let electricKm = state.electricDistanceKm, electricKm > 0 {
+            rows.append(KVRow(L10n.text("Electric Driving"), String(format: "%.1f km", electricKm), symbol: "bolt.car.fill"))
+        }
+        if let fuelKm = state.fuelDistanceKm, fuelKm > 0 {
+            rows.append(KVRow(L10n.text("Combustion Driving"), String(format: "%.1f km", fuelKm), symbol: "fuelpump.fill"))
+        }
+        if let regen = state.regeneratedEnergyKwh, regen > 0 {
+            rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
+        }
         if let speed = state.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle.fill"))
         }
@@ -308,6 +371,15 @@ struct InfoTabView: View {
             let hasBrake = health.warnings.contains(.brakeFluid)
             rows.append(KVRow(L10n.text("Brake Fluid"), hasBrake ? L10n.text("Low / Check Required") : L10n.text("Normal"), symbol: "circle.circle", valueWarning: hasBrake))
 
+            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+                let warn = frontPads.uppercased() != "NORMAL" && !frontPads.uppercased().contains("NO_WARNING")
+                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle", valueWarning: warn))
+            }
+            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+                let warn = rearPads.uppercased() != "NORMAL" && !rearPads.uppercased().contains("NO_WARNING")
+                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle", valueWarning: warn))
+            }
+
             let hasWasher = health.warnings.contains(.washerFluid)
             rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : L10n.text("Adequate"), symbol: "drop.triangle.fill", valueWarning: hasWasher))
 
@@ -323,6 +395,12 @@ struct InfoTabView: View {
             }
         } else {
             rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Normal"), symbol: "circle.circle"))
+            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle"))
+            }
+            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
+            }
             rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Adequate"), symbol: "drop.triangle.fill"))
             rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Optimal"), symbol: "thermometer.sun.fill"))
             rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill"))
@@ -413,10 +491,10 @@ struct InfoTabView: View {
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
         if let capacity = state.reportedBatteryCapacityKwh ?? (state.powertrain.hasElectricRange ? Double(state.model.nominalUsableCapacityKwh) : nil), capacity > 0 {
-            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt"))
+            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt", info: L10n.text("Manufacturer Specification. Usable high-voltage pack capacity configured for this vehicle variant.")))
         }
         if state.powertrain.hasElectricRange && state.model.nominalWltpRangeKm > 0 {
-            rows.append(KVRow(L10n.text("WLTP Range (Est.)"), String(format: "%.0f km", state.model.nominalWltpRangeKm), symbol: "road.lanes"))
+            rows.append(KVRow(L10n.text("WLTP Range (Est.)"), String(format: "%.0f km", state.model.nominalWltpRangeKm), symbol: "road.lanes", info: L10n.text("Official Rating (Not Live Estimate). Standardized laboratory Worldwide Harmonised Light Vehicles Test Procedure benchmark for this model at 100% charge.")))
         }
         if let gearbox = state.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
@@ -425,10 +503,10 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Fuel Type"), fuel, symbol: "fuelpump.fill"))
         }
         if let liters = state.fuelAmountLiters, liters > 0 {
-            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill"))
+            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
         }
         if let avgFuel = state.averageFuelConsumptionLPer100Km, avgFuel > 0 {
-            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis"))
+            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
         }
 
         return Card {
@@ -437,6 +515,130 @@ struct InfoTabView: View {
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }
+    }
+
+    private var batteryHealthCard: some View {
+        guard state.powertrain.hasElectricRange, let soh = state.batteryStateOfHealthPercent else {
+            return AnyView(EmptyView())
+        }
+
+        let deg = state.batteryDegradationPercent ?? 0.0
+        let status = state.batteryHealthStatus
+        let usable = state.effectiveUsableBatteryCapacityKwh
+        let factoryUsable = state.factoryUsableBatteryCapacityKwh
+        let nominal = state.effectiveNominalBatteryCapacityKwh
+        let packDesc = state.batteryPackDescription
+        let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "battery.100.bolt", title: L10n.text("Battery Health & Longevity"), color: .green)
+                    Spacer()
+                    Pill(
+                        text: status,
+                        color: statusColor,
+                        symbol: "checkmark.shield.fill"
+                    )
+                }
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill", info: L10n.text("Manufacturer Specification. Architecture, chemical composition, and gross capacity of the high-voltage battery."))
+
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(HisingenTheme.accent)
+                                .frame(width: 14)
+                            Text(L10n.text("State of Health (SoH)"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                                .help(L10n.text("Estimated. Physical battery pack capacity retention derived from empirical EV degradation models (calendar aging from build week + cycle wear from total odometer distance). The factory warranty guarantees at least 70% retention over 8 years / 160,000 km."))
+                        }
+                        Spacer()
+                        HStack(spacing: 6) {
+                            ProgressView(value: min(100, soh), total: 100)
+                                .progressViewStyle(.linear)
+                                .frame(width: 60)
+                                .tint(statusColor)
+                            Text(String(format: "%.1f%%", soh))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(statusColor)
+                        }
+                    }
+                    .padding(.vertical, 2)
+
+                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
+                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
+                    KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
+
+                    let history = VehicleDatabase.shared.batteryHealthHistory(for: state.vin)
+                    if !history.isEmpty {
+                        Divider().opacity(0.4)
+                            .padding(.vertical, 2)
+
+                        DisclosureGroup {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(history.prefix(5)) { r in
+                                    HStack {
+                                        Text(Format.dateTimeFormatter.string(from: r.timestamp))
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        Text(String(format: "%.0f km", r.odometerKm))
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                        Text(String(format: "%.1f%% SoH", r.stateOfHealthPct))
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(HisingenTheme.semanticGood)
+                                    }
+                                    .padding(.vertical, 1)
+                                }
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state.vin)
+                                        let panel = NSSavePanel()
+                                        panel.allowedContentTypes = [.commaSeparatedText]
+                                        panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"
+                                        panel.begin { response in
+                                            if response == .OK, let url = panel.url {
+                                                try? csv.write(to: url, atomically: true, encoding: .utf8)
+                                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "square.and.arrow.up")
+                                            Text(L10n.text("Export Health Log (CSV)"))
+                                        }
+                                        .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .controlSize(.mini)
+                                }
+                                .padding(.top, 2)
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            HStack {
+                                Text(L10n.text("Recorded Degradation Milestones"))
+                                Spacer()
+                                Text(L10n.format("%d logs", history.count))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.system(size: 11, weight: .medium))
+                        }
+                        .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    }
+                }
+            }
+        })
     }
 
     private var serviceAndHealthCard: some View {
@@ -450,6 +652,13 @@ struct InfoTabView: View {
         }
         if let hours = state.engineHoursToService, hours > 0 {
             rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
+        }
+        if let workshopName = state.preferredWorkshopName, !workshopName.isEmpty {
+            var val = workshopName
+            if let id = state.preferredWorkshopId, !id.isEmpty { val += " (\(id))" }
+            rows.append(KVRow(L10n.text("Service Center"), val, symbol: "building.2.fill"))
+        } else if let id = state.preferredWorkshopId, !id.isEmpty {
+            rows.append(KVRow(L10n.text("Service Center ID"), id, symbol: "building.2.fill"))
         }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
@@ -532,6 +741,8 @@ struct InfoTabView: View {
         let warranty = state.effectiveWarrantyInfo
         let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
         let planTitle = warranty.planName ?? (isVolvo ? "Care by Volvo" : "Polestar Care")
+        let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
+        let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -539,13 +750,13 @@ struct InfoTabView: View {
                     CardHeader(
                         symbol: "shield.lefthalf.filled.badge.checkmark",
                         title: L10n.text("Warranty & Protection"),
-                        color: .indigo
+                        color: brandColor
                     )
                     Spacer()
                     Pill(
                         text: planTitle,
-                        color: .indigo,
-                        symbol: "checkmark.seal.fill"
+                        color: brandColor,
+                        symbol: brandIcon
                     )
                 }
 
@@ -554,7 +765,7 @@ struct InfoTabView: View {
                         let isExpired = factoryDate < Date()
                         KVRow(
                             L10n.text("Manufacturer Warranty"),
-                            Format.dateTimeFormatter.string(from: factoryDate),
+                            Format.dateFormatter.string(from: factoryDate),
                             symbol: "checkmark.shield.fill",
                             warning: isExpired
                         )
@@ -562,12 +773,24 @@ struct InfoTabView: View {
 
                     if let batteryDate = warranty.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
                         let isExpired = batteryDate < Date()
-                        let kmLimit = warranty.batteryWarrantyKm.map { Format.distance(km: $0, grouped: true, unit: Preferences.distanceUnit) } ?? "160,000 km"
                         KVRow(
                             L10n.text("EV Battery (8 yr / 160k km)"),
-                            "\(Format.dateTimeFormatter.string(from: batteryDate)) / \(kmLimit)",
+                            Format.dateFormatter.string(from: batteryDate),
                             symbol: "bolt.shield.fill",
                             warning: isExpired
+                        )
+                    }
+
+                    if state.powertrain.hasElectricRange,
+                       let maxKm = warranty.batteryWarrantyKm ?? (state.powertrain.hasElectricRange ? 160_000 : nil),
+                       let odo = state.odometerKm {
+                        let remainingKm = max(0, maxKm - odo)
+                        let isMileageExpired = odo >= maxKm
+                        KVRow(
+                            L10n.text("Battery Warranty Remaining"),
+                            Format.distance(km: remainingKm, grouped: true, unit: Preferences.distanceUnit),
+                            symbol: "gauge.with.needle",
+                            warning: isMileageExpired
                         )
                     }
 
@@ -576,7 +799,7 @@ struct InfoTabView: View {
                         let label = warranty.assistanceContact ?? L10n.text("Roadside Assistance")
                         KVRow(
                             label,
-                            Format.dateTimeFormatter.string(from: roadsideDate),
+                            Format.dateFormatter.string(from: roadsideDate),
                             symbol: "phone.badge.checkmark",
                             warning: isExpired
                         )
@@ -594,7 +817,7 @@ struct InfoTabView: View {
                         let isExpired = digitalDate < Date()
                         KVRow(
                             L10n.text("Digital Services & Data"),
-                            Format.dateTimeFormatter.string(from: digitalDate),
+                            Format.dateFormatter.string(from: digitalDate),
                             symbol: "antenna.radiowaves.left.and.right",
                             warning: isExpired
                         )
@@ -604,7 +827,7 @@ struct InfoTabView: View {
                         let isExpired = corrosionDate < Date()
                         KVRow(
                             L10n.text("Corrosion Protection (12 yr)"),
-                            Format.dateTimeFormatter.string(from: corrosionDate),
+                            Format.dateFormatter.string(from: corrosionDate),
                             symbol: "shield.fill",
                             warning: isExpired
                         )

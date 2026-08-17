@@ -31,9 +31,29 @@ sequenceDiagram
 
 Failure detection is string-based: if the login page HTML contains the literal string `"ERR001"`, Hisingen maps it to `PolestarError.authenticationRequired(.invalidCredentials)`; any other failure to extract a code maps to `.callbackRejected`. There is no structured error response to parse — this is a genuinely brittle, reverse-engineered flow, and `Tests/HisingenTests/Unit/ResumePathTests.swift` exists specifically to pin down the HTML-parsing regexes against known page variants.
 
-**Client and scopes:** Hisingen authenticates as the polestar.com **web** OIDC client, `client_id = l3oopkc_10`, requesting `openid profile email customer:attributes customer:attributes:write`. The `:write` scope is what the C3 OTA scheduler requires; it was previously omitted. The **mobile-app** client (`lp8dyrd_10`) was tested and cannot be used — its token is rejected by `mystar-v2`, breaking vehicle discovery. See [polestar.md](polestar.md#remote-commands).
+**Two clients, both required.** Hisingen runs the OIDC flow twice:
 
-**Redirect validation:** `oidcRedirectURL = https://www.polestar.com/sign-in-callback`. `OAuthRedirectDelegate` only captures a redirect whose scheme/host/path match this exactly — anything else continues following redirects normally. Path comparison normalizes `"/"` to `""` so a callback that reports an empty path in one form and `/` in another still matches.
+| | `l3oopkc_10` (web) | `lp8dyrd_10` (app) |
+| --- | --- | --- |
+| Redirect | `https://www.polestar.com/sign-in-callback` | `polestar-explore://explore.polestar.com` |
+| Used for | GraphQL + gRPC reads, OTA writes | `invocation.InvocationService` writes only |
+| Why not the other | not on the command allowlist | its token is rejected by `mystar-v2`, so it cannot list vehicles |
+
+Both request `openid profile email customer:attributes customer:attributes:write`. The second
+authorization reuses the PingFederate SSO cookie from the first, so it needs no extra credential
+prompt — provided both flows share one `URLSession`. Both issue refresh tokens, so email+password
+is needed exactly once; the command client's refresh token is stored under its own Keychain
+account (`polestar-command-refresh-token`) and both are revoked on sign-out.
+
+A session restored from a refresh token alone cannot bootstrap the command client if its refresh
+token was never stored — there is no IdP cookie and no password to replay. That is the one case
+where the app asks for email and password again, reported as *"Polestar mobile credentials
+required for remote controls."*
+
+Full detail and the allowlist itself: `docs/api/polestar-backend-map.md`, section
+"OAuth clients — the two-client rule" (internal-only, not published in this repository).
+
+**Redirect validation:** `OAuthRedirectDelegate` holds *both* callbacks and captures a redirect whose scheme/host/path matches either; anything else continues following redirects normally. Path comparison normalizes `"/"` to `""` so a callback that reports an empty path in one form and `/` in another still matches. Recognising both matters: the app client's callback is a custom scheme `URLSession` cannot load, so if it is not intercepted the redirect is followed into a failure and the authorization code is lost — silently, with the app then falling back to the web token and every remote command failing on the allowlist check.
 
 **State validation:** the `state` query parameter on the captured callback is compared against the value generated before the authorize request; a mismatch throws `.callbackRejected` before any code exchange is attempted.
 
@@ -43,7 +63,7 @@ Failure detection is string-based: if the login page HTML contains the literal s
 
 **Token refresh:** `refreshAccessToken(force:)` is coalesced — if a refresh is already in flight, concurrent callers `await` the same stored `Task` rather than issuing a duplicate POST. Triggered proactively (`refreshTokenIfNeeded`, when expiry is <5 minutes away) and reactively (on a 401/403 or an embedded GraphQL auth error, one retry).
 
-**Note:** `PolestarAPI` has its own private, duplicate PKCE implementation rather than using `Support/PKCE.swift` — functionally identical, but worth knowing if you're touching either. See [architecture/technical-debt.md](../architecture/technical-debt.md).
+**PKCE:** both providers use `Support/PKCE.swift`. `PolestarAPI` wraps it only to translate `URLError` into its own error domain.
 
 ## Volvo: OAuth2 PKCE, with a redirect-URI bridge
 

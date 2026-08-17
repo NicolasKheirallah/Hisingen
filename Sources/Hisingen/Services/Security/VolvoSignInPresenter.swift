@@ -14,7 +14,12 @@ final class VolvoSignInPresenter: NSObject {
                 existing.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
             }
             self.pendingContinuation = continuation
-            NSWorkspace.shared.open(authorizeURL)
+
+            let opened = NSWorkspace.shared.open(authorizeURL)
+            if !opened {
+                self.pendingContinuation = nil
+                continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
+            }
         }
     }
 
@@ -24,10 +29,10 @@ final class VolvoSignInPresenter: NSObject {
         continuation.resume(returning: url)
     }
 
-    func cancel() {
+    func cancel(with error: Error? = nil) {
         guard let continuation = pendingContinuation else { return }
         pendingContinuation = nil
-        continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
+        continuation.resume(throwing: error ?? VolvoError.authenticationRequired(.callbackRejected))
     }
 }
 

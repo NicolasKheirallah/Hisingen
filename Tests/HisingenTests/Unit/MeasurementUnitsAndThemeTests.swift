@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Testing
 @testable import Hisingen
 
@@ -71,14 +72,24 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(AppearanceMode.light.colorScheme, .light)
         XCTAssertEqual(AppearanceMode.dark.colorScheme, .dark)
 
+        XCTAssertNil(AppearanceMode.system.nsAppearance)
+        XCTAssertEqual(AppearanceMode.light.nsAppearance?.name, .aqua)
+        XCTAssertEqual(AppearanceMode.dark.nsAppearance?.name, .darkAqua)
+
         Preferences.appearanceMode = .light
         XCTAssertEqual(Preferences.appearanceMode, .light)
+        Preferences.applyAppearance()
+        XCTAssertEqual(NSApplication.shared.appearance?.name, .aqua)
 
         Preferences.appearanceMode = .dark
         XCTAssertEqual(Preferences.appearanceMode, .dark)
+        Preferences.applyAppearance()
+        XCTAssertEqual(NSApplication.shared.appearance?.name, .darkAqua)
 
         Preferences.appearanceMode = .system
         XCTAssertEqual(Preferences.appearanceMode, .system)
+        Preferences.applyAppearance()
+        XCTAssertNil(NSApplication.shared.appearance as NSAppearance?)
     }
 
     @Test

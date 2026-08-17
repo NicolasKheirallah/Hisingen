@@ -15,6 +15,7 @@ struct GrpcOdometerReport: Equatable, Sendable {
 
 extension PolestarGRPC {
     private static let exteriorPath = "/services.vehiclestates.exterior.ExteriorService/GetLatestExterior"
+    private static let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
     private static let healthPath = "/services.vehiclestates.health.HealthService/GetHealth"
     private static let odometerPath = "/services.vehiclestates.odometer.OdometerService/GetOdometer"
     private static let dashboardPath = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
@@ -27,10 +28,13 @@ extension PolestarGRPC {
     private static let preCleaningPath = "/services.vehiclestates.precleaning.PreCleaningService/GetPreCleaning"
     private static let locationPath = "/dtlinternet.DtlInternetService/GetLastKnownLocation"
     private static let weatherPath = "/weather.WeatherService/GetWeatherReport"
+    private static let errorsPath = "/chronos.services.v1.ErrorService/GetErrors"
+    private static let myCarsPath = "/car_information.CarInformation/GetMyCars"
 
     func fetchExterior(vin: String, accessToken: String) async throws -> ExteriorSnapshot? {
-        let body = try await firstMessage(path: Self.exteriorPath, message: Self.vehicleRequest(vin),
-                                          vin: vin, accessToken: accessToken)
+        let path = useStreaming ? Self.exteriorStreamPath : Self.exteriorPath
+        let body = try await firstMessage(path: path, message: Self.vehicleRequest(vin),
+                                           vin: vin, accessToken: accessToken)
         guard let payload = Self.message(body, field: 3) else { return nil }
         let current = Self.parseExterior(payload)
         guard let current else { return exteriorCache[vin] }
@@ -79,6 +83,7 @@ extension PolestarGRPC {
                 rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
                 let parsed = Self.parseSoftware(payload)
                 otaSoftwareStates[vin] = parsed.state
+                otaRawSoftwareStates[vin] = parsed.rawState
                 info = parsed
             }
         } catch { firstError = error }
@@ -158,6 +163,72 @@ extension PolestarGRPC {
             if hasInfrastructureError { throw errors[0] }
         }
         return schedules
+    }
+
+    /// Fetches vehicle service errors from `chronos.services.v1.ErrorService/GetErrors` (C3).
+    /// The response is a oneof-style message where exactly one per-service error
+    /// field (3-8) is populated. Recovered from the official Polestar APK v5.10.0 teardown.
+    func fetchErrors(vin: String, accessToken: String) async throws -> [VehicleChronosError] {
+        // ErrorService is server-streaming and may take longer than the default 10s request
+        // timeout to return the first frame on PCCS — use a dedicated session with a longer
+        // timeout. The service is not deployed on all backends/regions; if it returns
+        // UNAVAILABLE (14) or UNIMPLEMENTED (12), treat it as "no errors" rather than failing.
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 45
+        let longSession = URLSession(configuration: config)
+        let base = try await resolvedHost(.c3, accessToken: accessToken)
+        var request = URLRequest(url: base.appendingPathComponent(Self.errorsPath))
+        request.httpMethod = "POST"
+        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vin, forHTTPHeaderField: "vin")
+        request.httpBody = Protobuf.grpcFrame(Self.chronosEnvelope(vin: vin))
+
+        do {
+            let (bytes, response) = try await longSession.bytes(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                return []
+            }
+            if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
+                // 12=UNIMPLEMENTED, 14=UNAVAILABLE — service not deployed; no errors to report.
+                if status == "12" || status == "14" { return [] }
+                throw PolestarError.invalidResponse(operation: "gRPC errors status \(status)")
+            }
+            guard http.statusCode == 200 else { return [] }
+            var header = [UInt8]()
+            var body = Data()
+            var expected: Int?
+            for try await byte in bytes {
+                if expected == nil {
+                    header.append(byte)
+                    guard header.count == 5 else { continue }
+                    expected = Int(header[1]) << 24 | Int(header[2]) << 16
+                        | Int(header[3]) << 8 | Int(header[4])
+                    if expected == 0 { break }
+                    continue
+                }
+                body.append(byte)
+                if let frameSize = expected, body.count == frameSize { break }
+            }
+            guard !body.isEmpty else { return [] }
+            return Self.parseErrors(body)
+        } catch let error as URLError where error.code == .timedOut {
+            // Server-streaming timeout — service didn't respond; treat as no errors.
+            return []
+        }
+    }
+
+    /// Fetches vehicle information from `car_information.CarInformation/GetMyCars` (C3 gRPC).
+    /// Returns backend-authoritative capability flags and the **actually installed** software
+    /// version (`consumerSoftwareVersion`) — which `GetSoftwareInfo` does not provide during
+    /// a rollout. Recovered from the official Polestar APK v5.10.0 teardown — see
+    /// `docs/api/ota-investigation.md` (E10).
+    func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
+        let body = try await firstMessage(path: Self.myCarsPath, message: Data(),
+                                          vin: vin, accessToken: accessToken)
+        return Self.parseMyCars(body, vin: vin)
     }
 
     func fetchClimate(vin: String, accessToken: String) async throws -> VehicleClimateStatus? {
@@ -242,36 +313,80 @@ extension PolestarGRPC {
 
 
     func fetchLocation(vin: String, accessToken: String) async throws -> VehicleLocation? {
-        let body = try await firstMessage(path: Self.locationPath,
-                                          message: Self.vehicleRequest(vin),
-                                          vin: vin, accessToken: accessToken)
+        let paths: [(String, GRPCHost)] = [
+            (Self.locationPath, .c3),
+            ("/services.vehiclestates.location.LocationService/GetLatestLocation", .c3),
+            ("/dtlinternet.DtlInternetService/GetLocation", .c3),
+            ("/pccs.chronos.services.v1.LocationService/GetLocation", .pccs),
+            ("/services.vehiclestates.location.LocationService/GetLocation", .c3)
+        ]
 
-        let compact = Self.message(body, field: 5) ?? Self.message(body, field: 2)
-        guard let compact else { return nil }
-        return Self.parseLocation(compact)
+        let message = Protobuf.stringField(1, vin)
+        for (path, host) in paths {
+            do {
+                let body = try await firstMessage(path: path,
+                                                  message: message,
+                                                  vin: vin, accessToken: accessToken, host: host)
+
+                let candidates = [
+                    body,
+                    Self.message(body, field: 5),
+                    Self.message(body, field: 1),
+                    Self.message(body, field: 3),
+                    Self.message(body, field: 2),
+                    Self.message(body, field: 4)
+                ].compactMap { $0 }
+
+                for candidate in candidates {
+                    if let loc = Self.parseLocation(candidate) {
+                        return loc
+                    }
+                }
+            } catch {
+                continue
+            }
+        }
+        return nil
     }
 
 
     func fetchWeather(vin: String, accessToken: String) async throws -> VehicleWeather? {
-
         if let location = try? await fetchLocation(vin: vin, accessToken: accessToken),
            let lat = location.latitude, let lon = location.longitude,
-           lat != 0.0, lon != 0.0 {
+           abs(lat) > 0.001, abs(lon) > 0.001 {
             if let weather = await fetchOpenMeteoWeather(latitude: lat, longitude: lon) {
                 return weather
             }
         }
 
+        let weatherPaths: [(String, GRPCHost)] = [
+            (Self.weatherPath, .c3),
+            ("/services.vehiclestates.weather.WeatherService/GetLatestWeather", .c3),
+            ("/weather.WeatherService/GetWeatherReport", .pccs)
+        ]
 
-        do {
-            let body = try await firstMessage(path: Self.weatherPath,
-                                              message: Self.vehicleRequest(vin),
-                                              vin: vin, accessToken: accessToken)
-            guard let report = Self.message(body, field: 1) else { return nil }
-            return Self.parseWeather(report)
-        } catch {
-            return nil
+        let message = Protobuf.stringField(1, vin)
+        for (path, host) in weatherPaths {
+            do {
+                let body = try await firstMessage(path: path,
+                                                  message: message,
+                                                  vin: vin, accessToken: accessToken, host: host)
+                let candidates = [
+                    body,
+                    Self.message(body, field: 1),
+                    Self.message(body, field: 3),
+                    Self.message(body, field: 2)
+                ].compactMap { $0 }
+                for candidate in candidates {
+                    if let weather = Self.parseWeather(candidate) {
+                        return weather
+                    }
+                }
+            } catch {
+                continue
+            }
         }
+        return nil
     }
 
     private func fetchOpenMeteoWeather(latitude: Double, longitude: Double) async -> VehicleWeather? {
@@ -459,14 +574,25 @@ extension PolestarGRPC {
 
     /// Parses an `ota_mobcache` `CarSoftwareInfo`:
     /// `1 software_id`, `2 description{1 name, 2 short, 3 long}`, `3 qb_code`, `4 state`,
-    /// `6 new_sw_version`, `8 schedule_info{2 scheduled_at}`, `10 state_timestamp`.
+    /// `5 install_info{1 estimated_duration_seconds}`, `6 new_sw_version`,
+    /// `8 schedule_info{2 scheduled_at}`, `10 state_timestamp{1 seconds}`, `11 originator`.
+    ///
+    /// Field 5 is a nested message (not a scalar varint) — confirmed by
+    /// `testDecodeGetSoftwareInfoRecursively`: `f5: msg(3){f1: varint=5400}`.
     static func parseSoftware(_ data: Data) -> VehicleSoftwareInfo {
         let fields = Protobuf.fields(data)
         let description = message(fields, field: 2).map(Protobuf.fields)
-        let state = softwareState(varint(fields, 4) ?? 0)
+        let rawStateValue = varint(fields, 4) ?? 0
+        let rawState = SoftwareStateRaw(rawValue: Int(rawStateValue)) ?? .unknown
+        let state = rawState.coarseState
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
         let advertisedVersion = string(fields, 6).nilIfEmpty
         let parsedTitle = description.flatMap { string($0, 1).nilIfEmpty } ?? advertisedVersion
+
+        // Field 5 is a nested message: `{1: estimated_install_duration_seconds}`.
+        let installDuration = message(fields, field: 5)
+            .flatMap { Protobuf.fields($0).first(where: { $0.number == 1 })?.varint }
+            .map { Int($0) }
 
         // `new_sw_version` is the only version string the backend returns, and its meaning
         // depends on `state`: while an update is pending it is the *target* version, and the
@@ -486,6 +612,8 @@ extension PolestarGRPC {
             version: advertisedVersion,
             title: parsedTitle,
             state: state,
+            rawState: rawState,
+            estimatedInstallDurationSeconds: installDuration,
             scheduledAt: timestamp(schedule),
             updatedAt: timestamp(message(fields, field: 10)),
             installedVersion: describesInstalled ? advertisedVersion : nil,
@@ -494,9 +622,14 @@ extension PolestarGRPC {
     }
 
     /// `ota_mobcache.SoftwareState`. The enum it mirrors runs 0…14; 15 is an extra value this
-    /// backend has been observed emitting for an offered update (pinned by
-    /// `testSoftwareVersionRepresentsAvailableUpdateNotInstalledVersion`). Anything else is
-    /// reported as unknown rather than guessed at.
+    /// backend has been observed emitting for an update that has been *announced* but not yet
+    /// *authorized for download* — distinct from 1 (`DOWNLOAD_READY`, which means the payload
+    /// has been downloaded and is ready to install). Both collapse into `.available` here for
+    /// UI continuity; the precise distinction is preserved in `VehicleSoftwareInfo.rawState`
+    /// (see `SoftwareStateRaw`). Pinned by
+    /// `testSoftwareVersionRepresentsAvailableUpdateNotInstalledVersion` and
+    /// `testDecodeGetSoftwareInfoRecursively`. Anything else is reported as unknown rather
+    /// than guessed at.
     static func softwareState(_ value: UInt64) -> SoftwareUpdateState {
         switch value {
         case 1, 15: return .available // DOWNLOAD_READY, UPDATE_AVAILABLE
@@ -511,6 +644,72 @@ extension PolestarGRPC {
         case 13: return .installing   // INSTALLATION_SCHEDULE_TRIGGERED
         default: return .unknown      // 0 UNKNOWN, 14 INSTALLATION_UNKNOWN
         }
+    }
+
+    /// Parses a `pccs.chronos.messages.error.v1.GetErrorsResponse`:
+    /// `1 id`, `2 vin`, oneof serviceError { `3 ampLimitError{1 error}`, `4 chargeLocationError{1 error, 2 action}`,
+    /// `5 chargeNowError{1 error, 2 action}`, `6 globalChargeTimerError{1 error}`, `7 parkingClimateTimerError{1 error, 2 action}`,
+    /// `8 targetSocError{1 error}` }.
+    /// The oneof is identified by which field number is present (3-8). Each sub-error's
+    /// field 1 is an `Error` enum int; field 2 (where present) is an `Action` enum int.
+    static func parseErrors(_ data: Data) -> [VehicleChronosError] {
+        let fields = Protobuf.fields(data)
+        var errors: [VehicleChronosError] = []
+
+        let serviceMap: [(field: Int, service: VehicleChronosError.Service)] = [
+            (3, .ampLimit), (4, .chargeLocation), (5, .chargeNow),
+            (6, .globalChargeTimer), (7, .parkingClimateTimer), (8, .targetSoc),
+        ]
+        for (fieldNum, service) in serviceMap {
+            guard let errorData = message(fields, field: fieldNum) else { continue }
+            let subFields = Protobuf.fields(errorData)
+            let errorCodeInt = Int(varint(subFields, 1) ?? 0)
+            let errorCode = VehicleChronosError.Code(rawValue: errorCodeInt) ?? .unknown
+            let actionCode = subFields.first(where: { $0.number == 2 && $0.wire == 0 }).map { Int($0.varint) }
+            errors.append(VehicleChronosError(service: service, errorCode: errorCode,
+                                               actionCode: actionCode))
+        }
+        return errors
+    }
+
+    /// Parses a `GetMyCarsResponse`: `{1: [MyCar]}` where `MyCar` = `{1: Car, 2: userIsLinked,
+    /// 3: userIsOwner, 4: registrationPlate}`. Extracts the `Car` matching the VIN and reads
+    /// the OTA-relevant fields:
+    /// `9: consumerSoftwareVersion (string)`, `32: supportsUpdateStatus (bool)`,
+    /// `33: supportsRemoteOtaInstallSchedule (bool)`, `57: supportsFullOtaUpdates (bool)`,
+    /// `62: supportsCloudBasedOtaDownloadConsent (bool)`, `70: hasPerformanceSoftwareUpgrade (bool)`.
+    /// Boolean fields use protobuf default (absent = false).
+    static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
+        let outer = Protobuf.fields(data)
+        // GetMyCarsResponse: {1: [MyCar]} — field 1 is repeated, each entry is a MyCar message.
+        for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
+            let myCar = Protobuf.fields(myCarField.data)
+            // MyCar: {1: Car, 2: userIsLinked, 3: userIsOwner, 4: registrationPlate}
+            guard let carData = myCar.first(where: { $0.number == 1 && $0.wire == 2 })?.data else { continue }
+            let car = Protobuf.fields(carData)
+            // Car: {1: vin (string)}
+            let carVin = string(car, 1)
+            guard carVin.uppercased() == vin.uppercased() else { continue }
+
+            // Extract OTA-relevant fields.
+            let installedVersion = string(car, 9).nilIfEmpty
+            let supportsUpdateStatus = varint(car, 32) == 1
+            let supportsRemoteOtaInstallSchedule = varint(car, 33) == 1
+            let supportsFullOtaUpdates = varint(car, 57) == 1
+            // Field 62: supportsCloudBasedOtaDownloadConsent (bool, absent = false)
+            let supportsCloudBasedOtaDownloadConsent = varint(car, 62) == 1
+            let hasPerformanceSoftwareUpgrade = varint(car, 70) == 1
+
+            return VehicleOTACapabilities(
+                installedSoftwareVersion: installedVersion,
+                supportsFullOtaUpdates: supportsFullOtaUpdates,
+                supportsRemoteOtaInstallSchedule: supportsRemoteOtaInstallSchedule,
+                supportsCloudBasedOtaDownloadConsent: supportsCloudBasedOtaDownloadConsent,
+                supportsUpdateStatus: supportsUpdateStatus,
+                hasPerformanceSoftwareUpgrade: hasPerformanceSoftwareUpgrade
+            )
+        }
+        return nil
     }
 
     static func parseGlobalChargeTimer(_ data: Data) -> VehicleSchedule? {
@@ -621,17 +820,78 @@ extension PolestarGRPC {
 
     static func parseLocation(_ data: Data) -> VehicleLocation? {
         let fields = Protobuf.fields(data)
-        let longitude = numeric(fields, 1)
-        let latitude = numeric(fields, 2)
-        guard latitude != nil || longitude != nil else { return nil }
-        let heading = numeric(fields, 4).flatMap { $0 >= 0 ? $0 : nil }
-        let speed = numeric(fields, 5).flatMap { $0 >= 0 ? $0 : nil }
-        let ts = timestamp(message(fields, field: 3))
-        let altitude = numeric(fields, 6)
-        let accuracy = numeric(fields, 7)
-        let parkingBrake = varint(fields, 8).map { $0 != 0 }
+
+        var lon: Double?
+        var lat: Double?
+        var tsMillis: UInt64?
+
+        if let f1 = fields.first(where: { $0.number == 1 }), f1.wire == 1 || f1.wire == 5 {
+            lon = numeric(fields, 1)
+            lat = numeric(fields, 2)
+            if let tsMsg = message(fields, field: 3) {
+                let tsFields = Protobuf.fields(tsMsg)
+                if let sec = varint(tsFields, 1) {
+                    tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
+                }
+            } else {
+                tsMillis = varint(fields, 3)
+            }
+        } else {
+            lon = numeric(fields, 2)
+            lat = numeric(fields, 3)
+            tsMillis = varint(fields, 4)
+        }
+
+        if (lat == nil || lon == nil), let subData = message(fields, field: 5) ?? message(fields, field: 1) ?? message(fields, field: 3) {
+            let subFields = Protobuf.fields(subData)
+            lon = lon ?? numeric(subFields, 1) ?? numeric(subFields, 2)
+            lat = lat ?? numeric(subFields, 2) ?? numeric(subFields, 3)
+            if tsMillis == nil {
+                if let tsSub = message(subFields, field: 3) {
+                    let tsFields = Protobuf.fields(tsSub)
+                    if let sec = varint(tsFields, 1) {
+                        tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
+                    }
+                } else {
+                    tsMillis = varint(subFields, 3) ?? varint(subFields, 4)
+                }
+            }
+        }
+
+        if lat == nil && lon == nil {
+            lon = numeric(fields, 1)
+            lat = numeric(fields, 2)
+        }
+
+        if let rawLat = lat, abs(rawLat) > 180 {
+            lat = rawLat > 1_000_000_000 ? rawLat / 10_000_000.0 : (rawLat > 100_000 ? rawLat / 1_000_000.0 : rawLat)
+        }
+        if let rawLon = lon, abs(rawLon) > 180 {
+            lon = rawLon > 1_000_000_000 ? rawLon / 10_000_000.0 : (rawLon > 100_000 ? rawLon / 1_000_000.0 : rawLon)
+        }
+
+        guard let validLat = lat, let validLon = lon, (abs(validLat) > 0.0001 || abs(validLon) > 0.0001) else {
+            return nil
+        }
+
+        let heading = [numeric(fields, 4), numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
+            .compactMap { $0 }
+            .first(where: { val in
+                guard val >= 0 && val <= 360 else { return false }
+                if let ts = tsMillis, ts > 10_000_000 {
+                    return abs(val - Double(ts)) > 1000
+                }
+                return true
+            })
+        let speed = [numeric(fields, 5), numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
+            .compactMap { $0 }
+            .first(where: { $0 >= 0 && $0 <= 300 })
+        let date = tsMillis.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1_000) : nil }
+        let altitude = numeric(fields, 6) ?? numeric(fields, 8)
+        let accuracy = numeric(fields, 7) ?? numeric(fields, 9)
+        let parkingBrake = varint(fields, 8).map { $0 != 0 } ?? varint(fields, 10).map { $0 != 0 }
         let gear: String? = {
-            guard let g = varint(fields, 9) else { return nil }
+            guard let g = varint(fields, 9) ?? varint(fields, 11) else { return nil }
             switch g {
             case 1: return "P"
             case 2: return "R"
@@ -640,12 +900,13 @@ extension PolestarGRPC {
             default: return nil
             }
         }()
+
         return VehicleLocation(
-            latitude: latitude,
-            longitude: longitude,
+            latitude: validLat,
+            longitude: validLon,
             heading: heading,
             speed: speed,
-            timestamp: ts,
+            timestamp: date,
             altitudeMeters: altitude,
             accuracyMeters: accuracy,
             parkingBrakeEngaged: parkingBrake,
@@ -656,11 +917,17 @@ extension PolestarGRPC {
 
     static func parseWeather(_ data: Data) -> VehicleWeather? {
         let fields = Protobuf.fields(data)
-        let millis = varint(fields, 1).flatMap { $0 > 0 ? $0 : nil }
+        let subData = message(fields, field: 1) ?? data
+        let subFields = Protobuf.fields(subData)
+
+        let millis = varint(subFields, 1).flatMap { $0 > 0 ? $0 : nil }
         let timestamp = millis.map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000) }
-        let temp = numeric(fields, 2)
+        let temp = numeric(subFields, 2)
+        let code = varint(subFields, 3).map(Int.init)
+        let condition = code.map(Self.wmoWeatherDescription)
+
         guard timestamp != nil || temp != nil else { return nil }
-        return VehicleWeather(temperatureCelsius: temp, timestamp: timestamp)
+        return VehicleWeather(temperatureCelsius: temp, condition: condition, timestamp: timestamp)
     }
 
 

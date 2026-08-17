@@ -229,7 +229,7 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField("e.g. My Polestar, Midnight", text: $polestarNickname)
+                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: polestarNickname) { AccountDraftState.shared.polestarNickname = $0 }
             }
@@ -349,7 +349,7 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField("e.g. My Volvo, Family car", text: $volvoNickname)
+                TextField(L10n.text("e.g. My Volvo, Family car"), text: $volvoNickname)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: volvoNickname) { AccountDraftState.shared.volvoNickname = $0 }
             }

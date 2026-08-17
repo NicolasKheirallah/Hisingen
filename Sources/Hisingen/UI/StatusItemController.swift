@@ -57,18 +57,14 @@ final class StatusItemController: NSObject {
         }
         popover.behavior = .semitransient
         popover.delegate = self
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         popover.contentSize = NSSize(width: HisingenTheme.popoverWidth, height: 560)
         installGlobalHotKey()
     }
 
     private func installGlobalHotKey() {
-
-
         installLocalHotKey()
-        guard AXIsProcessTrusted() else {
-            _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-            return
-        }
+        guard AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
     }
 
@@ -145,9 +141,12 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
 
         if let state = latestState {
-            let nickname = Preferences.vehicleNickname(for: state.vin)
-            let vehicleName = [nickname.isEmpty ? nil : nickname, state.modelName]
-                .compactMap { $0 }.first ?? Preferences.activeBrand.displayName
+            let vehicleName = Preferences.formattedVehicleTitle(
+                vin: state.vin,
+                modelName: state.modelName,
+                modelYear: state.modelYear,
+                registrationNo: state.registrationNo
+            )
             let battery = state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
             let range = state.rangeKm.map {
                 "\(Preferences.distanceUnit.convert(km: $0)) \(Preferences.distanceUnit.suffix)"
@@ -207,7 +206,7 @@ final class StatusItemController: NSObject {
         if cars.count > 1 || otherBrandResumable {
             let switchMenu = NSMenu()
             for (index, car) in cars.enumerated() {
-                let name = car.title.isEmpty ? Preferences.activeBrand.displayName : car.title
+                let name = car.displayTitle()
                 let battery = cachedSnapshots[car.vin]?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌥\(index + 1)" : ""
                 let title = shortcut.isEmpty
@@ -445,27 +444,6 @@ final class StatusItemController: NSObject {
         }
     }
 
-    func updateCars(_ newCars: [CarSummary], activeVin: String?) {
-        cars = newCars
-        self.activeVin = activeVin
-        refreshPopoverIfNeeded()
-    }
-
-    func updateRemoteCommandState(_ inProgress: RemoteCommand?) {
-        remoteCommandInProgress = inProgress != nil
-        refreshPopoverIfNeeded()
-    }
-
-    func updateAppVersion(newVersion: String?) {
-        updateVersion = newVersion
-        refreshPopoverIfNeeded()
-    }
-
-    func updateCheckingForUpdates(_ checking: Bool) {
-        checkingForUpdates = checking
-        refreshPopoverIfNeeded()
-    }
-
     func updateNotificationPermission(_ permission: NotificationPermission) {
         notificationPermission = permission
         refreshPopoverIfNeeded()
@@ -473,6 +451,7 @@ final class StatusItemController: NSObject {
 
     private func showPopover() {
         guard !popover.isShown else { return }
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         let view = HisingenContentView(
             state: latestState,
             error: latestError,
@@ -499,6 +478,10 @@ final class StatusItemController: NSObject {
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
+    }
+
+    func openPopover() {
+        showPopover()
     }
 
     private func selectCar(_ vin: String) {
@@ -564,8 +547,9 @@ final class StatusItemController: NSObject {
         return faded
     }
 
-    private func refreshPopoverIfNeeded() {
+    func refreshPopoverIfNeeded() {
         guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<HisingenContentView> else { return }
+        popover.appearance = Preferences.appearanceMode.nsAppearance
         let view = HisingenContentView(
             state: latestState,
             error: latestError,

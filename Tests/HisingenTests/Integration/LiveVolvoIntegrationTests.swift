@@ -12,6 +12,31 @@ private let liveVolvoCredentialsConfigured: Bool = {
         && environment["HISINGEN_TEST_VOLVO_REFRESH_TOKEN"]?.isEmpty == false
 }()
 
+// The probe tests below deliberately send credentials that Volvo's identity provider
+// rejects (client_credentials and ROPC grants this client is not entitled to, plus a
+// scripted Volvo ID form post). PingFederate counts every rejection towards a per-client
+// lockout — running them unattended on every `swift test` locked the production client
+// out of the token endpoint. They stay opt-in, and never carry a credential fallback.
+private let volvoProbeRequiredVariables = [
+    "HISINGEN_ENABLE_VOLVO_PROBES",
+    "VOLVO_CLIENT_ID",
+    "VOLVO_CLIENT_SECRET",
+    "VOLVO_VCC_API_KEY",
+    "VOLVO_VIN",
+    "POLESTAR_LOGIN",
+    "POLESTAR_PASS"
+]
+
+private let volvoProbesEnabled: Bool = {
+    let environment = ProcessInfo.processInfo.environment
+    return volvoProbeRequiredVariables.allSatisfy { environment[$0]?.isEmpty == false }
+}()
+
+private let volvoProbeDisabledReason: Comment = """
+Volvo probe tests are opt-in: set \(volvoProbeRequiredVariables.joined(separator: ", ")). \
+They burn failed-login attempts against the shared OAuth client and can lock it out.
+"""
+
 @MainActor
 struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !liveVolvoCredentialsConfigured, "Live Volvo credentials are not configured"))
@@ -64,15 +89,85 @@ struct LiveVolvoReadOnlyIntegrationTests {
     }
 
     /// Comprehensive live probe of all Volvo Developer APIs, OIDC discovery, and Connected Vehicle endpoints.
-    @Test
+    @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
+    func testProbeVolvoOAuthAuthorizeURL() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
+        let email = try XCTUnwrap(environment["POLESTAR_LOGIN"])
+        let password = try XCTUnwrap(environment["POLESTAR_PASS"])
+
+        let api = VolvoAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        await api.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
+
+        let authURL = try await api.beginSignIn()
+        print("\n========================================================")
+        print("🔐 VOLVO OAUTH AUTHORIZE URL PROBE")
+        print("  • Authorize URL: \(authURL.absoluteString)")
+
+        let config = URLSessionConfiguration.default
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
+        let session = URLSession(configuration: config)
+
+        var req = URLRequest(url: authURL)
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: req)
+        let http = response as? HTTPURLResponse
+        print("  • Authorize Response Status: HTTP \(http?.statusCode ?? 0)")
+        let landingURL = http?.url?.absoluteString ?? "none"
+        print("  • Landing URL: \(landingURL)")
+
+        let html = String(decoding: data, as: UTF8.self)
+        print("  • HTML Length: \(html.count)")
+
+        // Extract the authenticate URL
+        if let urlStart = html.range(of: "\"url\": \""),
+           let urlEnd = html[urlStart.upperBound...].range(of: "\"") {
+            let authPath = String(html[urlStart.upperBound..<urlEnd.lowerBound]).replacingOccurrences(of: "\\/", with: "/")
+            let fullAuthURL = URL(string: "https://auth.volvocars.com\(authPath)")!
+            print("  • Found Auth Action: \(fullAuthURL.absoluteString)")
+
+            var postReq = URLRequest(url: fullAuthURL)
+            postReq.httpMethod = "POST"
+            postReq.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            postReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            let postBody = "username=\(email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&password=\(password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&credentialId="
+            postReq.httpBody = postBody.data(using: .utf8)
+
+            let (postData, postResp) = try await session.data(for: postReq)
+            let postHttp = postResp as? HTTPURLResponse
+            print("  • POST Response Status: HTTP \(postHttp?.statusCode ?? 0)")
+            print("  • Final URL after POST: \(postHttp?.url?.absoluteString ?? "none")")
+
+            let postHtml = String(decoding: postData, as: UTF8.self)
+            print("  • Checking error details in postHtml...")
+            if let msgRange = postHtml.range(of: "\"message\":") {
+                let rest = postHtml[msgRange.lowerBound...]
+                print("  • Message Object: \(rest.prefix(300))")
+            }
+
+            if let finalURL = postHttp?.url,
+               let comps = URLComponents(url: finalURL, resolvingAgainstBaseURL: false),
+               let code = comps.queryItems?.first(where: { $0.name == "code" })?.value {
+                print("  🎉 RECEIVED AUTHORIZATION CODE: \(code.prefix(15))...")
+            }
+        } else {
+            print("  ✗ url action not found")
+        }
+        print("========================================================\n")
+    }
+
+    @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testComprehensiveVolvoAllAPIsProbeAndDump() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = environment["VOLVO_CLIENT_ID"] ?? environment["HISINGEN_TEST_VOLVO_CLIENT_ID"] ?? "dc-3spjins2tdf9cbxsq16xjha14"
-        let clientSecret = environment["VOLVO_CLIENT_SECRET"] ?? environment["HISINGEN_TEST_VOLVO_CLIENT_SECRET"] ?? "yPdq8K9SwgsZUB9AKMQ81"
-        let vccApiKey = environment["VOLVO_VCC_API_KEY"] ?? environment["HISINGEN_TEST_VOLVO_VCC_API_KEY"] ?? "dfda4ef83c304b2c8503897e72dc2966"
-        let vin = environment["VOLVO_VIN"] ?? environment["HISINGEN_TEST_VOLVO_VIN"] ?? "YV1XZEHR2R2371256"
-        let login = environment["POLESTAR_LOGIN"] ?? environment["HISINGEN_TEST_EMAIL"] ?? "nicolas.kheirallah@gmail.com"
-        let pass = environment["POLESTAR_PASS"] ?? environment["HISINGEN_TEST_PASSWORD"] ?? "satdoj-4kowho-zuFbuf"
+        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
+        let vin = try XCTUnwrap(environment["VOLVO_VIN"])
+        let login = try XCTUnwrap(environment["POLESTAR_LOGIN"])
+        let pass = try XCTUnwrap(environment["POLESTAR_PASS"])
 
         print("\n========================================================")
         print("🔍 [1. VOLVO OIDC DISCOVERY & IDENTITY]")

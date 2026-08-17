@@ -18,3 +18,14 @@ DerivedData/
 !.env.example
 *.secret
 
+# Generated at build time by Scripts/inject-secrets.sh from .env.secrets or CI
+# secrets. Never tracked — the XOR masking is trivially reversible, so a
+# committed copy publishes the live credentials.
+Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift
+
+Hisingen.dmg.sha256
+# Reverse-engineering deep-dives — internal only, never upload
+docs/api/polestar-backend-map.md
+docs/api/polestar-probe-transcripts.md
+docs/api/volvo-backend-map.md
+docs/api/ota-investigation.md

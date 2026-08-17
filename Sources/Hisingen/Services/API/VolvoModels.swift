@@ -257,6 +257,8 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let oilLevelWarning: VolvoField<String>?
     let washerFluidLevelWarning: VolvoField<String>?
     let batteryChargeLevelWarning: VolvoField<String>?
+    let workshopId: VolvoField<String>?
+    let workshopName: VolvoField<String>?
 
     var hasServiceWarning: Bool {
         guard let raw = serviceWarning?.value?.uppercased() else { return false }
@@ -310,6 +312,9 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     let averageFuelConsumption: VolvoField<Double>?
     let averageEnergyConsumption: VolvoField<Double>?
     let averageSpeed: VolvoField<Double>?
+    let electricDistance: VolvoField<Double>?
+    let fuelDistance: VolvoField<Double>?
+    let regeneratedEnergy: VolvoField<Double>?
 }
 
 
@@ -339,10 +344,6 @@ struct VolvoCommandDTO: Decodable, Sendable {
     let href: String?
 }
 
-struct VolvoCommandsListDTO: Decodable, Sendable {
-    let commands: [VolvoCommandDTO]?
-}
-
 
 struct VolvoLocationDTO: Decodable, Sendable {
     struct Properties: Decodable, Sendable {
@@ -366,6 +367,9 @@ struct VolvoEngineStatusDTO: Decodable, Sendable {
 
 struct VolvoBrakesDTO: Decodable, Sendable {
     let brakeFluidLevelWarning: VolvoField<String>?
+    let frontBrakePadStatus: VolvoField<String>?
+    let rearBrakePadStatus: VolvoField<String>?
+    let parkingBrakeStatus: VolvoField<String>?
 }
 
 struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
@@ -434,86 +438,6 @@ struct VolvoWarningsDTO: Decodable, Sendable {
     }
 }
 
-
-struct VolvoClimatizationDTO: Decodable, Sendable {
-    let status: VolvoField<String>?
-    let timeRemainingMinutes: VolvoField<Int>?
-    let interiorTemperatureCelsius: VolvoField<Double>?
-    let targetTemperatureCelsius: VolvoField<Double>?
-    let preconditioning: VolvoField<String>?
-
-    private enum CodingKeys: String, CodingKey {
-        case status
-        case climatizationStatus
-        case parkedClimatization
-        case parkingClimateStatus
-        case preconditioning
-        case preConditioningStatus
-        case state
-
-        case timeRemaining
-        case timeRemainingMinutes
-        case timeRemainingInMinutes
-        case durationMinutes
-
-        case interiorTemperature
-        case interiorTemperatureCelsius
-        case cabinTemperature
-        case temperature
-
-        case targetTemperature
-        case targetTemperatureCelsius
-        case setTemperature
-        case requestedTemperature
-    }
-
-    init(
-        status: VolvoField<String>? = nil,
-        timeRemainingMinutes: VolvoField<Int>? = nil,
-        interiorTemperatureCelsius: VolvoField<Double>? = nil,
-        targetTemperatureCelsius: VolvoField<Double>? = nil,
-        preconditioning: VolvoField<String>? = nil
-    ) {
-        self.status = status
-        self.timeRemainingMinutes = timeRemainingMinutes
-        self.interiorTemperatureCelsius = interiorTemperatureCelsius
-        self.targetTemperatureCelsius = targetTemperatureCelsius
-        self.preconditioning = preconditioning
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        // Status field fallback cascade
-        self.status = try container.decodeIfPresent(VolvoField<String>.self, forKey: .status)
-            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .climatizationStatus)
-            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .parkedClimatization)
-            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .parkingClimateStatus)
-            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .state)
-
-        // Preconditioning fallback
-        self.preconditioning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .preconditioning)
-            ?? container.decodeIfPresent(VolvoField<String>.self, forKey: .preConditioningStatus)
-
-        // Time remaining fallback
-        self.timeRemainingMinutes = try container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemaining)
-            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemainingMinutes)
-            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeRemainingInMinutes)
-            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .durationMinutes)
-
-        // Interior temperature fallback
-        self.interiorTemperatureCelsius = try container.decodeIfPresent(VolvoField<Double>.self, forKey: .interiorTemperature)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .interiorTemperatureCelsius)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .cabinTemperature)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .temperature)
-
-        // Target temperature fallback
-        self.targetTemperatureCelsius = try container.decodeIfPresent(VolvoField<Double>.self, forKey: .targetTemperature)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .targetTemperatureCelsius)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .setTemperature)
-            ?? container.decodeIfPresent(VolvoField<Double>.self, forKey: .requestedTemperature)
-    }
-}
 
 struct VolvoTokenResponseDTO: Decodable, Sendable {
     let accessToken: String

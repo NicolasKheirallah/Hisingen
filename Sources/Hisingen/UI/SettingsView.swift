@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
     @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
     @State private var registrationBadgePosition: RegistrationNumberBadgePosition = Preferences.registrationBadgePosition
+    @State private var vehicleLabelFormat: VehicleLabelFormat = Preferences.vehicleLabelFormat
     @State private var menuBarStyle = Preferences.menuBarStyle
     @State private var distanceUnit = Preferences.distanceUnit
     @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
@@ -47,6 +48,8 @@ struct SettingsView: View {
     @State private var currencySymbol = Preferences.currencySymbol
     @State private var storeChargingHistory = Preferences.storeChargingHistory
     @State private var requireBiometrics = Preferences.requireBiometricsForRemoteControls
+    @State private var databaseVacuumed = false
+    @State private var databasePruned = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -61,6 +64,7 @@ struct SettingsView: View {
                 remoteControlsCard
                 capabilitiesCard
                 notificationsCard
+                databaseStorageCard
                 actionsCard
                 versionFooter
             }
@@ -451,6 +455,56 @@ struct SettingsView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Vehicle display name"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Shown in footer switcher, menus, and vehicle headers"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $vehicleLabelFormat) {
+                            ForEach(VehicleLabelFormat.allCases, id: \.self) { format in
+                                Text(format.title).tag(format)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: vehicleLabelFormat) { _ in
+                            Preferences.vehicleLabelFormat = vehicleLabelFormat
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    let previewTitle = Preferences.formattedVehicleTitle(
+                        vin: Preferences.vin.isEmpty ? "YS2TESTVIN123456" : Preferences.vin,
+                        modelName: state?.modelName ?? (Preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
+                        modelYear: state?.modelYear ?? "2024",
+                        registrationNo: state?.registrationNo ?? "ZCJ 06G",
+                        format: vehicleLabelFormat
+                    )
+                    HStack(spacing: 6) {
+                        Text(L10n.text("Preview:"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Image(systemName: Preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(HisingenTheme.accent)
+                            Text(previewTitle)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Session History"))
                                 .font(.system(size: 12, weight: .medium))
                             Text(L10n.text("Keep up to 20 local per-vehicle charging summaries"))
@@ -728,14 +782,15 @@ struct SettingsView: View {
 
                 Text(isVolvo
                      ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
-                     : L10n.text("Climate, locks, windows and cabin cleaning are dispatched through Polestar's command service, and software installation through its OTA scheduler. Charging commands are not yet verified against the backend."))
+                     : L10n.text("Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
                     featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
                     featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: false, badgeText: isVolvo ? "Read-Only in API" : "Unverified")
+                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo, badgeText: isVolvo ? "Read-Only in API" : nil)
+                    featureToggleRow(.remoteSchedules, symbol: "calendar.badge.clock", title: "Charging & Climate Timers", detail: "Create and edit charge windows and departure timers", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                     featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
@@ -1103,6 +1158,117 @@ struct SettingsView: View {
         .padding(.vertical, 3)
     }
 
+    private var databaseStorageCard: some View {
+        let counts = VehicleDatabase.shared.recordCounts()
+        let sizeBytes = VehicleDatabase.shared.databaseSizeBytes
+        let sizeStr = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: .blue)
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
+                    KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
+                    KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
+                    KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
+                    KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
+                    KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
+                }
+
+                Divider().opacity(0.4)
+                    .padding(.vertical, 2)
+
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button {
+                            VehicleDatabase.shared.vacuum()
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                databaseVacuumed = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    databaseVacuumed = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: databaseVacuumed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                                Text(databaseVacuumed ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(databaseVacuumed ? HisingenTheme.semanticGood : nil)
+
+                        Button {
+                            VehicleDatabase.shared.pruneHistoricalSamples(olderThanDays: 90)
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                databasePruned = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    databasePruned = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: databasePruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+                                Text(databasePruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(databasePruned ? HisingenTheme.semanticGood : nil)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button {
+                            let csv = VehicleDatabase.shared.exportChargingSessionsCSV(for: state?.vin)
+                            saveCSVWithPanel(suggestedFilename: "charging_sessions_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Charging (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button {
+                            let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state?.vin)
+                            saveCSVWithPanel(suggestedFilename: "battery_health_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Health (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private func saveCSVWithPanel(suggestedFilename: String, csvContent: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = suggestedFilename
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? csvContent.write(to: url, atomically: true, encoding: .utf8)
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            }
+        }
+    }
 
     private var actionsCard: some View {
         Card {
