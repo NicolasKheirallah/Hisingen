@@ -4,8 +4,9 @@ Polestar publishes no supported third-party vehicle-cloud API. Everything in thi
 
 Source: `Services/API/PolestarAPI.swift`, `PolestarGRPC.swift`, `PolestarGRPCCapabilities.swift`, `PolestarGRPCRemote.swift`, `GraphQLModels.swift`, `PolestarServiceError.swift`.
 
-> **See also: [polestar-backend-map.md](polestar-backend-map.md)** (with raw transcripts in
-> [polestar-probe-transcripts.md](polestar-probe-transcripts.md)) — the complete host/service/method/field map,
+> **See also: `docs/api/polestar-backend-map.md`** (with raw transcripts in
+> `docs/api/polestar-probe-transcripts.md`) — internal-only, not published in this repository.
+> Between them they hold the complete host/service/method/field map,
 > the two-client allowlist rule, the master remote controls matrix, Chronos writes, the full `SoftwareState` enum,
 > the OTA rollout control plane analysis, error semantics, transport quirks, and newly discovered capabilities.
 

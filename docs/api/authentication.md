@@ -50,7 +50,8 @@ token was never stored — there is no IdP cookie and no password to replay. Tha
 where the app asks for email and password again, reported as *"Polestar mobile credentials
 required for remote controls."*
 
-Full detail and the allowlist itself: [polestar-backend-map.md](polestar-backend-map.md#oauth-clients--the-two-client-rule).
+Full detail and the allowlist itself: `docs/api/polestar-backend-map.md`, section
+"OAuth clients — the two-client rule" (internal-only, not published in this repository).
 
 **Redirect validation:** `OAuthRedirectDelegate` holds *both* callbacks and captures a redirect whose scheme/host/path matches either; anything else continues following redirects normally. Path comparison normalizes `"/"` to `""` so a callback that reports an empty path in one form and `/` in another still matches. Recognising both matters: the app client's callback is a custom scheme `URLSession` cannot load, so if it is not intercepted the redirect is followed into a failure and the authorization code is lost — silently, with the app then falling back to the web token and every remote command failing on the allowlist check.
 

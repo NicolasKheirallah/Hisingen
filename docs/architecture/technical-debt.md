@@ -89,7 +89,7 @@ Charge-target/amp-limit/schedule/pre-cleaning/OTA commands all fall through to `
 `VehicleCapabilityProfile.permits(_:)`, and `remoteCommandInProgress`. No `.disabled(true)`
 literal remains in the file. Polestar's climate/locks/windows/honk/charging/timer controls are
 live (invocation via C3 + command token, chronos via PCCS + web token; both paths verified
-against a real vehicle — see [api/polestar-backend-map.md](../api/polestar-backend-map.md)).
+against a real vehicle — see the internal-only `docs/api/polestar-backend-map.md`).
 
 The original problem, for the record: the UI used to *enable* controls on a hardcoded
 `isBrandVolvo` check independent of the capability system, so the two could drift apart. They no
