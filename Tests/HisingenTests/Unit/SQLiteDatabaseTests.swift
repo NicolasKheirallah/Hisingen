@@ -169,6 +169,89 @@ struct SQLiteDatabaseTests {
         #expect(history.last?.odometerKm == 10000)
     }
 
+    @Test("Battery health skips readings that duplicate the last milestone")
+    func testBatteryHealthSkipsUnchangedReadings() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "BATTERY_VIN_DEDUP"
+
+        // First reading always lands — there is no history to compare against.
+        #expect(vdb.recordBatteryHealthMilestone(
+            vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
+        ))
+
+        // A refresh minutes later reporting the same figures carries no new information.
+        for _ in 0..<20 {
+            #expect(vdb.recordBatteryHealthMilestone(
+                vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
+            ) == false)
+        }
+        #expect(vdb.batteryHealthHistory(for: vin, limit: 50).count == 1)
+
+        // Noise below the threshold is still noise.
+        #expect(vdb.recordBatteryHealthMilestone(
+            vin: vin, odometerKm: 10_050, sohPct: 98.6, degPct: 1.4, usableKwh: 76.8
+        ) == false)
+
+        // Real SoH movement earns a row.
+        #expect(vdb.recordBatteryHealthMilestone(
+            vin: vin, odometerKm: 10_060, sohPct: 97.9, degPct: 2.1, usableKwh: 76.2
+        ))
+
+        // So does meaningful distance, even at an unchanged SoH.
+        #expect(vdb.recordBatteryHealthMilestone(
+            vin: vin, odometerKm: 10_600, sohPct: 97.9, degPct: 2.1, usableKwh: 76.2
+        ))
+        #expect(vdb.batteryHealthHistory(for: vin, limit: 50).count == 3)
+    }
+
+    @Test("Battery health records a heartbeat row once the interval elapses")
+    func testBatteryHealthHeartbeatAfterInterval() {
+        let vdb = VehicleDatabase.inMemory()
+        let previous = BatteryHealthRecord(
+            id: 1, vin: "HEARTBEAT_VIN", timestamp: Date(), odometerKm: 10_000,
+            stateOfHealthPct: 98.5, degradationPct: 1.5, effectiveUsableKwh: 76.8
+        )
+        let interval = VehicleDatabase.BatteryHealthMilestone.minimumInterval
+
+        // Identical readings, one second short of the heartbeat: still redundant.
+        #expect(vdb.isBatteryHealthMilestone(
+            sohPct: 98.5, odometerKm: 10_000, since: previous,
+            now: previous.timestamp.addingTimeInterval(interval - 1)
+        ) == false)
+
+        // Past the heartbeat, the same readings become a trend point worth keeping.
+        #expect(vdb.isBatteryHealthMilestone(
+            sohPct: 98.5, odometerKm: 10_000, since: previous,
+            now: previous.timestamp.addingTimeInterval(interval)
+        ))
+    }
+
+    @Test("Telemetry skips refreshes where the vehicle has not moved")
+    func testTelemetrySkipsStationaryVehicle() {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "TELEMETRY_VIN_DEDUP"
+
+        #expect(vdb.recordTelemetry(
+            vin: vin, odometerKm: 12_000, tripManualKm: 120, tripAutoKm: 40,
+            avgConsumption: 18.2, ambientTempC: 14, latitude: 57.7, longitude: 11.9
+        ))
+
+        // Parked: odometer and both trip meters unchanged, so nothing new to log even
+        // though ambient temperature drifts.
+        for temp in [13.0, 12.5, 12.0] {
+            #expect(vdb.recordTelemetry(
+                vin: vin, odometerKm: 12_000, tripManualKm: 120, tripAutoKm: 40,
+                avgConsumption: 18.2, ambientTempC: temp, latitude: 57.7, longitude: 11.9
+            ) == false)
+        }
+
+        // Driving moves the odometer, which is exactly what this table is for.
+        #expect(vdb.recordTelemetry(
+            vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
+            avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
+        ))
+    }
+
     @Test("VehicleDatabase audit logs remote commands")
     func testRemoteCommandAuditLogging() throws {
         let vdb = VehicleDatabase.inMemory()
