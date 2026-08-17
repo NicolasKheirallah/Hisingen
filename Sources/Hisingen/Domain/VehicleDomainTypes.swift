@@ -911,22 +911,5 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     }
 }
 
-/// Who set the OTA schedule, from the `SetBy` enum in `SchedulerService`.
-/// Recovered from the APK's `ota_mobcache.schedule.api.SetBy` enum.
-enum ScheduleSetBy: Int, Codable, Sendable {
-    case unknown = 0
-    case app = 1
-    case hmi = 2
-    case cloud = 3
-
-    var displayName: String {
-        switch self {
-        case .unknown: return L10n.text("Unknown")
-        case .app: return L10n.text("App")
-        case .hmi: return L10n.text("Car display")
-        case .cloud: return L10n.text("Cloud")
-        }
-    }
-}
 
 

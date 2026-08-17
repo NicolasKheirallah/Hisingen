@@ -2392,10 +2392,10 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("\n📖 GetAmpLimit: HTTP \(getAmpStatus), grpc-status: \(getAmpHeaders["grpc-status"] ?? "none")")
         print("   Body Hex: \(getAmpBody.map { String(format: "%02x", $0) }.joined())")
         for f in Protobuf.fields(getAmpBody) {
-            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint), len=\(f.data.count)")
             if f.wire == 2 {
                 for sub in Protobuf.fields(f.data) {
-                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint)")
                 }
             }
         }
@@ -2409,10 +2409,10 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("\n✏️ SetAmpLimit (Shape A: {2: 16}): HTTP \(setAmpAStatus), grpc-status: \(setAmpAHeaders["grpc-status"] ?? "none") (msg: \(setAmpAHeaders["grpc-message"] ?? "none"))")
         print("   Body Hex: \(setAmpABody.map { String(format: "%02x", $0) }.joined())")
         for f in Protobuf.fields(setAmpABody) {
-            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint), len=\(f.data.count)")
             if f.wire == 2 {
                 for sub in Protobuf.fields(f.data) {
-                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint)")
                 }
             }
         }
@@ -2426,10 +2426,10 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("\n✏️ SetAmpLimit (Shape B: {2: 16, 3: 1}): HTTP \(setAmpBStatus), grpc-status: \(setAmpBHeaders["grpc-status"] ?? "none") (msg: \(setAmpBHeaders["grpc-message"] ?? "none"))")
         print("   Body Hex: \(setAmpBBody.map { String(format: "%02x", $0) }.joined())")
         for f in Protobuf.fields(setAmpBBody) {
-            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint), len=\(f.data.count)")
             if f.wire == 2 {
                 for sub in Protobuf.fields(f.data) {
-                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint ?? 0)")
+                    print("     Subfield \(sub.number) (wire \(sub.wire)): varint=\(sub.varint)")
                 }
             }
         }
@@ -2440,7 +2440,7 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("\n⚡️ StartOverrideChargeTimer: HTTP \(nowStatus), grpc-status: \(nowHeaders["grpc-status"] ?? "none") (msg: \(nowHeaders["grpc-message"] ?? "none"))")
         print("   Body Hex: \(nowBody.map { String(format: "%02x", $0) }.joined())")
         for f in Protobuf.fields(nowBody) {
-            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint ?? 0), len=\(f.data.count)")
+            print("   Field \(f.number) (wire \(f.wire)): varint=\(f.varint), len=\(f.data.count)")
         }
 
         print("========================================================\n")
@@ -3130,7 +3130,7 @@ struct LivePolestarRemoteCommandIntegrationTests {
 
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let payload = json["data"] as? [String: Any],
-           let images = payload["getCarImages"] as? [String: Any] {
+           payload["getCarImages"] is [String: Any] {
             let upholsteryCode = "RFA000"
             let colorCode = "72900"
             let wheelCode = "19"

@@ -27,9 +27,16 @@ actor VolvoAPI {
     ]
 
 
-    private static let restrictedScopes = [
-        "conve:lock", "conve:unlock", "conve:engine_start_stop", "conve:honk_flash", "location:read"
-    ]
+    // Volvo gates these behind a per-application approval on developer.volvocars.com and
+    // rejects them in an authorize request from an unapproved client, so they are deliberately
+    // not in `readScopes`:
+    //
+    //     conve:lock, conve:unlock, conve:engine_start_stop, conve:honk_flash, location:read
+    //
+    // Until this client is approved for them, `/location/v1/.../location` and the lock,
+    // unlock, engine and honk-flash commands answer 403. `optional(...)` swallows the
+    // location failure and the feature reports itself unavailable rather than breaking
+    // the refresh. Add the approved scopes to `readScopes` once Volvo grants them.
 
 
     private var clientID: String?
@@ -236,9 +243,6 @@ actor VolvoAPI {
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: true, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
-        async let climatizationStatusTask: VolvoClimatizationDTO? = optional(
-            enabled: features.contains(.climateStatus) || features.contains(.remoteClimate), key: "climatization-status", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/climatization-status") }
 
         let fuel = try await fuelTask
         let energy = try await energyTask
@@ -253,7 +257,6 @@ actor VolvoAPI {
         let warnings = try await warningsTask
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
-        let climatization = try await climatizationStatusTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -274,42 +277,21 @@ actor VolvoAPI {
         let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
             .compactMap { $0 }.max()
 
+        // Volvo exposes no climate-status resource. Climatization is command-only
+        // (POST .../commands/climatization-start|stop); every GET spelling under
+        // connected-vehicle/v2, energy/v2 and location/v1 404s at the gateway's routing
+        // layer, before authentication, exactly like a path that was never registered.
+        // With remote climate commands available we still show a clean Idle/Standby state
+        // rather than a broken unavailable badge.
         let climate: VehicleClimateStatus? = {
-            guard features.contains(.climateStatus) else { return nil }
-            if let climatization {
-                let rawStatus = climatization.status?.value ?? climatization.preconditioning?.value
-                let raw = rawStatus?.uppercased().trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let activity: ClimateActivity
-                if raw.contains("HEAT") || raw.contains("WARM") {
-                    activity = .heating
-                } else if raw.contains("COOL") {
-                    activity = .cooling
-                } else if raw.contains("VENT") {
-                    activity = .ventilating
-                } else if raw.contains("ON") || raw.contains("RUNNING") || raw.contains("ACTIVE") {
-                    activity = .active
-                } else {
-                    activity = .idle
-                }
-                return VehicleClimateStatus(
-                    activity: activity,
-                    timeRemainingMinutes: climatization.timeRemainingMinutes?.value,
-                    timerTriggered: false,
-                    interiorTemperatureCelsius: climatization.interiorTemperatureCelsius?.value,
-                    requestedTemperatureCelsius: climatization.targetTemperatureCelsius?.value ?? 22.0
-                )
-            } else if features.contains(.remoteClimate) {
-                // If telemetry endpoint is 404/not supported on this model, but remote climate commands work,
-                // present a clean Idle/Standby state rather than a broken unavailable badge
-                return VehicleClimateStatus(
-                    activity: .idle,
-                    timeRemainingMinutes: nil,
-                    timerTriggered: false,
-                    interiorTemperatureCelsius: nil,
-                    requestedTemperatureCelsius: 22.0
-                )
-            }
-            return nil
+            guard features.contains(.climateStatus), features.contains(.remoteClimate) else { return nil }
+            return VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: nil,
+                requestedTemperatureCelsius: 22.0
+            )
         }()
 
         // Volvo publishes no software/OTA resource. The Connected Vehicle API v2 surface is
