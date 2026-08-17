@@ -557,6 +557,8 @@ struct InfoTabView: View {
                             Image(systemName: "info.circle")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.tertiary)
+                                .frame(width: 16, height: 16)
+                                .contentShape(Rectangle())
                                 .help(L10n.text("Estimated. Physical battery pack capacity retention derived from empirical EV degradation models (calendar aging from build week + cycle wear from total odometer distance). The factory warranty guarantees at least 70% retention over 8 years / 160,000 km."))
                         }
                         Spacer()

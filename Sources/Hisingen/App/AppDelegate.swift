@@ -42,7 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onRemoteCommand: { [weak self] command in self?.performRemoteCommand(command) }
         )
         statusController.onSelectCar = { [weak self] vin in self?.refreshCoordinator.selectCar(vin: vin) }
-        statusController.onOpenUpdate = { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
+        statusController.onOpenUpdate = { [weak self] in
+            NSWorkspace.shared.open(UpdateChecker.releasePage(for: self?.statusController.updateVersion))
+        }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.refreshCoordinator.signOut() }
         notifier.onPermissionChanged = { [weak self] permission in
@@ -569,7 +571,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.addButton(withTitle: L10n.text("Later"))
                 render()
                 if alert.runModal() == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                    NSWorkspace.shared.open(UpdateChecker.releasePage(for: version))
                 }
             case .upToDate:
                 alert.messageText = L10n.text("Hisingen is up to date")

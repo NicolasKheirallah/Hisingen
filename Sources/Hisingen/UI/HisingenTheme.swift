@@ -623,6 +623,8 @@ struct KVRow: View {
                 Image(systemName: "info.circle")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.tertiary)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
                     .help(info)
                     .accessibilityHidden(true)
             }

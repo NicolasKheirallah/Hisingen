@@ -340,12 +340,30 @@ struct FormattingTests {
 
     @Test
     func testReleaseEvaluationFiltersDraftsAndPrereleases() throws {
-        let stable = #"{"tag_name":"v3.0.0","draft":false,"prerelease":false}"#.data(using: .utf8)!
-        let prerelease = #"{"tag_name":"v4.0.0-beta.1","draft":false,"prerelease":true}"#.data(using: .utf8)!
+        let stable = #"[{"tag_name":"v3.0.0","draft":false,"prerelease":false}]"#.data(using: .utf8)!
+        let prerelease = #"[{"tag_name":"v4.0.0-beta.1","draft":false,"prerelease":true}]"#.data(using: .utf8)!
         try XCTAssertEqual(UpdateChecker.evaluateRelease(data: stable, currentVersion: "2.4.1"),
                            .updateAvailable("3.0.0"))
         try XCTAssertEqual(UpdateChecker.evaluateRelease(data: stable, currentVersion: "3.0.0"), .upToDate)
         try XCTAssertEqual(UpdateChecker.evaluateRelease(data: prerelease, currentVersion: "2.4.1"), .upToDate)
+    }
+
+    @Test
+    func testReleaseEvaluationSkipsRollingLatestTagAndPicksHighestSemver() throws {
+        // The CI pipeline republishes a non-semver "latest" rolling build on every push to
+        // main, so it's almost always the most recently published release. The evaluator
+        // must ignore it and pick the highest real version tag instead.
+        let releases = #"""
+        [
+          {"tag_name":"latest","draft":false,"prerelease":false},
+          {"tag_name":"v1.0.0","draft":false,"prerelease":false},
+          {"tag_name":"v2.1.0","draft":false,"prerelease":false},
+          {"tag_name":"v2.5.0","draft":true,"prerelease":false}
+        ]
+        """#.data(using: .utf8)!
+        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: releases, currentVersion: "1.5.0"),
+                           .updateAvailable("2.1.0"))
+        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: releases, currentVersion: "2.1.0"), .upToDate)
     }
 
     @Test

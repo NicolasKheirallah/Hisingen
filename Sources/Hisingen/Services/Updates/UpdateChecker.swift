@@ -8,8 +8,19 @@ enum UpdateCheckResult: Equatable {
 
 @MainActor
 final class UpdateChecker {
-    private static let latestReleaseAPI = URL(string: "https://api.github.com/repos/NicolasKheirallah/hisingen/releases/latest")!
-    static let releasesPage = URL(string: "https://github.com/NicolasKheirallah/hisingen/releases/latest")!
+    private static let releasesListAPI = URL(string: "https://api.github.com/repos/NicolasKheirallah/hisingen/releases?per_page=30")!
+    // Not /releases/latest: that page (like the API endpoint above) resolves to whichever
+    // release GitHub most recently published, which is the CI's unsigned rolling "latest"
+    // build far more often than the signed, notarized versioned release. Point at the
+    // releases index by default, or a specific tag once a version has been detected.
+    static let releasesPage = URL(string: "https://github.com/NicolasKheirallah/hisingen/releases")!
+
+    static func releasePage(for version: String?) -> URL {
+        guard let version,
+              let url = URL(string: "https://github.com/NicolasKheirallah/hisingen/releases/tag/v\(version)")
+        else { return releasesPage }
+        return url
+    }
     private let defaults: UserDefaults
     private let session: URLSession
     private let currentVersion: () -> String
@@ -48,7 +59,7 @@ final class UpdateChecker {
         let current = currentVersion()
         task = Task { [session, defaults] in
             var result: UpdateCheckResult = .failed
-            var request = URLRequest(url: Self.latestReleaseAPI)
+            var request = URLRequest(url: Self.releasesListAPI)
             request.timeoutInterval = 10
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.setValue("Hisingen/\(current)", forHTTPHeaderField: "User-Agent")
@@ -83,10 +94,19 @@ final class UpdateChecker {
     }
 
     static func evaluateRelease(data: Data, currentVersion: String) throws -> UpdateCheckResult {
-        let release = try JSONDecoder().decode(Release.self, from: data)
-        guard !release.draft, !release.prerelease else { return .upToDate }
-        let latest = release.tagName.hasPrefix("v") ? String(release.tagName.dropFirst()) : release.tagName
-        return isVersion(latest, newerThan: currentVersion) ? .updateAvailable(latest) : .upToDate
+        let releases = try JSONDecoder().decode([Release].self, from: data)
+        // Only consider tags that are actual semantic versions (e.g. "v1.2.3"). This
+        // deliberately skips non-version tags such as the CI's rolling "latest" build,
+        // which republishes on every push to main and would otherwise shadow real releases
+        // since GitHub's /releases/latest endpoint returns the most recently published one.
+        let candidates: [(tag: String, version: SemanticVersion)] = releases.compactMap { release in
+            guard !release.draft, !release.prerelease else { return nil }
+            let tag = release.tagName.hasPrefix("v") ? String(release.tagName.dropFirst()) : release.tagName
+            guard let version = SemanticVersion(tag) else { return nil }
+            return (tag, version)
+        }
+        guard let latest = candidates.max(by: { $0.version < $1.version }) else { return .upToDate }
+        return isVersion(latest.tag, newerThan: currentVersion) ? .updateAvailable(latest.tag) : .upToDate
     }
 
     static func isVersion(_ candidate: String, newerThan current: String) -> Bool {

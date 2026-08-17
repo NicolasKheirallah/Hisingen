@@ -9,8 +9,14 @@ struct RegressionFixTests {
 
     @Test
     func testUpdateCheckerPointsToMaintainedFork() {
+        // Not /releases/latest: that resolves to whichever release GitHub published most
+        // recently, which is the CI's unsigned rolling "latest" build far more often than
+        // an actual signed, notarized version. See UpdateChecker.releasePage(for:).
         XCTAssertEqual(UpdateChecker.releasesPage.host, "github.com")
-        XCTAssertEqual(UpdateChecker.releasesPage.path, "/NicolasKheirallah/hisingen/releases/latest")
+        XCTAssertEqual(UpdateChecker.releasesPage.path, "/NicolasKheirallah/hisingen/releases")
+        XCTAssertEqual(UpdateChecker.releasePage(for: "2.1.0").path,
+                       "/NicolasKheirallah/hisingen/releases/tag/v2.1.0")
+        XCTAssertEqual(UpdateChecker.releasePage(for: nil), UpdateChecker.releasesPage)
     }
 
 
