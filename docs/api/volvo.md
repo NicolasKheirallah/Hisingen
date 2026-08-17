@@ -4,6 +4,10 @@ Unlike Polestar, this is built on Volvo's **official, documented** Connected Veh
 
 Source: `Services/API/VolvoAPI.swift`, `VolvoModels.swift`, `VolvoServiceError.swift`.
 
+> **See also: `docs/api/volvo-backend-map.md`** — internal-only, not published in this repository.
+> Holds real captured payload samples and the full Volvo ID scope/grant-type catalog (broader
+> than what Hisingen actually requests); everything Hisingen implements is covered here instead.
+
 ## Host and gateway
 
 Everything goes through one host, `api.volvocars.com`, behind Volvo's API gateway (`vcc-api-key` header) plus an OAuth2 Bearer token from `volvoid.eu.volvocars.com`. There is no undocumented/internal endpoint in use — every call in `VolvoAPI.swift` targets a product family (`connected-vehicle`, `energy`, `location`) that Volvo documents and gates behind a Developer Portal subscription.

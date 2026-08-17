@@ -688,7 +688,7 @@ extension PolestarGRPC {
             guard let carData = myCar.first(where: { $0.number == 1 && $0.wire == 2 })?.data else { continue }
             let car = Protobuf.fields(carData)
             // Car: {1: vin (string)}
-            let carVin = string(car, 1) ?? ""
+            let carVin = string(car, 1)
             guard carVin.uppercased() == vin.uppercased() else { continue }
 
             // Extract OTA-relevant fields.

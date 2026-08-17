@@ -125,6 +125,8 @@ longer can — a control is enabled iff all three layers agree.
 
 `UI/Theme.swift` is a small, mostly-superseded set of AppKit label/color helpers; `UI/HisingenTheme.swift` is the real, actively-used design system. `Theme.swift` isn't fully dead (a few AppKit call sites still use it), but it's a candidate for consolidation next time someone touches AppKit-facing label styling.
 
+**Status: RESOLVED.** The remaining call sites had already migrated — `Theme` had no references left anywhere in `Sources/` or `Tests/`, so the file was deleted outright. `HisingenTheme` is now the only design system.
+
 ## Polestar exposes 6 vehicle-image angles, `CarRenderAngle` only names 4
 
 **Severity: Low**

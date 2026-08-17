@@ -62,20 +62,6 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     let effectiveUsableKwh: Double
 }
 
-/// Represents a drive & efficiency telemetry log entry.
-struct TelemetryLogEntry: Codable, Equatable, Identifiable, Sendable {
-    let id: Int64
-    let vin: String
-    let timestamp: Date
-    let odometerKm: Double?
-    let tripManualKm: Double?
-    let tripAutoKm: Double?
-    let avgConsumption: Double?
-    let ambientTempC: Double?
-    let latitude: Double?
-    let longitude: Double?
-}
-
 /// High-level vehicle database repository coordinating SQLite tables and schema migrations.
 final class VehicleDatabase: @unchecked Sendable {
     static let shared = VehicleDatabase()

@@ -68,10 +68,6 @@ final class StatusItemController: NSObject {
         installGlobalHotKeyIfAuthorized()
     }
 
-    func requestAccessibilityPermission() {
-        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-    }
-
     func refreshGlobalHotKeyAccess() {
         guard globalKeyMonitor == nil, AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
@@ -446,27 +442,6 @@ final class StatusItemController: NSObject {
         if popover.isShown {
             refreshPopoverIfNeeded()
         }
-    }
-
-    func updateCars(_ newCars: [CarSummary], activeVin: String?) {
-        cars = newCars
-        self.activeVin = activeVin
-        refreshPopoverIfNeeded()
-    }
-
-    func updateRemoteCommandState(_ inProgress: RemoteCommand?) {
-        remoteCommandInProgress = inProgress != nil
-        refreshPopoverIfNeeded()
-    }
-
-    func updateAppVersion(newVersion: String?) {
-        updateVersion = newVersion
-        refreshPopoverIfNeeded()
-    }
-
-    func updateCheckingForUpdates(_ checking: Bool) {
-        checkingForUpdates = checking
-        refreshPopoverIfNeeded()
     }
 
     func updateNotificationPermission(_ permission: NotificationPermission) {
