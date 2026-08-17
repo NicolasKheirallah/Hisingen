@@ -1,6 +1,6 @@
 # Hisingen
 
-[![macOS](https://img.shields.io/badge/macOS-13.0%2B-blue?logo=apple)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift)](https://swift.org)
 [![Architecture](https://img.shields.io/badge/Architecture-Universal%20(Apple%20Silicon%20%2F%20Intel)-purple)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -499,7 +499,7 @@ Production releases are universal binaries, Developer ID signed, hardened-runtim
 
 ### Build From Source
 
-Requirements: macOS 13 Ventura or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+. CI and production releases build with Xcode 16.2 specifically (see `.github/workflows/release.yml`); older Xcode 15.x installations are expected to work for local development but aren't what ships.
+Requirements: macOS 14 Sonoma or later and Xcode 15+ or compatible Command Line Tools with Swift 5.9+. CI and production releases build with Xcode 16.2 specifically (see `.github/workflows/release.yml`); older Xcode 15.x installations are expected to work for local development but aren't what ships.
 
 ```bash
 git clone https://github.com/NicolasKheirallah/hisingen.git

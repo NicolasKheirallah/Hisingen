@@ -93,6 +93,7 @@ extension PolestarGRPC {
         // install even when GetSoftwareInfo has nothing to report, which is what makes
         // "cancel a scheduled installation" reachable.
         var scheduledAt: Date?
+        var scheduleSetBy: ScheduleSetBy?
         do {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
@@ -101,6 +102,9 @@ extension PolestarGRPC {
                 let fields = Protobuf.fields(scheduler)
                 scheduledAt = Self.timestamp(Self.message(fields, field: 3))
                 rememberSoftwareID(Self.string(fields, 4), vin: vin)
+                if let setByValue = Self.varint(fields, 5), let setBy = ScheduleSetBy(rawValue: Int(setByValue)) {
+                    scheduleSetBy = setBy
+                }
                 if scheduledAt != nil, otaSoftwareStates[vin] == nil {
                     otaSoftwareStates[vin] = .scheduled
                 }
@@ -112,13 +116,15 @@ extension PolestarGRPC {
         if let info {
             var merged = info
             merged.scheduledAt = info.scheduledAt ?? scheduledAt
+            merged.scheduleSetBy = scheduleSetBy
             return merged
         }
         if let scheduledAt {
             // A schedule exists but GetSoftwareInfo returned nothing, so the target version is
             // genuinely unknown here. Report the schedule and leave every version field nil
             // rather than inventing one.
-            return VehicleSoftwareInfo(state: .scheduled, scheduledAt: scheduledAt)
+            return VehicleSoftwareInfo(state: .scheduled, scheduledAt: scheduledAt,
+                                       scheduleSetBy: scheduleSetBy)
         }
         if let firstError { throw firstError }
         return nil
@@ -674,31 +680,51 @@ extension PolestarGRPC {
 
     /// Parses a `GetMyCarsResponse`: `{1: [MyCar]}` where `MyCar` = `{1: Car, 2: userIsLinked,
     /// 3: userIsOwner, 4: registrationPlate}`. Extracts the `Car` matching the VIN and reads
-    /// the OTA-relevant fields:
-    /// `9: consumerSoftwareVersion (string)`, `32: supportsUpdateStatus (bool)`,
-    /// `33: supportsRemoteOtaInstallSchedule (bool)`, `57: supportsFullOtaUpdates (bool)`,
-    /// `62: supportsCloudBasedOtaDownloadConsent (bool)`, `70: hasPerformanceSoftwareUpgrade (bool)`.
-    /// Boolean fields use protobuf default (absent = false).
+    /// the OTA + capability fields. The `Car` proto uses nested capability messages:
+    /// `36: Locks{5: supportsWindowControl, 6: supportsSunroofControl, 7: supportsTrunkControl,
+    ///  10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions, 9: amperageLimitSettings,
+    ///  8: targetChargeLevelSettings, 15: supportsChargeNow, 29: supportsPlugAndCharge}`,
+    /// `34: AirPurification{1: supportsRemoteStart}`, `16: honkFlashType (enum)`.
+    /// Recovered from the official Polestar APK v5.10.0 teardown.
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
         let outer = Protobuf.fields(data)
-        // GetMyCarsResponse: {1: [MyCar]} — field 1 is repeated, each entry is a MyCar message.
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
             let myCar = Protobuf.fields(myCarField.data)
-            // MyCar: {1: Car, 2: userIsLinked, 3: userIsOwner, 4: registrationPlate}
             guard let carData = myCar.first(where: { $0.number == 1 && $0.wire == 2 })?.data else { continue }
             let car = Protobuf.fields(carData)
-            // Car: {1: vin (string)}
             let carVin = string(car, 1)
             guard carVin.uppercased() == vin.uppercased() else { continue }
 
-            // Extract OTA-relevant fields.
+            // Direct fields on Car
             let installedVersion = string(car, 9).nilIfEmpty
             let supportsUpdateStatus = varint(car, 32) == 1
             let supportsRemoteOtaInstallSchedule = varint(car, 33) == 1
             let supportsFullOtaUpdates = varint(car, 57) == 1
-            // Field 62: supportsCloudBasedOtaDownloadConsent (bool, absent = false)
             let supportsCloudBasedOtaDownloadConsent = varint(car, 62) == 1
             let hasPerformanceSoftwareUpgrade = varint(car, 70) == 1
+            // Field 16: honkFlashType (enum): 0=UNSPECIFIED, 2=NONE, 3=HONK_AND_FLASH,
+            // 4=HONK_AND_OR_FLASH, 5=HONK, 6=FLASH
+            let honkFlashType = varint(car, 16) ?? 0
+            let supportsHonkAndFlash = honkFlashType == 3 || honkFlashType == 4
+            let supportsFlash = honkFlashType == 4 || honkFlashType == 6
+
+            // Nested Locks message (field 36)
+            let locksData = message(car, field: 36).map(Protobuf.fields)
+            let supportsWindowsControl = locksData?.first(where: { $0.number == 5 })?.varint == 1
+            let supportsTrunkControl = locksData?.first(where: { $0.number == 7 })?.varint == 1
+            let supportsTrunkUnlock = locksData?.first(where: { $0.number == 10 })?.varint == 1
+
+            // Nested Charging message (field 35)
+            let chargingData = message(car, field: 35).map(Protobuf.fields)
+            let supportsChargingFunctions = chargingData?.first(where: { $0.number == 1 })?.varint == 1
+            let supportsGlobalChargeAmperageLimit = chargingData?.first(where: { $0.number == 9 })?.varint == 1
+            let supportsTargetChargeLevel = chargingData?.first(where: { $0.number == 8 })?.varint == 1
+            let supportsChargeNowTimerOverride = chargingData?.first(where: { $0.number == 15 })?.varint == 1
+            let supportsPlugAndCharge = chargingData?.first(where: { $0.number == 29 })?.varint == 1
+
+            // Nested AirPurification message (field 34)
+            let airData = message(car, field: 34).map(Protobuf.fields)
+            let supportsAirPurificationRemoteStart = airData?.first(where: { $0.number == 1 })?.varint == 1
 
             return VehicleOTACapabilities(
                 installedSoftwareVersion: installedVersion,
@@ -706,7 +732,18 @@ extension PolestarGRPC {
                 supportsRemoteOtaInstallSchedule: supportsRemoteOtaInstallSchedule,
                 supportsCloudBasedOtaDownloadConsent: supportsCloudBasedOtaDownloadConsent,
                 supportsUpdateStatus: supportsUpdateStatus,
-                hasPerformanceSoftwareUpgrade: hasPerformanceSoftwareUpgrade
+                hasPerformanceSoftwareUpgrade: hasPerformanceSoftwareUpgrade,
+                supportsTrunkControl: supportsTrunkControl,
+                supportsTrunkUnlock: supportsTrunkUnlock,
+                supportsHonkAndFlash: supportsHonkAndFlash,
+                supportsFlash: supportsFlash,
+                supportsChargingFunctions: supportsChargingFunctions,
+                supportsGlobalChargeAmperageLimit: supportsGlobalChargeAmperageLimit,
+                supportsTargetChargeLevel: supportsTargetChargeLevel,
+                supportsChargeNowTimerOverride: supportsChargeNowTimerOverride,
+                supportsWindowsControl: supportsWindowsControl,
+                supportsAirPurificationRemoteStart: supportsAirPurificationRemoteStart,
+                supportsPlugAndCharge: supportsPlugAndCharge
             )
         }
         return nil

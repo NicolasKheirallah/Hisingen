@@ -316,13 +316,8 @@ extension Color {
 }
 
 extension View {
-    @ViewBuilder
     func withoutFocusRing() -> some View {
-        if #available(macOS 14.0, *) {
-            self.focusable(false).focusEffectDisabled()
-        } else {
-            self.focusable(false)
-        }
+        self.focusable(false).focusEffectDisabled()
     }
 }
 

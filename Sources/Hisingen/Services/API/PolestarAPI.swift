@@ -168,7 +168,7 @@ actor PolestarAPI {
     }
 
     /// A valid token for invocation-backed commands, refreshed on demand.
-    private func validCommandToken() async -> String? {
+    func validCommandToken() async -> String? {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return token }
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
@@ -425,6 +425,7 @@ actor PolestarAPI {
         let location = try await locationTask
         let ampLimit = try await ampLimitTask
         let serviceErrors = try await errorsTask
+        let otaCapabilities = try await myCarsTask
 
         let primaryReportedAt = battery?.timestamp?.date
         let extrasAreNewer = extras?.reportedAt.map { reported in
@@ -553,6 +554,18 @@ actor PolestarAPI {
             dataWarnings: warnings
         )
         state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
+
+        // Merge GetMyCars OTA capabilities: use the authoritative installed version from
+        // GetMyCars when GetSoftwareInfo doesn't provide one (during a rollout, GetSoftwareInfo
+        // only reports the target version, leaving installedVersion nil).
+        if let otaCaps = otaCapabilities.value {
+            state.otaCapabilities = otaCaps
+            if var sw = state.softwareInfo, sw.installedVersion == nil,
+               let installed = otaCaps.installedSoftwareVersion {
+                sw.installedVersion = installed
+                state.softwareInfo = sw
+            }
+        }
         state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
         state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
         state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil

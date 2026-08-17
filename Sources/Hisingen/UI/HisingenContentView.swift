@@ -569,8 +569,7 @@ struct VehicleTabView: View {
                 let showPlateTopLeft = (plate != nil && !plate!.isEmpty) && regPosition == .topLeftOverlay
                 let showPlateTopRight = (plate != nil && !plate!.isEmpty) && regPosition == .topRightOverlay
 
-                if features.contains(.vehicleImage), let imageData = heroImageData,
-                   let nsImage = NSImage(data: imageData) {
+                if features.contains(.vehicleImage), let imageData = heroImageData {
                     ZStack {
 
                         RadialGradient(
@@ -583,14 +582,15 @@ struct VehicleTabView: View {
                             endRadius: 170
                         )
 
-                        Image(nsImage: nsImage)
-                            .interpolation(.high)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .scaleEffect(1.33, anchor: .center)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 205)
-                            .padding(.horizontal, 8)
+                        VehiclePresentationView(
+                            identity: VehiclePresentationIdentity(
+                                vin: state.vin,
+                                angle: Preferences.carRenderAngle.rawValue
+                            ),
+                            imageData: imageData
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 220)
 
                         if showModelTopLeft || showModelTopRight || showPlateTopLeft || showPlateTopRight {
                             VStack {
@@ -1554,6 +1554,9 @@ struct VehicleTabView: View {
         if let scheduledAt = software.scheduledAt {
             rows.append(KVRow(L10n.text("Installation Scheduled"),
                               Format.dateTimeFormatter.string(from: scheduledAt), symbol: "calendar.badge.clock"))
+            if let setBy = software.scheduleSetBy, setBy != .unknown {
+                rows.append(KVRow(L10n.text("Scheduled By"), setBy.displayName, symbol: "person.crop.circle"))
+            }
         }
         if let updatedAt = software.updatedAt {
             rows.append(KVRow(L10n.text("Last Updated"),
@@ -1601,9 +1604,15 @@ struct VehicleTabView: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
-                        Text(L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly."))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                        if let caps = state.otaCapabilities, !caps.supportsCloudBasedOtaDownloadConsent {
+                            Text(L10n.text("This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly."))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly."))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

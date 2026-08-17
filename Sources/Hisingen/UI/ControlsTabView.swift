@@ -10,11 +10,22 @@ struct ControlsTabView: View {
     @State private var driverSeat: HeatingLevel = Preferences.remoteDriverSeatHeating
     @State private var passengerSeat: HeatingLevel = Preferences.remoteFrontRightSeatHeating
     @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
-    @State private var chargeTarget: Int = 80
-    @State private var ampLimit: Int = 16
     @State private var engineRuntimeMinutes: Int = 15
     @State private var showScheduleEditor = false
     @State private var isInitialized = false
+
+    /// Charge target derived from state (not @State) so it survives view rebuilds.
+    /// When a command is in progress or the optimistic lock is active, use the optimistic
+    /// value from the state; otherwise use the backend-reported value.
+    private var chargeTarget: Int {
+        if let target = state.chargeTargetPercentage, target > 0 { return target }
+        return 80
+    }
+    /// Amp limit derived from state (not @State) for the same reason.
+    private var ampLimit: Int {
+        if let amps = state.chargingCurrentAmps, amps > 0 { return amps }
+        return 16
+    }
 
     private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
@@ -99,26 +110,8 @@ struct ControlsTabView: View {
             ScheduleEditorSheet(state: state, onRemoteCommand: onRemoteCommand)
         }
         .onAppear {
-            if let currentTarget = state.chargeTargetPercentage {
-                chargeTarget = currentTarget
-            }
-            if let currentAmps = state.chargingCurrentAmps, currentAmps > 0 {
-                ampLimit = currentAmps
-            }
             DispatchQueue.main.async {
                 isInitialized = true
-            }
-        }
-        .onChange(of: state.chargeTargetPercentage) { newTarget in
-            guard !remoteCommandInProgress else { return }
-            if let newTarget {
-                chargeTarget = newTarget
-            }
-        }
-        .onChange(of: state.chargingCurrentAmps) { newAmps in
-            guard !remoteCommandInProgress else { return }
-            if let newAmps, newAmps > 0 {
-                ampLimit = newAmps
             }
         }
     }
@@ -407,7 +400,6 @@ struct ControlsTabView: View {
                         // One-Touch Quick Presets
                         HStack(spacing: 6) {
                             Button {
-                                chargeTarget = 80
                                 onRemoteCommand(.setChargeTarget(80))
                             } label: {
                                 HStack(spacing: 3) {
@@ -426,7 +418,6 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.setChargeTarget(80)))
 
                             Button {
-                                chargeTarget = 90
                                 onRemoteCommand(.setChargeTarget(90))
                             } label: {
                                 HStack(spacing: 3) {
@@ -445,7 +436,6 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.setChargeTarget(90)))
 
                             Button {
-                                chargeTarget = 100
                                 onRemoteCommand(.setChargeTarget(100))
                             } label: {
                                 HStack(spacing: 3) {
@@ -468,7 +458,6 @@ struct ControlsTabView: View {
                             get: { chargeTarget },
                             set: { newValue in
                                 guard newValue != chargeTarget else { return }
-                                chargeTarget = newValue
                                 onRemoteCommand(.setChargeTarget(newValue))
                             }
                         )) {
@@ -499,7 +488,6 @@ struct ControlsTabView: View {
                             get: { ampLimit },
                             set: { newValue in
                                 guard newValue != ampLimit else { return }
-                                ampLimit = newValue
                                 onRemoteCommand(.setAmpLimit(newValue))
                             }
                         )) {
@@ -616,20 +604,44 @@ struct ControlsTabView: View {
                         .disabled(isDisabled(.unlock))
                     }
 
-                    if profile.permits(.trunk) && features.contains(.remoteLocks) {
-                        Button {
-                            onRemoteCommand(.unlockTrunk)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "car.side.rear.open.fill")
-                                    .font(.system(size: 15))
-                                Text(L10n.text("Unlock Trunk"))
-                                    .font(.system(size: 11, weight: .medium))
+                    if features.contains(.remoteLocks) {
+                        let caps = state.otaCapabilities
+                        let showTrunkUnlock = profile.permits(.trunk) && (caps?.supportsTrunkUnlock ?? profile.permits(.trunk))
+                        let showTailgateControl = caps?.supportsTrunkControl ?? false
+
+                        if showTrunkUnlock {
+                            Button {
+                                onRemoteCommand(.unlockTrunk)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "car.side.rear.open.fill")
+                                        .font(.system(size: 15))
+                                    Text(L10n.text("Unlock Trunk"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 46)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.unlockTrunk))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.unlockTrunk))
+
+                        if showTailgateControl {
+                            let tailgateIsOpen = state.exteriorStatus?.isTailgateOpen ?? false
+                            Button {
+                                onRemoteCommand(tailgateIsOpen ? .closeTailgate : .openTailgate)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: tailgateIsOpen ? "car.side.rear.open.fill" : "car.side.rear.fill")
+                                        .font(.system(size: 15))
+                                    Text(tailgateIsOpen ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 46)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(tailgateIsOpen ? .orange : nil)
+                            .disabled(isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
+                        }
                     }
                 }
             }
@@ -681,47 +693,55 @@ struct ControlsTabView: View {
                     }
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
-                        Button {
-                            onRemoteCommand(.flashLights)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "flashlight.on.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Flash Lights"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.flashLights))
+                        let caps = state.otaCapabilities
+                        let supportsHonk = caps?.supportsHonkAndFlash ?? true
+                        let supportsFlashOnly = caps?.supportsFlash ?? true
 
-                        Button {
-                            onRemoteCommand(.honkAndFlash)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "light.beacon.max.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk & Flash"))
-                                    .font(.system(size: 10, weight: .medium))
+                        if supportsFlashOnly {
+                            Button {
+                                onRemoteCommand(.flashLights)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "flashlight.on.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Flash Lights"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.flashLights))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkAndFlash))
 
-                        Button {
-                            onRemoteCommand(.honkHorn)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "speaker.wave.2.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk Horn"))
-                                    .font(.system(size: 10, weight: .medium))
+                        if supportsHonk {
+                            Button {
+                                onRemoteCommand(.honkAndFlash)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "light.beacon.max.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Honk & Flash"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.honkAndFlash))
+
+                            Button {
+                                onRemoteCommand(.honkHorn)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Honk Horn"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.honkHorn))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkHorn))
                     }
                 }
             }

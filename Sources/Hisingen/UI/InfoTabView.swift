@@ -79,7 +79,7 @@ struct InfoTabView: View {
                     .zIndex(10)
                 }
 
-                if let currentImageData, let nsImage = NSImage(data: currentImageData) {
+                if let currentImageData {
                     ZStack {
                         RadialGradient(
                             colors: [Color.primary.opacity(0.06), Color.clear],
@@ -88,16 +88,12 @@ struct InfoTabView: View {
                             endRadius: 170
                         )
 
-                        Image(nsImage: nsImage)
-                            .interpolation(.high)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .scaleEffect(1.33, anchor: .center)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 205)
-                            .padding(.horizontal, 8)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                            .id("\(state.vin)_\(selectedAngleIndex)")
+                        VehiclePresentationView(
+                            identity: VehiclePresentationIdentity(vin: state.vin, angle: selectedAngleIndex),
+                            imageData: currentImageData
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 220)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 220)

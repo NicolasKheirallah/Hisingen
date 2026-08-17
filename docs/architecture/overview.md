@@ -55,5 +55,6 @@ Everything above `VehicleProviding` is written once and works for either brand. 
 - [providers.md](providers.md) — the `VehicleProviding` seam in detail
 - [capabilities.md](capabilities.md) — how "does this vehicle support X" is decided
 - [refresh-system.md](refresh-system.md) — polling cadence, coalescing, backoff
+- [vehicle-motion.md](vehicle-motion.md) — the vehicle roll-in and angle transitions, and why they don't replay on a refresh
 - [concurrency.md](concurrency.md) — actors, `@MainActor`, and the two places that use manual locks
 - [technical-debt.md](technical-debt.md) — known rough edges, named honestly

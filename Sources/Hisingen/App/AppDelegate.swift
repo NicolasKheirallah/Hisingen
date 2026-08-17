@@ -418,9 +418,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
                 requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
             )
-        case .lock, .unlock:
+        case .lock, .unlock, .unlockTrunk:
             guard var exterior = current.exteriorStatus else { return }
-            exterior.isLocked = (command == .lock)
+            if command == .lock {
+                exterior.isLocked = true
+            } else {
+                exterior.isLocked = false
+            }
+            current.exteriorStatus = exterior
+        case .openTailgate, .closeTailgate:
+            guard var exterior = current.exteriorStatus else { return }
+            // Toggle the tailgate opening state optimistically
+            let isOpening = command == .openTailgate
+            if let idx = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
+                exterior.openings[idx] = OpeningReading(opening: .tailgate,
+                                                        state: isOpening ? .open : .closed)
+            } else {
+                exterior.openings.append(OpeningReading(opening: .tailgate,
+                                                        state: isOpening ? .open : .closed))
+            }
             current.exteriorStatus = exterior
         case .setChargeTarget(let target):
             current.chargeTargetPercentage = target
@@ -437,6 +453,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
+        // Only show a modal alert for failures — success is already visible via the
+        // optimistic state update (the slider/button flips immediately). A modal alert
+        // on success blocks the UI and makes it feel like the command hasn't applied.
         guard !success else { return }
         Task { @MainActor in
             let alert = NSAlert()
