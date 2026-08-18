@@ -200,10 +200,15 @@ actor PolestarGRPC {
         request.setValue(vin, forHTTPHeaderField: "vin")
         request.httpBody = Protobuf.grpcFrame(message)
 
+        let startedAt = Date()
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw PolestarError.invalidResponse(operation: "gRPC")
         }
+        await APIDiagnosticLogStore.shared.record(
+            provider: .polestar, request: request, operation: "gRPC \(path)",
+            statusCode: http.statusCode, startedAt: startedAt
+        )
         if http.statusCode == 401 || http.statusCode == 403 {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
@@ -284,10 +289,15 @@ actor PolestarGRPC {
         request.setValue(vin, forHTTPHeaderField: "vin")
         request.httpBody = Protobuf.grpcFrame(message)
 
+        let startedAt = Date()
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw PolestarError.invalidResponse(operation: "gRPC command")
         }
+        await APIDiagnosticLogStore.shared.record(
+            provider: .polestar, request: request, operation: "gRPC \(path)",
+            statusCode: http.statusCode, startedAt: startedAt
+        )
         if http.statusCode == 401 || http.statusCode == 403 {
             throw PolestarError.authenticationRequired(.expiredSession)
         }

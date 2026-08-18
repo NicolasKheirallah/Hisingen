@@ -1,5 +1,7 @@
 import Foundation
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SettingsChange {
     case credentials
@@ -1307,6 +1309,26 @@ struct SettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
+
+                    Button {
+                        Task { @MainActor in
+                            guard let data = try? await APIDiagnosticLogStore.shared.exportData() else { return }
+                            saveDataWithPanel(
+                                suggestedFilename: "hisingen_api_diagnostics.json",
+                                contentType: .json,
+                                data: data
+                            )
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "stethoscope")
+                            Text(L10n.text("Export Redacted API Logs"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help(L10n.text("Exports request metadata only. Vehicle identifiers, credentials, headers, bodies, and response payloads are excluded."))
                 }
             }
         }
@@ -1319,6 +1341,18 @@ struct SettingsView: View {
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 try? csvContent.write(to: url, atomically: true, encoding: .utf8)
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            }
+        }
+    }
+
+    private func saveDataWithPanel(suggestedFilename: String, contentType: UTType, data: Data) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [contentType]
+        panel.nameFieldStringValue = suggestedFilename
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? data.write(to: url, options: .atomic)
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }

@@ -785,7 +785,7 @@ struct ChargingSession: Codable, Equatable, Sendable {
               let endBattery = current.batteryPercentage,
               endBattery > first.batteryPercentage else { return nil }
         let percentageAdded = endBattery - first.batteryPercentage
-        let estimatedKwh = percentageAdded / 100 * current.effectiveUsableBatteryCapacityKwh
+        let estimatedKwh = percentageAdded / 100 * current.configuredUsableBatteryCapacityKwh
         guard estimatedKwh > 0 else { return nil }
         return ChargingSession(
             id: UUID(),
@@ -994,6 +994,5 @@ enum ScheduleSetBy: Int, Codable, Sendable {
         }
     }
 }
-
 
 

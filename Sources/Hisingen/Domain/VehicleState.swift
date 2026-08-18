@@ -221,6 +221,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
 
+    /// Provider-reported pack specification. This is not a measured battery-health value.
     var reportedBatteryCapacityKwh: Double? = nil
     var externalColour: String? = nil
     var gearbox: String? = nil
@@ -531,14 +532,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var factoryNominalBatteryCapacityKwh: Double {
-        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
-            if explicit >= 77.0 { return 82.0 }
-            if explicit >= 72.0 { return 78.0 }
-            if explicit >= 60.0 { return 69.0 }
-            if explicit >= 14.0 { return 18.8 }
-            if explicit >= 8.0 { return 11.6 }
-            return explicit
-        }
+        guard model.isKnown else { return 0.0 }
         let yearInt = Int(modelYear ?? "") ?? 2023
         if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
             return 82.0
@@ -550,13 +544,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var factoryUsableBatteryCapacityKwh: Double {
-        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
-            if explicit >= 77.0 { return 79.0 }
-            if explicit >= 72.0 { return 75.0 }
-            if explicit >= 60.0 { return 64.0 }
-            if explicit >= 14.0 { return 14.9 }
-            if explicit >= 8.0 { return 9.1 }
-        }
+        guard model.isKnown else { return 0.0 }
         let yearInt = Int(modelYear ?? "") ?? 2023
         if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
             return 79.0
@@ -572,33 +560,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var batteryDegradationPercent: Double? {
-        guard powertrain.hasElectricRange else { return nil }
-        if let explicit = reportedBatteryCapacityKwh, explicit > 0 {
-            let factoryUsable = factoryUsableBatteryCapacityKwh
-            let measuredDeg = max(0.0, ((factoryUsable - explicit) / factoryUsable) * 100.0)
-            return ((measuredDeg * 10).rounded()) / 10.0
-        }
-
-        // Empirical degradation calculation based on vehicle calendar age and odometer cycle throughput
-        var calendarDegradation = 0.0
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        var vehicleAgeYears = max(0.5, Double(Calendar.current.component(.year, from: Date()) - yearInt))
-        if let sw = structureWeek, sw.count >= 6, let swYear = Double(sw.prefix(4)), let swWeek = Double(sw.suffix(2)) {
-            let approximateBuildDate = swYear + (swWeek / 52.0)
-            let currentYearFraction = Double(Calendar.current.component(.year, from: Date())) + (Double(Calendar.current.component(.month, from: Date())) / 12.0)
-            vehicleAgeYears = max(0.2, currentYearFraction - approximateBuildDate)
-        }
-        // Lithium-ion NMC calendar aging curve (~1.35% * sqrt(years))
-        calendarDegradation = min(8.0, 1.35 * sqrt(vehicleAgeYears))
-
-        var cycleDegradation = 0.0
-        if let odo = odometerKm, odo > 0 {
-            // High-voltage pack cycle aging (~4.2% per 100,000 km for Polestar 2 / Volvo CMA & SPA platform)
-            cycleDegradation = min(12.0, (Double(odo) / 100_000.0) * 4.2)
-        }
-
-        let totalDeg = calendarDegradation + cycleDegradation
-        return max(0.2, ((totalDeg * 10).rounded()) / 10.0)
+        // Neither provider currently exposes a validated measured capacity or SoH value.
+        // Do not infer pack degradation from age, mileage, or a specification capacity.
+        return nil
     }
 
     var batteryStateOfHealthPercent: Double? {
@@ -607,14 +571,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         return ((soh * 10).rounded()) / 10.0
     }
 
-    var effectiveUsableBatteryCapacityKwh: Double {
-        if let reported = reportedBatteryCapacityKwh, reported > 0 {
-            return reported
-        }
-        let factoryUsable = factoryUsableBatteryCapacityKwh
-        guard let soh = batteryStateOfHealthPercent else { return factoryUsable }
-        let currentUsable = factoryUsable * (soh / 100.0)
-        return ((currentUsable * 10).rounded()) / 10.0
+    var configuredUsableBatteryCapacityKwh: Double {
+        // This value is suitable for nominal charging-energy estimates only.
+        return factoryUsableBatteryCapacityKwh
     }
 
     var batteryPackDescription: String {
@@ -668,7 +627,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var batteryHealthStatus: String {
-        guard let soh = batteryStateOfHealthPercent else { return L10n.text("Normal") }
+        guard let soh = batteryStateOfHealthPercent else { return L10n.text("Unavailable") }
         if soh >= 95.0 { return L10n.text("Optimal") }
         if soh >= 85.0 { return L10n.text("Good") }
         if soh >= 75.0 { return L10n.text("Normal") }

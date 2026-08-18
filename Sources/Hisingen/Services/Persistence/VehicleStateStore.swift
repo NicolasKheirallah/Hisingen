@@ -38,13 +38,13 @@ final class VehicleStateStore {
         database.saveSnapshot(state)
 
         if let odo = state.odometerKm, let batteryPct = state.batteryPercentage {
-            let soh = state.batteryStateOfHealthPercent ?? 98.0
-            let deg = state.batteryDegradationPercent ?? (100.0 - soh)
-            let usable = state.effectiveUsableBatteryCapacityKwh
-            database.recordBatteryHealthMilestone(
-                vin: state.vin, odometerKm: Double(odo), sohPct: soh, degPct: deg, usableKwh: usable
-            )
-
+            if let soh = state.batteryStateOfHealthPercent {
+                let deg = state.batteryDegradationPercent ?? (100.0 - soh)
+                database.recordBatteryHealthMilestone(
+                    vin: state.vin, odometerKm: Double(odo), sohPct: soh,
+                    degPct: deg, usableKwh: state.configuredUsableBatteryCapacityKwh
+                )
+            }
             database.recordTelemetry(
                 vin: state.vin, odometerKm: Double(odo),
                 tripManualKm: state.tripMeterManualKm,
@@ -80,7 +80,7 @@ final class VehicleStateStore {
                 let peak = samples.compactMap(\.powerKw).max() ?? (powerKw ?? 0.0)
                 let avg = samples.isEmpty ? peak : (samples.compactMap(\.powerKw).reduce(0, +) / Double(samples.count))
                 let socDelta = max(0, batteryPct - active.startSoc)
-                let capacity = state.effectiveUsableBatteryCapacityKwh
+                let capacity = state.configuredUsableBatteryCapacityKwh
                 let energy = (socDelta / 100.0) * capacity
                 database.completeChargingSession(
                     id: active.id, endSoc: batteryPct, energyDeliveredKwh: energy,

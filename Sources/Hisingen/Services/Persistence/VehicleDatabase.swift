@@ -154,7 +154,8 @@ final class VehicleDatabase: @unchecked Sendable {
             odometer_km REAL NOT NULL,
             state_of_health_pct REAL NOT NULL,
             degradation_pct REAL NOT NULL,
-            effective_usable_kwh REAL NOT NULL
+            effective_usable_kwh REAL NOT NULL,
+            measurement_source TEXT NOT NULL DEFAULT 'legacy'
         );
         CREATE INDEX IF NOT EXISTS idx_battery_health_vin ON battery_health_history(vin, timestamp DESC);
 
@@ -184,6 +185,9 @@ final class VehicleDatabase: @unchecked Sendable {
         """
         do {
             try db.execute(sql: sql)
+            // Existing installations contain rows produced by the old inferred/Volvo-capacity
+            // implementation. Keep them quarantined rather than presenting them as measurements.
+            try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
         } catch {
             logger.error("Could not initialize database schema: \(error, privacy: .public)")
         }
@@ -442,8 +446,8 @@ final class VehicleDatabase: @unchecked Sendable {
             return false
         }
         let sql = """
-        INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source)
+        VALUES (?, ?, ?, ?, ?, ?, 'measured');
         """
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -460,7 +464,7 @@ final class VehicleDatabase: @unchecked Sendable {
     func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
         let sql = """
         SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh
-        FROM battery_health_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
+        FROM battery_health_history WHERE vin = ? AND measurement_source = 'measured' ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -588,7 +592,7 @@ final class VehicleDatabase: @unchecked Sendable {
             snapshots: count(table: "vehicle_snapshots"),
             chargingSessions: count(table: "charging_sessions"),
             chargingSamples: count(table: "charging_samples"),
-            batteryHealth: count(table: "battery_health_history"),
+            batteryHealth: count(table: "battery_health_history WHERE measurement_source = 'measured'"),
             telemetry: count(table: "telemetry_logs"),
             commands: count(table: "remote_commands_log")
         )
@@ -661,8 +665,8 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func exportBatteryHealthCSV(for vin: String? = nil) -> String {
         let sql = vin != nil
-            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE vin = ? ORDER BY timestamp DESC;"
-            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history ORDER BY timestamp DESC;"
+            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE vin = ? AND measurement_source = 'measured' ORDER BY timestamp DESC;"
+            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE measurement_source = 'measured' ORDER BY timestamp DESC;"
 
         let records = (try? db.query(sql: sql) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }
