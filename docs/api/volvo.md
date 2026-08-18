@@ -14,7 +14,7 @@ Everything goes through one host, `api.volvocars.com`, behind Volvo's API gatewa
 
 ## Authentication
 
-See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge) for the full flow, including why a GitHub Pages bridge page is involved. Scopes requested: `openid` + 18 `conve:*`/`energy:*` read scopes. Note the unused `restrictedScopes` gap — see [architecture/technical-debt.md](../architecture/technical-debt.md).
+See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge) for the full flow, including why a GitHub Pages bridge page is involved. Scopes requested: `openid` + 18 `conve:*`/`energy:*` read scopes. Note the unused `restrictedScopes` gap — see 
 
 ## Vehicle discovery
 
@@ -76,13 +76,10 @@ The one explicit backend-provided capability signal in either provider: `GET /en
 
 Everything else (`unlockTrunk`, window control, charge-target/amp-limit, schedules, pre-cleaning, OTA) throws `RemoteCommandError.unsupported` — there's no Volvo implementation yet regardless of what the capability profile reports. `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` is sent with an empty JSON body (`"{}"`) — parameters like requested climate temperature or seat heating from a `RemoteCommand.startClimate` payload are **not sent**, since Volvo's command endpoint here doesn't take a body.
 
-Response parsing reads `invokeStatus` (`"COMPLETED"`/`"DELIVERED"` → `.completed`, else `.accepted`) from a raw, untyped JSON dictionary rather than a `Decodable` DTO — see [architecture/technical-debt.md](../architecture/technical-debt.md).
+Response parsing reads `invokeStatus` (`"COMPLETED"`/`"DELIVERED"` → `.completed`, else `.accepted`) from a raw, untyped JSON dictionary rather than a `Decodable` DTO — see 
 
 Concurrency: single-in-flight-per-VIN via `remoteCommandsInFlight`, same pattern as the refresh path.
 
-## Error handling
-
-See [errors-and-rate-limits.md](errors-and-rate-limits.md). Volvo-specific: no `Retry-After` header is ever actually read (a 429 always maps to `.rateLimited(retryAfter: nil)`); a 403 on a per-vehicle telemetry GET is specifically reinterpreted as `.regionRestricted` rather than a permission error (an undocumented heuristic — see [architecture/technical-debt.md](../architecture/technical-debt.md)); a 401 whose body mentions `VCC-API-KEY`/`API-KEY` short-circuits straight to `.appNotConfigured` instead of attempting a token refresh.
 
 ## Defensive decoding
 
