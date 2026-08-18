@@ -1,0 +1,16 @@
+{
+  "data": {
+    "carTelematicsV2": {
+      "battery": [{
+        "vin": "YSMTEST0000000001",
+        "batteryChargeLevelPercentage": 62,
+        "estimatedDistanceToEmptyKm": 321,
+        "chargingStatusV2": "CHARGING_STATUS_IDLE",
+        "estimatedChargingTimeToFullMinutes": 0,
+        "timestamp": { "seconds": "2000000000" }
+      }],
+      "odometer": [{ "vin": "YSMTEST0000000001", "odometerMeters": 12345000 }],
+      "health": []
+    }
+  }
+}
