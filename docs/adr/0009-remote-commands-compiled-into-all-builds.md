@@ -62,4 +62,3 @@ less automated coverage than read-only ones.
 Commands other than OTA remain unreachable from the UI: `ControlsTabView`
 still hardcodes Polestar's lock/window/climate/charging buttons to
 `.disabled(true)`, and their PCCS request paths are unverified — see
-[architecture/technical-debt.md](../architecture/technical-debt.md).

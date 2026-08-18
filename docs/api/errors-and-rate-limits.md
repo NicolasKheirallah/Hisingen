@@ -15,7 +15,7 @@ Both `PolestarError` and `VolvoError` are provider-specific `Error, LocalizedErr
 | 5xx | `.server(statusCode:)` | `.server(statusCode:)` |
 | other 4xx | `.client(statusCode:)` | `.client(statusCode:)` |
 
-**`Retry-After` parsing (Polestar only):** `retryAfter(from:)` handles both raw-seconds (`Retry-After: 30`) and HTTP-date (`Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`) formats, converting the latter to a relative interval. Volvo's `httpFailure` is always called with `retryAfter: nil` at every call site — a real gap, not a deliberate simplification; see [architecture/technical-debt.md](../architecture/technical-debt.md).
+**`Retry-After` parsing (Polestar only):** `retryAfter(from:)` handles both raw-seconds (`Retry-After: 30`) and HTTP-date (`Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`) formats, converting the latter to a relative interval. Volvo's `httpFailure` is always called with `retryAfter: nil` at every call site — a real gap, not a deliberate simplification; see 
 
 ## Volvo's `regionRestricted` heuristic
 

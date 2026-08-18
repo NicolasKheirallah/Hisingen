@@ -1,144 +1,678 @@
 # Authentication
 
-Polestar and Volvo use genuinely different flows. Both end up with a bearer access token and a persisted refresh token, but how they get there — and how Hisingen has to work around each vendor's constraints — differs substantially.
+Hisingen supports authentication with both Polestar and Volvo, but the two providers use substantially different integration models.
 
-## Polestar: scraped OIDC login
+At a high level:
 
-Polestar has no documented third-party OAuth client registration process, so Hisingen's login flow reproduces what the official web/app client does against Polestar ID's PingFederate-based identity provider, rather than a simple redirect-and-exchange.
+- **Polestar** uses an undocumented authentication flow derived from the behaviour of Polestar's first-party services.
+- **Volvo** uses a documented OAuth 2.0 authorization flow through the Volvo Cars Developer Platform.
+
+Both integrations use PKCE and validate authorization state before accepting a callback.
+
+Long-lived credentials that need to survive an application restart are stored locally using the macOS Keychain. Hisingen does not operate an authentication server or account service of its own.
+
+This document intentionally describes the authentication architecture without publishing provider-specific reverse-engineering details such as internal client identifiers, captured login forms, undocumented allowlist behaviour, raw responses or probing results.
+
+---
+
+## Security goals
+
+The authentication implementation is designed around a few basic requirements:
+
+1. Credentials should be sent only to the provider they belong to.
+2. Hisingen should not operate an intermediary credential or token service.
+3. Authorization callbacks must be tied to the flow that initiated them.
+4. Long-lived secrets should not be stored in plaintext application preferences.
+5. Short-lived credentials should remain in memory where practical.
+6. Polestar and Volvo credentials must remain isolated from each other.
+7. Authentication failure should fail closed and return the application to an unauthenticated state.
+
+See:
+
+- [Security Overview](../security/overview.md)
+- [Keychain](../security/keychain.md)
+- [Threat Model](../security/threat-model.md)
+
+---
+
+# Polestar Authentication
+
+## Overview
+
+Polestar does not currently provide a documented third-party authentication and vehicle-API integration intended for applications such as Hisingen.
+
+Hisingen therefore authenticates using an OAuth/OIDC-style flow based on observed first-party behaviour.
+
+The implementation uses:
+
+- OpenID Connect discovery;
+- authorization-code exchange;
+- PKCE;
+- redirect validation;
+- OAuth state validation;
+- refresh-token-based session restoration.
+
+Because this is not a published third-party contract, Polestar can change the authentication flow without notice.
+
+Changes to:
+
+- the sign-in experience;
+- identity-provider behaviour;
+- authorization requirements;
+- redirect behaviour;
+- token issuance;
+- account permissions
+
+can require a Hisingen update.
+
+---
+
+## Authentication flow
+
+Conceptually, Polestar authentication follows this sequence:
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant App as PolestarAPI (actor)
-    participant OIDC as polestarid.eu.polestar.com
-    App->>OIDC: GET .well-known/openid-configuration
-    OIDC-->>App: issuer, authorization_endpoint, token_endpoint (validated: https, *.polestar.com)
-    App->>App: generate PKCE verifier + challenge (SecRandomCopyBytes, SHA256, base64url)
-    App->>OIDC: GET authorization_endpoint (client_id, redirect_uri, code_challenge, state, ...)
-    Note over App,OIDC: OAuthRedirectDelegate (URLSessionTaskDelegate)<br/>intercepts the redirect chain instead of following it
-    OIDC-->>App: login page HTML
-    App->>App: extractResumePath(html) — regex over several known patterns
-    App->>OIDC: POST pf.username / pf.pass to resume URL
-    alt uid present, second confirmation step needed
-        App->>OIDC: POST pf.submit=true / subject=uid
-    end
-    OIDC-->>App: redirect to oidcRedirectURL?code=...&state=...
-    App->>App: validate state matches; extract code
-    App->>OIDC: POST token_endpoint (code, code_verifier, redirect_uri)
-    OIDC-->>App: access_token, refresh_token, expires_in
-    App->>App: persist refresh token to Keychain (access token stays in-memory only)
+    participant App as Hisingen
+    participant ID as Polestar Identity Service
+
+    App->>App: Generate PKCE verifier/challenge and OAuth state
+    App->>ID: Begin authorization
+    User->>ID: Authenticate with Polestar account
+    ID-->>App: Authorization callback
+    App->>App: Validate callback and state
+    App->>ID: Exchange authorization code using PKCE verifier
+    ID-->>App: Access and refresh session material
+    App->>App: Keep short-lived access state in memory
+    App->>App: Persist required long-lived session material in Keychain
+````
+
+The exact provider-specific login mechanics are intentionally not documented publicly.
+
+---
+
+## PKCE
+
+Hisingen uses Proof Key for Code Exchange (PKCE) when performing provider authorization.
+
+For each new authorization:
+
+1. Hisingen creates a cryptographically random verifier.
+2. A SHA-256-derived challenge is sent with the authorization request.
+3. The verifier remains local to the application.
+4. The verifier is supplied during the authorization-code exchange.
+
+An intercepted authorization code therefore cannot normally be exchanged without the verifier held by the Hisingen process that initiated the flow.
+
+The shared PKCE implementation lives in:
+
+```text
+Sources/Hisingen/Support/PKCE.swift
 ```
 
-Failure detection is string-based: if the login page HTML contains the literal string `"ERR001"`, Hisingen maps it to `PolestarError.authenticationRequired(.invalidCredentials)`; any other failure to extract a code maps to `.callbackRejected`. There is no structured error response to parse — this is a genuinely brittle, reverse-engineered flow, and `Tests/HisingenTests/Unit/ResumePathTests.swift` exists specifically to pin down the HTML-parsing regexes against known page variants.
+---
 
-**Two clients, both required.** Hisingen runs the OIDC flow twice:
+## OAuth state validation
 
-| | `l3oopkc_10` (web) | `lp8dyrd_10` (app) |
-| --- | --- | --- |
-| Redirect | `https://www.polestar.com/sign-in-callback` | `polestar-explore://explore.polestar.com` |
-| Used for | GraphQL + gRPC reads, OTA writes | `invocation.InvocationService` writes only |
-| Why not the other | not on the command allowlist | its token is rejected by `mystar-v2`, so it cannot list vehicles |
+Every authentication request includes a freshly generated `state` value.
 
-Both request `openid profile email customer:attributes customer:attributes:write`. The second
-authorization reuses the PingFederate SSO cookie from the first, so it needs no extra credential
-prompt — provided both flows share one `URLSession`. Both issue refresh tokens, so email+password
-is needed exactly once; the command client's refresh token is stored under its own Keychain
-account (`polestar-command-refresh-token`) and both are revoked on sign-out.
+When the provider redirects back, Hisingen compares the returned value with the one associated with the pending authentication request.
 
-A session restored from a refresh token alone cannot bootstrap the command client if its refresh
-token was never stored — there is no IdP cookie and no password to replay. That is the one case
-where the app asks for email and password again, reported as *"Polestar mobile credentials
-required for remote controls."*
+A mismatched or missing state causes the callback to be rejected before token exchange.
 
-Full detail and the allowlist itself: `docs/api/polestar-backend-map.md`, section
-"OAuth clients — the two-client rule" (internal-only, not published in this repository).
+This protects the flow against callback confusion and common OAuth request-forgery scenarios.
 
-**Redirect validation:** `OAuthRedirectDelegate` holds *both* callbacks and captures a redirect whose scheme/host/path matches either; anything else continues following redirects normally. Path comparison normalizes `"/"` to `""` so a callback that reports an empty path in one form and `/` in another still matches. Recognising both matters: the app client's callback is a custom scheme `URLSession` cannot load, so if it is not intercepted the redirect is followed into a failure and the authorization code is lost — silently, with the app then falling back to the web token and every remote command failing on the allowlist check.
+---
 
-**State validation:** the `state` query parameter on the captured callback is compared against the value generated before the authorize request; a mismatch throws `.callbackRejected` before any code exchange is attempted.
+## Redirect validation
 
-**OIDC discovery hardening:** every URL returned by the `.well-known/openid-configuration` document (`authorization_endpoint`, `token_endpoint`, etc.) is validated to be `https` and either `host == "polestar.com"` or `host.hasSuffix(".polestar.com")` before use — a defense against a compromised or spoofed discovery response redirecting the login flow elsewhere.
+Hisingen only accepts authentication redirects matching the destination expected for the active authorization flow.
 
-**Token storage:** only the **refresh token** is written to Keychain (account `polestar-refresh-token`). The access token and its expiry live only in `PolestarAPI`'s in-memory actor state and are lost on relaunch — every app start that resumes a session does so via the refresh token, never a cached access token.
+Unexpected redirects are not interpreted as successful authentication callbacks.
 
-**Token refresh:** `refreshAccessToken(force:)` is coalesced — if a refresh is already in flight, concurrent callers `await` the same stored `Task` rather than issuing a duplicate POST. Triggered proactively (`refreshTokenIfNeeded`, when expiry is <5 minutes away) and reactively (on a 401/403 or an embedded GraphQL auth error, one retry).
+The implementation also validates provider-controlled URLs before using them where appropriate.
 
-**PKCE:** both providers use `Support/PKCE.swift`. `PolestarAPI` wraps it only to translate `URLError` into its own error domain.
+Authentication code should preserve this behaviour when modified.
 
-## Volvo: OAuth2 PKCE, with a redirect-URI bridge
+---
 
-Volvo's flow is a standard OAuth2 authorization-code-with-PKCE grant against a documented identity provider — the interesting engineering problem here isn't the OAuth mechanics, it's that **Volvo's Developer Portal only accepts `http(s)` redirect URIs** (no `localhost`, no custom URL schemes), while Hisingen needs the callback to land back inside the app via its `hisingen://` URL scheme.
+## Credential handling
+
+The user's Polestar credentials are used only for authentication against Polestar's identity services.
+
+Hisingen does not send them to:
+
+* Hisingen-operated infrastructure;
+* Volvo;
+* Open-Meteo;
+* GitHub;
+* Apple geocoding services.
+
+Long-lived authentication state required for session restoration is stored using the macOS Keychain.
+
+Short-lived access credentials are kept in process memory rather than persisted where practical.
+
+See [Keychain](../security/keychain.md).
+
+---
+
+## Session restoration
+
+After Hisingen restarts, it attempts to restore an existing Polestar session from locally stored session material.
+
+Conceptually:
+
+```mermaid
+sequenceDiagram
+    participant App as Hisingen
+    participant KC as macOS Keychain
+    participant ID as Polestar Identity Service
+    participant API as Polestar Vehicle Services
+
+    App->>KC: Read stored session material
+    KC-->>App: Stored session
+    App->>ID: Refresh authentication
+    ID-->>App: New short-lived access state
+    App->>API: Discover vehicles
+    API-->>App: Vehicle list / state
+```
+
+If the stored session can no longer be refreshed, Hisingen clears invalid authentication state and requires the user to sign in again.
+
+---
+
+## Authentication failures
+
+Polestar authentication can fail because of:
+
+* invalid credentials;
+* expired or revoked session material;
+* changed provider behaviour;
+* network failure;
+* malformed or unexpected provider responses;
+* rejected authorization callbacks;
+* changes to account permissions.
+
+Failures that require user authentication are surfaced as authentication-required state rather than being retried indefinitely.
+
+Transient network and provider errors are handled separately through the normal retry/backoff system.
+
+See [Errors and Rate Limits](errors-and-rate-limits.md).
+
+---
+
+# Volvo Authentication
+
+## Overview
+
+Volvo uses a documented OAuth 2.0 authorization-code flow through the Volvo Cars Developer Platform.
+
+Unlike Polestar, Volvo requires the user to create their own Developer Portal application.
+
+Hisingen therefore requires Volvo users to provide the application credentials issued for their own registration.
+
+Depending on the enabled API products and requested functionality, these can include:
+
+* Client ID;
+* Client Secret;
+* VCC API Key.
+
+The user's Volvo Developer application remains separate from Hisingen itself.
+
+---
+
+## Volvo authorization flow
+
+Volvo authentication uses:
+
+* OAuth 2.0 authorization code;
+* PKCE;
+* OAuth state validation;
+* browser-based user sign-in;
+* an HTTPS callback bridge;
+* refresh-token-based session restoration.
+
+Conceptually:
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Presenter as VolvoSignInPresenter
-    participant Browser as System browser
-    participant VID as volvoid.eu.volvocars.com
-    participant Bridge as GitHub Pages<br/>oauth-callback.html
-    participant App as VolvoAPI (actor)
-    participant AD as AppDelegate
+    participant App as Hisingen
+    participant Browser
+    participant Volvo as Volvo Identity
+    participant Bridge as Static HTTPS Callback
+    participant KC as macOS Keychain
 
-    App->>App: generate PKCE verifier/challenge + state (Support/PKCE.swift)
-    Presenter->>Browser: NSWorkspace.open(authorizeURL)
-    Browser->>VID: GET /as/authorization.oauth2 (redirect_uri = GitHub Pages URL)
-    User->>VID: signs in, consents
-    VID-->>Browser: redirect to GitHub Pages URL?code=...&state=...
-    Browser->>Bridge: GET oauth-callback.html?code=...&state=...
-    Bridge->>Bridge: window.location.replace("hisingen://oauth/volvo/callback" + search)
-    Browser->>AD: opens hisingen://oauth/volvo/callback?code=...&state=...
-    AD->>Presenter: handleCallbackURL(url)
-    Presenter->>Presenter: resume suspended continuation from signIn()
-    Presenter-->>App: callback URL
-    App->>App: validate state; extract code
-    App->>VID: POST /as/token.oauth2 (Basic auth: client_id/client_secret, code, code_verifier)
-    VID-->>App: access_token, refresh_token, expires_in
-    App->>App: persist refresh token + client secret + VCC API key to Keychain
+    App->>App: Generate PKCE verifier/challenge and OAuth state
+    App->>Browser: Open authorization URL
+    Browser->>Volvo: Begin authorization
+    User->>Volvo: Sign in and authorize
+    Volvo-->>Bridge: HTTPS callback with authorization response
+    Bridge-->>App: Forward callback through hisingen://
+    App->>App: Validate state and callback
+    App->>Volvo: Exchange authorization code using PKCE
+    Volvo-->>App: Access and refresh session material
+    App->>KC: Persist required long-lived credentials
 ```
 
-**Why the bridge page exists:** `docs/oauth-callback.html` is a static, no-backend page whose entire job is to hand the query string straight through — the file's own comment says it plainly: *"This page exists only because Volvo's Developer Portal requires an http(s) redirect URI — no localhost, no custom URL schemes — while the actual OAuth callback destination is Hisingen's own registered URL scheme."* It never stores or transmits anything itself.
+---
 
-**Not `ASWebAuthenticationSession`:** `VolvoSignInPresenter` opens the user's default system browser via `NSWorkspace.shared.open(_:)`, not Apple's dedicated auth-session API, and suspends with `withCheckedThrowingContinuation` until `AppDelegate.application(_:open:)` routes the `hisingen://` callback back to it. Only one sign-in can be pending at a time — a second call to `signIn` rejects any prior pending continuation.
+## Why an HTTPS callback bridge is required
 
-**Client credentials:** Client ID, Client Secret, and VCC API Key are the user's own Volvo Developer Portal application credentials (registered by the user at developer.volvocars.com, not shared or issued by Hisingen). Client ID/secret authenticate the token exchange via HTTP Basic auth; the VCC API Key is a separate API-gateway subscription key sent as a `vcc-api-key` header on every subsequent REST call.
+Volvo's Developer Platform requires an HTTP(S) redirect URI for the OAuth application.
 
-**Token storage:** all three Volvo secrets (client secret, VCC API key, refresh token) are stored together as one JSON blob in a single Keychain item (account `volvo-credentials-bundle`). The Client ID itself is not a secret and lives in `Preferences`/`UserDefaults`.
+Hisingen is a native macOS application and ultimately needs the callback returned to the local app.
 
-**Token refresh:** same coalescing pattern as Polestar — one stored `Task`, concurrent callers await it. Triggered when the access token is missing or <5 minutes from expiry, plus one retry on a 401 inside the generic authenticated-GET helper.
+The registered callback is therefore:
 
-**Scopes requested:** `openid` plus 18 `conve:*`/`energy:*` read scopes. A separate `restrictedScopes` array (`conve:lock`, `conve:unlock`, `conve:engine_start_stop`, `conve:honk_flash`, `location:read`) is defined in the source but **never included** in the actual authorize request — see [architecture/technical-debt.md](../architecture/technical-debt.md) for what that might mean for lock/unlock/honk-flash/location calls.
+```text
+https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html
+```
 
-## Session resumption (both providers)
+That page is static.
 
-At launch, `AppDelegate.resumeStoredSession()` reads the relevant Keychain items and, if present, calls `restoreSession(token:preferredVIN:features:)` on the active provider — which force-refreshes the access token from the stored refresh token and re-runs vehicle discovery. If that refresh fails with an authentication-requiring error, the stored refresh token is deleted from Keychain and the error propagates up, landing the UI in the unauthenticated (`WelcomeSignInView`) state rather than retrying indefinitely against a dead token.
+Its only purpose is to return the OAuth callback to Hisingen through the application's registered:
 
-## Authentication failure / recovery
+```text
+hisingen://
+```
+
+URL scheme.
+
+The bridge:
+
+* does not contain a Hisingen account system;
+* does not exchange tokens;
+* does not store credentials;
+* does not process vehicle telemetry;
+* does not authenticate the user itself.
+
+The application validates the OAuth state after the callback is returned.
+
+The bridge implementation is available in the public repository so its behaviour can be inspected.
+
+---
+
+## Callback handling
+
+A Volvo sign-in remains pending while the user's browser completes authorization.
+
+When macOS opens the Hisingen callback URL, the application routes the response back to the pending authorization operation.
+
+Hisingen then:
+
+1. verifies that an authorization is actually pending;
+2. validates the OAuth state;
+3. checks for provider errors;
+4. extracts the authorization code;
+5. exchanges it using the corresponding PKCE verifier.
+
+A second authorization request should not silently overwrite an unrelated pending flow.
+
+---
+
+## Volvo Developer credentials
+
+Volvo application credentials belong to the user's own Developer Portal registration.
+
+Hisingen does not ship a shared Volvo Developer identity intended to impersonate every installation.
+
+The relevant values are entered through Hisingen Settings.
+
+Sensitive values that must persist are stored in the macOS Keychain.
+
+The Client ID may be stored as non-secret application configuration because an OAuth Client ID is an identifier rather than a credential granting access on its own.
+
+See [Keychain](../security/keychain.md).
+
+---
+
+## API key
+
+Volvo's API gateway uses the VCC API Key associated with the user's Developer application.
+
+This key is separate from the OAuth access token.
+
+Authenticated Volvo requests can therefore require both:
+
+* authorization associated with the user's account;
+* application-level API access associated with the Developer registration.
+
+The VCC API Key must be treated as sensitive configuration and must never be committed to the repository.
+
+---
+
+## OAuth scopes
+
+Volvo API functionality is scope-based.
+
+Hisingen requests scopes required for the functionality it implements and that the user's Developer application is allowed to access.
+
+Some functionality can require:
+
+* additional API products;
+* additional OAuth scopes;
+* approval through Volvo's Developer Platform;
+* support from the vehicle itself.
+
+A missing feature or HTTP permission error should therefore not automatically be interpreted as a Hisingen implementation failure.
+
+See [Volvo Integration](volvo.md).
+
+The exact private configuration of a developer application's approved permissions should not be published in bug reports or examples.
+
+---
+
+## Session restoration
+
+Volvo sessions are restored from locally persisted credentials where possible.
+
+Conceptually:
 
 ```mermaid
 sequenceDiagram
-    participant RC as RefreshCoordinator
-    participant API as Provider actor
-    participant AD as AppDelegate
-    participant Notif as Notifier
+    participant App as Hisingen
+    participant KC as macOS Keychain
+    participant Volvo as Volvo Identity
+    participant API as Volvo Vehicle APIs
 
-    RC->>API: fetchVehicleState / any authenticated call
-    API-->>RC: throws VehicleServiceError.authenticationRequired
-    RC-->>AD: onError(error)
-    AD->>AD: sessionValid = false (if Notifications feature enabled)
-    AD->>Notif: authenticationRequired() — posts a local notification, deduplicated
-    Note over AD: UI falls back to WelcomeSignInView<br/>on next render
-    User->>AD: re-enters credentials / re-authorizes
-    AD->>API: authenticate(...) or beginVolvoSignIn(...)
-    API-->>AD: success
-    AD->>Notif: authenticationSucceeded() — clears the auth-required notification
+    App->>KC: Read stored credentials/session
+    KC-->>App: Stored session
+    App->>Volvo: Refresh OAuth session
+    Volvo-->>App: New access state
+    App->>API: Discover vehicles
+    API-->>App: Vehicle list / state
 ```
 
-`authenticationNoticePosted` on `Notifier` prevents the same "please sign in" notification from repeating on every failed refresh — it's cleared only once `authenticationSucceeded()` fires.
+If the refresh token is revoked, expired or otherwise rejected, Hisingen clears the invalid session and asks the user to authorize again.
 
-## Sign out
+---
 
-Both providers' `signOut()` calls `resetSession()` (clears in-memory token state, invalidates and recreates the ephemeral `URLSession` so no stale cookies survive, and for Polestar also invalidates the cached C3 gRPC host) and then deletes the relevant Keychain items — the refresh token for Polestar; the session token, client secret, and API key for Volvo. `RefreshCoordinator.signOut()` additionally clears `VehicleStateStore` and resets in-memory `latest`/`cars` via `onSignedOut`.
+# Token Refresh
 
-## Provider isolation
+Both provider implementations use refreshable authentication sessions.
 
-Signing into one brand never touches the other's credentials — Polestar and Volvo each have entirely separate Keychain accounts, separate `Preferences` keys, and separate `VehicleProviding` actor instances. See [security/keychain.md](../security/keychain.md) for the isolation guarantees and [Tests/HisingenTests/Unit/VolvoKeychainIsolationTests.swift](../../Tests/HisingenTests/Unit/VolvoKeychainIsolationTests.swift) for the test that proves it.
+Refresh can occur:
+
+* when Hisingen launches;
+* before an access credential expires;
+* after an authenticated request indicates that the current access credential is no longer valid.
+
+Concurrent refresh requests should be coalesced so multiple callers do not independently perform the same refresh operation.
+
+A refresh failure requiring new credentials is surfaced to the application as an authentication-required condition.
+
+---
+
+## Access credentials
+
+Short-lived access credentials should not be written to disk unless there is a clear need.
+
+Where practical, Hisingen retains them in memory only.
+
+Application relaunch should restore access through the provider-supported long-lived session mechanism rather than relying on an old cached access credential.
+
+---
+
+# Keychain Storage
+
+Sensitive persisted authentication material is stored using the macOS Keychain.
+
+Hisingen currently uses:
+
+```text
+kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+```
+
+for persisted Keychain items.
+
+This means the data:
+
+* is tied to the current Mac;
+* is excluded from iCloud Keychain synchronization;
+* becomes accessible after the Mac has been unlocked once following startup;
+* can remain accessible while the screen is subsequently locked.
+
+The latter property allows a menu-bar application to continue background refreshes while the user is not actively using the Mac.
+
+This should not be described as Secure Enclave storage.
+
+See [Keychain](../security/keychain.md) for the current storage model.
+
+---
+
+# Provider Isolation
+
+Polestar and Volvo authentication state is kept separate.
+
+Signing into one provider does not reuse the other provider's:
+
+* password;
+* OAuth application credentials;
+* refresh session;
+* access token;
+* API key.
+
+A provider implementation must never send credentials belonging to one brand to the other brand.
+
+This separation is part of the shared provider architecture described in [Provider Architecture](../architecture/providers.md).
+
+---
+
+# Sign Out
+
+Signing out should remove both:
+
+1. active in-memory authentication state;
+2. persisted session material belonging to that provider.
+
+It should also invalidate provider-specific network session state that could otherwise preserve authentication cookies or stale authorization information.
+
+Signing out of one provider should not delete credentials belonging to the other provider.
+
+---
+
+# Authentication Recovery
+
+Authentication failure is handled differently from an ordinary transient provider error.
+
+Conceptually:
+
+```mermaid
+sequenceDiagram
+    participant Refresh as RefreshCoordinator
+    participant Provider
+    participant App as Hisingen
+    participant User
+
+    Refresh->>Provider: Fetch authenticated vehicle state
+    Provider-->>Refresh: Authentication required
+    Refresh-->>App: Session no longer valid
+    App->>App: Stop treating session as authenticated
+    App-->>User: Request sign-in
+    User->>App: Authenticate / authorize again
+    App->>Provider: Establish new session
+    Provider-->>App: Authenticated
+```
+
+Hisingen should not continually retry a permanently invalid credential as though it were a temporary network error.
+
+---
+
+# Error Handling
+
+Authentication-related failures are translated into Hisingen's shared provider error model.
+
+Common categories include:
+
+* invalid credentials;
+* expired session;
+* revoked authorization;
+* application not configured;
+* insufficient permissions;
+* rejected callback;
+* invalid provider response;
+* Keychain failure;
+* network failure;
+* provider/server failure.
+
+Only errors that are reasonably transient should be automatically retried.
+
+See [Errors and Rate Limits](errors-and-rate-limits.md).
+
+---
+
+# Logging
+
+Authentication code must never intentionally log:
+
+* passwords;
+* Client Secrets;
+* API keys;
+* access tokens;
+* refresh tokens;
+* authorization codes;
+* PKCE verifiers;
+* full authentication responses.
+
+Error logs should describe the operation and failure category without including the secret value involved.
+
+This rule applies equally to:
+
+* application logs;
+* test output;
+* GitHub Actions;
+* issue reports;
+* diagnostic archives.
+
+---
+
+# CI and Test Credentials
+
+The normal deterministic test suite does not require real provider credentials.
+
+Tests that require a live provider account are isolated from normal CI execution and must be explicitly enabled.
+
+Credentials used for live testing must be supplied through secure environment or secret storage rather than committed files.
+
+Live-provider fixtures must never be produced by committing a raw response first and sanitizing it later.
+
+Sanitization must occur **before the first Git commit**.
+
+See:
+
+* [Testing Strategy](../testing/strategy.md)
+* [Fixtures](../testing/fixtures.md)
+* [Security Policy](../../SECURITY.md)
+
+---
+
+# Repository Rules
+
+Never commit:
+
+* `.env` files containing live credentials;
+* passwords;
+* Client Secrets;
+* VCC API Keys;
+* access tokens;
+* refresh tokens;
+* authorization codes;
+* captured authenticated HTTP responses;
+* browser cookies;
+* unredacted authentication logs;
+* raw provider traffic containing account information.
+
+Use obviously fake placeholders in examples.
+
+Prefer values such as:
+
+```text
+example-client-id
+example-client-secret-not-real
+fixture-access-token-not-real
+fixture-refresh-token-not-real
+```
+
+over random strings that could be mistaken for real credentials.
+
+---
+
+# Public Documentation Boundary
+
+Public authentication documentation should explain:
+
+* which authentication model each provider uses;
+* where trust boundaries exist;
+* how PKCE and state validation are used;
+* what classes of credentials are stored;
+* how sessions are restored;
+* how sign-out and failure recovery work;
+* which security guarantees users can rely on.
+
+Public documentation should not reproduce:
+
+* first-party OAuth client identifiers discovered through reverse engineering;
+* provider-internal allowlists;
+* raw authorization requests or responses from real accounts;
+* undocumented scope experiments;
+* captured sign-in HTML;
+* cookies;
+* backend-specific authentication bypass research;
+* probing transcripts;
+* detailed provider implementation material that is unnecessary to use or contribute to Hisingen.
+
+Such information is not required to understand Hisingen's architecture and creates unnecessary maintenance, security and provider-relationship risk.
+
+---
+
+# Contributor Guidance
+
+When modifying authentication:
+
+1. Preserve PKCE.
+2. Preserve OAuth state validation.
+3. Validate callbacks before token exchange.
+4. Do not weaken provider-domain validation.
+5. Keep provider credentials isolated.
+6. Do not persist short-lived secrets unnecessarily.
+7. Keep long-lived secrets in Keychain.
+8. Never add credential values to logs.
+9. Ensure sign-out removes persisted session material.
+10. Ensure an invalid refresh session returns to unauthenticated state.
+11. Add tests for callback validation and failure handling.
+12. Never commit raw authentication captures.
+13. Keep undocumented reverse-engineering material out of public documentation.
+
+Authentication changes should generally be treated as security-sensitive changes even when they appear to be simple provider compatibility fixes.
+
+---
+
+# Related Documentation
+
+* [API Overview](overview.md)
+* [Polestar Integration](polestar.md)
+* [Volvo Integration](volvo.md)
+* [Errors and Rate Limits](errors-and-rate-limits.md)
+* [Provider Architecture](../architecture/providers.md)
+* [Security Overview](../security/overview.md)
+* [Keychain](../security/keychain.md)
+* [Privacy](../security/privacy.md)
+* [Threat Model](../security/threat-model.md)
+* [Testing Strategy](../testing/strategy.md)
+* [Security Policy](../../SECURITY.md)
+
+---
+
+# Disclaimer
+
+Authentication behaviour ultimately depends on Polestar and Volvo services that Hisingen does not control.
+
+The Volvo integration uses the documented Volvo Developer Platform but still depends on provider availability, application configuration and granted permissions.
+
+The Polestar integration relies on undocumented first-party behaviour and may require changes when Polestar modifies its authentication systems.
+
+Hisingen should fail conservatively when an authentication assumption is no longer valid rather than attempting to bypass provider security controls.
+
+
