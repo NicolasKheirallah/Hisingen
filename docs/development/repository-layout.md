@@ -32,7 +32,6 @@
 ├── README.md             User-facing project README
 ├── SECURITY.md           Vulnerability reporting policy — see security/overview.md
 ├── TERMS.md              Legal/liability terms
-└── changelog.md          Single consolidated release-note entry (see testing/strategy.md)
 ```
 
 ## What belongs where

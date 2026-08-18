@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check Markdown files for broken local links and unbalanced mermaid/code fences.
 
-Scans README.md, changelog.md, TERMS.md, and everything under docs/. Only
+Scans README.md, TERMS.md, and everything under docs/. Only
 relative links to files/anchors inside this repo are checked — external
 http(s)/mailto links are left alone (no network access here, and GitHub
 already surfaces dead external links via its own link-checking on render).
@@ -16,7 +16,7 @@ FENCE_RE = re.compile(r'^\s*```')
 
 
 def markdown_files():
-    candidates = [ROOT / "README.md", ROOT / "changelog.md", ROOT / "TERMS.md"]
+    candidates = [ROOT / "README.md", ROOT / "TERMS.md"]
     candidates += sorted((ROOT / "docs").rglob("*.md"))
     return [path for path in candidates if path.is_file()]
 

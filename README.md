@@ -14,7 +14,7 @@ Where the vehicle, provider and account support them, Hisingen can also expose r
 
 Hisingen is open source, runs locally on your Mac, and has no Hisingen-operated vehicle-data backend or account service.
 
-[**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Vehicle support](#vehicle-support) · [Volvo setup](#volvo-setup) · [Documentation](docs/README.md) · [Changelog](changelog.md) · [Security](SECURITY.md)
+[**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Vehicle support](#vehicle-support) · [Volvo setup](#volvo-setup) · [Documentation](docs/README.md) · [Security](SECURITY.md)
 
 <p align="center">
   <img src="website/public/assets/product/00-menu-bar-overview.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
