@@ -505,10 +505,15 @@ Requirements: macOS 14 Sonoma or later and Xcode 15+ or compatible Command Line 
 git clone https://github.com/NicolasKheirallah/hisingen.git
 cd hisingen
 make doctor
-make test
+make ci
 make app
 open Hisingen.app
 ```
+
+`make ci` is the deterministic build and test command used for pull requests. It
+does not contact Polestar or Volvo and does not require credentials. Live account
+checks are intentionally separate and are available only through the manual
+integration workflow.
 
 `make app` produces an ad-hoc-signed local build. Rebuilding changes its identity and can cause Keychain or Accessibility approval to be requested again. Stable trust across rebuilds requires a Developer ID-signed release.
 

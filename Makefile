@@ -11,12 +11,17 @@ AUTODETECTED_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/nu
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
-.PHONY: all dist doctor build universal app app-universal dmg run test clean release setup-cert inject-secrets
+.PHONY: all dist ci doctor build universal app app-universal dmg run test clean release setup-cert inject-secrets
 
 ## Default target: build both .app bundle and .dmg installer
 all: app dmg
 
 dist: app dmg
+
+## Run the deterministic build and test validation used by pull requests.
+ci: doctor inject-secrets
+	swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+	sh Scripts/test.sh --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
 doctor:
 	sh Scripts/doctor.sh

@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   tag-and-push:
@@ -25,16 +26,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Determine next version and tag
+      - name: Determine next version and create release pull request
         id: versioning
+        env:
+          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 || true)
           echo "Latest tag found: $LATEST_TAG"
-
-          BUMP="${{ github.event.inputs.bump }}"
 
           if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             NEW_VERSION="$BUMP"
@@ -64,6 +67,12 @@ jobs:
           echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
+          BRANCH="release/v${NEW_VERSION}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Release branch $BRANCH already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" Resources/Info.plist
           CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist 2>/dev/null || echo "0")
           NEXT_BUILD=$((CURRENT_BUILD + 1))
@@ -74,6 +83,11 @@ jobs:
 
           git add Resources/Info.plist
           git commit -m "chore(release): bump version to v${NEW_VERSION} (build ${NEXT_BUILD})"
-          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
-          git push origin main
-          git push origin "v${NEW_VERSION}"
+          git checkout -b "$BRANCH"
+          gh auth setup-git
+          git push --set-upstream origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(release): bump version to v${NEW_VERSION}" \
+            --body "This pull request updates the app version to v${NEW_VERSION}. Merge it after required CI checks pass, then create and push tag v${NEW_VERSION} to start the protected release workflow."
