@@ -11,6 +11,12 @@ final class StatusItemController: NSObject {
     private var authenticated = false
     private var monitor: AnyObject?
     private var settingsMode = false
+    private var selectedTab: HisingenContentView.Tab = .vehicle
+    private var pendingPopoverRefresh: Task<Void, Never>?
+    private let database: VehicleDatabase
+    private let reverseGeocoder: ReverseGeocoder
+    private let imageCache: CarImageCache
+    private let preferences: PreferencesStore
 
     var updateVersion: String?
     var checkingForUpdates = false
@@ -34,16 +40,32 @@ final class StatusItemController: NSObject {
     var onSignOut: () -> Void = {}
     var onTestConnection: () -> Void = {}
 
+    private var selectedTabBinding: Binding<HisingenContentView.Tab> {
+        Binding(
+            get: { [weak self] in self?.selectedTab ?? .vehicle },
+            set: { [weak self] value in self?.selectedTab = value }
+        )
+    }
+
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
 
+    @MainActor
     init(onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
          onCheckForUpdates: @escaping () -> Void,
-         onRemoteCommand: @escaping (RemoteCommand) -> Void) {
+          onRemoteCommand: @escaping (RemoteCommand) -> Void,
+          database: VehicleDatabase = VehicleDatabase(),
+          reverseGeocoder: ReverseGeocoder = ReverseGeocoder(),
+          imageCache: CarImageCache = CarImageCache(),
+          preferences: PreferencesStore) {
         self.onRefresh = onRefresh
         self.onSettings = onSettings
         self.onCheckForUpdates = onCheckForUpdates
         self.onRemoteCommand = onRemoteCommand
+        self.database = database
+        self.reverseGeocoder = reverseGeocoder
+        self.imageCache = imageCache
+        self.preferences = preferences
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
@@ -57,9 +79,13 @@ final class StatusItemController: NSObject {
         }
         popover.behavior = .semitransient
         popover.delegate = self
-        popover.appearance = Preferences.appearanceMode.nsAppearance
+         popover.appearance = preferences.appearanceMode.nsAppearance
         popover.contentSize = NSSize(width: HisingenTheme.popoverWidth, height: 560)
         installGlobalHotKey()
+    }
+
+    deinit {
+        pendingPopoverRefresh?.cancel()
     }
 
     private func installGlobalHotKey() {
@@ -141,7 +167,7 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
 
         if let state = latestState {
-            let vehicleName = Preferences.formattedVehicleTitle(
+            let vehicleName = preferences.formattedVehicleTitle(
                 vin: state.vin,
                 modelName: state.modelName,
                 modelYear: state.modelYear,
@@ -149,7 +175,7 @@ final class StatusItemController: NSObject {
             )
             let battery = state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
             let range = state.rangeKm.map {
-                "\(Preferences.distanceUnit.convert(km: $0)) \(Preferences.distanceUnit.suffix)"
+                "\(preferences.distanceUnit.convert(km: $0)) \(preferences.distanceUnit.suffix)"
             } ?? "--"
             let summary = "\(vehicleName) · \(battery) (\(range))"
             let headerItem = NSMenuItem(title: summary, action: nil, keyEquivalent: "")
@@ -200,8 +226,8 @@ final class StatusItemController: NSObject {
             copyItem.target = self
         }
 
-        let otherBrand: VehicleBrand = Preferences.activeBrand == .polestar ? .volvo : .polestar
-        let otherBrandResumable = Preferences.hasResumableSession(for: otherBrand)
+        let otherBrand: VehicleBrand = preferences.activeBrand == .polestar ? .volvo : .polestar
+        let otherBrandResumable = preferences.hasResumableSession(for: otherBrand)
 
         if cars.count > 1 || otherBrandResumable {
             let switchMenu = NSMenu()
@@ -220,7 +246,7 @@ final class StatusItemController: NSObject {
             }
             if otherBrandResumable {
                 if !cars.isEmpty { switchMenu.addItem(.separator()) }
-                let label = Preferences.lastVehicleLabel(for: otherBrand)
+                let label = preferences.lastVehicleLabel(for: otherBrand)
                 let item = NSMenuItem(
                     title: L10n.format("Switch to %@ (%@)…", otherBrand.displayName, label),
                     action: #selector(contextSwitchBrand(_:)), keyEquivalent: ""
@@ -238,7 +264,7 @@ final class StatusItemController: NSObject {
         }
 
         if let state = latestState {
-            let isVolvo = Preferences.activeBrand == .volvo
+            let isVolvo = preferences.activeBrand == .volvo
             let controlsMenu = NSMenu()
 
             if isVolvo {
@@ -256,7 +282,7 @@ final class StatusItemController: NSObject {
                     || state.climateStatus?.activity == .cooling
                     || state.climateStatus?.activity == .ventilating
                 let climateItem = NSMenuItem(
-                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(Preferences.remoteClimateTemperature)) °C"),
+                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(preferences.remoteClimateTemperature)) °C"),
                     action: #selector(contextToggleClimate),
                     keyEquivalent: ""
                 )
@@ -287,13 +313,68 @@ final class StatusItemController: NSObject {
                 honkFlashItem.target = self
                 controlsMenu.addItem(honkFlashItem)
             } else {
-                let infoItem = NSMenuItem(
-                    title: L10n.text("Remote controls restricted to paired mobile devices"),
-                    action: nil,
+                // Polestar quick controls
+                let isLocked = state.exteriorStatus?.isLocked == true
+                let lockItem = NSMenuItem(
+                    title: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors"),
+                    action: #selector(contextToggleLock),
                     keyEquivalent: ""
                 )
-                infoItem.isEnabled = false
-                controlsMenu.addItem(infoItem)
+                lockItem.target = self
+                controlsMenu.addItem(lockItem)
+
+                // Tailgate toggle if supported
+                if state.otaCapabilities?.supportsTrunkControl == true {
+                    let tailgateIsOpen = state.exteriorStatus?.isTailgateOpen ?? false
+                    let tailgateItem = NSMenuItem(
+                        title: tailgateIsOpen ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"),
+                        action: #selector(contextToggleTailgate),
+                        keyEquivalent: ""
+                    )
+                    tailgateItem.target = self
+                    controlsMenu.addItem(tailgateItem)
+                }
+
+                // Trunk unlock if supported
+                if state.otaCapabilities?.supportsTrunkUnlock == true {
+                    let trunkItem = NSMenuItem(
+                        title: L10n.text("Unlock Trunk"),
+                        action: #selector(contextUnlockTrunk),
+                        keyEquivalent: ""
+                    )
+                    trunkItem.target = self
+                    controlsMenu.addItem(trunkItem)
+                }
+
+                controlsMenu.addItem(.separator())
+
+                let climateActive = state.climateStatus?.activity == .active
+                    || state.climateStatus?.activity == .heating
+                    || state.climateStatus?.activity == .cooling
+                    || state.climateStatus?.activity == .ventilating
+                let climateItem = NSMenuItem(
+                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(preferences.remoteClimateTemperature)) °C"),
+                    action: #selector(contextToggleClimate),
+                    keyEquivalent: ""
+                )
+                climateItem.target = self
+                controlsMenu.addItem(climateItem)
+
+                let flashItem = NSMenuItem(
+                    title: L10n.text("Flash Lights"),
+                    action: #selector(contextFlashLights),
+                    keyEquivalent: ""
+                )
+                flashItem.target = self
+                controlsMenu.addItem(flashItem)
+
+                let honkFlashItem = NSMenuItem(
+                    title: L10n.text("Honk & Flash"),
+                    action: #selector(contextHonkAndFlash),
+                    keyEquivalent: ""
+                )
+                honkFlashItem.target = self
+                controlsMenu.addItem(honkFlashItem)
             }
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
@@ -329,7 +410,7 @@ final class StatusItemController: NSObject {
         guard let location = latestState?.location,
               let latitude = location.latitude,
               let longitude = location.longitude,
-              let label = Preferences.activeBrand.displayName
+              let label = preferences.activeBrand.displayName
                   .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "maps://?q=\(label)&ll=\(latitude),\(longitude)") else { return }
         NSWorkspace.shared.open(url)
@@ -364,13 +445,20 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextToggleLock() {
-        guard Preferences.activeBrand == .volvo else { return }
         let isLocked = latestState?.exteriorStatus?.isLocked == true
         onRemoteCommand(isLocked ? .unlock : .lock)
     }
 
+    @objc private func contextToggleTailgate() {
+        let tailgateIsOpen = latestState?.exteriorStatus?.isTailgateOpen ?? false
+        onRemoteCommand(tailgateIsOpen ? .closeTailgate : .openTailgate)
+    }
+
+    @objc private func contextUnlockTrunk() {
+        onRemoteCommand(.unlockTrunk)
+    }
+
     @objc private func contextToggleClimate() {
-        guard Preferences.activeBrand == .volvo else { return }
         let climateActive = latestState?.climateStatus?.activity == .active
             || latestState?.climateStatus?.activity == .heating
             || latestState?.climateStatus?.activity == .cooling
@@ -378,23 +466,21 @@ final class StatusItemController: NSObject {
         if climateActive {
             onRemoteCommand(.stopClimate)
         } else {
-            let temp = Float(Preferences.remoteClimateTemperature)
+            let temp = Float(preferences.remoteClimateTemperature)
             onRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
         }
     }
 
     @objc private func contextFlashLights() {
-        guard Preferences.activeBrand == .volvo else { return }
         onRemoteCommand(.flashLights)
     }
 
     @objc private func contextHonkHorn() {
-        guard Preferences.activeBrand == .volvo else { return }
         onRemoteCommand(.honkHorn)
     }
 
     @objc private func contextHonkAndFlash() {
-        guard Preferences.activeBrand == .volvo else { return }
+        guard preferences.activeBrand == .volvo else { return }
         onRemoteCommand(.honkAndFlash)
     }
 
@@ -403,9 +489,9 @@ final class StatusItemController: NSObject {
         let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
         let rows = state.chargingSessions.map { s in
             let dateStr = ISO8601DateFormatter().string(from: s.startDate)
-            let costStr = s.estimatedCost(tariff: Preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
+            let costStr = s.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
             let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
-            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(Preferences.currencySymbol)"
+            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(preferences.currencySymbol)"
         }.joined(separator: "\n")
         let csvData = headers + rows
 
@@ -451,8 +537,8 @@ final class StatusItemController: NSObject {
 
     private func showPopover() {
         guard !popover.isShown else { return }
-        popover.appearance = Preferences.appearanceMode.nsAppearance
-        let view = HisingenContentView(
+         popover.appearance = preferences.appearanceMode.nsAppearance
+        let view = AnyView(HisingenContentView(
             state: latestState,
             error: latestError,
             authenticated: authenticated,
@@ -471,8 +557,11 @@ final class StatusItemController: NSObject {
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
-            settingsMode: settingsMode
-        )
+            settingsMode: settingsMode,
+            selectedTab: selectedTabBinding,
+            database: database,
+             reverseGeocoder: reverseGeocoder, imageCache: imageCache
+        ).environment(\.preferencesStore, preferences))
         let hosting = NSHostingController(rootView: view)
         popover.contentViewController = hosting
         if let button = statusItem.button {
@@ -514,9 +603,9 @@ final class StatusItemController: NSObject {
         self.authenticated = authenticated
         if let diagnostics { self.diagnostics = diagnostics }
         let title = barTitle(for: data)
-        let iconName = Format.icon(for: data, includeConnection: Preferences.features.contains(.chargingDetails))
+         let iconName = Format.icon(for: data, includeConnection: preferences.features.contains(.chargingDetails))
         var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
-        if Preferences.tintMenuBarIcon, let data {
+        if preferences.tintMenuBarIcon, let data {
             let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
             if let configured = icon?.withSymbolConfiguration(.init(paletteColors: [tintColor])) {
                 icon = configured
@@ -548,9 +637,20 @@ final class StatusItemController: NSObject {
     }
 
     func refreshPopoverIfNeeded() {
-        guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<HisingenContentView> else { return }
-        popover.appearance = Preferences.appearanceMode.nsAppearance
-        let view = HisingenContentView(
+        guard popover.isShown else { return }
+        guard pendingPopoverRefresh == nil else { return }
+        pendingPopoverRefresh = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self?.pendingPopoverRefresh = nil
+            self?.applyPopoverRefresh()
+        }
+    }
+
+    private func applyPopoverRefresh() {
+        guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
+         popover.appearance = preferences.appearanceMode.nsAppearance
+        let view = AnyView(HisingenContentView(
             state: latestState,
             error: latestError,
             authenticated: authenticated,
@@ -569,17 +669,20 @@ final class StatusItemController: NSObject {
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
-            settingsMode: settingsMode
-        )
+            settingsMode: settingsMode,
+            selectedTab: selectedTabBinding,
+            database: database,
+             reverseGeocoder: reverseGeocoder, imageCache: imageCache
+        ).environment(\.preferencesStore, preferences))
         hosting.rootView = view
     }
 
     private func barTitle(for data: VehicleState?) -> String {
         Format.barTitle(
             for: data,
-            style: Preferences.menuBarStyle,
-            unit: Preferences.distanceUnit,
-            includeChargingContext: Preferences.features.contains(.chargingDetails)
+            style: preferences.menuBarStyle,
+            unit: preferences.distanceUnit,
+            includeChargingContext: preferences.features.contains(.chargingDetails)
         )
     }
 
@@ -601,5 +704,3 @@ extension StatusItemController: NSPopoverDelegate {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-

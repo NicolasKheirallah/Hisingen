@@ -661,7 +661,7 @@ private struct CarProfile {
 
     @MainActor
     static var current: CarProfile {
-        switch Preferences.appTheme {
+        switch PreferencesStore().appTheme {
         case .polestar, .cyanRacing: return .polestar
         case .volvo, .swedishGold, .sandDune: return .volvo
         case .hisingen, .nordicNight, .aurora, .forest: return .neutral

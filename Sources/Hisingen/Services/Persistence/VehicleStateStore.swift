@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Main-actor isolated because it holds no lock of its own: every mutation is a
 /// read-modify-write over a `UserDefaults`-backed dictionary, which two concurrent callers
@@ -11,10 +12,11 @@ final class VehicleStateStore {
     private let baselinesKey = "charging_baselines_v1"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "state-store")
 
     private let database: VehicleDatabase
 
-    init(defaults: UserDefaults = .standard, database: VehicleDatabase = .shared) {
+    init(defaults: UserDefaults = .standard, database: VehicleDatabase) {
         self.defaults = defaults
         self.database = database
     }
@@ -127,12 +129,19 @@ final class VehicleStateStore {
 
     private func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
-        return try? decoder.decode(type, from: data)
+        do {
+            return try decoder.decode(type, from: data)
+        } catch {
+            logger.error("Could not decode persisted state for key \(key, privacy: .public): \(error, privacy: .public)")
+            return nil
+        }
     }
 
     private func store<T: Encodable>(_ value: T, key: String) {
-        if let data = try? encoder.encode(value) { defaults.set(data, forKey: key) }
+        do {
+            defaults.set(try encoder.encode(value), forKey: key)
+        } catch {
+            logger.error("Could not encode persisted state for key \(key, privacy: .public): \(error, privacy: .public)")
+        }
     }
 }
-
-

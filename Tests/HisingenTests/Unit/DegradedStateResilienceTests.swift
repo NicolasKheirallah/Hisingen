@@ -104,7 +104,7 @@ struct DegradedStateResilienceTests {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let store = VehicleStateStore(defaults: defaults)
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
 
         let live = stateWithFullTelemetry()
         XCTAssertFalse(live.isCachedSnapshot)
@@ -112,12 +112,8 @@ struct DegradedStateResilienceTests {
 
         let restored = try XCTUnwrap(store.snapshot(for: live.vin))
         XCTAssertTrue(restored.isCachedSnapshot)
-        // `cacheableCopy` deliberately carries location now, so the vehicleLocation feature
-        // can render a position from cache before the first refresh completes. See
-        // RegressionFixTests.testCacheableCopyPreservesLocationAndRegistrationAndGreeting,
-        // which asserts the same thing from the other direction.
-        XCTAssertEqual(restored.location?.latitude, live.location?.latitude)
-        XCTAssertEqual(restored.location?.longitude, live.location?.longitude)
+        // Cached snapshots must not retain precise location data.
+        XCTAssertNil(restored.location)
     }
 
     // MARK: - Helpers
@@ -181,8 +177,9 @@ struct AuthFailureReschedulingTests {
 
         let coordinator = RefreshCoordinator(
             api: AuthFailingProvider(),
-            stateStore: VehicleStateStore(defaults: defaults),
+            stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             observesEnvironment: false,
+            preferences: PreferencesStore(defaults: defaults),
             clearPasswordAfterSession: {}
         )
         defer { coordinator.stop() }

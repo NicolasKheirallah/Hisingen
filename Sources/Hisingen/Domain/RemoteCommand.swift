@@ -36,6 +36,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case lock
     case unlock
     case unlockTrunk
+    case openTailgate
+    case closeTailgate
     case openWindows
     case closeWindows
     case flashLights
@@ -88,7 +90,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .startClimate, .stopClimate, .startEngine, .stopEngine: return .remoteClimate
         case .startPreCleaning, .stopPreCleaning: return .remotePreCleaning
-        case .lock, .unlock, .unlockTrunk: return .remoteLocks
+        case .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate: return .remoteLocks
         case .openWindows, .closeWindows: return .remoteWindows
         case .flashLights, .honkAndFlash, .honkHorn: return .remoteHonkFlash
         case .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride:
@@ -105,7 +107,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startEngine, .stopEngine: return .engineStart
         case .startPreCleaning, .stopPreCleaning: return .preCleaning
         case .lock, .unlock: return .locks
-        case .unlockTrunk: return .trunk
+        case .unlockTrunk, .openTailgate, .closeTailgate: return .trunk
         case .openWindows, .closeWindows: return .windows
         case .flashLights, .honkAndFlash, .honkHorn: return .honkAndFlash
         case .setChargeTarget: return .chargeTarget
@@ -135,7 +137,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
 
     var risk: RemoteCommandRisk {
         switch self {
-        case .unlock, .unlockTrunk, .openWindows, .startEngine:
+        case .unlock, .unlockTrunk, .openTailgate, .openWindows, .startEngine:
             return .securitySensitive
         case .installOTANow, .deleteClimateTimer:
             return .destructive
@@ -155,6 +157,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .lock: return "lock"
         case .unlock: return "unlock"
         case .unlockTrunk: return "unlock-trunk"
+        case .openTailgate: return "open-tailgate"
+        case .closeTailgate: return "close-tailgate"
         case .openWindows: return "open-windows"
         case .closeWindows: return "close-windows"
         case .flashLights: return "flash-lights"
@@ -190,6 +194,8 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .lock: return L10n.text("Lock vehicle")
         case .unlock: return L10n.text("Unlock vehicle")
         case .unlockTrunk: return L10n.text("Unlock trunk")
+        case .openTailgate: return L10n.text("Open tailgate")
+        case .closeTailgate: return L10n.text("Close tailgate")
         case .openWindows: return L10n.text("Open all windows")
         case .closeWindows: return L10n.text("Close all windows")
         case .flashLights: return L10n.text("Flash lights")

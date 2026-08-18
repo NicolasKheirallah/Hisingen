@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 final class CarImageCache: @unchecked Sendable {
     static let shared = CarImageCache()
@@ -6,6 +7,7 @@ final class CarImageCache: @unchecked Sendable {
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     private let lock = NSLock()
+    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "image-cache")
     private var memoryCache: [String: Data] = [:]
 
     init() {
@@ -13,7 +15,11 @@ final class CarImageCache: @unchecked Sendable {
         let base = paths.first ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let dir = base.appendingPathComponent("Hisingen/CarImages", isDirectory: true)
         cacheDirectory = dir
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        do {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            logger.error("Could not create image cache directory: \(error, privacy: .public)")
+        }
     }
 
     func image(for vin: String, angle: Int? = nil) -> Data? {
@@ -44,17 +50,14 @@ final class CarImageCache: @unchecked Sendable {
 
     private func read(key: String) -> Data? {
         lock.lock()
+        defer { lock.unlock() }
         if let mem = memoryCache[key] {
-            lock.unlock()
             return mem
         }
-        lock.unlock()
 
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
         if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
-            lock.lock()
             memoryCache[key] = data
-            lock.unlock()
             return data
         }
 
@@ -65,11 +68,15 @@ final class CarImageCache: @unchecked Sendable {
         guard !data.isEmpty else { return }
 
         lock.lock()
+        defer { lock.unlock() }
         memoryCache[key] = data
-        lock.unlock()
 
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            logger.error("Could not write cached vehicle image: \(error, privacy: .public)")
+        }
     }
 
     func clear(for vin: String? = nil) {
@@ -81,13 +88,21 @@ final class CarImageCache: @unchecked Sendable {
             memoryCache = memoryCache.filter { !$0.key.hasPrefix(cleanVIN) }
             if let items = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) {
                 for fileURL in items where fileURL.lastPathComponent.hasPrefix(cleanVIN) {
-                    try? fileManager.removeItem(at: fileURL)
+                    do {
+                        try fileManager.removeItem(at: fileURL)
+                    } catch {
+                        logger.error("Could not remove cached vehicle image: \(error, privacy: .public)")
+                    }
                 }
             }
         } else {
             memoryCache.removeAll()
-            try? fileManager.removeItem(at: cacheDirectory)
-            try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            do {
+                try fileManager.removeItem(at: cacheDirectory)
+                try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            } catch {
+                logger.error("Could not clear image cache: \(error, privacy: .public)")
+            }
         }
     }
 }

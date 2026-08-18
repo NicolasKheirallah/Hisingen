@@ -6,36 +6,60 @@ struct ControlsTabView: View {
     let remoteCommandInProgress: Bool
     let onRemoteCommand: (RemoteCommand) -> Void
 
-    @State private var targetTemperature: Double = Double(Preferences.remoteClimateTemperature)
-    @State private var driverSeat: HeatingLevel = Preferences.remoteDriverSeatHeating
-    @State private var passengerSeat: HeatingLevel = Preferences.remoteFrontRightSeatHeating
-    @State private var steeringHeating: HeatingLevel = Preferences.remoteSteeringWheelHeating
-    @State private var chargeTarget: Int = 80
-    @State private var ampLimit: Int = 16
+    @State private var targetTemperature: Double = 21
+    @State private var driverSeat: HeatingLevel = .unspecified
+    @State private var passengerSeat: HeatingLevel = .unspecified
+    @State private var steeringHeating: HeatingLevel = .unspecified
+    @Environment(\.preferencesStore) private var preferences
     @State private var engineRuntimeMinutes: Int = 15
     @State private var showScheduleEditor = false
-    @State private var isInitialized = false
+    @State private var chargeTargetDraft: Double?
+    @State private var ampLimitDraft: Double?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var isBrandVolvo: Bool { Preferences.activeBrand == .volvo }
+    /// Charge target derived from state (not @State) so it survives view rebuilds.
+    /// When a command is in progress or the optimistic lock is active, use the optimistic
+    /// value from the state; otherwise use the backend-reported value.
+    private var chargeTarget: Int {
+        if let target = state.chargeTargetPercentage, target > 0 { return target }
+        return 80
+    }
+    /// Amp limit derived from state (not @State) for the same reason.
+    private var ampLimit: Int {
+        if let amps = state.chargingCurrentAmps, amps > 0 { return amps }
+        return 16
+    }
+
+    private var isBrandVolvo: Bool { preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
-    private var features: Set<AppFeature> { Preferences.features.enabled }
+    private var features: Set<AppFeature> { preferences.features.enabled }
+    private let capabilityGate = CapabilityGate()
 
     /// A control is live only when all three layers agree: this app implements the command for
     /// the active brand, the vehicle's capability profile permits it, and nothing else is
     /// already in flight. Previously each button hardcoded a brand check, which meant the
     /// capability system and the actual affordance could drift apart silently.
     private func isDisabled(_ command: RemoteCommand) -> Bool {
-        guard command.isImplemented(by: Preferences.activeBrand),
-              profile.permits(command.requiredCapability) else { return true }
-        return remoteCommandInProgress
+        !capabilityGate.availability(
+            for: command,
+            state: state,
+            brand: preferences.activeBrand,
+            enabledFeatures: features,
+            commandInProgress: remoteCommandInProgress
+        ).isAvailable
     }
 
     /// Dims a whole card whose commands are unavailable on this vehicle, so "shown but inert"
     /// reads as deliberate rather than broken. Keyed off the card's representative command
     /// rather than the brand, for the same reason as `isDisabled`.
     private func cardOpacity(_ representative: RemoteCommand) -> Double {
-        representative.isImplemented(by: Preferences.activeBrand)
-            && profile.permits(representative.requiredCapability) ? 1.0 : 0.65
+        capabilityGate.availability(
+            for: representative,
+            state: state,
+            brand: preferences.activeBrand,
+            enabledFeatures: features,
+            commandInProgress: false
+        ) == .available ? 1.0 : 0.65
     }
 
     /// Stands in for the real `.startClimate` when only its gating matters — neither
@@ -97,29 +121,6 @@ struct ControlsTabView: View {
         }
         .sheet(isPresented: $showScheduleEditor) {
             ScheduleEditorSheet(state: state, onRemoteCommand: onRemoteCommand)
-        }
-        .onAppear {
-            if let currentTarget = state.chargeTargetPercentage {
-                chargeTarget = currentTarget
-            }
-            if let currentAmps = state.chargingCurrentAmps, currentAmps > 0 {
-                ampLimit = currentAmps
-            }
-            DispatchQueue.main.async {
-                isInitialized = true
-            }
-        }
-        .onChange(of: state.chargeTargetPercentage) { newTarget in
-            guard !remoteCommandInProgress else { return }
-            if let newTarget {
-                chargeTarget = newTarget
-            }
-        }
-        .onChange(of: state.chargingCurrentAmps) { newAmps in
-            guard !remoteCommandInProgress else { return }
-            if let newAmps, newAmps > 0 {
-                ampLimit = newAmps
-            }
         }
     }
 
@@ -200,7 +201,7 @@ struct ControlsTabView: View {
                                 Button {
                                     if targetTemperature > 16.0 {
                                         targetTemperature = max(16.0, targetTemperature - 0.5)
-                                        Preferences.remoteClimateTemperature = targetTemperature
+                                        preferences.remoteClimateTemperature = targetTemperature
                                     }
                                 } label: {
                                     Image(systemName: "minus")
@@ -216,7 +217,7 @@ struct ControlsTabView: View {
                                         let isSelected = abs(targetTemperature - Double(temp)) < 0.25
                                         Button {
                                             targetTemperature = Double(temp)
-                                            Preferences.remoteClimateTemperature = Double(temp)
+                                        preferences.remoteClimateTemperature = Double(temp)
                                         } label: {
                                             Text("\(temp)°")
                                                 .font(.system(size: 11, weight: isSelected ? .bold : .medium))
@@ -232,7 +233,7 @@ struct ControlsTabView: View {
                                 Button {
                                     if targetTemperature < 30.0 {
                                         targetTemperature = min(30.0, targetTemperature + 0.5)
-                                        Preferences.remoteClimateTemperature = targetTemperature
+                                        preferences.remoteClimateTemperature = targetTemperature
                                     }
                                 } label: {
                                     Image(systemName: "plus")
@@ -299,7 +300,7 @@ struct ControlsTabView: View {
                                     title: L10n.text("Driver"),
                                     level: $driverSeat
                                 ) { newLevel in
-                                    Preferences.remoteDriverSeatHeating = newLevel
+                                    preferences.remoteDriverSeatHeating = newLevel
                                 }
                                 .disabled(isDisabled(.stopClimate))
 
@@ -307,14 +308,14 @@ struct ControlsTabView: View {
                                     title: L10n.text("Passenger"),
                                     level: $passengerSeat
                                 ) { newLevel in
-                                    Preferences.remoteFrontRightSeatHeating = newLevel
+                                    preferences.remoteFrontRightSeatHeating = newLevel
                                 }
                                 .disabled(isDisabled(.stopClimate))
                             }
 
                             if profile.hasSelectableSteeringWheelHeating {
                                 SteeringHeatingControl(level: $steeringHeating) { newLevel in
-                                    Preferences.remoteSteeringWheelHeating = newLevel
+                                    preferences.remoteSteeringWheelHeating = newLevel
                                 }
                                 .disabled(isDisabled(.stopClimate))
                             }
@@ -399,15 +400,15 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text("\(chargeTarget)%")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(.primary)
+                                .contentTransition(reduceMotion ? .identity : .numericText())
                         }
 
                         // One-Touch Quick Presets
                         HStack(spacing: 6) {
                             Button {
-                                chargeTarget = 80
                                 onRemoteCommand(.setChargeTarget(80))
                             } label: {
                                 HStack(spacing: 3) {
@@ -426,7 +427,6 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.setChargeTarget(80)))
 
                             Button {
-                                chargeTarget = 90
                                 onRemoteCommand(.setChargeTarget(90))
                             } label: {
                                 HStack(spacing: 3) {
@@ -445,7 +445,6 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.setChargeTarget(90)))
 
                             Button {
-                                chargeTarget = 100
                                 onRemoteCommand(.setChargeTarget(100))
                             } label: {
                                 HStack(spacing: 3) {
@@ -464,20 +463,18 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.setChargeTarget(100)))
                         }
 
-                        Picker("", selection: Binding(
-                            get: { chargeTarget },
-                            set: { newValue in
-                                guard newValue != chargeTarget else { return }
-                                chargeTarget = newValue
-                                onRemoteCommand(.setChargeTarget(newValue))
-                            }
-                        )) {
-                            ForEach([40, 50, 60, 70, 80, 90, 100], id: \.self) { v in
-                                Text("\(v)%").tag(v)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .controlSize(.small)
+                        // Slider for granular control (40-100%)
+                        Slider(value: Binding(
+                            get: { chargeTargetDraft ?? Double(chargeTarget) },
+                            set: { chargeTargetDraft = $0 }
+                        ), in: 40...100, step: 5, onEditingChanged: { editing in
+                            guard !editing, let draft = chargeTargetDraft else { return }
+                            chargeTargetDraft = nil
+                            let rounded = Int(draft.rounded())
+                            guard rounded != chargeTarget else { return }
+                            onRemoteCommand(.setChargeTarget(rounded))
+                        })
+                        .tint(.green)
                         .disabled(isDisabled(.setChargeTarget(chargeTarget)))
                     }
                 }
@@ -490,25 +487,23 @@ struct ControlsTabView: View {
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Text("\(ampLimit) A")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(.primary)
+                                .contentTransition(reduceMotion ? .identity : .numericText())
                         }
 
-                        Picker("", selection: Binding(
-                            get: { ampLimit },
-                            set: { newValue in
-                                guard newValue != ampLimit else { return }
-                                ampLimit = newValue
-                                onRemoteCommand(.setAmpLimit(newValue))
-                            }
-                        )) {
-                            ForEach([6, 8, 10, 13, 16, 20, 25, 32], id: \.self) { v in
-                                Text("\(v)A").tag(v)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .controlSize(.small)
+                        Slider(value: Binding(
+                            get: { ampLimitDraft ?? Double(ampLimit) },
+                            set: { ampLimitDraft = $0 }
+                        ), in: 6...32, step: 1, onEditingChanged: { editing in
+                            guard !editing, let draft = ampLimitDraft else { return }
+                            ampLimitDraft = nil
+                            let rounded = Int(draft.rounded())
+                            guard rounded != ampLimit else { return }
+                            onRemoteCommand(.setAmpLimit(rounded))
+                        })
+                        .tint(.orange)
                         .disabled(isDisabled(.setAmpLimit(ampLimit)))
                     }
                 }
@@ -586,50 +581,60 @@ struct ControlsTabView: View {
 
                     if profile.permits(.locks) && features.contains(.remoteLocks) {
                         Button {
-                            onRemoteCommand(.lock)
+                            onRemoteCommand(isLocked ? .unlock : .lock)
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 15))
-                                Text(L10n.text("Lock"))
-                                    .font(.system(size: 11, weight: !isLocked ? .semibold : .medium))
+                                Image(systemName: isLocked ? "lock.open.fill" : "lock.fill")
+                                    .font(.system(size: 18))
+                                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                                Text(isLocked ? L10n.text("Unlock") : L10n.text("Lock"))
+                                    .font(.system(size: 12, weight: .semibold))
                             }
-                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .frame(maxWidth: .infinity, minHeight: 52)
                         }
                         .buttonStyle(.bordered)
-                        .tint(!isLocked ? .blue : nil)
-                        .disabled(isDisabled(.lock))
-
-                        Button {
-                            onRemoteCommand(.unlock)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "lock.open.fill")
-                                    .font(.system(size: 15))
-                                Text(L10n.text("Unlock"))
-                                    .font(.system(size: 11, weight: isLocked ? .semibold : .medium))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 46)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(isLocked ? .blue : nil)
-                        .disabled(isDisabled(.unlock))
+                        .tint(isLocked ? .blue : .green)
+                        .disabled(isDisabled(isLocked ? .unlock : .lock))
                     }
 
-                    if profile.permits(.trunk) && features.contains(.remoteLocks) {
-                        Button {
-                            onRemoteCommand(.unlockTrunk)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "car.side.rear.open.fill")
-                                    .font(.system(size: 15))
-                                Text(L10n.text("Unlock Trunk"))
-                                    .font(.system(size: 11, weight: .medium))
+                    if features.contains(.remoteLocks) {
+                        let caps = state.otaCapabilities
+                        let showTrunkUnlock = profile.permits(.trunk) && (caps?.supportsTrunkUnlock ?? profile.permits(.trunk))
+                        let showTailgateControl = caps?.supportsTrunkControl ?? false
+
+                        if showTrunkUnlock {
+                            Button {
+                                onRemoteCommand(.unlockTrunk)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "car.side.rear.open.fill")
+                                        .font(.system(size: 15))
+                                    Text(L10n.text("Unlock Trunk"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 46)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.unlockTrunk))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.unlockTrunk))
+
+                        if showTailgateControl {
+                            let tailgateIsOpen = state.exteriorStatus?.isTailgateOpen ?? false
+                            Button {
+                                onRemoteCommand(tailgateIsOpen ? .closeTailgate : .openTailgate)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: tailgateIsOpen ? "car.side.rear.open.fill" : "car.side.rear.fill")
+                                        .font(.system(size: 15))
+                                    Text(tailgateIsOpen ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 46)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(tailgateIsOpen ? .orange : nil)
+                            .disabled(isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
+                        }
                     }
                 }
             }
@@ -681,47 +686,55 @@ struct ControlsTabView: View {
                     }
 
                     if profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash) {
-                        Button {
-                            onRemoteCommand(.flashLights)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "flashlight.on.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Flash Lights"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 42)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.flashLights))
+                        let caps = state.otaCapabilities
+                        let supportsHonk = caps?.supportsHonkAndFlash ?? true
+                        let supportsFlashOnly = caps?.supportsFlash ?? true
 
-                        Button {
-                            onRemoteCommand(.honkAndFlash)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "light.beacon.max.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk & Flash"))
-                                    .font(.system(size: 10, weight: .medium))
+                        if supportsFlashOnly {
+                            Button {
+                                onRemoteCommand(.flashLights)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "flashlight.on.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Flash Lights"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.flashLights))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkAndFlash))
 
-                        Button {
-                            onRemoteCommand(.honkHorn)
-                        } label: {
-                            VStack(spacing: 3) {
-                                Image(systemName: "speaker.wave.2.fill")
-                                    .font(.system(size: 13))
-                                Text(L10n.text("Honk Horn"))
-                                    .font(.system(size: 10, weight: .medium))
+                        if supportsHonk {
+                            Button {
+                                onRemoteCommand(.honkAndFlash)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "light.beacon.max.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Honk & Flash"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.honkAndFlash))
+
+                            Button {
+                                onRemoteCommand(.honkHorn)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "speaker.wave.2.fill")
+                                        .font(.system(size: 13))
+                                    Text(L10n.text("Honk Horn"))
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 42)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isDisabled(.honkHorn))
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(isDisabled(.honkHorn))
                     }
                 }
             }
@@ -954,7 +967,7 @@ struct SpinningFanView: View {
                     startSpinning()
                 }
             }
-            .onChange(of: isSpinning) { spinning in
+            .onChange(of: isSpinning) { _, spinning in
                 if spinning {
                     startSpinning()
                 } else {
@@ -971,5 +984,3 @@ struct SpinningFanView: View {
         }
     }
 }
-
-

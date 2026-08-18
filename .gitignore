@@ -29,3 +29,7 @@ docs/api/polestar-backend-map.md
 docs/api/polestar-probe-transcripts.md
 docs/api/volvo-backend-map.md
 docs/api/ota-investigation.md
+
+# Static website build output and local dependencies
+website/node_modules/
+website/dist/

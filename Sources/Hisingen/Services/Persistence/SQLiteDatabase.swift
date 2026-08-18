@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SQLite3
 
 /// Error types thrown during SQLite operations.
@@ -25,8 +26,16 @@ enum SQLiteError: Error, LocalizedError, Sendable {
 /// A lightweight, memory-safe, thread-safe Swift wrapper around Apple's native `libsqlite3`.
 final class SQLiteDatabase: @unchecked Sendable {
     private var db: OpaquePointer?
-    private let lock = NSLock()
+    // Hold the lock across transaction bodies while allowing nested query calls.
+    private let lock = NSRecursiveLock()
     let path: String
+    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "sqlite")
+
+    var isOpen: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return db != nil
+    }
 
     init(path: String) throws {
         self.path = path
@@ -47,6 +56,18 @@ final class SQLiteDatabase: @unchecked Sendable {
         try execute(sql: "PRAGMA synchronous = NORMAL;")
         try execute(sql: "PRAGMA busy_timeout = 5000;")
         try execute(sql: "PRAGMA foreign_keys = ON;")
+    }
+
+    /// Creates a closed handle for callers that must remain operational when persistent
+    /// storage cannot be opened. Operations fail with `SQLiteError.closed` and can be logged
+    /// by the repository instead of crashing during application startup.
+    static func unavailable(path: String) -> SQLiteDatabase {
+        SQLiteDatabase(unavailablePath: path)
+    }
+
+    private init(unavailablePath: String) {
+        path = unavailablePath
+        db = nil
     }
 
     deinit {
@@ -71,14 +92,19 @@ final class SQLiteDatabase: @unchecked Sendable {
     func execute(sql: String) throws {
         lock.lock()
         defer { lock.unlock() }
-        guard let db else { throw SQLiteError.closed }
+        do {
+            guard let db else { throw SQLiteError.closed }
 
-        var errmsg: UnsafeMutablePointer<CChar>?
-        let status = sqlite3_exec(db, sql, nil, nil, &errmsg)
-        if status != SQLITE_OK {
-            let message = errmsg.flatMap { String(cString: $0) } ?? "Code \(status)"
-            sqlite3_free(errmsg)
-            throw SQLiteError.stepExecution(message)
+            var errmsg: UnsafeMutablePointer<CChar>?
+            let status = sqlite3_exec(db, sql, nil, nil, &errmsg)
+            if status != SQLITE_OK {
+                let message = errmsg.flatMap { String(cString: $0) } ?? "Code \(status)"
+                sqlite3_free(errmsg)
+                throw SQLiteError.stepExecution(message)
+            }
+        } catch {
+            logger.error("SQLite execute failed: \(error, privacy: .public)")
+            throw error
         }
     }
 
@@ -93,31 +119,42 @@ final class SQLiteDatabase: @unchecked Sendable {
                   process: (SQLiteStatement) throws -> T) throws -> T {
         lock.lock()
         defer { lock.unlock() }
-        guard let db else { throw SQLiteError.closed }
+        do {
+            guard let db else { throw SQLiteError.closed }
 
-        var stmtHandle: OpaquePointer?
-        let status = sqlite3_prepare_v2(db, sql, -1, &stmtHandle, nil)
-        guard status == SQLITE_OK, let stmt = stmtHandle else {
-            let message = String(cString: sqlite3_errmsg(db))
-            throw SQLiteError.prepareStatement(message)
+            var stmtHandle: OpaquePointer?
+            let status = sqlite3_prepare_v2(db, sql, -1, &stmtHandle, nil)
+            guard status == SQLITE_OK, let stmt = stmtHandle else {
+                let message = String(cString: sqlite3_errmsg(db))
+                throw SQLiteError.prepareStatement(message)
+            }
+
+            let statement = SQLiteStatement(stmt: stmt, db: db)
+            defer { sqlite3_finalize(stmt) }
+
+            try bindings(statement)
+            return try process(statement)
+        } catch {
+            logger.error("SQLite query failed: \(error, privacy: .public)")
+            throw error
         }
-
-        let statement = SQLiteStatement(stmt: stmt, db: db)
-        defer { sqlite3_finalize(stmt) }
-
-        try bindings(statement)
-        return try process(statement)
     }
 
     /// Runs multiple statements inside an ACID transaction.
     func withTransaction<T>(_ block: () throws -> T) throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
         try execute(sql: "BEGIN IMMEDIATE TRANSACTION;")
         do {
             let result = try block()
             try execute(sql: "COMMIT TRANSACTION;")
             return result
         } catch {
-            try? execute(sql: "ROLLBACK TRANSACTION;")
+            do {
+                try execute(sql: "ROLLBACK TRANSACTION;")
+            } catch {
+                logger.error("SQLite rollback failed: \(error, privacy: .public)")
+            }
             throw error
         }
     }

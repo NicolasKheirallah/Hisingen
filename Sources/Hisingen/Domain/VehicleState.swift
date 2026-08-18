@@ -22,8 +22,8 @@ struct CarSummary: Codable, Equatable, Sendable {
     }
 
     @MainActor
-    func displayTitle(format: VehicleLabelFormat? = nil) -> String {
-        Preferences.formattedVehicleTitle(
+    func displayTitle(format: VehicleLabelFormat? = nil, preferences: PreferencesStore = PreferencesStore()) -> String {
+        preferences.formattedVehicleTitle(
             vin: vin,
             modelName: modelName ?? (title.contains(" · ") ? title.components(separatedBy: " · ").first : title),
             modelYear: modelYear ?? (title.contains(" · ") ? title.components(separatedBy: " · ").last : nil),
@@ -790,7 +790,7 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     @MainActor
     var formattedChargingRate: String? {
-        formattedChargingRate(unit: Preferences.distanceUnit)
+        formattedChargingRate(unit: PreferencesStore().distanceUnit)
     }
 
     var freshnessDescription: String {
@@ -825,9 +825,9 @@ struct VehicleState: Codable, Equatable, Sendable {
             availability: availability,
             modelName: modelName,
             modelYear: modelYear,
-            registrationNo: registrationNo,
+            registrationNo: nil,
             vin: vin,
-            ownerFirstName: ownerFirstName,
+            ownerFirstName: nil,
             odometerKm: odometerKm,
             daysToService: daysToService,
             distanceToServiceKm: distanceToServiceKm,
@@ -845,7 +845,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             airQuality: airQuality,
             batteryDiagnostics: batteryDiagnostics,
             weather: weather,
-            location: location,
+            location: nil,
             unavailableFeatures: [],
             probedCapabilities: probedCapabilities,
             chargingSamples: chargingSamples,
@@ -882,7 +882,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         return copy
     }
 
-    func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection) -> VehicleState {
+    func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection,
+                           imageCache: CarImageCache = CarImageCache()) -> VehicleState {
         guard let previous, previous.vin == vin else { return self }
         let failed = Set(unavailableFeatures)
         func keep(_ feature: AppFeature) -> Bool {
@@ -998,7 +999,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             fuelLevelPercent: fuelLevelPercent ?? previous.fuelLevelPercent,
             fuelRangeKm: fuelRangeKm ?? previous.fuelRangeKm,
             reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? previous.reportedBatteryCapacityKwh,
-            imageData: imageData ?? (features.contains(.vehicleImage) ? (previous.imageData ?? CarImageCache.shared.image(for: vin)) : nil),
+            imageData: imageData ?? (features.contains(.vehicleImage) ? (previous.imageData ?? imageCache.image(for: vin)) : nil),
             fetchedAt: fetchedAt,
             vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
             dataWarnings: dataWarnings
@@ -1024,7 +1025,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
         merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
-            ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? CarImageCache.shared.interiorImage(for: vin)) : nil)
+            ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil)
         merged.optimisticCommandLockUntil = isCommandLocked ? previous.optimisticCommandLockUntil : nil
         merged.electricDistanceKm = electricDistanceKm ?? previous.electricDistanceKm
         merged.fuelDistanceKm = fuelDistanceKm ?? previous.fuelDistanceKm
@@ -1054,5 +1055,3 @@ struct VehicleState: Codable, Equatable, Sendable {
         return merged
     }
 }
-
-

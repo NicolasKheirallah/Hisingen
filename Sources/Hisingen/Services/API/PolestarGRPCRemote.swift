@@ -57,6 +57,14 @@ extension PolestarGRPC {
                                         vin: vin, token: accessToken)
         case .unlockTrunk:
             return try await invocation(method: "Unlock", request: Self.unlockRequest(vin, trunkOnly: true),
+                                         vin: vin, token: accessToken)
+        case .openTailgate:
+            return try await invocation(method: "TailgateControl",
+                                        request: Self.tailgateRequest(vin, open: true),
+                                        vin: vin, token: accessToken)
+        case .closeTailgate:
+            return try await invocation(method: "TailgateControl",
+                                        request: Self.tailgateRequest(vin, open: false),
                                         vin: vin, token: accessToken)
         case .openWindows:
             return try await invocation(method: "WindowControl", request: Self.windowRequest(vin, action: 1),
@@ -77,10 +85,14 @@ extension PolestarGRPC {
             guard (40...100).contains(target) else { throw RemoteCommandError.rejected(nil) }
             var payload = Data()
             payload.append(Protobuf.intField(2, target))
-            payload.append(Protobuf.intField(3, 1))
+            // The APK uses ChargeTargetLevelSettingType.CUSTOM (3), not DAILY (1).
+            // DAILY is accepted by the backend (returns SYNCED) but doesn't actually change
+            // the target SOC — it's a preset type, not an override. CUSTOM (3) is the
+            // setting type that actually applies the requested target level.
+            payload.append(Protobuf.intField(3, 3))  // CUSTOM
             let body = try await lastMessage(path: Self.targetSOCService + "/SetTargetSoc",
-                                             message: Self.chronosRequest(vin, payload: payload),
-                                             vin: vin, accessToken: accessToken, host: .pccs)
+                                              message: Self.chronosRequest(vin, payload: payload),
+                                              vin: vin, accessToken: accessToken, host: .pccs)
             return try Self.chronosResult(body, statusField: 3)
         case .setAmpLimit(let amps):
             guard (1...64).contains(amps) else { throw RemoteCommandError.rejected(nil) }
@@ -362,6 +374,14 @@ extension PolestarGRPC {
         request.append(Protobuf.intField(2, trunkOnly ? 1 : 0))
         return request
     }
+    /// `TailgateControlRequest`: `{1: request (InvocationRequest), 2: tailgateControl (TailgateControlType)}`.
+    /// `TailgateControlType`: 0=UNSPECIFIED, 1=OPEN_TAILGATE, 2=CLOSE_TAILGATE.
+    /// Recovered from the official Polestar APK v5.10.0 teardown.
+    static func tailgateRequest(_ vin: String, open: Bool) -> Data {
+        var request = invocationOnlyRequest(vin)
+        request.append(Protobuf.intField(2, open ? 1 : 2))
+        return request
+    }
     static func windowRequest(_ vin: String, action: Int) -> Data {
         var request = invocationOnlyRequest(vin)
         request.append(Protobuf.intField(2, action))
@@ -393,9 +413,16 @@ extension PolestarGRPC {
     }
     static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
         let status = varint(data, field: statusField) ?? 0
-        guard [1, 2, 3, 4, 8].contains(status) else { throw RemoteCommandError.rejected(nil) }
-        let outcome: RemoteCommandOutcome = status == 1 ? .accepted : (status == 2 ? .delivered : .completed)
-        return RemoteCommandResult(outcome: outcome, message: nil)
+        switch status {
+        case 1: return RemoteCommandResult(outcome: .accepted, message: nil)
+        case 2: return RemoteCommandResult(outcome: .delivered, message: nil)
+        case 3, 4, 8: return RemoteCommandResult(outcome: .completed, message: nil)
+        case 0: throw RemoteCommandError.rejected(L10n.text("The vehicle service reported an unknown error."))
+        case 5: throw RemoteCommandError.rejected(L10n.text("The vehicle is offline. Try again when it wakes up."))
+        case 6: throw RemoteCommandError.rejected(L10n.text("The vehicle reported an error processing this command."))
+        case 7: throw RemoteCommandError.rejected(L10n.text("The command failed. Please try again."))
+        default: throw RemoteCommandError.rejected(nil)
+        }
     }
     private static func message(_ data: Data, field: Int) -> Data? {
         Protobuf.fields(data).first(where: { $0.number == field && $0.wire == 2 })?.data
@@ -410,7 +437,8 @@ extension PolestarGRPC {
     private func isInvocationCommand(_ command: RemoteCommand) -> Bool {
         switch command {
         case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
-             .lock, .unlock, .unlockTrunk, .openWindows, .closeWindows,
+             .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate,
+             .openWindows, .closeWindows,
              .flashLights, .honkAndFlash, .honkHorn:
             return true
         default:

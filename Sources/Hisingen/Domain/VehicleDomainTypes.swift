@@ -147,6 +147,12 @@ struct ExteriorSnapshot: Codable, Equatable, Sendable {
     var isLocked: Bool?
     var alarmTriggered: Bool?
 
+    /// Whether the tailgate is currently open (or ajar).
+    var isTailgateOpen: Bool {
+        openings.first(where: { $0.opening == .tailgate })?.state == .open
+            || openings.first(where: { $0.opening == .tailgate })?.state == .ajar
+    }
+
     var itemsNeedingAttention: [VehicleOpening] {
         openings.filter { $0.state == .open || $0.state == .ajar }.map(\.opening)
     }
@@ -378,6 +384,8 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     /// (observed: 5400 = 90 min). `nil` when not reported.
     var estimatedInstallDurationSeconds: Int?
     var scheduledAt: Date?
+    /// Who set the schedule (APP, HMI, CLOUD) — from `SchedulerService/GetSchedule` field 5.
+    var scheduleSetBy: ScheduleSetBy?
     let updatedAt: Date?
     var installedVersion: String?
     var latestAvailableVersion: String?
@@ -389,6 +397,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         rawState: SoftwareStateRaw? = nil,
         estimatedInstallDurationSeconds: Int? = nil,
         scheduledAt: Date? = nil,
+        scheduleSetBy: ScheduleSetBy? = nil,
         updatedAt: Date? = nil,
         installedVersion: String? = nil,
         latestAvailableVersion: String? = nil
@@ -399,6 +408,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.rawState = rawState
         self.estimatedInstallDurationSeconds = estimatedInstallDurationSeconds
         self.scheduledAt = scheduledAt
+        self.scheduleSetBy = scheduleSetBy
         self.updatedAt = updatedAt
         self.installedVersion = installedVersion
         self.latestAvailableVersion = latestAvailableVersion
@@ -895,19 +905,93 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     let supportsUpdateStatus: Bool
     /// Whether a performance software upgrade is available.
     let hasPerformanceSoftwareUpgrade: Bool
+    /// Whether the vehicle supports trunk/tailgate open AND close (motorized tailgate).
+    let supportsTrunkControl: Bool
+    /// Whether the vehicle supports trunk unlock (unlock only, not open/close).
+    let supportsTrunkUnlock: Bool
+    /// Whether the vehicle supports honk and flash.
+    let supportsHonkAndFlash: Bool
+    /// Whether the vehicle supports flash only (without honk).
+    let supportsFlash: Bool
+    /// Whether the vehicle supports charging functions (target SOC, amp limit, timers).
+    let supportsChargingFunctions: Bool
+    /// Whether the vehicle supports global charge amperage limit setting.
+    let supportsGlobalChargeAmperageLimit: Bool
+    /// Whether the vehicle supports target charge level setting.
+    let supportsTargetChargeLevel: Bool
+    /// Whether the vehicle supports charge now timer override.
+    let supportsChargeNowTimerOverride: Bool
+    /// Minimum charge amperage limit.
+    let chargeAmperageMinLimit: Int
+    /// Maximum charge amperage limit.
+    let chargeAmperageMaxLimit: Int
+    /// Minimum target charge level percentage.
+    let targetChargeLevelPercentageMinLimit: Int
+    /// Whether the vehicle supports windows control.
+    let supportsWindowsControl: Bool
+    /// Whether the vehicle supports pre-cleaning.
+    let supportsAirPurificationRemoteStart: Bool
+    /// Whether the vehicle supports plug & charge.
+    let supportsPlugAndCharge: Bool
 
     init(installedSoftwareVersion: String? = nil,
          supportsFullOtaUpdates: Bool = false,
          supportsRemoteOtaInstallSchedule: Bool = false,
          supportsCloudBasedOtaDownloadConsent: Bool = false,
          supportsUpdateStatus: Bool = false,
-         hasPerformanceSoftwareUpgrade: Bool = false) {
+         hasPerformanceSoftwareUpgrade: Bool = false,
+         supportsTrunkControl: Bool = false,
+         supportsTrunkUnlock: Bool = false,
+         supportsHonkAndFlash: Bool = false,
+         supportsFlash: Bool = false,
+         supportsChargingFunctions: Bool = false,
+         supportsGlobalChargeAmperageLimit: Bool = false,
+         supportsTargetChargeLevel: Bool = false,
+         supportsChargeNowTimerOverride: Bool = false,
+         chargeAmperageMinLimit: Int = 0,
+         chargeAmperageMaxLimit: Int = 0,
+         targetChargeLevelPercentageMinLimit: Int = 0,
+         supportsWindowsControl: Bool = false,
+         supportsAirPurificationRemoteStart: Bool = false,
+         supportsPlugAndCharge: Bool = false) {
         self.installedSoftwareVersion = installedSoftwareVersion
         self.supportsFullOtaUpdates = supportsFullOtaUpdates
         self.supportsRemoteOtaInstallSchedule = supportsRemoteOtaInstallSchedule
         self.supportsCloudBasedOtaDownloadConsent = supportsCloudBasedOtaDownloadConsent
         self.supportsUpdateStatus = supportsUpdateStatus
         self.hasPerformanceSoftwareUpgrade = hasPerformanceSoftwareUpgrade
+        self.supportsTrunkControl = supportsTrunkControl
+        self.supportsTrunkUnlock = supportsTrunkUnlock
+        self.supportsHonkAndFlash = supportsHonkAndFlash
+        self.supportsFlash = supportsFlash
+        self.supportsChargingFunctions = supportsChargingFunctions
+        self.supportsGlobalChargeAmperageLimit = supportsGlobalChargeAmperageLimit
+        self.supportsTargetChargeLevel = supportsTargetChargeLevel
+        self.supportsChargeNowTimerOverride = supportsChargeNowTimerOverride
+        self.chargeAmperageMinLimit = chargeAmperageMinLimit
+        self.chargeAmperageMaxLimit = chargeAmperageMaxLimit
+        self.targetChargeLevelPercentageMinLimit = targetChargeLevelPercentageMinLimit
+        self.supportsWindowsControl = supportsWindowsControl
+        self.supportsAirPurificationRemoteStart = supportsAirPurificationRemoteStart
+        self.supportsPlugAndCharge = supportsPlugAndCharge
+    }
+}
+
+/// Who set the OTA schedule, from the `SetBy` enum in `SchedulerService`.
+/// Recovered from the APK's `ota_mobcache.schedule.api.SetBy` enum.
+enum ScheduleSetBy: Int, Codable, Sendable {
+    case unknown = 0
+    case app = 1
+    case hmi = 2
+    case cloud = 3
+
+    var displayName: String {
+        switch self {
+        case .unknown: return L10n.text("Unknown")
+        case .app: return L10n.text("App")
+        case .hmi: return L10n.text("Car display")
+        case .cloud: return L10n.text("Cloud")
+        }
     }
 }
 

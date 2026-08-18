@@ -3596,7 +3596,190 @@ struct LivePolestarRemoteCommandIntegrationTests {
         print("========================================================\n")
         try? await api.signOut()
     }
+
+    /// Diagnose trunk unlock and charge target/amp limit failures by tracing the raw gRPC
+    /// exchange. Read-only for charge target (sets same value as current); trunk unlock is
+    /// a real command — gated behind HISINGEN_TEST_TRUNK=1.
+    @Test(.disabled(if: !livePolestarCredentialsConfigured, "Live Polestar credentials are not configured"))
+    func testDiagnoseTrunkAndChargeCommands() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
+        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
+        try await api.authenticate(email: email, password: password,
+                                    preferredVIN: preferredVIN, features: .default)
+        let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try XCTUnwrap(resolvedVIN)
+        let resolvedToken = try await api.validAccessToken()
+        let token = try XCTUnwrap(resolvedToken)
+        let cmdTokenResolved = await api.validCommandToken()
+        let cmdToken = try XCTUnwrap(cmdTokenResolved)
+
+        var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
+        discovery.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
+        discovery.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (discoveryData, _) = try await URLSession.shared.data(for: discovery)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: discoveryData) as? [String: Any])
+        let c3 = try XCTUnwrap(json["c3"] as? [String: Any])
+        let host = try XCTUnwrap(c3["grpcHost"] as? String)
+        let c3Base = try XCTUnwrap(URL(string: "https://\(host):443"))
+        let pccsBase = URL(string: "https://api.pccs-prod.plstr.io:443")!
+
+        print("\n========================================================")
+        print("🔧 TRUNK + CHARGE COMMAND DIAGNOSTICS — VIN \(vin)")
+
+        // ── 1. Trunk unlock raw gRPC ──
+        if environment["HISINGEN_TEST_TRUNK"] == "1" {
+            print("\n── 1. Trunk Unlock (real command) ──")
+            var unlockReq = Data()
+            unlockReq.append(Protobuf.messageField(1, Protobuf.stringField(1, vin)))
+            unlockReq.append(Protobuf.intField(2, 1))  // UNLOCK_TYPE_TRUNK_ONLY
+            let result = await Self.callGRPC(base: c3Base,
+                path: "/invocation.InvocationService/Unlock",
+                body: unlockReq, vin: vin, token: cmdToken, label: "Unlock (trunk only)")
+            print("  → grpc-status=\(result.status ?? "nil"), frames=\(result.frames.count)")
+            for frame in result.frames {
+                print("  raw: \(frame.map { String(format: "%02x", $0) }.joined())")
+                Self.recursiveDecode(frame, depth: 1)
+            }
+        } else {
+            print("\n── 1. Trunk Unlock (skipped — set HISINGEN_TEST_TRUNK=1 to test) ──")
+        }
+
+        // ── 2. SetTargetSoc raw gRPC (same-value, non-destructive) ──
+        print("\n── 2. SetTargetSoc (read current, then set same value) ──")
+        // First read current target SOC
+        let getSocBody = try await api.grpc.firstMessage(
+            path: "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc",
+            message: PolestarGRPC.chronosEnvelope(vin: vin), vin: vin, accessToken: token, host: .pccs)
+        let socFields = Protobuf.fields(getSocBody)
+        var currentTarget: Int?
+        if let socData = socFields.first(where: { $0.number == 3 && $0.wire == 2 })?.data {
+            let inner = Protobuf.fields(socData)
+            if let v = inner.first(where: { $0.number == 1 })?.varint { currentTarget = Int(v) }
+        }
+        print("  current target SOC: \(currentTarget ?? -1)%")
+
+        // Now set the same value
+        let targetToSet = currentTarget ?? 90
+        var socPayload = Data()
+        socPayload.append(Protobuf.intField(2, targetToSet))
+        socPayload.append(Protobuf.intField(3, 1))  // DAILY
+        let socResult = await Self.callGRPC(base: pccsBase,
+            path: "/pccs.chronos.services.v1.TargetSocService/SetTargetSoc",
+            body: PolestarGRPC.chronosEnvelope(vin: vin, payload: socPayload),
+            vin: vin, token: token, label: "SetTargetSoc(\(targetToSet)%)")
+        print("  → grpc-status=\(socResult.status ?? "nil"), frames=\(socResult.frames.count)")
+        for frame in socResult.frames {
+            print("  raw: \(frame.map { String(format: "%02x", $0) }.joined())")
+            Self.recursiveDecode(frame, depth: 1)
+        }
+
+        // ── 3. SetAmpLimit raw gRPC ──
+        print("\n── 3. SetAmpLimit (read current, then set same value) ──")
+        let getAmpBody = try await api.grpc.firstMessage(
+            path: "/pccs.chronos.services.v1.AmpLimitService/GetAmpLimit",
+            message: PolestarGRPC.chronosEnvelope(vin: vin), vin: vin, accessToken: token, host: .pccs)
+        let ampFields = Protobuf.fields(getAmpBody)
+        var currentAmp: Int?
+        if let ampData = ampFields.first(where: { $0.number == 2 && $0.wire == 2 })?.data {
+            let inner = Protobuf.fields(ampData)
+            if let v = inner.first(where: { $0.number == 1 })?.varint { currentAmp = Int(v) }
+        }
+        print("  current amp limit: \(currentAmp ?? -1)A")
+
+        let ampToSet = currentAmp ?? 16
+        let ampPayload = Protobuf.intField(2, ampToSet)
+        let ampResult = await Self.callGRPC(base: pccsBase,
+            path: "/pccs.chronos.services.v1.AmpLimitService/SetAmpLimit",
+            body: PolestarGRPC.chronosEnvelope(vin: vin, payload: ampPayload),
+            vin: vin, token: token, label: "SetAmpLimit(\(ampToSet)A)")
+        print("  → grpc-status=\(ampResult.status ?? "nil"), frames=\(ampResult.frames.count)")
+        for frame in ampResult.frames {
+            print("  raw: \(frame.map { String(format: "%02x", $0) }.joined())")
+            Self.recursiveDecode(frame, depth: 1)
+        }
+
+        // ── 4. Now try via PolestarAPI.executeRemoteCommand ──
+        print("\n── 4. Via PolestarAPI.executeRemoteCommand ──")
+        // Test setting charge target to 100% specifically
+        do {
+            let result = try await api.executeRemoteCommand(.setChargeTarget(100), vin: vin)
+            print("  setChargeTarget(100): outcome=\(result.outcome) msg=\(result.message ?? "—")")
+        } catch {
+            print("  setChargeTarget(100): ERROR \(error)")
+        }
+        // Wait 5 seconds, then read back to verify
+        print("  waiting 5s then reading back target SOC...")
+        try? await Task.sleep(nanoseconds: 5_000_000_000)
+        let readBackBody = try await api.grpc.firstMessage(
+            path: "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc",
+            message: PolestarGRPC.chronosEnvelope(vin: vin), vin: vin, accessToken: token, host: .pccs)
+        print("  readback raw: \(readBackBody.map { String(format: "%02x", $0) }.joined())")
+        let readBackFields = Protobuf.fields(readBackBody)
+        // field 3 = current targetSoc
+        if let targetData = readBackFields.first(where: { $0.number == 3 && $0.wire == 2 })?.data {
+            let inner = Protobuf.fields(targetData)
+            if let v = inner.first(where: { $0.number == 1 })?.varint {
+                print("  readback current target SOC: \(Int(v))%")
+            }
+        }
+        // field 4 = pendingTargetSoc
+        if let pendingData = readBackFields.first(where: { $0.number == 4 && $0.wire == 2 })?.data {
+            let inner = Protobuf.fields(pendingData)
+            if let v = inner.first(where: { $0.number == 1 })?.varint {
+                print("  readback PENDING target SOC: \(Int(v))%")
+            }
+        } else {
+            print("  readback: no pending target SOC field")
+        }
+        // Restore to 90%
+        do {
+            let result = try await api.executeRemoteCommand(.setChargeTarget(90), vin: vin)
+            print("  setChargeTarget(90): outcome=\(result.outcome) msg=\(result.message ?? "—")")
+        } catch {
+            print("  setChargeTarget(90): ERROR \(error)")
+        }
+        do {
+            let result = try await api.executeRemoteCommand(.setAmpLimit(ampToSet), vin: vin)
+            print("  setAmpLimit(\(ampToSet)): outcome=\(result.outcome) msg=\(result.message ?? "—")")
+        } catch {
+            print("  setAmpLimit(\(ampToSet)): ERROR \(error)")
+        }
+
+        // ── 5. Test tailgate open/close via executeRemoteCommand ──
+        print("\n── 5. Tailgate open/close via executeRemoteCommand ──")
+        if environment["HISINGEN_TEST_TAILGATE"] == "1" {
+            // First test raw gRPC to see the actual response
+            var tailgateReq = Data()
+            tailgateReq.append(Protobuf.messageField(1, Protobuf.stringField(1, vin)))
+            tailgateReq.append(Protobuf.intField(2, 1))  // OPEN_TAILGATE
+            let tailgateResult = await Self.callGRPC(base: c3Base,
+                path: "/invocation.InvocationService/TailgateControl",
+                body: tailgateReq, vin: vin, token: cmdToken, label: "TailgateControl (raw)")
+            print("  raw TailgateControl: grpc-status=\(tailgateResult.status ?? "nil"), frames=\(tailgateResult.frames.count)")
+
+            do {
+                let result = try await api.executeRemoteCommand(.openTailgate, vin: vin)
+                print("  openTailgate: outcome=\(result.outcome) msg=\(result.message ?? "—")")
+            } catch {
+                print("  openTailgate: ERROR \(error)")
+            }
+            do {
+                let result = try await api.executeRemoteCommand(.closeTailgate, vin: vin)
+                print("  closeTailgate: outcome=\(result.outcome) msg=\(result.message ?? "—")")
+            } catch {
+                print("  closeTailgate: ERROR \(error)")
+            }
+        } else {
+            print("  (skipped — set HISINGEN_TEST_TAILGATE=1 to test)")
+        }
+
+        print("========================================================\n")
+        try? await api.signOut()
+    }
 }
 #endif
-
 

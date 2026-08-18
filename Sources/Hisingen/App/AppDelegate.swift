@@ -1,17 +1,23 @@
 import AppKit
 import OSLog
 import ServiceManagement
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "application")
-    private let stateStore = VehicleStateStore()
-    private let polestarAPI = PolestarAPI()
-    private let volvoAPI = VolvoAPI()
+    private let preferences = PreferencesStore()
+    private let vehicleDatabase = VehicleDatabase()
+    private lazy var stateStore = VehicleStateStore(database: vehicleDatabase)
+    private let reverseGeocoder = ReverseGeocoder()
+    private let imageCache = CarImageCache()
+    private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
+    private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     private let volvoSignInPresenter = VolvoSignInPresenter()
     private let updateChecker = UpdateChecker()
-    private let remoteAuthorizer = RemoteActionAuthorizer()
-    private lazy var notifier = Notifier(stateStore: stateStore)
+    private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
+    private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
+    private let capabilityGate = CapabilityGate()
     private var refreshCoordinator: RefreshCoordinator!
     private var statusController: StatusItemController!
     private var latest: VehicleState?
@@ -19,42 +25,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sessionValid = false
     private var lastDiagnostics: DiagnosticsSnapshot?
     private var remoteCommandInProgress = false
+    private var commandRefreshTask: Task<Void, Never>?
 
 
     private var activeProvider: any VehicleProviding {
-        Preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
+        preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
-        Preferences.applyAppearance()
+        preferences.applyAppearance()
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(systemAppearanceDidChange),
             name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil
         )
-        Preferences.migrateLegacyPassword()
+        preferences.migrateLegacyPassword()
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.refreshCoordinator.refreshNow() },
             onSettings: { [weak self] in self?.toggleSettingsInPopover() },
             onCheckForUpdates: { [weak self] in self?.checkForUpdates() },
-            onRemoteCommand: { [weak self] command in self?.performRemoteCommand(command) }
+            onRemoteCommand: { [weak self] command in self?.performRemoteCommand(command) },
+             database: vehicleDatabase,
+             reverseGeocoder: reverseGeocoder, imageCache: imageCache,
+             preferences: preferences
         )
         statusController.onSelectCar = { [weak self] vin in self?.refreshCoordinator.selectCar(vin: vin) }
-        statusController.onOpenUpdate = { NSWorkspace.shared.open(UpdateChecker.releasesPage) }
+        statusController.onOpenUpdate = { [weak self] in
+            NSWorkspace.shared.open(UpdateChecker.releasePage(for: self?.statusController.updateVersion))
+        }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
-        statusController.onSignOut = { [weak self] in self?.refreshCoordinator.signOut() }
+        statusController.onSignOut = { [weak self] in self?.signOut() }
         notifier.onPermissionChanged = { [weak self] permission in
             self?.statusController.updateNotificationPermission(permission)
         }
         statusController.updateNotificationPermission(notifier.permission)
-        refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
+        refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore,
+                                                imageCache: imageCache, preferences: preferences)
         connectCoordinator()
-        let initialAuthenticated = Preferences.hasResumableSession(for: Preferences.activeBrand)
-        let initialVIN = Preferences.vin(for: Preferences.activeBrand)
-        let initialNickname = Preferences.vehicleNickname(for: initialVIN)
-        let initialCar = initialVIN.isEmpty ? nil : CarSummary(vin: initialVIN, title: initialNickname.isEmpty ? Preferences.activeBrand.displayName : initialNickname)
+        let initialAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
+        let initialVIN = preferences.vin(for: preferences.activeBrand)
+        let initialNickname = preferences.vehicleNickname(for: initialVIN)
+        let initialCar = initialVIN.isEmpty ? nil : CarSummary(vin: initialVIN, title: initialNickname.isEmpty ? preferences.activeBrand.displayName : initialNickname)
         if let initialCar {
             statusController.cars = [initialCar]
             statusController.activeVin = initialVIN
@@ -83,8 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cacheDormantBrandSnapshot() {
-        let dormantBrand: VehicleBrand = Preferences.activeBrand == .polestar ? .volvo : .polestar
-        let dormantVIN = Preferences.vin(for: dormantBrand)
+        let dormantBrand: VehicleBrand = preferences.activeBrand == .polestar ? .volvo : .polestar
+        let dormantVIN = preferences.vin(for: dormantBrand)
         guard !dormantVIN.isEmpty, statusController.cachedSnapshots[dormantVIN] == nil,
               let snapshot = stateStore.snapshot(for: dormantVIN) else { return }
         statusController.cachedSnapshots[dormantVIN] = snapshot
@@ -92,18 +105,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     private func resumeStoredSession() {
-        switch Preferences.activeBrand {
+        switch preferences.activeBrand {
         case .polestar:
-            guard !Preferences.email.isEmpty else { return }
+            guard !preferences.email.isEmpty else { return }
             let sessionToken = (try? Keychain.readSessionToken()) ?? nil
             let password = sessionToken?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
             guard sessionToken != nil || password != nil else { return }
             refreshCoordinator.start(
-                email: Preferences.email, password: password, sessionToken: sessionToken,
-                preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
+                email: preferences.email, password: password, sessionToken: sessionToken,
+                preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
             )
         case .volvo:
-            let clientID = !Preferences.volvoClientID.isEmpty ? Preferences.volvoClientID : BuiltinVolvoSecrets.clientID
+            let clientID = !preferences.volvoClientID.isEmpty ? preferences.volvoClientID : BuiltinVolvoSecrets.clientID
             let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil) ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
             let vccApiKey = ((try? Keychain.readVolvoApiKey()) ?? nil) ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
             let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
@@ -117,10 +130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 await volvoAPI.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
 
-                guard Preferences.activeBrand == .volvo else { return }
+                guard preferences.activeBrand == .volvo else { return }
                 refreshCoordinator.start(
                     email: "", password: nil, sessionToken: sessionToken,
-                    preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
+                    preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
                 )
             }
         }
@@ -128,19 +141,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     private func switchActiveBrand(to brand: VehicleBrand, force: Bool = false) {
-        if !force && Preferences.activeBrand == brand { return }
+        if !force && preferences.activeBrand == brand { return }
         refreshCoordinator?.stop()
-        Preferences.activeBrand = brand
-        Preferences.syncAppThemeStorageKey()
-        let hasSession = Preferences.hasResumableSession(for: brand)
+        preferences.activeBrand = brand
+        preferences.syncAppThemeStorageKey()
+        let hasSession = preferences.hasResumableSession(for: brand)
         sessionValid = hasSession
-        let vin = Preferences.vin(for: brand)
-        let nick = Preferences.vehicleNickname(for: vin)
+        let vin = preferences.vin(for: brand)
+        let nick = preferences.vehicleNickname(for: vin)
         latest = vin.isEmpty ? nil : (statusController.cachedSnapshots[vin] ?? stateStore.snapshot(for: vin))
         lastError = nil
         statusController.cars = vin.isEmpty ? [] : [CarSummary(vin: vin, title: nick.isEmpty ? brand.displayName : nick)]
         statusController.activeVin = vin.isEmpty ? nil : vin
-        refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore)
+        refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore,
+                                                imageCache: imageCache, preferences: preferences)
         connectCoordinator()
         render()
         cacheDormantBrandSnapshot()
@@ -173,12 +187,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         if !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
-           trimmedClientID == Preferences.volvoClientID, clientSecret.isEmpty, vccApiKey.isEmpty {
+           trimmedClientID == preferences.volvoClientID, clientSecret.isEmpty, vccApiKey.isEmpty {
             switchActiveBrand(to: .volvo, force: true)
             Task { [weak self] in
                 guard let self else { return }
                 if !trimmedNickname.isEmpty, let vin = await volvoAPI.resolvedVIN(preferred: nil) {
-                    Preferences.setVehicleNickname(trimmedNickname, for: vin)
+                     preferences.setVehicleNickname(trimmedNickname, for: vin)
                 }
             }
             resumeStoredSession()
@@ -202,12 +216,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let callbackURL = try await volvoSignInPresenter.signIn(
                     authorizeURL: authorizeURL, callbackScheme: "hisingen"
                 )
-                try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil, features: Preferences.features)
-                Preferences.volvoClientID = trimmedClientID
+                 try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil, features: preferences.features)
+                 preferences.volvoClientID = trimmedClientID
                 try Keychain.saveVolvoClientSecret(effectiveSecret)
                 try Keychain.saveVolvoApiKey(effectiveApiKey)
                 if !trimmedNickname.isEmpty, let vin = await volvoAPI.resolvedVIN(preferred: nil) {
-                    Preferences.setVehicleNickname(trimmedNickname, for: vin)
+                     preferences.setVehicleNickname(trimmedNickname, for: vin)
                 }
                 switchActiveBrand(to: .volvo, force: true)
                 resumeStoredSession()
@@ -228,7 +242,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        commandRefreshTask?.cancel()
         refreshCoordinator.stop()
+    }
+
+    private func signOut() {
+        commandRefreshTask?.cancel()
+        commandRefreshTask = nil
+        refreshCoordinator.signOut()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -262,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshCoordinator.onError = { [weak self] error in
             guard let self else { return }
             lastError = error.localizedDescription
-            if error.requiresAuthentication && Preferences.features.contains(.notifications) {
+            if error.requiresAuthentication && preferences.features.contains(.notifications) {
                 sessionValid = false
                 notifier.authenticationRequired()
             }
@@ -270,10 +291,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshCoordinator.onDiagnostics = { [weak self] diagnostics in
             guard let self else { return }
-            let hasStored = Preferences.hasResumableSession(for: Preferences.activeBrand)
+            let hasStored = preferences.hasResumableSession(for: preferences.activeBrand)
             sessionValid = diagnostics.sessionValid || hasStored
             lastDiagnostics = diagnostics
-            if (diagnostics.sessionValid || hasStored) && Preferences.features.contains(.notifications) {
+            if (diagnostics.sessionValid || hasStored) && preferences.features.contains(.notifications) {
                 notifier.authenticationSucceeded()
             }
             render()
@@ -299,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func render() {
-        let isAuth = sessionValid || Preferences.hasResumableSession(for: Preferences.activeBrand)
+        let isAuth = sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
         statusController.remoteCommandInProgress = remoteCommandInProgress
         statusController.render(data: latest, error: lastError, authenticated: isAuth)
     }
@@ -314,20 +335,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                              message: RemoteCommandError.busy.localizedDescription, success: false)
             return
         }
-        guard Preferences.features.contains(command.feature) else {
-            showRemoteResult(title: L10n.text("Command not sent"),
-                             message: RemoteCommandError.disabled.localizedDescription, success: false)
-            return
-        }
         guard sessionValid, let state = latest,
-              (Preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(Preferences.vin) == .orderedSame) else {
+              (preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
             showRemoteResult(title: L10n.text("Command not sent"),
                              message: RemoteCommandError.missingContext.localizedDescription, success: false)
             return
         }
-        guard state.capabilityProfile.permits(command.requiredCapability) else {
+        let availability = capabilityGate.availability(
+            for: command,
+            state: state,
+            brand: activeProvider.brand,
+            enabledFeatures: preferences.features.enabled,
+            commandInProgress: remoteCommandInProgress
+        )
+        guard availability == .available else {
             showRemoteResult(title: L10n.text("Command not sent"),
-                             message: RemoteCommandError.unsupported.localizedDescription, success: false)
+                             message: availability == .disabledBySettings
+                                 ? RemoteCommandError.disabled.localizedDescription
+                                 : RemoteCommandError.unsupported.localizedDescription,
+                             success: false)
             return
         }
         let command = command.adapted(to: state.capabilityProfile)
@@ -360,12 +386,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 showRemoteResult(title: L10n.text("Command sent"), message: message, success: true)
-                Task {
-                    try? await Task.sleep(nanoseconds: 12_000_000_000)
-                    await MainActor.run { [weak self] in
-                        self?.refreshCoordinator.refreshNow()
+                    let commandVIN = state.vin
+                    commandRefreshTask?.cancel()
+                    commandRefreshTask = Task { @MainActor [weak self] in
+                        do {
+                            try await Task.sleep(for: .seconds(12))
+                            guard !Task.isCancelled else { return }
+                            guard let self, self.sessionValid, self.latest?.vin == commandVIN else { return }
+                            self.commandRefreshTask = nil
+                            self.refreshCoordinator.refreshNow()
+                        } catch is CancellationError {
+                            // A new command, sign-out, or termination superseded this refresh.
+                        } catch {
+                            // The follow-up refresh is best effort.
+                        }
                     }
-                }
             } catch {
                 let mapped = error as? LocalizedError
                 showRemoteResult(
@@ -416,9 +451,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
                 requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
             )
-        case .lock, .unlock:
+        case .lock, .unlock, .unlockTrunk:
             guard var exterior = current.exteriorStatus else { return }
-            exterior.isLocked = (command == .lock)
+            if command == .lock {
+                exterior.isLocked = true
+            } else {
+                exterior.isLocked = false
+            }
+            current.exteriorStatus = exterior
+        case .openTailgate, .closeTailgate:
+            guard var exterior = current.exteriorStatus else { return }
+            // Toggle the tailgate opening state optimistically
+            let isOpening = command == .openTailgate
+            if let idx = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
+                exterior.openings[idx] = OpeningReading(opening: .tailgate,
+                                                        state: isOpening ? .open : .closed)
+            } else {
+                exterior.openings.append(OpeningReading(opening: .tailgate,
+                                                        state: isOpening ? .open : .closed))
+            }
             current.exteriorStatus = exterior
         case .setChargeTarget(let target):
             current.chargeTargetPercentage = target
@@ -435,17 +486,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
-        guard !success else { return }
-        Task { @MainActor in
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = title
-            alert.informativeText = message
-            alert.addButton(withTitle: L10n.text("OK"))
-            NSApp.activate(ignoringOtherApps: true)
-            DispatchQueue.main.async {
-                alert.runModal()
-            }
+        // Use UserNotifications so command results follow the system notification settings.
+        // Success is also visible via the optimistic state update (slider/button flips).
+        let identifier = "remote-command-\(UUID().uuidString)"
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = message
+        if !success { content.sound = .default }
+
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+
+        // Auto-dismiss after 5 seconds.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
         }
     }
 
@@ -475,7 +533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .credentials:
 
 
-            let switchedFromAnotherBrand = Preferences.activeBrand != .polestar
+            let switchedFromAnotherBrand = preferences.activeBrand != .polestar
             switchActiveBrand(to: .polestar)
             applyLaunchAtLogin(userInitiated: true)
             notifier.featureSelectionDidChange()
@@ -488,9 +546,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 resumeStoredSession()
             } else {
                 refreshCoordinator.credentialsChanged(
-                    email: Preferences.email,
+                    email: preferences.email,
                     password: password,
-                    preferredVIN: Preferences.vin.isEmpty ? nil : Preferences.vin
+                    preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
                 )
             }
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
@@ -502,12 +560,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 resumeStoredSession()
                 statusController.dismissSettings()
             case .volvo:
-                if Preferences.hasResumableSession(for: .volvo) {
+                if preferences.hasResumableSession(for: .volvo) {
                     switchActiveBrand(to: .volvo)
                     resumeStoredSession()
                     statusController.dismissSettings()
                 } else {
-                    beginVolvoSignIn(clientID: Preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
+                    beginVolvoSignIn(clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
                 }
             }
         case .closeSettings:
@@ -520,7 +578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
         case .presentation:
-            Preferences.applyAppearance()
+            preferences.applyAppearance()
             refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
@@ -529,23 +587,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemAppearanceDidChange() {
-        guard Preferences.appearanceMode == .system else { return }
+        guard preferences.appearanceMode == .system else { return }
         render()
         statusController?.refreshPopoverIfNeeded()
     }
 
     private func updateNotificationAuthorizationIfNeeded() {
-        if Preferences.features.contains(.notifications)
-            && (Preferences.notifyChargingStarted || Preferences.notifyChargingComplete
-                || Preferences.notifyChargingProblem || Preferences.notifyLowBattery
-                || Preferences.notifySoftwareUpdates || Preferences.notifyVehicleWarnings
-                || Preferences.notifyRainWithWindowsOpen || Preferences.notifyEveningUnlocked) {
+        if preferences.features.contains(.notifications)
+            && (preferences.notifyChargingStarted || preferences.notifyChargingComplete
+                || preferences.notifyChargingProblem || preferences.notifyLowBattery
+                || preferences.notifySoftwareUpdates || preferences.notifyVehicleWarnings
+                || preferences.notifyRainWithWindowsOpen || preferences.notifyEveningUnlocked) {
             notifier.requestAuthorizationFromSettings()
         }
     }
 
     private func updateCheckConfiguration() {
-        if Preferences.features.contains(.updateChecks) {
+        if preferences.features.contains(.updateChecks) {
             checkForUpdatesIfEnabled()
         } else {
             statusController.updateVersion = nil
@@ -553,7 +611,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkForUpdates() {
-        guard Preferences.features.contains(.updateChecks) else { return }
+        guard preferences.features.contains(.updateChecks) else { return }
         statusController.checkingForUpdates = true
         render()
         updateChecker.checkNow { [weak self] result in
@@ -569,7 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.addButton(withTitle: L10n.text("Later"))
                 render()
                 if alert.runModal() == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                    NSWorkspace.shared.open(UpdateChecker.releasePage(for: version))
                 }
             case .upToDate:
                 alert.messageText = L10n.text("Hisingen is up to date")
@@ -588,9 +646,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkForUpdatesIfEnabled() {
-        guard Preferences.features.contains(.updateChecks) else { return }
+        guard preferences.features.contains(.updateChecks) else { return }
         updateChecker.checkIfDue { [weak self] version in
-            guard let self, Preferences.features.contains(.updateChecks) else { return }
+            guard let self, self.preferences.features.contains(.updateChecks) else { return }
             statusController.updateVersion = version
             render()
         }
@@ -600,7 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         let service = SMAppService.mainApp
         do {
-            if Preferences.launchAtLogin {
+            if preferences.launchAtLogin {
                 switch service.status {
                 case .notRegistered:
                     try service.register()
@@ -609,15 +667,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .enabled:
                     break
                 case .notFound:
-                    Preferences.launchAtLogin = false
+                    preferences.launchAtLogin = false
                 @unknown default:
-                    Preferences.launchAtLogin = false
+                    preferences.launchAtLogin = false
                 }
             } else if service.status == .enabled || service.status == .requiresApproval {
                 try service.unregister()
             }
         } catch {
-            Preferences.launchAtLogin = service.status == .enabled || service.status == .requiresApproval
+            preferences.launchAtLogin = service.status == .enabled || service.status == .requiresApproval
             logger.error("Launch-at-login update failed: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -666,10 +724,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "climate/start", "climatization/start":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
                 let temp = queryItems?.first(where: { $0.name == "temp" || $0.name == "temperature" })?
-                    .value.flatMap { Float($0) } ?? Float(Preferences.remoteClimateTemperature)
+                    .value.flatMap { Float($0) } ?? Float(preferences.remoteClimateTemperature)
                 performRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
             } else {
                 notifier.notifyCommandNotice(
@@ -679,7 +737,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "climate/stop", "climatization/stop":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 performRemoteCommand(.stopClimate)
             } else {
                 notifier.notifyCommandNotice(
@@ -689,7 +747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "lock":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 performRemoteCommand(.lock)
             } else {
                 notifier.notifyCommandNotice(
@@ -699,7 +757,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "unlock":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 performRemoteCommand(.unlock)
             } else {
                 notifier.notifyCommandNotice(
@@ -709,7 +767,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "flash", "flash-lights":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 performRemoteCommand(.flashLights)
             } else {
                 notifier.notifyCommandNotice(
@@ -719,7 +777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case "honk-flash", "honk":
-            if Preferences.activeBrand == .volvo {
+            if preferences.activeBrand == .volvo {
                 performRemoteCommand(.honkAndFlash)
             } else {
                 notifier.notifyCommandNotice(
@@ -733,5 +791,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-
-

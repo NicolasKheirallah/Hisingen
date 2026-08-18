@@ -42,7 +42,7 @@ let package = Package(
     name: "Hisingen",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     targets: [
         .executableTarget(

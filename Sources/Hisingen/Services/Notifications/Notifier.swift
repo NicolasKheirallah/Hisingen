@@ -13,6 +13,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private let available = Bundle.main.bundleURL.pathExtension == "app"
     private let detector = ChargingTransitionDetector()
     private let stateStore: VehicleStateStore
+    private let preferences: PreferencesStore
     private(set) var permission: NotificationPermission = .notDetermined {
         didSet { if permission != oldValue { onPermissionChanged?(permission) } }
     }
@@ -23,8 +24,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     var onPermissionChanged: ((NotificationPermission) -> Void)?
 
-    init(stateStore: VehicleStateStore) {
+    init(stateStore: VehicleStateStore, preferences: PreferencesStore) {
         self.stateStore = stateStore
+        self.preferences = preferences
         super.init()
         guard available else { return }
         UNUserNotificationCenter.current().delegate = self
@@ -60,24 +62,24 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let result = detector.evaluate(
             previous: stateStore.baseline(for: state.vin),
             current: state,
-            lowBatteryThreshold: Preferences.lowBatteryThreshold
+            lowBatteryThreshold: preferences.lowBatteryThreshold
         )
         stateStore.save(result.baseline)
-        guard Preferences.features.contains(.notifications), available, authorized else { return }
+        guard preferences.features.contains(.notifications), available, authorized else { return }
 
         for event in result.events {
             switch event {
-            case .started where Preferences.notifyChargingStarted:
+            case .started where preferences.notifyChargingStarted:
                 post(event, state: state, title: L10n.text("Charging started"), body: chargingBody(state))
-            case .completed where Preferences.notifyChargingComplete:
+            case .completed where preferences.notifyChargingComplete:
                 post(event, state: state, title: L10n.text("Charging complete"), body: completionBody(state))
-            case .fault where Preferences.notifyChargingProblem:
+            case .fault where preferences.notifyChargingProblem:
                 post(event, state: state, title: L10n.text("Charging problem"),
                      body: privateBody(L10n.text("The vehicle reported a charging fault.")))
-            case .interrupted where Preferences.notifyChargingProblem:
+            case .interrupted where preferences.notifyChargingProblem:
                 post(event, state: state, title: L10n.text("Charging interrupted"),
                      body: privateBody(L10n.text("Charging stopped before the target was reached.")))
-            case .lowBattery(let threshold) where Preferences.notifyLowBattery:
+            case .lowBattery(let threshold) where preferences.notifyLowBattery:
                 let brandName = state.model.brand.displayName
                 post(event, state: state, title: L10n.format("Battery at %d%%", threshold),
                      body: privateBody(L10n.format("Your %@ battery is low.", brandName)))
@@ -94,7 +96,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkSoftwareUpdate(previous: VehicleState?, current: VehicleState) {
-        guard Preferences.notifySoftwareUpdates,
+        guard preferences.notifySoftwareUpdates,
               let previousSoftware = previous?.softwareInfo,
               let software = current.softwareInfo,
               software.state != previousSoftware.state else { return }
@@ -119,7 +121,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkVehicleWarnings(previous: VehicleState?, current: VehicleState) {
-        guard Preferences.notifyVehicleWarnings, let previous else { return }
+        guard preferences.notifyVehicleWarnings, let previous else { return }
         let previousWarnings = warningLabels(previous)
         let currentWarnings = warningLabels(current)
         let added = currentWarnings.subtracting(previousWarnings).sorted()
@@ -157,7 +159,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkRainWithWindows(previous: VehicleState?, current: VehicleState) {
-        guard Preferences.notifyRainWithWindowsOpen,
+        guard preferences.notifyRainWithWindowsOpen,
               Self.rainWithWindowsOpenCondition(current),
               !Self.rainWithWindowsOpenCondition(previous) else { return }
 
@@ -178,7 +180,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkEveningUnlocked(previous: VehicleState?, current: VehicleState) {
-        guard Preferences.notifyEveningUnlocked,
+        guard preferences.notifyEveningUnlocked,
               Self.eveningUnlockedCondition(current),
               !Self.eveningUnlockedCondition(previous) else { return }
 
@@ -200,7 +202,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
-        guard Preferences.notifyPlugInReminder,
+        guard preferences.notifyPlugInReminder,
               Self.plugInReminderCondition(current),
               !Self.plugInReminderCondition(previous) else { return }
 
@@ -215,10 +217,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func authenticationRequired() {
-        guard Preferences.features.contains(.notifications), available, authorized,
+        guard preferences.features.contains(.notifications), available, authorized,
               !authenticationNoticePosted else { return }
         authenticationNoticePosted = true
-        let brandName = Preferences.activeBrand.displayName
+        let brandName = preferences.activeBrand.displayName
         let content = UNMutableNotificationContent()
         content.title = L10n.text("Hisingen needs you to sign in")
         content.body = L10n.format("Open Hisingen Settings to reconnect your %@ account.", brandName)
@@ -236,7 +238,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func featureSelectionDidChange() {
-        guard available, !Preferences.features.contains(.notifications) else { return }
+        guard available, !preferences.features.contains(.notifications) else { return }
         authenticationNoticePosted = false
         let center = UNUserNotificationCenter.current()
         center.removeAllDeliveredNotifications()
@@ -245,7 +247,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func chargingBody(_ state: VehicleState) -> String {
         let brandName = state.model.brand.displayName
-        guard !Preferences.privateNotificationDetails else { return L10n.format("Your %@ started charging.", brandName) }
+        guard !preferences.privateNotificationDetails else { return L10n.format("Your %@ started charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
         if let minutes = state.estimatedChargingTimeToFullMinutes {
@@ -256,17 +258,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func completionBody(_ state: VehicleState) -> String {
         let brandName = state.model.brand.displayName
-        guard !Preferences.privateNotificationDetails else { return L10n.format("Your %@ finished charging.", brandName) }
+        guard !preferences.privateNotificationDetails else { return L10n.format("Your %@ finished charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
         if let range = state.rangeKm {
-            values.append(L10n.format("%@ range", Format.distance(km: range, unit: Preferences.distanceUnit)))
+            values.append(L10n.format("%@ range", Format.distance(km: range, unit: preferences.distanceUnit)))
         }
         return values.isEmpty ? L10n.format("Your %@ finished charging.", brandName) : values.joined(separator: " · ")
     }
 
     private func privateBody(_ detailed: String) -> String {
-        Preferences.privateNotificationDetails ? L10n.text("Open Hisingen for details.") : detailed
+        preferences.privateNotificationDetails ? L10n.text("Open Hisingen for details.") : detailed
     }
 
     private func post(_ event: ChargingEvent, state: VehicleState, title: String, body: String) {
@@ -304,5 +306,3 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         [.banner, .sound]
     }
 }
-
-

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Represents a historical charging session record stored in SQLite.
 struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
@@ -14,7 +15,7 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     let locationName: String?
     let createdAt: Date
 
-    func toDomainSession(database: VehicleDatabase = .shared) -> ChargingSession {
+    func toDomainSession(database: VehicleDatabase) -> ChargingSession {
         let dbSamples = database.chargingSamples(for: id)
         let domainSamples = dbSamples.map {
             ChargingSample(
@@ -67,26 +68,44 @@ final class VehicleDatabase: @unchecked Sendable {
     static let shared = VehicleDatabase()
 
     let db: SQLiteDatabase
+    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "database")
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+
+    var storageAvailable: Bool { db.isOpen }
 
     init(database: SQLiteDatabase? = nil) {
         if let database {
             self.db = database
         } else {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            let appSupport = baseDirectory
                 .appendingPathComponent("Hisingen", isDirectory: true)
-            try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+            do {
+                try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+            } catch {
+                logger.error("Could not create database directory: \(error, privacy: .public)")
+            }
             let dbURL = appSupport.appendingPathComponent("hisingen.sqlite3")
-            self.db = (try? SQLiteDatabase(path: dbURL.path)) ?? (try! SQLiteDatabase.inMemory())
+            do {
+                self.db = try SQLiteDatabase(path: dbURL.path)
+            } catch {
+                logger.error("Could not open database at \(dbURL.path, privacy: .private): \(error, privacy: .public)")
+                self.db = .unavailable(path: dbURL.path)
+            }
         }
         createTables()
     }
 
     /// Convenience for in-memory database instance for testing.
     static func inMemory() -> VehicleDatabase {
-        let memoryDB = try! SQLiteDatabase.inMemory()
-        return VehicleDatabase(database: memoryDB)
+        do {
+            return VehicleDatabase(database: try SQLiteDatabase.inMemory())
+        } catch {
+            assertionFailure("In-memory database initialization failed: \(error)")
+            return VehicleDatabase(database: .unavailable(path: ":memory:"))
+        }
     }
 
     private func createTables() {
@@ -163,13 +182,23 @@ final class VehicleDatabase: @unchecked Sendable {
             error_message TEXT
         );
         """
-        try? db.execute(sql: sql)
+        do {
+            try db.execute(sql: sql)
+        } catch {
+            logger.error("Could not initialize database schema: \(error, privacy: .public)")
+        }
     }
 
     // MARK: - Vehicle Snapshots
 
     func saveSnapshot(_ state: VehicleState) {
-        guard let data = try? encoder.encode(state.cacheableCopy) else { return }
+        let data: Data
+        do {
+            data = try encoder.encode(state.cacheableCopy)
+        } catch {
+            logger.error("Could not encode vehicle snapshot for persistence: \(error, privacy: .public)")
+            return
+        }
         let brandName = state.isVolvo ? "volvo" : "polestar"
         let sql = """
         INSERT INTO vehicle_snapshots (vin, brand, model_name, fetched_at, vehicle_reported_at, is_cached_snapshot, payload)
@@ -533,7 +562,9 @@ final class VehicleDatabase: @unchecked Sendable {
     // MARK: - Database Diagnostics & Maintenance
 
     var databaseSizeBytes: Int64 {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let appSupport = baseDirectory
             .appendingPathComponent("Hisingen", isDirectory: true)
         let main = appSupport.appendingPathComponent("hisingen.sqlite3")
         let wal = appSupport.appendingPathComponent("hisingen.sqlite3-wal")

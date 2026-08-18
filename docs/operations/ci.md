@@ -27,7 +27,7 @@ flowchart LR
 
 ## `ci.yml`
 
-**Trigger:** `push` to `main`, and every `pull_request`.
+**Trigger:** `push` to `main`, and pull requests targeting `main`.
 **Permissions:** `contents: read`.
 **Concurrency:** `ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}`, cancels in-progress runs on a new push to the same PR/branch.
 **Secrets:** none.
@@ -62,7 +62,7 @@ actually renders on GitHub.
 
 ### Job `build-and-test` (matrix: `macos-14`, `macos-15`, `fail-fast: false`, 20-minute timeout)
 
-Checkout → cache `.build` (keyed on
+Checkout → cache SwiftPM checkout data (keyed on
 `${{ matrix.os }}-spm-${{ hashFiles('Package.resolved','Package.swift') }}`)
 → `swift --version` + `make doctor` → (macos-15 leg only) warn via
 `::warning::` if `/Applications/Xcode_16.2.app` is missing from the runner
@@ -105,8 +105,10 @@ catch).
 
 ## `security.yml`
 
-**Trigger:** `push` to `main`, every `pull_request`, and a weekly schedule
-(Mondays 04:17 UTC).
+**Trigger:** `push` to `main`, a weekly schedule (Mondays 04:17 UTC), and manual
+dispatch. Dependency Review remains the pull-request security check; CodeQL
+Swift runs off the PR path because its instrumented compiled-language build can
+take 20+ minutes on hosted macOS runners.
 **Secrets:** none.
 
 ### Job `codeql` (macos-15, `security-events: write`, ~10–15 min)

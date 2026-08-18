@@ -40,6 +40,8 @@ final class RefreshCoordinator {
 
     private let api: any VehicleProviding
     private let stateStore: VehicleStateStore
+    private let imageCache: CarImageCache
+    private let preferences: PreferencesStore
     private let clearPasswordAfterSession: () -> Void
     private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "refresh")
     private let monitor = NWPathMonitor()
@@ -50,6 +52,7 @@ final class RefreshCoordinator {
     private var generation: UInt64 = 0
     private var failureCount = 0
     private var rateLimitedUntil: Date?
+    private var lastManualRefresh: Date?
     private var sleeping = false
     private var networkAvailable = true
     private var sessionReady = false
@@ -74,9 +77,13 @@ final class RefreshCoordinator {
 
     init(api: any VehicleProviding, stateStore: VehicleStateStore,
          observesEnvironment: Bool = true,
+         imageCache: CarImageCache = CarImageCache(),
+         preferences: PreferencesStore,
          clearPasswordAfterSession: @escaping () -> Void = { try? Keychain.deletePassword() }) {
         self.api = api
         self.stateStore = stateStore
+        self.imageCache = imageCache
+        self.preferences = preferences
         self.clearPasswordAfterSession = clearPasswordAfterSession
         guard observesEnvironment else { return }
         installSystemObservers()
@@ -133,8 +140,14 @@ final class RefreshCoordinator {
             publishDiagnostics()
             return
         }
+        // Debounce: skip manual refresh if one started less than 2 seconds ago — rapid
+        // clicks on the refresh button (or ⌘R spam) would otherwise stack requests.
+        if let lastManualRefresh, Date().timeIntervalSince(lastManualRefresh) < 2, task != nil {
+            return
+        }
+        lastManualRefresh = Date()
         guard sessionReady else {
-            beginSession(preferredVIN: Preferences.vin.nilIfEmpty)
+            beginSession(preferredVIN: preferences.vin.nilIfEmpty)
             return
         }
         refresh(trigger: .manual)
@@ -142,23 +155,23 @@ final class RefreshCoordinator {
 
     func reloadVehicleMetadata() {
         guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else { return }
-        guard sessionReady, task == nil, !Preferences.vin.isEmpty else {
+        guard sessionReady, task == nil, !preferences.vin.isEmpty else {
             refreshNow()
             return
         }
-        let vin = Preferences.vin
+        let vin = preferences.vin
         let requestGeneration = generation
         onLoading?()
         task = Task {
             do {
-                try await api.selectCar(vin: vin, features: Preferences.features)
+                try await api.selectCar(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 refresh(trigger: .manual)
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                handle(VehicleServiceError.map(error, provider: api.brand), retrySession: false)
+                handle(ServiceErrorPolicy.decision(error, provider: api.brand).error, retrySession: false)
             }
         }
         publishDiagnostics()
@@ -172,26 +185,26 @@ final class RefreshCoordinator {
 
     func selectCar(vin: String) {
         guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else { return }
-        guard vin != Preferences.vin else { return }
+        guard vin != preferences.vin else { return }
         generation &+= 1
         failureCount = 0
         task?.cancel()
         task = nil
         timer?.invalidate()
-        Preferences.vin = vin
+        preferences.vin = vin
         latest = stateStore.snapshot(for: vin)
         if let latest { onState?(latest) } else { onLoading?() }
         let requestGeneration = generation
         task = Task {
             do {
-                try await api.selectCar(vin: vin, features: Preferences.features)
+                try await api.selectCar(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 refresh(trigger: .vehicleChanged)
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                handle(VehicleServiceError.map(error, provider: api.brand), retrySession: false)
+                handle(ServiceErrorPolicy.decision(error, provider: api.brand).error, retrySession: false)
             }
         }
         publishDiagnostics()
@@ -207,6 +220,7 @@ final class RefreshCoordinator {
 
     func signOut() {
         cancelCurrentWork()
+        let requestGeneration = generation
         sessionReady = false
         latest = nil
         cars = []
@@ -215,15 +229,18 @@ final class RefreshCoordinator {
         pendingPassword = nil
         pendingSessionToken = nil
         rateLimitedUntil = nil
-        Preferences.email = ""
-        Preferences.vin = ""
+        preferences.email = ""
+        preferences.vin = ""
         stateStore.clear()
-        Task {
+        task = Task {
             do {
                 try await api.signOut()
             } catch {
+                guard requestGeneration == generation, !Task.isCancelled else { return }
                 self.lastError = .secureStorage
             }
+            guard requestGeneration == generation, !Task.isCancelled else { return }
+            task = nil
             self.onSignedOut?()
             if let lastError { self.onError?(lastError) }
             self.publishDiagnostics()
@@ -246,13 +263,13 @@ final class RefreshCoordinator {
                         try await api.restoreSession(
                             token: pendingSessionToken,
                             preferredVIN: preferredVIN,
-                            features: Preferences.features
+                            features: preferences.features
                         )
                     } else {
                         throw VehicleServiceError.authenticationRequired(provider: api.brand, reason: .noStoredSession)
                     }
                 } catch {
-                    guard VehicleServiceError.map(error, provider: api.brand).requiresAuthentication else { throw error }
+                    guard ServiceErrorPolicy.decision(error, provider: api.brand).error.requiresAuthentication else { throw error }
 
 
                     guard let password = pendingPassword, !pendingEmail.isEmpty else { throw error }
@@ -260,14 +277,14 @@ final class RefreshCoordinator {
                         email: pendingEmail,
                         password: password,
                         preferredVIN: preferredVIN,
-                        features: Preferences.features
+                        features: preferences.features
                     )
                 }
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 guard let vin = await api.resolvedVIN(preferred: preferredVIN) else {
                     throw VehicleServiceError.notConfigured
                 }
-                Preferences.vin = vin
+                preferences.vin = vin
                 cars = await api.cars
                 onCars?(cars, vin)
                 sessionReady = true
@@ -276,14 +293,14 @@ final class RefreshCoordinator {
 
                 if pendingPassword != nil { clearPasswordAfterSession() }
                 pendingPassword = nil
-                let state = try await api.fetchVehicleState(vin: vin, features: Preferences.features)
+                let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 apply(state, latency: Date().timeIntervalSince(started))
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                let mapped = VehicleServiceError.map(error, provider: api.brand)
+                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: !sessionReady)
             }
@@ -293,7 +310,7 @@ final class RefreshCoordinator {
 
     private func refresh(trigger: Trigger) {
         guard task == nil, !sleeping, networkAvailable, sessionReady else { return }
-        let vin = Preferences.vin
+        let vin = preferences.vin
         guard !vin.isEmpty else {
             handle(.notConfigured, retrySession: false)
             return
@@ -305,14 +322,14 @@ final class RefreshCoordinator {
         let started = Date()
         task = Task {
             do {
-                let state = try await api.fetchVehicleState(vin: vin, features: Preferences.features)
+                let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 apply(state, latency: Date().timeIntervalSince(started))
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                let mapped = VehicleServiceError.map(error, provider: api.brand)
+                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: false)
             }
@@ -322,12 +339,14 @@ final class RefreshCoordinator {
 
     private func apply(_ state: VehicleState, latency: TimeInterval) {
         let previous = latest
-        var state = state.mergingLastKnown(from: previous, features: Preferences.features)
-        if Preferences.storeChargingHistory,
+        var state = state.mergingLastKnown(
+            from: previous, features: preferences.features, imageCache: imageCache
+        )
+        if preferences.storeChargingHistory,
            let session = ChargingSession.completed(
                previous: previous,
                current: state,
-               pricePerKwh: Preferences.electricityPricePerKwh
+               pricePerKwh: preferences.electricityPricePerKwh
            ) {
             state.chargingSessions.append(session)
             if state.chargingSessions.count > 20 {
@@ -378,7 +397,7 @@ final class RefreshCoordinator {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if retrySession || !self.sessionReady {
-                    self.beginSession(preferredVIN: Preferences.vin.nilIfEmpty)
+                    self.beginSession(preferredVIN: preferences.vin.nilIfEmpty)
                 } else {
                     self.refresh(trigger: .timer)
                 }
@@ -393,7 +412,7 @@ final class RefreshCoordinator {
             cancelCurrentWork()
         } else if restored && !sleeping {
             if sessionReady { refresh(trigger: .networkRestored) }
-            else { beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+            else { beginSession(preferredVIN: preferences.vin.nilIfEmpty) }
         }
         publishDiagnostics()
     }
@@ -406,7 +425,7 @@ final class RefreshCoordinator {
         observerTokens.append(addMainActorObserver(for: NSWorkspace.didWakeNotification) { coordinator in
             coordinator.sleeping = false
             if coordinator.sessionReady { coordinator.refresh(trigger: .wake) }
-            else { coordinator.beginSession(preferredVIN: Preferences.vin.nilIfEmpty) }
+            else { coordinator.beginSession(preferredVIN: coordinator.preferences.vin.nilIfEmpty) }
         })
     }
 
@@ -458,5 +477,3 @@ final class RefreshCoordinator {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-

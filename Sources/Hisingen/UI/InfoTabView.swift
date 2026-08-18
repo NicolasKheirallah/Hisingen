@@ -4,8 +4,11 @@ import SwiftUI
 @MainActor
 struct InfoTabView: View {
     let state: VehicleState
+    let database: VehicleDatabase
+    let imageCache: CarImageCache
 
-    @State private var selectedAngleIndex: Int = Preferences.carRenderAngle.rawValue
+    @State private var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
+    @Environment(\.preferencesStore) private var preferences
     @State private var vinCopied = false
 
     var body: some View {
@@ -34,22 +37,80 @@ struct InfoTabView: View {
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
+            capabilityInspectorCard
         }
+    }
+
+    /// Backend-authoritative capability flags from `GetMyCars` — shows what the vehicle
+    /// actually supports according to the cloud, not heuristic model profiling.
+    private var capabilityInspectorCard: some View {
+        guard let caps = state.otaCapabilities, state.isVolvo == false else { return AnyView(EmptyView()) }
+        var rows: [KVRow] = []
+        rows.append(KVRow(L10n.text("Full OTA Updates"),
+                          caps.supportsFullOtaUpdates ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "arrow.down.circle",
+                          valueWarning: !caps.supportsFullOtaUpdates))
+        rows.append(KVRow(L10n.text("Remote Install Scheduling"),
+                          caps.supportsRemoteOtaInstallSchedule ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "calendar.badge.clock",
+                          valueWarning: !caps.supportsRemoteOtaInstallSchedule))
+        rows.append(KVRow(L10n.text("Cloud Download Consent"),
+                          caps.supportsCloudBasedOtaDownloadConsent ? L10n.text("Supported") : L10n.text("Vehicle-managed"),
+                          symbol: "icloud.and.arrow.down",
+                          valueWarning: !caps.supportsCloudBasedOtaDownloadConsent))
+        rows.append(KVRow(L10n.text("Tailgate Open/Close"),
+                          caps.supportsTrunkControl ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "car.side.rear.open",
+                          valueWarning: !caps.supportsTrunkControl))
+        rows.append(KVRow(L10n.text("Trunk Unlock"),
+                          caps.supportsTrunkUnlock ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "lock.open",
+                          valueWarning: !caps.supportsTrunkUnlock))
+        rows.append(KVRow(L10n.text("Honk & Flash"),
+                          caps.supportsHonkAndFlash ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "light.beacon",
+                          valueWarning: !caps.supportsHonkAndFlash))
+        rows.append(KVRow(L10n.text("Windows Control"),
+                          caps.supportsWindowsControl ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "rectangle.arrowtriangle.2.outward",
+                          valueWarning: !caps.supportsWindowsControl))
+        rows.append(KVRow(L10n.text("Charging Functions"),
+                          caps.supportsChargingFunctions ? L10n.text("Supported") : L10n.text("Not supported"),
+                          symbol: "bolt.fill",
+                          valueWarning: !caps.supportsChargingFunctions))
+        if caps.supportsPlugAndCharge {
+            rows.append(KVRow(L10n.text("Plug & Charge"),
+                              L10n.text("Supported"),
+                              symbol: "plug"))
+        }
+        if let installed = caps.installedSoftwareVersion {
+            rows.append(KVRow(L10n.text("Installed Software"),
+                              installed, symbol: "checkmark.seal"))
+        }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
+                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                Text(L10n.text("Reported by the vehicle cloud backend — exact support per VIN."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
+            }
+        })
     }
 
     private var heroVisualSection: some View {
         let isInterior = selectedAngleIndex == -1
         let currentImageData: Data? = {
             if isInterior {
-                return state.interiorImageData ?? CarImageCache.shared.interiorImage(for: state.vin)
+                return state.interiorImageData ?? imageCache.interiorImage(for: state.vin)
             }
-            return CarImageCache.shared.image(for: state.vin, angle: selectedAngleIndex)
-                ?? (selectedAngleIndex == Preferences.carRenderAngle.rawValue ? state.imageData : nil)
+            return imageCache.image(for: state.vin, angle: selectedAngleIndex)
+                 ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.imageData : nil)
         }()
 
-        let supportsMultipleAngles = Preferences.activeBrand == .polestar
+        let supportsMultipleAngles = preferences.activeBrand == .polestar
         let hasInterior = (state.interiorImageData != nil)
-            || (CarImageCache.shared.interiorImage(for: state.vin) != nil)
+            || (imageCache.interiorImage(for: state.vin) != nil)
 
         return Card {
             VStack(spacing: 12) {
@@ -79,7 +140,7 @@ struct InfoTabView: View {
                     .zIndex(10)
                 }
 
-                if let currentImageData, let nsImage = NSImage(data: currentImageData) {
+                if let currentImageData {
                     ZStack {
                         RadialGradient(
                             colors: [Color.primary.opacity(0.06), Color.clear],
@@ -88,16 +149,12 @@ struct InfoTabView: View {
                             endRadius: 170
                         )
 
-                        Image(nsImage: nsImage)
-                            .interpolation(.high)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .scaleEffect(1.33, anchor: .center)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 205)
-                            .padding(.horizontal, 8)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                            .id("\(state.vin)_\(selectedAngleIndex)")
+                        VehiclePresentationView(
+                            identity: VehiclePresentationIdentity(vin: state.vin, angle: selectedAngleIndex),
+                            imageData: currentImageData
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 220)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 220)
@@ -122,7 +179,7 @@ struct InfoTabView: View {
                     .allowsHitTesting(false)
                 }
 
-                let primaryTitle = Preferences.formattedVehicleTitle(
+                let primaryTitle = preferences.formattedVehicleTitle(
                     vin: state.vin,
                     modelName: state.modelName,
                     modelYear: state.modelYear,
@@ -130,12 +187,12 @@ struct InfoTabView: View {
                 )
                 let showRegBadge: Bool = {
                     guard let reg = state.registrationNo, !reg.isEmpty else { return false }
-                    return Preferences.vehicleLabelFormat != .registration
-                        && Preferences.vehicleLabelFormat != .nicknameAndRegistration
-                        && Preferences.vehicleLabelFormat != .registrationAndModel
+                    return preferences.vehicleLabelFormat != .registration
+                        && preferences.vehicleLabelFormat != .nicknameAndRegistration
+                        && preferences.vehicleLabelFormat != .registrationAndModel
                 }()
                 let subtitleText: String? = {
-                    switch Preferences.vehicleLabelFormat {
+                    switch preferences.vehicleLabelFormat {
                     case .registration, .nickname, .nicknameAndRegistration:
                         let model = state.modelName
                         let year = state.modelYear.map { L10n.format("Model Year %@", $0) }
@@ -333,7 +390,7 @@ struct InfoTabView: View {
         var rows: [KVRow] = []
 
         if let manualKm = state.tripMeterManualKm {
-            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: Preferences.distanceUnit), symbol: "m.circle.fill"))
+            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle.fill"))
         }
         if let autoKm = state.tripMeterAutomaticKm {
             rows.append(KVRow(L10n.text("Auto Trip (TA)"), String(format: "%.1f km", autoKm), symbol: "a.circle.fill"))
@@ -351,7 +408,7 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle.fill"))
         }
         if let odo = state.odometerKm {
-            rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: Preferences.distanceUnit), symbol: "speedometer"))
+            rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
         }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
@@ -557,6 +614,8 @@ struct InfoTabView: View {
                             Image(systemName: "info.circle")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.tertiary)
+                                .frame(width: 16, height: 16)
+                                .contentShape(Rectangle())
                                 .help(L10n.text("Estimated. Physical battery pack capacity retention derived from empirical EV degradation models (calendar aging from build week + cycle wear from total odometer distance). The factory warranty guarantees at least 70% retention over 8 years / 160,000 km."))
                         }
                         Spacer()
@@ -576,7 +635,7 @@ struct InfoTabView: View {
                     KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
                     KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
 
-                    let history = VehicleDatabase.shared.batteryHealthHistory(for: state.vin)
+                    let history = database.batteryHealthHistory(for: state.vin)
                     if !history.isEmpty {
                         Divider().opacity(0.4)
                             .padding(.vertical, 2)
@@ -601,7 +660,7 @@ struct InfoTabView: View {
                                 HStack {
                                     Spacer()
                                     Button {
-                                        let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state.vin)
+                                         let csv = database.exportBatteryHealthCSV(for: state.vin)
                                         let panel = NSSavePanel()
                                         panel.allowedContentTypes = [.commaSeparatedText]
                                         panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"
@@ -646,7 +705,7 @@ struct InfoTabView: View {
 
         if let days = state.daysToService {
             var val = L10n.format("in %d days", days)
-            if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: Preferences.distanceUnit))" }
+            if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: preferences.distanceUnit))" }
             if let trigger = state.formattedServiceTrigger { val += " (\(trigger))" }
             rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
         }
@@ -788,7 +847,7 @@ struct InfoTabView: View {
                         let isMileageExpired = odo >= maxKm
                         KVRow(
                             L10n.text("Battery Warranty Remaining"),
-                            Format.distance(km: remainingKm, grouped: true, unit: Preferences.distanceUnit),
+                            Format.distance(km: remainingKm, grouped: true, unit: preferences.distanceUnit),
                             symbol: "gauge.with.needle",
                             warning: isMileageExpired
                         )
