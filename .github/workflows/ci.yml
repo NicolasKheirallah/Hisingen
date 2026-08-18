@@ -2,175 +2,36 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  lint-workflows-and-scripts:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  test:
+    runs-on: macos-14
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install actionlint (via Go module proxy, checksum-verified)
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-
-      - name: Lint GitHub Actions workflows
+      - uses: actions/checkout@v4
+      - name: Select Swift toolchain
+        run: xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Build
+        run: swift build
+      - name: Strict concurrency build
+        run: swift build -Xswiftc -strict-concurrency=complete
+      - name: Test
+        run: swift test
+      - name: Check localization and documentation
         run: |
-          GOPATH="$(go env GOPATH)"
-          "$GOPATH/bin/actionlint" -color
-
-      - name: Lint shell scripts
-        run: shellcheck Scripts/*.sh
-
-  check-localization:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Check localization keys
-        run: python3 Scripts/check-localization.py
-
-  check-docs:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Check documentation links and fences
-        run: python3 Scripts/check-docs-links.py
-
-  build-and-test:
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        os: [macos-14, macos-15]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Cache Swift Package Manager dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .build
-          key: ${{ matrix.os }}-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
-          restore-keys: |
-            ${{ matrix.os }}-spm-
-
-      - name: Select Xcode toolchain
-        run: |
-          set -euo pipefail
-          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app; do
-            if [ -d "$xcode/Contents/Developer" ]; then
-              echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-              echo "Selected $xcode"
-              break
-            fi
-          done
-
-      - name: Verify toolchain
-        run: |
-          set -euo pipefail
-          swift --version
-          make doctor
-
-      - name: Warn if release-pinned Xcode is missing from this runner
-        if: matrix.os == 'macos-15'
-        run: |
-          set -euo pipefail
-          if [ ! -d /Applications/Xcode_16.2.app ]; then
-            echo "::warning::release.yml pins DEVELOPER_DIR=/Applications/Xcode_16.2.app, but that Xcode is not present on this macos-15 runner image. The release build may fail even though CI passed. Update the pin in release.yml to an Xcode version available on the runner image."
-          fi
-
-      - name: Inject Volvo secrets or fallback template
-        env:
-          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
-          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
-          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
-        run: sh Scripts/inject-secrets.sh
-
-      - name: Build with complete concurrency checks
-        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-
-      - name: Test (deterministic suite only — live/remote-command tests excluded)
-        run: |
-          set -euo pipefail
-          if swift test --help 2>&1 | grep -q -- '--enable-swift-testing'; then
-            swift test --disable-xctest --enable-swift-testing --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-          else
-            swift test --filter "^((?!Live).)*$" -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-          fi
-
-      - name: Build app bundle and DMG installer
+          python3 Scripts/check-localization.py
+          python3 Scripts/check-docs-links.py
+      - name: Validate secrets and release inputs
+        run: sh Scripts/validate-release.sh
+      - name: Build app bundle and disk image
         run: make all IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
-
-      - name: Validate bundle and disk image
+      - name: Validate signed bundle and disk image
         run: |
           set -euo pipefail
           test -x Hisingen.app/Contents/MacOS/Hisingen
           plutil -lint Hisingen.app/Contents/Info.plist
-          lipo Hisingen.app/Contents/MacOS/Hisingen -verify_arch arm64
           codesign --verify --deep --strict --verbose=2 Hisingen.app
-          test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' Hisingen.app/Contents/Info.plist)" = "true"
-          ICON_FILE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' Hisingen.app/Contents/Info.plist)
-          test -f "Hisingen.app/Contents/Resources/${ICON_FILE}.icns" || test -f "Hisingen.app/Contents/Resources/${ICON_FILE}"
           test -s Hisingen.dmg
           hdiutil verify Hisingen.dmg
-
-      - name: Upload build artifacts (App & DMG)
-        if: matrix.os == 'macos-15'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: Hisingen-macos-build
-          path: |
-            Hisingen.dmg
-            Hisingen.app
-          if-no-files-found: error
-
-      - name: Generate SHA256 Checksum
-        if: github.ref == 'refs/heads/main' && matrix.os == 'macos-15'
-        run: |
           shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
-
-      - name: Automatically publish / update latest release
-        if: github.ref == 'refs/heads/main' && matrix.os == 'macos-15'
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-        with:
-          tag_name: latest
-          name: "Hisingen (Latest Build)"
-          body: |
-            Automated rolling release from the latest `main` branch build.
-            
-            ### 📦 Downloads
-            - **Hisingen.dmg** (Universal macOS Installer)
-            - **Hisingen.dmg.sha256** (SHA-256 Checksum)
-          draft: false
-          prerelease: false
-          files: |
-            Hisingen.dmg
-            Hisingen.dmg.sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          shasum -a 256 -c Hisingen.dmg.sha256

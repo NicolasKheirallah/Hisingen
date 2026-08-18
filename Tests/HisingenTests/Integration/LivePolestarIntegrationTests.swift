@@ -3614,7 +3614,7 @@ struct LivePolestarRemoteCommandIntegrationTests {
         let vin = try XCTUnwrap(resolvedVIN)
         let resolvedToken = try await api.validAccessToken()
         let token = try XCTUnwrap(resolvedToken)
-        let cmdTokenResolved = try await api.validCommandToken()
+        let cmdTokenResolved = await api.validCommandToken()
         let cmdToken = try XCTUnwrap(cmdTokenResolved)
 
         var discovery = URLRequest(url: URL(string: "https://cnepmob.volvocars.com")!)
@@ -3782,5 +3782,4 @@ struct LivePolestarRemoteCommandIntegrationTests {
     }
 }
 #endif
-
 

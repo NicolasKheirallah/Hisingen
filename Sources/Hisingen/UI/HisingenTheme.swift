@@ -3,7 +3,7 @@ import AppKit
 
 @MainActor
 enum HisingenTheme {
-    static var theme: AppTheme { Preferences.appTheme }
+    static var theme: AppTheme { PreferencesStore().appTheme }
     static var isPolestar: Bool { theme == .polestar }
 
 
@@ -709,7 +709,7 @@ struct BatteryGauge: View {
     }
 
 
-    private var isPolestar: Bool { Preferences.appTheme == .polestar }
+    private var isPolestar: Bool { PreferencesStore().appTheme == .polestar }
     private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
 
     var body: some View {
@@ -777,7 +777,7 @@ struct BatteryGauge: View {
                 }
             }
         }
-        .onChange(of: isCharging) { charging in
+        .onChange(of: isCharging) { _, charging in
             guard !reduceMotion else { return }
             if charging {
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
@@ -797,7 +797,7 @@ struct FuelGauge: View {
     let fraction: Double
     let color: Color
 
-    private var isPolestar: Bool { Preferences.appTheme == .polestar }
+    private var isPolestar: Bool { PreferencesStore().appTheme == .polestar }
     private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
 
     private var accessibilityValue: String {
@@ -983,5 +983,3 @@ struct SteeringHeatingControl: View {
         level == .level3 || level == .level2 || level == .level1
     }
 }
-
-

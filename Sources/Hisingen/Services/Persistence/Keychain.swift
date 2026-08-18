@@ -1,6 +1,7 @@
 
 
 import Foundation
+import OSLog
 import Security
 
 enum KeychainError: Error, LocalizedError {
@@ -16,7 +17,6 @@ enum KeychainError: Error, LocalizedError {
 }
 
 private final class InMemorySecretCache: @unchecked Sendable {
-    static let shared = InMemorySecretCache()
     private let lock = NSLock()
     private var cache: [String: String] = [:]
 
@@ -37,6 +37,23 @@ private final class InMemorySecretCache: @unchecked Sendable {
     }
 }
 
+private final class TestSecretStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: String] = [:]
+
+    func get(_ key: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[key]
+    }
+
+    func set(_ key: String, value: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let value { values[key] = value } else { values.removeValue(forKey: key) }
+    }
+}
+
 private struct VolvoSecretBundle: Codable {
     var clientSecret: String?
     var apiKey: String?
@@ -45,8 +62,15 @@ private struct VolvoSecretBundle: Codable {
 
 struct KeychainStore: Sendable {
     static let app = KeychainStore(service: "io.kheirallah.hisingen")
+    private static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "keychain")
 
     let service: String
+    private let memoryCache: InMemorySecretCache
+
+    init(service: String) {
+        self.service = service
+        self.memoryCache = InMemorySecretCache()
+    }
 
     private static let passwordAccount = "polestar-password"
     private static let sessionAccount = "polestar-refresh-token"
@@ -193,16 +217,16 @@ struct KeychainStore: Sendable {
 
     /// Wipes all stored credentials, tokens, session state, and presence flags.
     func wipeAll() {
-        try? deletePassword()
-        try? deleteSessionToken()
-        try? deleteCommandSessionToken()
-        try? deletePasswordDraft()
-        try? deleteVolvoSessionToken()
-        try? deleteVolvoClientSecret()
-        try? deleteVolvoApiKey()
-        try? deleteVolvoClientSecretDraft()
-        try? deleteVolvoApiKeyDraft()
-        try? delete(account: Self.volvoBundleAccount)
+        attemptWipe("Polestar password") { try deletePassword() }
+        attemptWipe("Polestar session") { try deleteSessionToken() }
+        attemptWipe("Polestar command session") { try deleteCommandSessionToken() }
+        attemptWipe("Polestar password draft") { try deletePasswordDraft() }
+        attemptWipe("Volvo session") { try deleteVolvoSessionToken() }
+        attemptWipe("Volvo client secret") { try deleteVolvoClientSecret() }
+        attemptWipe("Volvo API key") { try deleteVolvoApiKey() }
+        attemptWipe("Volvo client secret draft") { try deleteVolvoClientSecretDraft() }
+        attemptWipe("Volvo API key draft") { try deleteVolvoApiKeyDraft() }
+        attemptWipe("Volvo credential bundle") { try delete(account: Self.volvoBundleAccount) }
         UserDefaults.standard.removeObject(forKey: "has_polestar_password")
         UserDefaults.standard.removeObject(forKey: "has_polestar_session")
         UserDefaults.standard.removeObject(forKey: "has_polestar_cmd_session")
@@ -210,6 +234,14 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.removeObject(forKey: "has_polestar_pw_draft")
         UserDefaults.standard.removeObject(forKey: "has_volvo_secret_draft")
         UserDefaults.standard.removeObject(forKey: "has_volvo_key_draft")
+    }
+
+    private func attemptWipe(_ item: String, _ action: () throws -> Void) {
+        do {
+            try action()
+        } catch {
+            Self.logger.error("Could not remove \(item, privacy: .public) from Keychain: \(error, privacy: .public)")
+        }
     }
 
     private func readVolvoBundle() -> VolvoSecretBundle {
@@ -247,8 +279,7 @@ struct KeychainStore: Sendable {
         service.hasPrefix("io.kheirallah.hisingen.tests.") || service != "io.kheirallah.hisingen"
     }
 
-    private static var testStore: [String: String] = [:]
-    private static let testLock = NSLock()
+    private static let testStore = TestSecretStore()
 
     private func cacheKey(account: String) -> String {
         "\(service)|\(account)"
@@ -267,11 +298,9 @@ struct KeychainStore: Sendable {
     }
 
     private func save(_ value: String, account: String) throws {
-        InMemorySecretCache.shared.set(cacheKey(account: account), value: value)
+        memoryCache.set(cacheKey(account: account), value: value)
         if isTestService {
-            Self.testLock.lock()
-            Self.testStore[cacheKey(account: account)] = value
-            Self.testLock.unlock()
+            Self.testStore.set(cacheKey(account: account), value: value)
             return
         }
 
@@ -310,14 +339,11 @@ struct KeychainStore: Sendable {
     }
 
     private func read(account: String) throws -> String? {
-        if let cached = InMemorySecretCache.shared.get(cacheKey(account: account)) {
+        if let cached = memoryCache.get(cacheKey(account: account)) {
             return cached
         }
         if isTestService {
-            Self.testLock.lock()
-            let val = Self.testStore[cacheKey(account: account)]
-            Self.testLock.unlock()
-            return val
+            return Self.testStore.get(cacheKey(account: account))
         }
 
         var dpQuery = baseQuery(account: account, useDataProtection: true)
@@ -327,7 +353,7 @@ struct KeychainStore: Sendable {
         var item: CFTypeRef?
         let dpStatus = SecItemCopyMatching(dpQuery as CFDictionary, &item)
         if dpStatus == errSecSuccess, let data = item as? Data, let result = String(data: data, encoding: .utf8) {
-            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            memoryCache.set(cacheKey(account: account), value: result)
             return result
         }
 
@@ -338,7 +364,7 @@ struct KeychainStore: Sendable {
         var legacyItem: CFTypeRef?
         let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
         if legacyStatus == errSecSuccess, let data = legacyItem as? Data, let result = String(data: data, encoding: .utf8) {
-            InMemorySecretCache.shared.set(cacheKey(account: account), value: result)
+            memoryCache.set(cacheKey(account: account), value: result)
             try? save(result, account: account)
             _ = SecItemDelete(legacyQuery as CFDictionary)
             return result
@@ -348,11 +374,9 @@ struct KeychainStore: Sendable {
     }
 
     private func delete(account: String) throws {
-        InMemorySecretCache.shared.set(cacheKey(account: account), value: nil)
+        memoryCache.set(cacheKey(account: account), value: nil)
         if isTestService {
-            Self.testLock.lock()
-            Self.testStore.removeValue(forKey: cacheKey(account: account))
-            Self.testLock.unlock()
+            Self.testStore.set(cacheKey(account: account), value: nil)
             return
         }
         _ = SecItemDelete(baseQuery(account: account, useDataProtection: true) as CFDictionary)
@@ -390,5 +414,3 @@ enum Keychain {
     static func readVolvoApiKeyDraft() throws -> String? { try KeychainStore.app.readVolvoApiKeyDraft() }
     static func deleteVolvoApiKeyDraft() throws { try KeychainStore.app.deleteVolvoApiKeyDraft() }
 }
-
-

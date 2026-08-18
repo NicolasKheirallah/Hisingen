@@ -18,10 +18,11 @@ fi
 # Run test suite
 echo "🧪 Running full test suite..."
 sh Scripts/test.sh
+sh Scripts/validate-release.sh
 
 # Check documentation & localization if scripts exist
 if [ -f "Scripts/check-localization.py" ]; then
-    python3 Scripts/check-localization.py || true
+    python3 Scripts/check-localization.py
 fi
 
 # 2. Resolve version bump
@@ -71,6 +72,7 @@ make dmg
 # Generate SHA256
 shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
 echo "🔒 SHA256 Checksum: $(cat Hisingen.dmg.sha256)"
+sh Scripts/validate-release.sh
 
 # 5. Commit and Tag
 git add Resources/Info.plist

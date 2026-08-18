@@ -9,8 +9,9 @@ struct GetVehicleBatteryIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        let vin = Preferences.vin
-        let store = VehicleStateStore()
+        let preferences = PreferencesStore()
+        let vin = preferences.vin
+        let store = VehicleStateStore(database: VehicleDatabase())
         guard let state = store.snapshot(for: vin) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
@@ -19,7 +20,7 @@ struct GetVehicleBatteryIntent: AppIntent {
             parts.append(String(format: "%.0f%% battery", battery))
         }
         if let range = state.primaryRangeKm {
-            parts.append(String(format: "%d %@ range", Preferences.distanceUnit.convert(km: range), Preferences.distanceUnit.suffix))
+            parts.append(String(format: "%d %@ range", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
         }
         if state.isCharging {
             if let power = state.chargingPowerWatts, power > 0 {
@@ -43,7 +44,7 @@ struct LockVehicleIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        let vin = Preferences.vin
+        let vin = PreferencesStore().vin
         guard !vin.isEmpty else {
             return .result(dialog: "No vehicle configured in Hisingen.")
         }
@@ -59,7 +60,7 @@ struct UnlockVehicleIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        let vin = Preferences.vin
+        let vin = PreferencesStore().vin
         guard !vin.isEmpty else {
             return .result(dialog: "No vehicle configured in Hisingen.")
         }
@@ -75,7 +76,7 @@ struct StartClimateIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        let vin = Preferences.vin
+        let vin = PreferencesStore().vin
         guard !vin.isEmpty else {
             return .result(dialog: "No vehicle configured in Hisingen.")
         }
@@ -91,7 +92,7 @@ struct StopClimateIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        let vin = Preferences.vin
+        let vin = PreferencesStore().vin
         guard !vin.isEmpty else {
             return .result(dialog: "No vehicle configured in Hisingen.")
         }

@@ -12,44 +12,55 @@ enum SettingsChange {
     case closeSettings
 }
 
+private struct DatabaseStats: Sendable {
+    let counts: (snapshots: Int, chargingSessions: Int, chargingSamples: Int, batteryHealth: Int, telemetry: Int, commands: Int)
+    let sizeBytes: Int64
+}
+
 @MainActor
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
     var state: VehicleState? = nil
+    var database: VehicleDatabase = VehicleDatabase()
+    var imageCache: CarImageCache = CarImageCache()
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
 
-    @State private var appTheme: AppTheme = Preferences.appTheme
-    @State private var appearanceMode: AppearanceMode = Preferences.appearanceMode
-    @State private var carRenderAngle: CarRenderAngle = Preferences.carRenderAngle
-    @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = Preferences.vehicleModelBadgePosition
-    @State private var registrationBadgePosition: RegistrationNumberBadgePosition = Preferences.registrationBadgePosition
-    @State private var vehicleLabelFormat: VehicleLabelFormat = Preferences.vehicleLabelFormat
-    @State private var menuBarStyle = Preferences.menuBarStyle
-    @State private var distanceUnit = Preferences.distanceUnit
-    @State private var fuelVolumeUnit = Preferences.fuelVolumeUnit
-    @State private var fuelEconomyUnit = Preferences.fuelEconomyUnit
+    @State private var appTheme: AppTheme = .hisingen
+    @State private var appearanceMode: AppearanceMode = .system
+    @State private var carRenderAngle: CarRenderAngle = .frontThreeQuarter
+    @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = .inlineHeader
+    @State private var registrationBadgePosition: RegistrationNumberBadgePosition = .belowGreeting
+    @State private var vehicleLabelFormat: VehicleLabelFormat = .modelAndYear
+    @State private var menuBarStyle = MenuBarStyle.battery
+    @State private var distanceUnit = DistanceUnit.kilometers
+    @State private var fuelVolumeUnit = FuelVolumeUnit.liters
+    @State private var fuelEconomyUnit = FuelEconomyUnit.litersPer100Km
     @State private var selectedThemeCategory: ThemeCategory = .all
-    @State private var interfaceLanguage = Preferences.interfaceLanguage
-    @State private var tintMenuBarIcon = Preferences.tintMenuBarIcon
-    @State private var launchAtLogin = Preferences.launchAtLogin
-    @State private var features = Preferences.features
-    @State private var notifyChargingStarted = Preferences.notifyChargingStarted
-    @State private var notifyChargingComplete = Preferences.notifyChargingComplete
-    @State private var notifyChargingProblem = Preferences.notifyChargingProblem
-    @State private var notifyLowBattery = Preferences.notifyLowBattery
-    @State private var notifySoftwareUpdates = Preferences.notifySoftwareUpdates
-    @State private var notifyVehicleWarnings = Preferences.notifyVehicleWarnings
-    @State private var lowBatteryThreshold = Preferences.lowBatteryThreshold
-    @State private var notifyRainWithWindows = Preferences.notifyRainWithWindowsOpen
-    @State private var notifyEveningUnlocked = Preferences.notifyEveningUnlocked
-    @State private var privateNotificationDetails = Preferences.privateNotificationDetails
-    @State private var electricityPrice = String(format: "%.2f", Preferences.electricityPricePerKwh)
-    @State private var currencySymbol = Preferences.currencySymbol
-    @State private var storeChargingHistory = Preferences.storeChargingHistory
-    @State private var requireBiometrics = Preferences.requireBiometricsForRemoteControls
+    @State private var interfaceLanguage = InterfaceLanguage.system
+    @State private var tintMenuBarIcon = true
+    @State private var launchAtLogin = false
+    @State private var features = FeatureSelection.default
+    @State private var notifyChargingStarted = true
+    @State private var notifyChargingComplete = true
+    @State private var notifyChargingProblem = true
+    @State private var notifyLowBattery = true
+    @State private var notifySoftwareUpdates = true
+    @State private var notifyVehicleWarnings = true
+    @State private var lowBatteryThreshold = 20
+    @State private var notifyRainWithWindows = true
+    @State private var notifyEveningUnlocked = true
+    @State private var privateNotificationDetails = true
+    @State private var electricityPrice = "2.00"
+    @State private var currencySymbol = "kr"
+    @State private var storeChargingHistory = false
+    @State private var requireBiometrics = false
+    @Environment(\.preferencesStore) private var preferences
     @State private var databaseVacuumed = false
     @State private var databasePruned = false
+    @State private var databaseStats = DatabaseStats(
+        counts: (0, 0, 0, 0, 0, 0), sizeBytes: 0
+    )
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -71,6 +82,48 @@ struct SettingsView: View {
             .padding(HisingenTheme.sectionSpacing)
         }
         .frame(width: HisingenTheme.popoverWidth)
+        .onAppear {
+            appTheme = preferences.appTheme
+            appearanceMode = preferences.appearanceMode
+            carRenderAngle = preferences.carRenderAngle
+            vehicleModelBadgePosition = preferences.vehicleModelBadgePosition
+            registrationBadgePosition = preferences.registrationBadgePosition
+            vehicleLabelFormat = preferences.vehicleLabelFormat
+            menuBarStyle = preferences.menuBarStyle
+            distanceUnit = preferences.distanceUnit
+            fuelVolumeUnit = preferences.fuelVolumeUnit
+            fuelEconomyUnit = preferences.fuelEconomyUnit
+            interfaceLanguage = preferences.interfaceLanguage
+            tintMenuBarIcon = preferences.tintMenuBarIcon
+            launchAtLogin = preferences.launchAtLogin
+            features = preferences.features
+            notifyChargingStarted = preferences.notifyChargingStarted
+            notifyChargingComplete = preferences.notifyChargingComplete
+            notifyChargingProblem = preferences.notifyChargingProblem
+            notifyLowBattery = preferences.notifyLowBattery
+            notifySoftwareUpdates = preferences.notifySoftwareUpdates
+            notifyVehicleWarnings = preferences.notifyVehicleWarnings
+            lowBatteryThreshold = preferences.lowBatteryThreshold
+            notifyRainWithWindows = preferences.notifyRainWithWindowsOpen
+            notifyEveningUnlocked = preferences.notifyEveningUnlocked
+            privateNotificationDetails = preferences.privateNotificationDetails
+            electricityPrice = String(format: "%.2f", preferences.electricityPricePerKwh)
+            currencySymbol = preferences.currencySymbol
+            storeChargingHistory = preferences.storeChargingHistory
+            requireBiometrics = preferences.requireBiometricsForRemoteControls
+        }
+        .task {
+            await loadDatabaseStats()
+        }
+    }
+
+    private func loadDatabaseStats() async {
+        let database = database
+        let stats = await Task.detached(priority: .utility) {
+            DatabaseStats(counts: database.recordCounts(), sizeBytes: database.databaseSizeBytes)
+        }.value
+        guard !Task.isCancelled else { return }
+        databaseStats = stats
     }
 
     private var headerBar: some View {
@@ -133,8 +186,8 @@ struct SettingsView: View {
     }
 
     private var appearanceCard: some View {
-        let vehicleLabel = Preferences.lastVehicleLabel(for: Preferences.activeBrand)
-        let supportsMultipleAngles = Preferences.activeBrand == .polestar
+        let vehicleLabel = preferences.lastVehicleLabel(for: preferences.activeBrand)
+        let supportsMultipleAngles = preferences.activeBrand == .polestar
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -160,7 +213,7 @@ struct SettingsView: View {
                             Button {
                                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                                     appearanceMode = mode
-                                    Preferences.appearanceMode = mode
+                                    preferences.appearanceMode = mode
                                 }
                                 onSettingsChanged(.presentation)
                             } label: {
@@ -204,8 +257,8 @@ struct SettingsView: View {
 
                     // Live Studio Render Preview
                     let previewData = supportsMultipleAngles
-                        ? (CarImageCache.shared.image(for: Preferences.vin, angle: carRenderAngle.rawValue) ?? CarImageCache.shared.image(for: Preferences.vin))
-                        : CarImageCache.shared.image(for: Preferences.vin)
+                        ? (imageCache.image(for: preferences.vin, angle: carRenderAngle.rawValue) ?? imageCache.image(for: preferences.vin))
+                        : imageCache.image(for: preferences.vin)
                     if let previewData, let nsImg = NSImage(data: previewData) {
                         Image(nsImage: nsImg)
                             .resizable()
@@ -227,7 +280,7 @@ struct SettingsView: View {
                                 Button {
                                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                                         carRenderAngle = angle
-                                        Preferences.carRenderAngle = angle
+                                        preferences.carRenderAngle = angle
                                     }
                                     onSettingsChanged(.presentation)
                                 } label: {
@@ -320,7 +373,7 @@ struct SettingsView: View {
             guard appTheme != theme else { return }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 appTheme = theme
-                Preferences.appTheme = theme
+                preferences.appTheme = theme
             }
             onSettingsChanged(.presentation)
         } label: {
@@ -395,8 +448,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: interfaceLanguage) { _ in
-                            Preferences.interfaceLanguage = interfaceLanguage
+                        .onChange(of: interfaceLanguage) { _, _ in
+                            preferences.interfaceLanguage = interfaceLanguage
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -420,8 +473,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: vehicleModelBadgePosition) { _ in
-                            Preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
+                        .onChange(of: vehicleModelBadgePosition) { _, _ in
+                            preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -445,8 +498,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: registrationBadgePosition) { _ in
-                            Preferences.registrationBadgePosition = registrationBadgePosition
+                        .onChange(of: registrationBadgePosition) { _, _ in
+                            preferences.registrationBadgePosition = registrationBadgePosition
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -470,15 +523,15 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: vehicleLabelFormat) { _ in
-                            Preferences.vehicleLabelFormat = vehicleLabelFormat
+                        .onChange(of: vehicleLabelFormat) { _, _ in
+                            preferences.vehicleLabelFormat = vehicleLabelFormat
                             onSettingsChanged(.presentation)
                         }
                     }
 
-                    let previewTitle = Preferences.formattedVehicleTitle(
-                        vin: Preferences.vin.isEmpty ? "YS2TESTVIN123456" : Preferences.vin,
-                        modelName: state?.modelName ?? (Preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
+                    let previewTitle = preferences.formattedVehicleTitle(
+                        vin: preferences.vin.isEmpty ? "YS2TESTVIN123456" : preferences.vin,
+                        modelName: state?.modelName ?? (preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
                         modelYear: state?.modelYear ?? "2024",
                         registrationNo: state?.registrationNo ?? "ZCJ 06G",
                         format: vehicleLabelFormat
@@ -488,7 +541,7 @@ struct SettingsView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
-                            Image(systemName: Preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
+                            Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(HisingenTheme.accent)
                             Text(previewTitle)
@@ -516,8 +569,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: storeChargingHistory) { _ in
-                                Preferences.storeChargingHistory = storeChargingHistory
+                            .onChange(of: storeChargingHistory) { _, _ in
+                                preferences.storeChargingHistory = storeChargingHistory
                                 onSettingsChanged(.presentation)
                             }
                     }
@@ -536,8 +589,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: menuBarStyle) { _ in
-                            Preferences.menuBarStyle = menuBarStyle
+                        .onChange(of: menuBarStyle) { _, _ in
+                            preferences.menuBarStyle = menuBarStyle
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -589,8 +642,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: tintMenuBarIcon) { _ in
-                                Preferences.tintMenuBarIcon = tintMenuBarIcon
+                        .onChange(of: tintMenuBarIcon) { _, _ in
+                                preferences.tintMenuBarIcon = tintMenuBarIcon
                                 onSettingsChanged(.presentation)
                             }
                     }
@@ -609,8 +662,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: distanceUnit) { _ in
-                            Preferences.distanceUnit = distanceUnit
+                        .onChange(of: distanceUnit) { _, _ in
+                            preferences.distanceUnit = distanceUnit
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -629,8 +682,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: fuelVolumeUnit) { _ in
-                            Preferences.fuelVolumeUnit = fuelVolumeUnit
+                        .onChange(of: fuelVolumeUnit) { _, _ in
+                            preferences.fuelVolumeUnit = fuelVolumeUnit
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -649,8 +702,8 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: fuelEconomyUnit) { _ in
-                            Preferences.fuelEconomyUnit = fuelEconomyUnit
+                        .onChange(of: fuelEconomyUnit) { _, _ in
+                            preferences.fuelEconomyUnit = fuelEconomyUnit
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -670,8 +723,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: launchAtLogin) { _ in
-                                Preferences.launchAtLogin = launchAtLogin
+                            .onChange(of: launchAtLogin) { _, _ in
+                                preferences.launchAtLogin = launchAtLogin
                                 onSettingsChanged(.launchAtLogin)
                             }
                     }
@@ -693,17 +746,17 @@ struct SettingsView: View {
                                 .frame(width: 55)
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
-                                .onChange(of: electricityPrice) { _ in
+                                .onChange(of: electricityPrice) { _, _ in
                                     if let price = Double(electricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
-                                        Preferences.electricityPricePerKwh = price
+                                        preferences.electricityPricePerKwh = price
                                     }
                                 }
                             TextField("kr", text: $currencySymbol)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 45)
                                 .controlSize(.small)
-                                .onChange(of: currencySymbol) { _ in
-                                    Preferences.currencySymbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .onChange(of: currencySymbol) { _, _ in
+                                    preferences.currencySymbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
                                 }
                             Text("/kWh")
                                 .font(.system(size: 11))
@@ -726,8 +779,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: requireBiometrics) { _ in
-                                Preferences.requireBiometricsForRemoteControls = requireBiometrics
+                            .onChange(of: requireBiometrics) { _, _ in
+                                preferences.requireBiometricsForRemoteControls = requireBiometrics
                             }
                     }
                 }
@@ -741,7 +794,7 @@ struct SettingsView: View {
             Button {
                 let recommended = FeatureSelection.default
                 features = recommended
-                Preferences.features = recommended
+                preferences.features = recommended
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
@@ -758,7 +811,7 @@ struct SettingsView: View {
             Button {
                 let all = FeatureSelection(enabled: Set(AppFeature.userSelectableCases))
                 features = all
-                Preferences.features = all
+                preferences.features = all
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
@@ -775,7 +828,7 @@ struct SettingsView: View {
 
 
     private var remoteControlsCard: some View {
-        let isVolvo = Preferences.activeBrand == .volvo
+        let isVolvo = preferences.activeBrand == .volvo
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
@@ -802,7 +855,7 @@ struct SettingsView: View {
 
 
     private var vehicleDataCard: some View {
-        let brand = Preferences.activeBrand
+        let brand = preferences.activeBrand
         let isVolvo = brand == .volvo
         let brandName = brand.displayName
         return Card {
@@ -900,7 +953,7 @@ struct SettingsView: View {
                 set: { enabled in
                     guard isSupported else { return }
                     features.set(feature, enabled: enabled)
-                    Preferences.features = features
+                    preferences.features = features
                     onSettingsChanged(.features)
                 }
             ))
@@ -1024,28 +1077,28 @@ struct SettingsView: View {
                         title: "Charging Started",
                         detail: "Alert when vehicle starts charging",
                         isOn: $notifyChargingStarted,
-                        persist: { Preferences.notifyChargingStarted = $0 }
+                        persist: { preferences.notifyChargingStarted = $0 }
                     )
                     notificationRow(
                         symbol: "battery.100.bolt",
                         title: "Charging Complete",
                         detail: "Alert when target state of charge is reached",
                         isOn: $notifyChargingComplete,
-                        persist: { Preferences.notifyChargingComplete = $0 }
+                        persist: { preferences.notifyChargingComplete = $0 }
                     )
                     notificationRow(
                         symbol: "exclamationmark.triangle.fill",
                         title: "Charging Interrupted",
                         detail: "Alert if charging stops unexpectedly",
                         isOn: $notifyChargingProblem,
-                        persist: { Preferences.notifyChargingProblem = $0 }
+                        persist: { preferences.notifyChargingProblem = $0 }
                     )
                     notificationRow(
                         symbol: "battery.25",
                         title: "Low Battery Warning",
                         detail: "Alert when battery falls below threshold",
                         isOn: $notifyLowBattery,
-                        persist: { Preferences.notifyLowBattery = $0 }
+                        persist: { preferences.notifyLowBattery = $0 }
                     )
 
                     notificationRow(
@@ -1053,7 +1106,7 @@ struct SettingsView: View {
                         title: "Software Updates",
                         detail: "Alert when vehicle software becomes available or finishes installing",
                         isOn: $notifySoftwareUpdates,
-                        persist: { Preferences.notifySoftwareUpdates = $0 }
+                        persist: { preferences.notifySoftwareUpdates = $0 }
                     )
 
                     notificationRow(
@@ -1061,7 +1114,7 @@ struct SettingsView: View {
                         title: "Vehicle Warnings & Alarm",
                         detail: "Alert for new service, tyre, light, 12 V, fluid, or alarm warnings",
                         isOn: $notifyVehicleWarnings,
-                        persist: { Preferences.notifyVehicleWarnings = $0 }
+                        persist: { preferences.notifyVehicleWarnings = $0 }
                     )
 
                     if notifyLowBattery {
@@ -1082,8 +1135,8 @@ struct SettingsView: View {
                             .labelsHidden()
                             .controlSize(.small)
                             .frame(maxWidth: 80)
-                            .onChange(of: lowBatteryThreshold) { _ in
-                                Preferences.lowBatteryThreshold = lowBatteryThreshold
+                            .onChange(of: lowBatteryThreshold) { _, _ in
+                                preferences.lowBatteryThreshold = lowBatteryThreshold
                                 onSettingsChanged(.notifications)
                             }
                         }
@@ -1099,7 +1152,7 @@ struct SettingsView: View {
                         title: "Rain Alert (Windows Open)",
                         detail: "Alert if rain starts while windows or sunroof are open",
                         isOn: $notifyRainWithWindows,
-                        persist: { Preferences.notifyRainWithWindowsOpen = $0 }
+                        persist: { preferences.notifyRainWithWindowsOpen = $0 }
                     )
 
                     notificationRow(
@@ -1107,7 +1160,7 @@ struct SettingsView: View {
                         title: "Evening Unlocked Reminder",
                         detail: "Alert if parked and unlocked after 21:00",
                         isOn: $notifyEveningUnlocked,
-                        persist: { Preferences.notifyEveningUnlocked = $0 }
+                        persist: { preferences.notifyEveningUnlocked = $0 }
                     )
 
                     Divider().opacity(0.4)
@@ -1118,7 +1171,7 @@ struct SettingsView: View {
                         title: "Private Notification Banners",
                         detail: "Hide license plate and battery % from lock screen",
                         isOn: $privateNotificationDetails,
-                        persist: { Preferences.privateNotificationDetails = $0 }
+                        persist: { preferences.privateNotificationDetails = $0 }
                     )
                 }
             }
@@ -1150,7 +1203,7 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .controlSize(.mini)
                 .labelsHidden()
-                .onChange(of: isOn.wrappedValue) { value in
+                .onChange(of: isOn.wrappedValue) { _, value in
                     persist(value)
                     onSettingsChanged(.notifications)
                 }
@@ -1159,9 +1212,8 @@ struct SettingsView: View {
     }
 
     private var databaseStorageCard: some View {
-        let counts = VehicleDatabase.shared.recordCounts()
-        let sizeBytes = VehicleDatabase.shared.databaseSizeBytes
-        let sizeStr = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+        let counts = databaseStats.counts
+        let sizeStr = ByteCountFormatter.string(fromByteCount: databaseStats.sizeBytes, countStyle: .file)
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -1182,7 +1234,8 @@ struct SettingsView: View {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Button {
-                            VehicleDatabase.shared.vacuum()
+                            database.vacuum()
+                            Task { await loadDatabaseStats() }
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 databaseVacuumed = true
@@ -1204,7 +1257,8 @@ struct SettingsView: View {
                         .tint(databaseVacuumed ? HisingenTheme.semanticGood : nil)
 
                         Button {
-                            VehicleDatabase.shared.pruneHistoricalSamples(olderThanDays: 90)
+                            database.pruneHistoricalSamples(olderThanDays: 90)
+                            Task { await loadDatabaseStats() }
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 databasePruned = true
@@ -1228,7 +1282,7 @@ struct SettingsView: View {
 
                     HStack(spacing: 8) {
                         Button {
-                            let csv = VehicleDatabase.shared.exportChargingSessionsCSV(for: state?.vin)
+                            let csv = database.exportChargingSessionsCSV(for: state?.vin)
                             saveCSVWithPanel(suggestedFilename: "charging_sessions_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
                         } label: {
                             HStack(spacing: 4) {
@@ -1241,7 +1295,7 @@ struct SettingsView: View {
                         .controlSize(.small)
 
                         Button {
-                            let csv = VehicleDatabase.shared.exportBatteryHealthCSV(for: state?.vin)
+                            let csv = database.exportBatteryHealthCSV(for: state?.vin)
                             saveCSVWithPanel(suggestedFilename: "battery_health_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
                         } label: {
                             HStack(spacing: 4) {
@@ -1278,7 +1332,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text(L10n.format("Sign Out of %@ Account", Preferences.activeBrand.displayName))
+                        Text(L10n.format("Sign Out of %@ Account", preferences.activeBrand.displayName))
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -1354,5 +1408,3 @@ struct SettingsView: View {
     }
 
 }
-
-

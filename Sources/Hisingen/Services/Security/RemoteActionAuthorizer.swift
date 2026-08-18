@@ -3,8 +3,12 @@ import LocalAuthentication
 
 @MainActor
 final class RemoteActionAuthorizer {
+    private let preferences: PreferencesStore
+
+    init(preferences: PreferencesStore) { self.preferences = preferences }
+
     func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
-        let requiresConfirmation = command.risk != .routine || Preferences.requireBiometricsForRemoteControls
+        let requiresConfirmation = command.risk != .routine || preferences.requireBiometricsForRemoteControls
         if requiresConfirmation {
             let alert = NSAlert()
             alert.alertStyle = command.risk == .destructive ? .critical : .warning
@@ -17,7 +21,7 @@ final class RemoteActionAuthorizer {
             alert.addButton(withTitle: L10n.text("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return false }
         }
-        guard Preferences.requireBiometricsForRemoteControls || command.risk.requiresDeviceOwnerAuthentication else { return true }
+        guard preferences.requireBiometricsForRemoteControls || command.risk.requiresDeviceOwnerAuthentication else { return true }
 
         let context = LAContext()
         var error: NSError?
@@ -45,5 +49,4 @@ final class RemoteActionAuthorizer {
         alert.runModal()
     }
 }
-
 

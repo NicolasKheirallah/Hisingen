@@ -35,3 +35,11 @@ Out of scope:
 
 Only the latest published release is supported. Please update before reporting
 an issue you haven't reproduced on the latest version.
+
+## Credential rotation
+
+Rotate Volvo Developer API credentials immediately if they appear in a workstation, build log,
+artifact, or repository history. Revoke the old client and API key at the Volvo developer portal,
+create replacements, update GitHub Actions secrets, and run `Scripts/validate-release.sh` before
+building a release. Generated credentials are build-local and must never be committed, uploaded,
+or included in a diagnostic archive.

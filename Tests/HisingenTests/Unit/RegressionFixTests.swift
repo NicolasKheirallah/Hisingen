@@ -181,15 +181,13 @@ struct RegressionFixTests {
     }
 
     @Test
-    func testCacheableCopyPreservesLocationAndRegistrationAndGreeting() {
+    func testCacheableCopyDropsLocationAndPersonalIdentity() {
         let original = makeVehicleState()
         let copy = original.cacheableCopy
 
-        XCTAssertEqual(copy.registrationNo, "TEST123")
-        XCTAssertEqual(copy.ownerFirstName, "Nico")
-        XCTAssertEqual(copy.location?.latitude, 57.7427)
-        XCTAssertEqual(copy.location?.longitude, 11.9682)
+        XCTAssertNil(copy.registrationNo)
+        XCTAssertNil(copy.ownerFirstName)
+        XCTAssertNil(copy.location)
     }
 }
-
 

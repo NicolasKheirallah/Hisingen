@@ -18,8 +18,8 @@ struct VehicleTimelineProvider: TimelineProvider {
 
     func getSnapshot(in context: Context, completion: @escaping (VehicleWidgetEntry) -> Void) {
         let (_, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
-            let v = Preferences.vin
-            let s = VehicleStateStore().snapshot(for: v)
+            let v = PreferencesStore().vin
+            let s = VehicleStateStore(database: VehicleDatabase()).snapshot(for: v)
             return (v, s)
         }
         completion(VehicleWidgetEntry(date: Date(), state: state ?? sampleState, isPlaceholder: context.isPreview))
@@ -27,8 +27,8 @@ struct VehicleTimelineProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<VehicleWidgetEntry>) -> Void) {
         let (_, state) = MainActor.assumeIsolated { () -> (String, VehicleState?) in
-            let v = Preferences.vin
-            let s = VehicleStateStore().snapshot(for: v)
+            let v = PreferencesStore().vin
+            let s = VehicleStateStore(database: VehicleDatabase()).snapshot(for: v)
             return (v, s)
         }
         let entry = VehicleWidgetEntry(date: Date(), state: state, isPlaceholder: false)
@@ -74,6 +74,7 @@ struct HisingenWidgetSmallView: View {
     let entry: VehicleWidgetEntry
 
     var body: some View {
+        let preferences = PreferencesStore()
         if let state = entry.state {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -103,7 +104,7 @@ struct HisingenWidgetSmallView: View {
                 }
 
                 if let range = state.primaryRangeKm {
-                    Text(String(format: "%d %@", Preferences.distanceUnit.convert(km: range), Preferences.distanceUnit.suffix))
+                    Text(String(format: "%d %@", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -134,6 +135,7 @@ struct HisingenWidgetMediumView: View {
     let entry: VehicleWidgetEntry
 
     var body: some View {
+        let preferences = PreferencesStore()
         if let state = entry.state {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -158,7 +160,7 @@ struct HisingenWidgetMediumView: View {
                     }
 
                     if let range = state.primaryRangeKm {
-                        Text(String(format: "%d %@", Preferences.distanceUnit.convert(km: range), Preferences.distanceUnit.suffix))
+                        Text(String(format: "%d %@", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
@@ -203,7 +205,7 @@ struct HisingenWidgetMediumView: View {
                             Image(systemName: "speedometer")
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
-                            Text(Format.distance(km: odo, unit: Preferences.distanceUnit))
+                            Text(Format.distance(km: odo, unit: preferences.distanceUnit))
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }

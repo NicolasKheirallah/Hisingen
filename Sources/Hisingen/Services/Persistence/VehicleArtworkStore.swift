@@ -11,7 +11,11 @@ import ImageIO
 /// decode land in the render pass of whichever telemetry refresh got there first.
 @MainActor
 final class VehicleArtworkStore {
-    static let shared = VehicleArtworkStore()
+    private let imageCache: CarImageCache
+
+    init(imageCache: CarImageCache = CarImageCache()) {
+        self.imageCache = imageCache
+    }
 
     struct Artwork {
         /// Decoded at display resolution rather than at source resolution.
@@ -114,7 +118,7 @@ final class VehicleArtworkStore {
 
         queue.async(qos: .utility) {
             for entry in sources {
-                guard let data = CarImageCache.shared.image(for: vin, angle: entry.angle) else { continue }
+                guard let data = self.imageCache.image(for: vin, angle: entry.angle) else { continue }
                 let key = Key(source: entry.source, byteCount: data.count, pixelBudget: pixelBudget)
                 let artwork = Self.decode(data: data, pixelBudget: pixelBudget)
                 Task { @MainActor in

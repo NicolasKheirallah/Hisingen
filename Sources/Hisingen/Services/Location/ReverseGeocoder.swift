@@ -1,8 +1,9 @@
 import Foundation
 import CoreLocation
+import OSLog
 
 actor ReverseGeocoder {
-    static let shared = ReverseGeocoder()
+    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "geocoder")
     private var cache: [String: String] = [:]
     private let geocoder = CLGeocoder()
 
@@ -35,11 +36,12 @@ actor ReverseGeocoder {
                     return formatted
                 }
             }
+        } catch is CancellationError {
+            return nil
         } catch {
-
+            logger.debug("Reverse geocoding failed: \(error, privacy: .public)")
         }
         return nil
     }
 }
-
 

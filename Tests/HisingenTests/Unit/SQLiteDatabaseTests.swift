@@ -57,6 +57,7 @@ struct SQLiteDatabaseTests {
     @Test("VehicleDatabase saves and restores snapshots with full isolation")
     func testVehicleDatabaseSnapshots() {
         let vdb = VehicleDatabase.inMemory()
+        #expect(vdb.storageAvailable)
         let state = VehicleState(
             batteryPercentage: 82.5,
             rangeKm: 340,

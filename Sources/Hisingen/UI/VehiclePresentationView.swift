@@ -50,6 +50,8 @@ struct VehicleEntranceFrame: Equatable {
 struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
     let imageData: Data?
+    private let artworkStore = VehicleArtworkStore()
+    private let entranceLedger = VehicleEntranceLedger.shared
 
     @Environment(\.displayScale) private var displayScale
 
@@ -150,7 +152,7 @@ struct VehiclePresentationView: View {
         let budget = VehicleArtworkStore.pixelBudget(pointSize: drawn, scale: displayScale)
         let source = VehicleArtworkStore.source(vin: identity.vin, angle: identity.angle)
 
-        let decoded = await VehicleArtworkStore.shared.artwork(
+        let decoded = await artworkStore.artwork(
             source: source,
             data: request.data,
             pixelBudget: budget
@@ -169,18 +171,18 @@ struct VehiclePresentationView: View {
             entrance = nil
         } else {
             entrance = VehicleEntranceMotion.resolve(
-                style: VehicleEntranceLedger.shared.style(for: identity),
+                style: entranceLedger.style(for: identity),
                 identity: identity,
                 reduceMotion: VehicleMotionPreference.prefersReducedMotion
             )
-            VehicleEntranceLedger.shared.markPresented(identity)
+            entranceLedger.markPresented(identity)
         }
 
         artwork = decoded
         shown = identity
 
         if !identity.isCabin {
-            VehicleArtworkStore.shared.warmExteriorAngles(vin: identity.vin, pixelBudget: budget)
+            artworkStore.warmExteriorAngles(vin: identity.vin, pixelBudget: budget)
         }
     }
 }

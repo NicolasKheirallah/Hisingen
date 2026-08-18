@@ -19,6 +19,7 @@ struct RefreshCoordinatorTests {
             api: provider,
             stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             observesEnvironment: false,
+            preferences: PreferencesStore(defaults: defaults),
             clearPasswordAfterSession: {}
         )
         await withCheckedContinuation { continuation in
@@ -55,5 +56,4 @@ private actor MockVehicleProvider: VehicleProviding {
         RemoteCommandResult(outcome: .completed, message: nil)
     }
 }
-
 

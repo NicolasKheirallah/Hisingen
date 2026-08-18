@@ -122,12 +122,34 @@ enum VehicleTransitionDirection: Equatable {
 
 // MARK: - Accessibility
 
+private final class ReduceMotionOverride: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Bool?
+
+    func get() -> Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func set(_ value: Bool?) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.value = value
+    }
+}
+
 /// The one place the reduce-motion setting is read. Everything that animates the
 /// vehicle asks here instead of touching `NSWorkspace` itself, which also lets
 /// tests exercise both paths.
 enum VehicleMotionPreference {
     /// Test hook. `nil` means "ask the system".
-    static var reduceMotionOverride: Bool?
+    private static let overrideStore = ReduceMotionOverride()
+
+    static var reduceMotionOverride: Bool? {
+        get { overrideStore.get() }
+        set { overrideStore.set(newValue) }
+    }
 
     static var prefersReducedMotion: Bool {
         reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
