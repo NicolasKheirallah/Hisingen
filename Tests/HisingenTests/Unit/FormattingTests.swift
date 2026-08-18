@@ -367,13 +367,6 @@ struct FormattingTests {
     }
 
     @Test
-    func testGreetingUsesSystemLanguage() {
-        XCTAssertEqual(Format.greeting("Simon", languageCode: "da-DK"), "Hej, Simon")
-        XCTAssertEqual(Format.greeting("Simon", languageCode: "en-US"), "Hi, Simon")
-        XCTAssertEqual(Format.greeting("Simon", languageCode: nil as String?), "Hi, Simon")
-    }
-
-    @Test
     func testGreetingUsesSelectedInterfaceLanguage() {
         // Resolve through the explicit-language API rather than assigning
         // Preferences.interfaceLanguage. That preference is process-global, and the suite

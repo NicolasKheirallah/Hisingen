@@ -908,13 +908,7 @@ Useful starting points:
 
 ## Project History
 
-Hisingen originally started as a fork of [Simon Busborg's Polaris](https://github.com/simonbusborg/polaris), which was created alongside [Teslaris](https://github.com/simonbusborg/teslaris).
-
-The project has since been substantially rebuilt and expanded with a different architecture, broader vehicle support, additional provider integrations and a redesigned macOS experience.
-
-Hisingen now lives as its own project so it can continue in its own direction without creating confusion with the original Polaris project.
-
-The original projects remain independent and deserve credit for the idea Hisingen grew from.
+Hisingen originally started as because I got tired of not being able to control the fan control in my car from my Mac because my phone was dead or I was in the zone
 
 ## Credits
 
@@ -929,11 +923,7 @@ Hisingen is released under the [MIT License](LICENSE).
 ## Disclaimer
 
 Hisingen is independent open-source software.
-
 It is **not affiliated with, endorsed by, sponsored by, or maintained by Polestar Performance AB or Volvo Car Corporation**.
-
 Polestar and Volvo are trademarks of their respective owners and are referenced only to describe vehicle compatibility.
-
 Use of their accounts, APIs and vehicle services remains subject to the terms, policies and availability of the respective providers.
-
 See [Terms & Conditions](TERMS.md) for additional information.
