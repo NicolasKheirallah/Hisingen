@@ -33,7 +33,6 @@ struct InfoTabView: View {
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
-            batteryHealthCard
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
@@ -547,7 +546,10 @@ struct InfoTabView: View {
         var rows: [KVRow] = []
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
-        if let capacity = state.reportedBatteryCapacityKwh ?? (state.powertrain.hasElectricRange ? Double(state.model.nominalUsableCapacityKwh) : nil), capacity > 0 {
+        let configuredCapacity = state.powertrain.hasElectricRange
+            ? state.factoryUsableBatteryCapacityKwh
+            : nil
+        if let capacity = configuredCapacity, capacity > 0 {
             rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt", info: L10n.text("Manufacturer Specification. Usable high-voltage pack capacity configured for this vehicle variant.")))
         }
         if state.powertrain.hasElectricRange && state.model.nominalWltpRangeKm > 0 {
@@ -581,7 +583,7 @@ struct InfoTabView: View {
 
         let deg = state.batteryDegradationPercent ?? 0.0
         let status = state.batteryHealthStatus
-        let usable = state.effectiveUsableBatteryCapacityKwh
+        let usable = state.configuredUsableBatteryCapacityKwh
         let factoryUsable = state.factoryUsableBatteryCapacityKwh
         let nominal = state.effectiveNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
@@ -616,7 +618,7 @@ struct InfoTabView: View {
                                 .foregroundStyle(.tertiary)
                                 .frame(width: 16, height: 16)
                                 .contentShape(Rectangle())
-                                .help(L10n.text("Estimated. Physical battery pack capacity retention derived from empirical EV degradation models (calendar aging from build week + cycle wear from total odometer distance). The factory warranty guarantees at least 70% retention over 8 years / 160,000 km."))
+                                .help(L10n.text("Unavailable. Neither provider currently exposes a validated measured battery State of Health value. Pack capacity shown elsewhere is a manufacturer specification, not a health measurement."))
                         }
                         Spacer()
                         HStack(spacing: 6) {

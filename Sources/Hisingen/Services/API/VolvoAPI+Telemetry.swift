@@ -218,6 +218,7 @@ extension VolvoAPI {
         let fuelLiters: Double? = fuel?.liters
         let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value
         let isEngineRunning: Bool? = engineStatus?.isRunning
+        // vehicle-details batteryCapacityKWH is a vehicle specification, not BMS SoH telemetry.
         let batteryCap: Double? = details.batteryCapacityKWH
         let carImg: Data? = features.contains(.vehicleImage) ? (carImageData[vin] ?? imageCache.image(for: vin)) : nil
         let interiorImg: Data? = features.contains(.vehicleImage)

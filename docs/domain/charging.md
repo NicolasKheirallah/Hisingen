@@ -16,7 +16,7 @@
 | Range Health Estimate | `VehicleState.estimatedRangeHealth` | **Calculated**, range-based, explicitly not a real battery SOH — see [domain/vehicle.md](vehicle.md#range-health-estimate) |
 | `ChargingSession` history entries | `ChargingSession.completed(previous:current:pricePerKwh:)`, appended by `RefreshCoordinator.apply` | **Calculated** from consecutive polls, not a real session log from either backend |
 
-There is no vehicle-reported "State of Health" or usable-capacity figure available from either provider's APIs — Hisingen doesn't fabricate one. See [architecture/technical-debt.md](../architecture/technical-debt.md) if a "real" SOH figure ever becomes available and needs wiring in.
+There is no vehicle-reported "State of Health" or measured usable-capacity figure available from either provider's APIs — Hisingen doesn't fabricate one. Volvo's `batteryCapacityKWH` is treated as a vehicle specification and is not used as a health measurement. Capacity-based SoH, age/mileage degradation estimates, and health-history milestones remain unavailable until a validated measured field becomes available. See [architecture/technical-debt.md](../architecture/technical-debt.md) if a real SoH figure becomes available and needs wiring in.
 
 ## Charging state machine
 

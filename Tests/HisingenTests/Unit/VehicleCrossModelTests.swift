@@ -224,10 +224,75 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(my23State.factoryNominalBatteryCapacityKwh, 78.0)
         XCTAssertEqual(my23State.factoryUsableBatteryCapacityKwh, 75.0)
         XCTAssertTrue(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
-        XCTAssertTrue(my23State.batteryDegradationPercent! >= 1.0 && my23State.batteryDegradationPercent! <= 10.0)
-        XCTAssertTrue(my23State.batteryStateOfHealthPercent! >= 90.0 && my23State.batteryStateOfHealthPercent! < 100.0)
-        XCTAssertEqual(my23State.batteryHealthStatus, "Optimal")
-        XCTAssertTrue(my23State.effectiveUsableBatteryCapacityKwh > 70.0 && my23State.effectiveUsableBatteryCapacityKwh < 75.0)
+        XCTAssertNil(my23State.batteryDegradationPercent)
+        XCTAssertNil(my23State.batteryStateOfHealthPercent)
+        XCTAssertEqual(my23State.batteryHealthStatus, "Unavailable")
+        XCTAssertEqual(my23State.configuredUsableBatteryCapacityKwh, 75.0)
+    }
+
+    @Test
+    func testVolvoBatterySpecificationIsNotUsedAsSoHMeasurement() {
+        let state = VehicleState(
+            batteryPercentage: 80.0, rangeKm: 40, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "V60 Recharge", modelYear: "2021", registrationNo: nil,
+            vin: "YV1TESTV60RECHARGE", ownerFirstName: nil, odometerKm: 50000,
+            daysToService: nil, distanceToServiceKm: nil, serviceWarning: false,
+            fluidWarnings: [], powertrain: .phev, reportedBatteryCapacityKwh: 11.83,
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+
+        XCTAssertEqual(state.factoryNominalBatteryCapacityKwh, 11.6)
+        XCTAssertEqual(state.factoryUsableBatteryCapacityKwh, 9.1)
+        XCTAssertNil(state.batteryStateOfHealthPercent)
+        XCTAssertNil(state.batteryDegradationPercent)
+        XCTAssertEqual(state.configuredUsableBatteryCapacityKwh, 9.1)
+    }
+
+    @Test
+    func testUnknownModelDoesNotInventBatteryCapacity() {
+        let state = VehicleState(
+            batteryPercentage: 50.0, rangeKm: 20, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "Unknown Prototype", modelYear: "2023", registrationNo: nil,
+            vin: "UNKNOWN-BATTERY-001", ownerFirstName: nil, odometerKm: nil,
+            daysToService: nil, distanceToServiceKm: nil, serviceWarning: false,
+            fluidWarnings: [], powertrain: .phev, reportedBatteryCapacityKwh: 18.8,
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+
+        XCTAssertEqual(state.factoryNominalBatteryCapacityKwh, 0.0)
+        XCTAssertEqual(state.configuredUsableBatteryCapacityKwh, 0.0)
+    }
+
+    @MainActor
+    @Test
+    func testUnavailableSoHDoesNotDisableTelemetryPersistence() {
+        let defaults = UserDefaults(suiteName: "HisingenTests.VehicleStateStore.SoH")!
+        defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
+        let database = VehicleDatabase.inMemory()
+        let state = VehicleState(
+            batteryPercentage: 80.0, rangeKm: 40, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "V60 Recharge", modelYear: "2021", registrationNo: nil,
+            vin: "YV1STORETESTV60", ownerFirstName: nil, odometerKm: 50000,
+            daysToService: nil, distanceToServiceKm: nil, serviceWarning: false,
+            fluidWarnings: [], tripMeterManualKm: 10.0, powertrain: .phev,
+            reportedBatteryCapacityKwh: 11.83, imageData: nil, fetchedAt: Date(),
+            vehicleReportedAt: Date(), dataWarnings: []
+        )
+
+        VehicleStateStore(defaults: defaults, database: database).save(state)
+        let counts = database.recordCounts()
+        XCTAssertEqual(counts.telemetry, 1)
+        XCTAssertEqual(counts.batteryHealth, 0)
+        defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
     }
 
     @Test
@@ -258,8 +323,8 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(session?.startBatteryPercentage, 20.0)
         XCTAssertEqual(session?.endBatteryPercentage, 80.0)
         // 60% of 75.0 kWh usable = 45.0 kWh
-        XCTAssertEqual(session?.kwhDelivered, 45.0)
-        XCTAssertEqual(session?.cost, 45.0 * 2.50)
+        XCTAssertEqual(session?.kwhDelivered, 47.4)
+        XCTAssertEqual(session?.cost, 47.4 * 2.50)
     }
 
     @Test
@@ -328,6 +393,3 @@ struct VehicleCrossModelTests {
         )
     }
 }
-
-
-

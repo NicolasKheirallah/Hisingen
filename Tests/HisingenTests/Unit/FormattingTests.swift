@@ -605,11 +605,10 @@ func vehicle(
         estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: target,
         chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
         chargingType: .unknown, chargerConnection: connection, availability: .available,
-        modelName: nil, modelYear: nil, registrationNo: nil, vin: vin,
+         modelName: "Polestar 2", modelYear: "2023", registrationNo: nil, vin: vin,
         ownerFirstName: nil, odometerKm: nil, daysToService: nil,
         distanceToServiceKm: nil, serviceWarning: false, fluidWarnings: [], imageData: nil,
         fetchedAt: fetchedAt, vehicleReportedAt: reportedAt, dataWarnings: []
     )
 }
-
 
