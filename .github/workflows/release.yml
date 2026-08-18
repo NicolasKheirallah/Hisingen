@@ -1,0 +1,201 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    environment: production-release
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require production signing configuration
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+        run: |
+          test -n "$MACOS_CERT_P12" || { echo "MACOS_CERT_P12 is required"; exit 1; }
+          test -n "$MACOS_CERT_PASSWORD" || { echo "MACOS_CERT_PASSWORD is required"; exit 1; }
+          test -n "$NOTARY_APPLE_ID" || { echo "NOTARY_APPLE_ID is required"; exit 1; }
+          test -n "$NOTARY_TEAM_ID" || { echo "NOTARY_TEAM_ID is required"; exit 1; }
+          test -n "$NOTARY_APP_PASSWORD" || { echo "NOTARY_APP_PASSWORD is required"; exit 1; }
+
+      - name: Verify version and toolchain
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR" || { echo "Missing Xcode at $DEVELOPER_DIR"; exit 1; }
+          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be vMAJOR.MINOR.PATCH"; exit 1; }
+          test "$PLIST_VERSION" = "$TAG_VERSION" || { echo "Info.plist has $PLIST_VERSION but tag is $TAG_VERSION"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "Release tag must point to a commit on main"; exit 1; }
+          plutil -lint Resources/Info.plist
+          xcodebuild -version
+          swift --version
+
+      - name: Test (deterministic suite only — live/remote-command tests excluded)
+        run: >-
+          swift test --disable-xctest --enable-swift-testing
+          --skip Live
+          -Xswiftc -strict-concurrency=complete
+          -Xswiftc -warn-concurrency
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          chmod 600 "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+          test -n "$IDENTITY" || { echo "No Developer ID Application identity found"; exit 1; }
+          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
+
+      - name: Build signed universal app
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+        run: >-
+          make app-universal IDENTITY="$IDENTITY"
+          SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+
+      - name: Verify signature and architectures
+        run: |
+          set -euo pipefail
+          lipo Hisingen.app/Contents/MacOS/Hisingen -verify_arch arm64 x86_64
+          codesign --verify --deep --strict --verbose=2 Hisingen.app
+          codesign -dvv Hisingen.app
+
+      - name: Notarize and staple app
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent Hisingen.app notarize-app.zip
+          xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+          xcrun stapler staple Hisingen.app
+          xcrun stapler validate Hisingen.app
+          spctl --assess --type execute --verbose=2 Hisingen.app
+
+      - name: Package and notarize disk image
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          make dmg
+          codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
+          codesign --verify --verbose=2 Hisingen.dmg
+          xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+          xcrun stapler staple Hisingen.dmg
+          xcrun stapler validate Hisingen.dmg
+          spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
+          ditto -c -k --keepParent Hisingen.app Hisingen.zip
+          ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
+
+          DMG_MOUNT=$(mktemp -d "$RUNNER_TEMP/hisingen-dmg.XXXXXX")
+          ZIP_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-zip.XXXXXX")
+          DMG_ATTACHED=false
+          cleanup_packages() {
+            if $DMG_ATTACHED; then hdiutil detach "$DMG_MOUNT" || true; fi
+            rm -rf "$DMG_MOUNT" "$ZIP_DIR"
+          }
+          trap cleanup_packages EXIT
+          hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"
+          DMG_ATTACHED=true
+          codesign --verify --deep --strict --verbose=2 "$DMG_MOUNT/Hisingen.app"
+          spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
+          hdiutil detach "$DMG_MOUNT"
+          DMG_ATTACHED=false
+
+          ditto -x -k Hisingen.zip "$ZIP_DIR"
+          codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/Hisingen.app"
+          spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
+          ditto -x -k Hisingen.app.zip "$ZIP_DIR/app-asset"
+          codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
+          spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
+          cleanup_packages
+          trap - EXIT
+          shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
+
+      - name: Verify release artifacts exist before publishing
+        run: |
+          set -euo pipefail
+          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
+            test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
+          done
+          grep -q "Hisingen.dmg" SHA256SUMS
+          grep -q "Hisingen.zip" SHA256SUMS
+          grep -q "Hisingen.app.zip" SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        with:
+          subject-path: |
+            Hisingen.dmg
+            Hisingen.zip
+            Hisingen.app.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          files: |
+            Hisingen.dmg
+            Hisingen.zip
+            Hisingen.app.zip
+            SHA256SUMS
+          generate_release_notes: true
+
+      - name: Verify assets were actually attached to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSET_NAMES=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
+            echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $GITHUB_REF_NAME is missing uploaded asset: $artifact"; exit 1; }
+          done
+
+      - name: Clean temporary signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/hisingen-signing.p12" notarize-app.zip
+          security delete-keychain "$RUNNER_TEMP/hisingen-signing.keychain-db" 2>/dev/null || true

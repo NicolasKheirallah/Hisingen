@@ -1,8 +1,0 @@
-{
-  "data": {
-    "frontLeft": { "value": "UNSPECIFIED", "timestamp": "2026-08-15T09:00:00Z" },
-    "frontRight": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
-    "rearLeft": { "value": "LOW_PRESSURE", "timestamp": "2026-08-15T09:00:00Z" },
-    "rearRight": { "value": "HIGH_PRESSURE", "timestamp": "2026-08-15T09:00:00Z" }
-  }
-}

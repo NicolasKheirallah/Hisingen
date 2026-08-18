@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-workflows-and-scripts:
+    name: lint-workflows-and-scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Lint GitHub Actions workflows
+        run: |
+          GOPATH="$(go env GOPATH)"
+          "$GOPATH/bin/actionlint" -color
+      - name: Lint shell scripts
+        run: shellcheck Scripts/*.sh
+
+  check-localization:
+    name: check-localization
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check localization keys
+        run: python3 Scripts/check-localization.py
+
+  check-docs:
+    name: check-docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check documentation links and fences
+        run: python3 Scripts/check-docs-links.py
+
+  build-and-test:
+    name: build-and-test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Cache SwiftPM checkout data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build/checkouts
+          key: ${{ runner.os }}-${{ matrix.os }}-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-spm-
+      - name: Select available Xcode toolchain
+        run: |
+          set -euo pipefail
+          selected=""
+          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app /Applications/Xcode.app; do
+            if [ -d "$xcode/Contents/Developer" ]; then
+              selected="$xcode/Contents/Developer"
+              break
+            fi
+          done
+          test -n "$selected" || { echo "No supported Xcode installation was found" >&2; exit 1; }
+          echo "DEVELOPER_DIR=$selected" >> "$GITHUB_ENV"
+          echo "Selected $selected"
+      - name: Report toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          make doctor
+      - name: Generate non-secret build configuration
+        run: sh Scripts/inject-secrets.sh
+      - name: Build with complete concurrency checks
+        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+      - name: Test deterministic suite
+        run: |
+          set -euo pipefail
+          sh Scripts/test.sh --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+      - name: Validate localization and documentation
+        run: |
+          python3 Scripts/check-localization.py
+          python3 Scripts/check-docs-links.py
+      - name: Validate repository and release inputs
+        run: sh Scripts/validate-release.sh
+      - name: Build ad-hoc app bundle
+        run: make app IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+      - name: Validate app bundle
+        run: |
+          set -euo pipefail
+          test -x Hisingen.app/Contents/MacOS/Hisingen
+          plutil -lint Hisingen.app/Contents/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' Hisingen.app/Contents/Info.plist)" = "true"
+          codesign --verify --deep --strict --verbose=2 Hisingen.app
+      - name: Build DMG validation artifact
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          make dmg IDENTITY="-"
+          test -s Hisingen.dmg
+          hdiutil verify Hisingen.dmg
+          shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
+      - name: Upload DMG validation artifact
+        if: matrix.os == 'macos-15'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Hisingen-macos-build
+          if-no-files-found: error
+          path: |
+            Hisingen.dmg
+            Hisingen.dmg.sha256

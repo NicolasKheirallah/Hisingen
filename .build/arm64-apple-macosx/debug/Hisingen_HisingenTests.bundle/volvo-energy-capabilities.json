@@ -1,9 +1,0 @@
-{
-  "data": {
-    "batteryChargeLevel": { "isSupported": true },
-    "electricRange": { "isSupported": true },
-    "chargingStatus": { "isSupported": true },
-    "chargingPower": { "isSupported": true },
-    "targetBatteryLevel": { "isSupported": false }
-  }
-}

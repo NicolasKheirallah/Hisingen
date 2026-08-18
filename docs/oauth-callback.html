@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Returning to Hisingen…</title>
+<meta name="robots" content="noindex">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #111417;
+    color: #e7eaec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+    text-align: center;
+  }
+  main { max-width: 360px; padding: 24px; }
+  a { color: #7bb0d3; }
+  p { font-size: 14px; line-height: 1.5; color: #c2cad0; }
+</style>
+</head>
+<body>
+<main>
+  <p id="message">Signing you back into Hisingen…</p>
+  <p><a id="fallback" href="#">Click here if nothing happens.</a></p>
+</main>
+<script>
+  // Volvo redirects the browser here after sign-in with the OAuth
+  // authorization code/state (or an error) in the query string. This page
+  // exists only because Volvo's Developer Portal requires an http(s)
+  // redirect URI — no localhost, no custom URL schemes — while the actual
+  // OAuth callback destination is Hisingen's own registered URL scheme.
+  // This page's only job is to hand the query string straight through.
+  var target = "hisingen://oauth/volvo/callback" + window.location.search;
+  document.getElementById("fallback").href = target;
+  window.location.replace(target);
+</script>
+</body>
+</html>
