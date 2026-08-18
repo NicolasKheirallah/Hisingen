@@ -905,7 +905,6 @@ Useful starting points:
 - [Security](docs/security/overview.md)
 - [Testing](docs/testing/strategy.md)
 - [Release Process](docs/operations/releases.md)
-- [Changelog](changelog.md)
 
 ## Project History
 

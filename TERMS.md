@@ -18,7 +18,7 @@ The application running on your Mac communicates directly with the relevant serv
 
 Vehicle information is fetched from the manufacturer and processed locally on your Mac. It is not routed through a Hisingen server because no such server exists.
 
-Some optional features may communicate directly with other services, as described in [PRIVACY.md](PRIVACY.md).
+Some optional features may communicate directly with other services, as described in [PRIVACY.md](docs/security/privacy.md).
 
 ## 2. Open-Source Licence
 
