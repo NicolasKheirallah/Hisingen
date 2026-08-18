@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nicolaskheirallah.github.io/Hisingen/sitemap.xml

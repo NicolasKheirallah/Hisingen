@@ -1,0 +1,194 @@
+{
+  "": {
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/primary.swiftdeps"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Integration/LivePolestarIntegrationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LivePolestarIntegrationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LivePolestarIntegrationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LivePolestarIntegrationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LivePolestarIntegrationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LivePolestarIntegrationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LiveVolvoIntegrationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LiveVolvoIntegrationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LiveVolvoIntegrationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LiveVolvoIntegrationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LiveVolvoIntegrationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/ChargingTransitionDetectorTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ChargingTransitionDetectorTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ChargingTransitionDetectorTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ChargingTransitionDetectorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ChargingTransitionDetectorTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ChargingTransitionDetectorTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/CombustionAndHybridVehicleTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/CombustionAndHybridVehicleTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/CombustionAndHybridVehicleTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/CombustionAndHybridVehicleTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/CombustionAndHybridVehicleTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/CombustionAndHybridVehicleTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/DegradedStateResilienceTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DegradedStateResilienceTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DegradedStateResilienceTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DegradedStateResilienceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DegradedStateResilienceTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DegradedStateResilienceTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/FormattingTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/FormattingTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/FormattingTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/FormattingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/FormattingTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/FormattingTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/GraphQLDecodingTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/GraphQLDecodingTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/GraphQLDecodingTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/GraphQLDecodingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/GraphQLDecodingTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/GraphQLDecodingTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/InputBoundaryTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/InputBoundaryTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/InputBoundaryTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/InputBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/InputBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/InputBoundaryTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/KeychainDraftTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/KeychainDraftTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/KeychainDraftTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/KeychainDraftTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/KeychainDraftTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/KeychainDraftTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/LocalizationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LocalizationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LocalizationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LocalizationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LocalizationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/LocalizationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/MeasurementUnitsAndThemeTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/MeasurementUnitsAndThemeTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/MeasurementUnitsAndThemeTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/MeasurementUnitsAndThemeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/MeasurementUnitsAndThemeTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/MeasurementUnitsAndThemeTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/RefreshCoordinatorTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RefreshCoordinatorTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RefreshCoordinatorTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RefreshCoordinatorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RefreshCoordinatorTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RefreshCoordinatorTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/RegressionFixTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RegressionFixTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RegressionFixTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RegressionFixTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RegressionFixTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RegressionFixTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/RemoteCommandTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RemoteCommandTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RemoteCommandTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RemoteCommandTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RemoteCommandTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RemoteCommandTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/RequestConstructionTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RequestConstructionTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RequestConstructionTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RequestConstructionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RequestConstructionTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/RequestConstructionTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/ResumePathTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ResumePathTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ResumePathTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ResumePathTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ResumePathTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/ResumePathTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/SQLiteDatabaseTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/SQLiteDatabaseTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/SQLiteDatabaseTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/SQLiteDatabaseTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/SQLiteDatabaseTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/SQLiteDatabaseTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/TestingAssertions.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/TestingAssertions.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/TestingAssertions.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/TestingAssertions~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/TestingAssertions.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/TestingAssertions.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VehicleCapabilityParsingTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityParsingTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityParsingTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityParsingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityParsingTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityParsingTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VehicleCapabilityTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCapabilityTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VehicleCrossModelTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCrossModelTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCrossModelTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCrossModelTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCrossModelTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleCrossModelTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VehiclePresentationAnimationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehiclePresentationAnimationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehiclePresentationAnimationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehiclePresentationAnimationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehiclePresentationAnimationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehiclePresentationAnimationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VehicleServiceErrorTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleServiceErrorTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleServiceErrorTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleServiceErrorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleServiceErrorTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VehicleServiceErrorTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VolvoDecodingTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoDecodingTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoDecodingTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoDecodingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoDecodingTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoDecodingTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VolvoKeychainIsolationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoKeychainIsolationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoKeychainIsolationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoKeychainIsolationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoKeychainIsolationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoKeychainIsolationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/Tests/HisingenTests/Unit/VolvoModelIdentificationTests.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoModelIdentificationTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoModelIdentificationTests.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoModelIdentificationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoModelIdentificationTests.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/VolvoModelIdentificationTests.dia"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/DerivedSources/resource_bundle_accessor.swift": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/resource_bundle_accessor.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/debug/HisingenTests.build/resource_bundle_accessor.dia"
+  }
+}

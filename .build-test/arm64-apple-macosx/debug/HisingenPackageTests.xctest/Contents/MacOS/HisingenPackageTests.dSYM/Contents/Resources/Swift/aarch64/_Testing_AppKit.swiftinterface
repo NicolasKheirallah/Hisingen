@@ -1,0 +1,16 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+// swift-module-flags: -target arm64-apple-macos14.0 -enable-objc-interop -enable-library-evolution -swift-version 6 -O -enable-experimental-feature Lifetimes -enable-experimental-feature AccessLevelOnImport -enable-upcoming-feature InternalImportsByDefault -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature ExistentialAny -enable-upcoming-feature InferIsolatedConformances -enable-experimental-feature DebugDescriptionMacro -user-module-version 1902 -module-name _Testing_AppKit -package-name swift_testing
+// swift-module-flags-ignorable:  -formal-cxx-interoperability-mode=off -interface-compiler-version 6.3.3
+public import AppKit
+public import Swift
+@_exported public import Testing
+public import _Concurrency
+public import _StringProcessing
+public import _SwiftConcurrencyShims
+@_exported public import _Testing_CoreGraphics
+@available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *)
+extension AppKit.NSImage : Testing.AttachableAsImage {
+  public func withUnsafeBytes<R>(as imageFormat: Testing.AttachableImageFormat, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+  public func _copyAttachableValue() -> Self
+}

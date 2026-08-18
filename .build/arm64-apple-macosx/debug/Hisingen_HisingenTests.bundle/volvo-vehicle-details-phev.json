@@ -1,0 +1,13 @@
+{
+  "data": {
+    "vin": "YV1FIXTURE0000002",
+    "modelYear": 2023,
+    "fuelType": "PETROL/ELECTRIC",
+    "batteryCapacityKWH": 18.8,
+    "descriptions": {
+      "model": "XC60",
+      "upholstery": "Fixture Nappa",
+      "steering": "Left"
+    }
+  }
+}

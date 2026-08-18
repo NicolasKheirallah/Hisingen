@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/HisingenPackageTests.d",
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/HisingenPackageTests.o",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/primary.swiftdeps"
+  },
+  "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.derived/runner.swift": {
+    "object": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/nicolaskheirallah/Documents/GitHub/Hisingen/.build/arm64-apple-macosx/release/HisingenPackageTests.build/runner.dia"
+  }
+}

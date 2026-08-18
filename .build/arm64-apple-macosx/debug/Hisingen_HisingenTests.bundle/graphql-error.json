@@ -1,0 +1,4 @@
+{
+  "data": null,
+  "errors": [{ "message": "Not authorized", "path": ["carTelematicsV2"] }]
+}

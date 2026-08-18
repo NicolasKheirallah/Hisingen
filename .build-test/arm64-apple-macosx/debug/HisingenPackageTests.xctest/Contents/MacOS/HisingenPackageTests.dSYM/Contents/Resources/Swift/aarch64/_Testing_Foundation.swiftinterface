@@ -1,0 +1,35 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+// swift-module-flags: -target arm64-apple-macos14.0 -target-variant arm64-apple-ios17.0-macabi -enable-objc-interop -enable-library-evolution -swift-version 6 -O -enable-experimental-feature Lifetimes -enable-experimental-feature AccessLevelOnImport -enable-upcoming-feature InternalImportsByDefault -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature ExistentialAny -enable-upcoming-feature InferIsolatedConformances -enable-experimental-feature DebugDescriptionMacro -user-module-version 1902 -module-name _Testing_Foundation -package-name swift_testing
+// swift-module-flags-ignorable:  -formal-cxx-interoperability-mode=off -interface-compiler-version 6.3.3
+public import Foundation
+public import Swift
+@_exported public import Testing
+public import _Concurrency
+public import _StringProcessing
+public import _SwiftConcurrencyShims
+public struct _AttachableURLWrapper : Swift.Sendable {
+}
+extension _Testing_Foundation._AttachableURLWrapper : Testing.AttachableWrapper {
+  public var wrappedValue: Foundation.URL {
+    get
+  }
+  public func withUnsafeBytes<R>(for attachment: borrowing Testing.Attachment<_Testing_Foundation._AttachableURLWrapper>, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+  public borrowing func preferredName(for attachment: borrowing Testing.Attachment<_Testing_Foundation._AttachableURLWrapper>, basedOn suggestedName: Swift.String) -> Swift.String
+  public typealias Wrapped = Foundation.URL
+}
+extension Testing.Attachable where Self : Swift.Encodable {
+  public func withUnsafeBytes<R>(for attachment: borrowing Testing.Attachment<Self>, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+}
+extension Testing.Attachable where Self : Foundation.NSSecureCoding, Self : Swift.Encodable {
+  @_documentation(visibility: private) public func withUnsafeBytes<R>(for attachment: borrowing Testing.Attachment<Self>, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+}
+extension Testing.Attachable where Self : Foundation.NSSecureCoding {
+  public func withUnsafeBytes<R>(for attachment: borrowing Testing.Attachment<Self>, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+}
+extension Testing.Attachment where AttachableValue == _Testing_Foundation._AttachableURLWrapper {
+  public init(contentsOf url: Foundation.URL, named preferredName: Swift.String? = nil, sourceLocation: Testing.SourceLocation = #_sourceLocation) async throws
+}
+extension Foundation.Data : Testing.Attachable {
+  public func withUnsafeBytes<R>(for attachment: borrowing Testing.Attachment<Foundation.Data>, _ body: (Swift.UnsafeRawBufferPointer) throws -> R) throws -> R
+}
