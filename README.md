@@ -462,7 +462,7 @@ Vehicular telemetry arrives in drastically different formats across brands and p
 
 ## Installation & Setup
 
-1. Download `Hisingen.dmg` from [the latest release](https://github.com/NicolasKheirallah/hisingen/releases/latest).
+1. Download `Hisingen.dmg` from [the latest release](https://github.com/NicolasKheirallah/hisingen/releases/latest). Releases also include `Hisingen.app.zip` for users who want the notarized app bundle without the disk image.
 2. Open the disk image and drag `Hisingen.app` into `/Applications`.
 3. Launch Hisingen and open **Settings**:
    - **For Polestar**: Select *Polestar* as brand and sign in directly with your Polestar ID.

@@ -82,7 +82,6 @@ struct KeychainStore: Sendable {
         try save(password, account: Self.passwordAccount)
     }
     func readPassword() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_polestar_password") || isTestService else { return nil }
         return try read(account: Self.passwordAccount)
     }
     func deletePassword() throws {
@@ -95,7 +94,6 @@ struct KeychainStore: Sendable {
         try save(token, account: Self.sessionAccount)
     }
     func readSessionToken() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_polestar_session") || isTestService else { return nil }
         return try read(account: Self.sessionAccount)
     }
     func deleteSessionToken() throws {
@@ -110,7 +108,6 @@ struct KeychainStore: Sendable {
         try save(token, account: Self.commandSessionAccount)
     }
     func readCommandSessionToken() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_polestar_cmd_session") || isTestService else { return nil }
         return try read(account: Self.commandSessionAccount)
     }
     func deleteCommandSessionToken() throws {
@@ -176,7 +173,6 @@ struct KeychainStore: Sendable {
     }
 
     func readPasswordDraft() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_polestar_pw_draft") || isTestService else { return nil }
         return try read(account: Self.passwordDraftAccount)
     }
 
@@ -191,7 +187,6 @@ struct KeychainStore: Sendable {
     }
 
     func readVolvoClientSecretDraft() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_volvo_secret_draft") || isTestService else { return nil }
         return try read(account: Self.volvoClientSecretDraftAccount)
     }
 
@@ -206,7 +201,6 @@ struct KeychainStore: Sendable {
     }
 
     func readVolvoApiKeyDraft() throws -> String? {
-        guard UserDefaults.standard.bool(forKey: "has_volvo_key_draft") || isTestService else { return nil }
         return try read(account: Self.volvoApiKeyDraftAccount)
     }
 
@@ -249,9 +243,6 @@ struct KeychainStore: Sendable {
            let data = raw.data(using: .utf8),
            let bundle = try? JSONDecoder().decode(VolvoSecretBundle.self, from: data) {
             return bundle
-        }
-        guard UserDefaults.standard.bool(forKey: "has_volvo_session") || isTestService else {
-            return VolvoSecretBundle(clientSecret: nil, apiKey: nil, sessionToken: nil)
         }
         let legacySecret = try? read(account: "volvo-client-secret")
         let legacyApiKey = try? read(account: "volvo-vcc-api-key")

@@ -129,6 +129,7 @@ jobs:
           xcrun stapler validate Hisingen.dmg
           spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
           ditto -c -k --keepParent Hisingen.app Hisingen.zip
+          ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
 
           DMG_MOUNT=$(mktemp -d "$RUNNER_TEMP/hisingen-dmg.XXXXXX")
           ZIP_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-zip.XXXXXX")
@@ -148,18 +149,22 @@ jobs:
           ditto -x -k Hisingen.zip "$ZIP_DIR"
           codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/Hisingen.app"
           spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
+          ditto -x -k Hisingen.app.zip "$ZIP_DIR/app-asset"
+          codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
+          spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
           cleanup_packages
           trap - EXIT
-          shasum -a 256 Hisingen.dmg Hisingen.zip > SHA256SUMS
+          shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
 
       - name: Verify release artifacts exist before publishing
         run: |
           set -euo pipefail
-          for artifact in Hisingen.dmg Hisingen.zip SHA256SUMS; do
+          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
             test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
           done
           grep -q "Hisingen.dmg" SHA256SUMS
           grep -q "Hisingen.zip" SHA256SUMS
+          grep -q "Hisingen.app.zip" SHA256SUMS
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
@@ -167,6 +172,7 @@ jobs:
           subject-path: |
             Hisingen.dmg
             Hisingen.zip
+            Hisingen.app.zip
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -174,6 +180,7 @@ jobs:
           files: |
             Hisingen.dmg
             Hisingen.zip
+            Hisingen.app.zip
             SHA256SUMS
           generate_release_notes: true
 
@@ -183,7 +190,7 @@ jobs:
         run: |
           set -euo pipefail
           ASSET_NAMES=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
-          for artifact in Hisingen.dmg Hisingen.zip SHA256SUMS; do
+          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
             echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $GITHUB_REF_NAME is missing uploaded asset: $artifact"; exit 1; }
           done
 

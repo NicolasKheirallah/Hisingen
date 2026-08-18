@@ -20,7 +20,7 @@ if (storedTheme === 'light' || storedTheme === 'dark') {
   if (themeLabel) themeLabel.textContent = storedTheme[0].toUpperCase() + storedTheme.slice(1);
 }
 
-themeMeta?.setAttribute('content', storedTheme === 'dark' || (!storedTheme && colorSchemeQuery.matches) ? '#0b191e' : '#f2efe8');
+themeMeta?.setAttribute('content', storedTheme === 'dark' || (!storedTheme && colorSchemeQuery.matches) ? '#101c21' : '#f5f7f4');
 
 const setMenu = (open: boolean): void => {
   if (!menuButton || !mobileMenu) return;
@@ -70,11 +70,11 @@ themeButton?.addEventListener('click', () => {
   }
   if (themeLabel) themeLabel.textContent = next[0].toUpperCase() + next.slice(1);
   themeButton.setAttribute('aria-label', `Appearance: ${next}. Activate to change appearance.`);
-  themeMeta?.setAttribute('content', next === 'dark' || (next === 'system' && colorSchemeQuery.matches) ? '#0b191e' : '#f2efe8');
+  themeMeta?.setAttribute('content', next === 'dark' || (next === 'system' && colorSchemeQuery.matches) ? '#101c21' : '#f5f7f4');
 });
 
 colorSchemeQuery.addEventListener('change', ({ matches }) => {
   if (!document.documentElement.dataset.theme) {
-    themeMeta?.setAttribute('content', matches ? '#0b191e' : '#f2efe8');
+    themeMeta?.setAttribute('content', matches ? '#101c21' : '#f5f7f4');
   }
 });

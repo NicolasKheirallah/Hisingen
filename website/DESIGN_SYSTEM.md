@@ -43,26 +43,26 @@ The site uses the system sans stack so it feels natural on macOS, loads no remot
 
 ## Colour
 
-Light mode uses warm paper rather than pure white. The primary product shell is deep blue-green, with an ochre Hisingen signal colour used for action and state. Dark mode keeps that blue-green shell and uses layered blue-green surfaces rather than black. The accent is Hisingen's own signal colour; it is not a Polestar or Volvo brand colour.
+Light mode uses porcelain and mineral mist rather than pure white. The primary product shell is deep slate, with a soft sage Hisingen signal colour used for action and state. Dark mode uses layered blue-slate surfaces rather than black. The accent is Hisingen's own mineral signal colour; it is not a Polestar or Volvo brand colour.
 
 ```css
---surface-primary: #f2efe8;
---surface-secondary: #e4e1d8;
---surface-raised: #fbfaf6;
---text-primary: #17272a;
---text-secondary: #657174;
---text-muted: #87918f;
---border-subtle: #c9c9c0;
---border-strong: #657174;
---accent: #e0a13a;
---accent-hover: #8b5a05;
+--surface-primary: #f5f7f4;
+--surface-secondary: #e7ece9;
+--surface-raised: #fcfdfb;
+--text-primary: #1d2a2e;
+--text-secondary: #617074;
+--text-muted: #879391;
+--border-subtle: #cbd5d2;
+--border-strong: #617074;
+--accent: #b7cbbd;
+--accent-hover: #456b5a;
 ```
 
-Dark equivalents are `#121b1d`, `#1d282a`, `#fbfaf6`, `#ecf0ea`, `#aebbb7`, `#3a4a4a`, and `#edb54b`. Semantic states use green, amber, red and blue only when communicating state, never as decoration.
+Dark equivalents are `#111a1e`, `#1d2b30`, `#eef4f0`, `#eaf1ed`, `#a9b9b5`, `#3b4c4e`, and `#bcd5c5`. Semantic states use green, amber, red and blue only when communicating state, never as decoration.
 
 ## Controls
 
-Primary buttons are dark graphite with a rust hover state. Secondary actions are text links with an underline. Controls have a minimum 44px target, a visible `:focus-visible` ring and a restrained 2px radius. Full pills are reserved for real status indicators. Links remain identifiable without colour alone.
+Primary buttons are deep slate with a soft sage hover state. Secondary actions are text links with an underline. Controls have a minimum 44px target, a visible `:focus-visible` ring and a restrained 2px radius. Full pills are reserved for real status indicators. Links remain identifiable without colour alone.
 
 ## Cards and radii
 
