@@ -51,7 +51,6 @@ incomplete/stub locale is expected, not a defect.
 
 ### Job `check-docs` (ubuntu-latest, ~1 min)
 
-Runs `Scripts/check-docs-links.py` against `README.md`, `changelog.md`,
 `TERMS.md`, and everything under `docs/`. Fails on a relative Markdown link
 that doesn't resolve to a real file, or an unterminated code fence
 (``` ``` ```) — the two cheapest, highest-signal documentation defects to

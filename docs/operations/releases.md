@@ -175,7 +175,7 @@ step with no advance warning otherwise.
 
 ## Release notes
 
-`generate_release_notes: true` on `softprops/action-gh-release` — GitHub auto-generates notes from merged PRs/commits since the last tag. There is no separate hand-written release-notes step; `changelog.md` (a single consolidated entry, not a per-version log — see [testing/strategy.md](../testing/strategy.md)) is the project's own running summary, maintained separately from GitHub's auto-generated notes.
+`generate_release_notes: true` on `softprops/action-gh-release` — GitHub auto-generates notes from merged PRs/commits since the last tag. There is no separate hand-written release-notes step; (a single consolidated entry, not a per-version log — see [testing/strategy.md](../testing/strategy.md)) is the project's own running summary, maintained separately from GitHub's auto-generated notes.
 
 ## Signing and notarization detail
 
