@@ -3,10 +3,10 @@ name: Security
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     # 04:17 UTC every Monday — off-peak, avoids stacking with other scheduled jobs.
     - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read

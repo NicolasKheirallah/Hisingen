@@ -105,8 +105,10 @@ catch).
 
 ## `security.yml`
 
-**Trigger:** `push` to `main`, every `pull_request`, and a weekly schedule
-(Mondays 04:17 UTC).
+**Trigger:** `push` to `main`, a weekly schedule (Mondays 04:17 UTC), and manual
+dispatch. Dependency Review remains the pull-request security check; CodeQL
+Swift runs off the PR path because its instrumented compiled-language build can
+take 20+ minutes on hosted macOS runners.
 **Secrets:** none.
 
 ### Job `codeql` (macos-15, `security-events: write`, ~10–15 min)
