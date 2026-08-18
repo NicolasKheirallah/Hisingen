@@ -118,3 +118,20 @@ jobs:
           plutil -lint Hisingen.app/Contents/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' Hisingen.app/Contents/Info.plist)" = "true"
           codesign --verify --deep --strict --verbose=2 Hisingen.app
+      - name: Build DMG validation artifact
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          make dmg IDENTITY="-"
+          test -s Hisingen.dmg
+          hdiutil verify Hisingen.dmg
+          shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
+      - name: Upload DMG validation artifact
+        if: matrix.os == 'macos-15'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Hisingen-macos-build
+          if-no-files-found: error
+          path: |
+            Hisingen.dmg
+            Hisingen.dmg.sha256
