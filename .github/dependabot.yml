@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  # Keep pinned commit SHAs in workflows current. Dependabot updates the SHA
+  # itself (and the trailing version comment) — pinning is preserved, not lost.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # No external SwiftPM dependencies exist today (Package.swift has none), but
+  # keep this configured so any added in the future are tracked automatically.
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      swift-packages:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "swift"

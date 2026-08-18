@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.swift text eol=lf
+*.plist text eol=lf
+*.strings text eol=lf
+*.png binary
+*.icns binary
+*.json text eol=lf
