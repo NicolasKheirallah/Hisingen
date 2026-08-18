@@ -24,7 +24,11 @@ npm run preview
 
 Production builds use `/Hisingen/` as the Vite base path. The output in `website/dist` is the complete static site and can be served by any static host.
 
-The site copies only the selected, source-controlled screenshots needed for the product presentation into `website/public/assets`. Source screenshots in the repository are not modified.
+The site copies selected, source-controlled screenshots into `website/public/assets/product/` with semantic, ordered names that match the product story. Source screenshots in the repository are not modified. The page deliberately uses a small set of readable product screens rather than loading the complete screenshot archive.
+
+## Design system
+
+`DESIGN_SYSTEM.md` documents the web-only visual language, layout tokens, component rules, accessibility requirements, responsive behavior and anti-patterns. It does not describe the native macOS application UI.
 
 ## GitHub Pages deployment
 
@@ -35,6 +39,8 @@ In the repository settings, set Pages' source to **GitHub Actions**. The workflo
 ## Base path and custom domains
 
 `website/vite.config.ts` sets the production base to `/Hisingen/`. Asset URLs in the HTML use `%BASE_URL%`, and imported CSS/JS assets are rewritten by Vite, so the generated site works at `https://nicolaskheirallah.github.io/Hisingen/` rather than assuming the domain root.
+
+The deployed `oauth-callback.html` is part of the static output because Volvo's OAuth flow requires an HTTPS redirect before returning to the `hisingen://` URL scheme. Keep `website/public/oauth-callback.html` as the canonical deployed copy; `docs/oauth-callback.html` is the source documentation copy.
 
 To move to a custom domain:
 

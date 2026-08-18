@@ -36,6 +36,9 @@ jobs:
       - name: Build website
         working-directory: website
         run: npm run build
+      - name: Verify static entry points
+        working-directory: website
+        run: test -f dist/index.html && test -f dist/oauth-callback.html && test -f dist/robots.txt && test -f dist/sitemap.xml
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact

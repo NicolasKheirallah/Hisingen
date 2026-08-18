@@ -35,61 +35,35 @@ Polestar does not publish a supported third-party vehicle-cloud API. Hisingen th
 
 ## Screenshots
 
-The screenshots below showcase the native macOS popover with Apple Liquid Glass styling, dark & light modes, multi-brand Polestar & Volvo telemetry, 3D studio angles, and live capability matrices.
+These current captures show the product as it is presented today: a compact native macOS utility for vehicle overview, charging, vehicle information, Polestar and Volvo integrations, and capability-aware read-only behavior. The complete screenshot source set lives in [`website/public/assets/product/`](website/public/assets/product/).
 
-### 🌟 Polestar Vehicle Dashboard & Telemetry
+### Vehicle Overview
 
-| Vehicle Overview & 3D Render | Charging & Openings Schematic |
+![Polestar vehicle overview in the Hisingen menu-bar popover](website/public/assets/product/07-polestar-overview.png)
+
+### Vehicle Information And Health
+
+| Powertrain, battery health and service | Volvo powertrain and health |
 | :---: | :---: |
-| ![Polestar 2 Hero Card](assets/hisingen-polestar-hero-card.png) | ![Charging and Openings](assets/hisingen-polestar-charging-openings.png) |
+| ![Polestar powertrain specifications, battery health and service status](website/public/assets/product/16-polestar-info-overview.png) | ![Volvo powertrain specifications, battery health and service status](website/public/assets/product/04-volvo-powertrain-health.png) |
 
-| Expanded Openings Monitor | 4-Wheel iTPMS Tire Status |
+### Charging And Vehicle Detail
+
+| Charging history and session cost | Doors, openings and tyre status |
 | :---: | :---: |
-| ![Doors, Windows and Lids](assets/hisingen-polestar-openings-expanded.png) | ![4-Wheel Tire Status](assets/hisingen-polestar-tpms-schematic.png) |
+| ![Polestar charging history with energy, duration and estimated cost](website/public/assets/product/08-polestar-charging-history.png) | ![Polestar doors, windows, charge lid and tyre status](website/public/assets/product/17-polestar-openings-and-tyres.png) |
 
-| Health, Fluids & 12V Battery | OTA Software & Range Health |
+### Provider Integrations
+
+| Polestar | Volvo |
 | :---: | :---: |
-| ![Vehicle Health and Fluids](assets/hisingen-polestar-identity-health-climate.png) | ![Software OTA and Battery Health](assets/hisingen-polestar-software-diagnostics.png) |
+| ![Polestar vehicle overview](website/public/assets/product/07-polestar-overview.png) | ![Volvo XC40 vehicle overview](website/public/assets/product/01-volvo-overview.png) |
 
-### ℹ️ Vehicle Info, CleanZone & Factory Build Metadata
+### Capability-Aware Behavior
 
-| 3D Perspective & Dimensions | CleanZone AQI & Diagnostics |
-| :---: | :---: |
-| ![Multi-Angle 3D Render](assets/hisingen-polestar-info-tab-top.png) | ![CleanZone Air Quality and Trip Meters](assets/hisingen-polestar-info-cleanzone-trips.png) |
+![Hisingen capability matrix showing verified, expected and unavailable states](website/public/assets/product/capability-matrix-polestar-overview.png)
 
-| Powertrain Specs & Polestar Care | Factory Build Week & Market Spec |
-| :---: | :---: |
-| ![Battery Specs and Warranty](assets/hisingen-polestar-info-specs-warranty.png) | ![Factory Build Week and PNO34 Spec](assets/hisingen-polestar-info-build-metadata.png) |
-
-### 🎮 Remote Controls & Live Capability Matrix
-
-| Remote Climate & Charging Limits | Lock, Unlock, Locate & OTA Controls |
-| :---: | :---: |
-| ![Climate and Charging Controls](assets/hisingen-polestar-controls-climate-charging.png) | ![Locks, Locate and Software Controls](assets/hisingen-polestar-controls-locks-software.png) |
-
-| Live Capability Matrix (Part 1) | Live Capability Matrix (Part 2) |
-| :---: | :---: |
-| ![Capability Matrix Overview](assets/hisingen-polestar-settings-capability-matrix-top.png) | ![Sensor and Remote Capabilities](assets/hisingen-polestar-settings-capability-matrix-bottom.png) |
-
-### 🚗 Volvo Integration & Experience
-
-| Volvo Telemetry & Health | Volvo Remote Controls |
-| :---: | :---: |
-| ![Volvo Vehicle Overview](assets/hisingen-volvo-vehicle-tab-top.png) | ![Volvo Remote Controls](assets/hisingen-volvo-controls-tab.png) |
-
-| Volvo Account & 3D Studio Renders | Volvo XC40 Capability Matrix |
-| :---: | :---: |
-| ![Volvo 3D Studio Render](assets/hisingen-volvo-settings-account-themes.png) | ![Volvo Capability Matrix](assets/hisingen-volvo-settings-capability-matrix.png) |
-
-### ⚙️ Settings, Customization & Notification Engine
-
-| Camera Perspective & 9 Themes | Units, Menu Bar & General Settings |
-| :---: | :---: |
-| ![Theme Selector and Camera Perspectives](assets/hisingen-polestar-settings-perspective-themes.png) | ![Units and Menu Bar Customization](assets/hisingen-polestar-settings-general-units.png) |
-
-| Security & Granular Feature Toggles | Charging & Vehicle Alert Notifications |
-| :---: | :---: |
-| ![Touch ID and Telemetry Toggles](assets/hisingen-polestar-settings-security-toggles.png) | ![Notification Controls](assets/hisingen-polestar-settings-notifications.png) |
+Unsupported or unverified controls remain unavailable in standard distributed builds. Hisingen does not treat a backend acknowledgement as proof that a vehicle executed a command.
 
 ## At A Glance
 
