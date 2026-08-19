@@ -1,56 +1,616 @@
-# Persistence
+# Persistence Architecture
 
-Three independent storage layers, none of them a database. See [security/keychain.md](../security/keychain.md) for the Keychain layer's security properties specifically.
+Hisingen uses several local persistence mechanisms with different security, lifetime, and performance characteristics.
 
-## Inventory
+The current architecture consists of:
 
-| Data | Storage | Scope | Lifetime | Sensitive | Migration |
-|---|---|---|---|---|---|
-| Polestar refresh token | Keychain, account `polestar-refresh-token` | Per brand | Until sign-out or revoked | Yes | — |
-| Polestar password | Keychain, account `polestar-password` | Per brand | Until sign-out | Yes | Migrated from a legacy plaintext `polestar_password` UserDefaults key at launch (`Preferences.migrateLegacyPassword()`), which is then deleted regardless of migration success |
-| Volvo client secret, VCC API key, refresh token | Keychain, single JSON blob under account `volvo-credentials-bundle` | Per brand | Until sign-out or revoked | Yes | Self-healing: `readVolvoBundle()` falls back to three legacy single-purpose accounts (`volvo-client-secret`, `volvo-vcc-api-key`, `volvo-refresh-token`) and re-saves them into the bundle format on first read |
-| Volvo client ID | `UserDefaults` (`volvo_client_id`) | Per brand | Persistent | No (not a secret — public OAuth client identifier) | — |
-| Active brand, selected VIN, nicknames | `UserDefaults` | Per brand (VIN/nickname), global (active brand) | Persistent | No | Nicknames migrated from a legacy single-vehicle key; VIN keys are brand-specific (`polestar_vin`/`volvo_vin`) |
-| Feature selection | `UserDefaults` (`enabled_features_v2`) | Global | Persistent | No | Migrates from `enabled_features_v1` (auto-enabling several newer features) or an even older `show_vehicle_image` bool |
-| Notification toggles, low-battery threshold, electricity price | `UserDefaults` | Global | Persistent | No | — |
-| Theme, menu-bar style, distance unit, language | `UserDefaults` | Per VIN (theme) / global (rest) | Persistent | No | Menu-bar style migrates from legacy display-name strings |
-| Vehicle telemetry snapshot | `UserDefaults` (`cached_vehicle_snapshots_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | Partially — see below | No versioned migration; a decode failure is treated as "no cache" |
-| Charging state-machine baseline | `UserDefaults` (`charging_baselines_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | No | Same as above |
-| Capability observations (`VehicleProbedCapabilities`) | Embedded inside the cached `VehicleState` | Per VIN | 6-hour staleness window, independent of the 7-day store TTL | No | Same as above |
-| Update-check result | `UserDefaults` | Global | Persistent, re-checked every 24h | No | — |
-| Reverse-geocode cache | In-memory only (`ReverseGeocoder` actor) | Global | Process lifetime | No (never written to disk) | N/A |
+1. macOS Keychain for sensitive authentication material.
+2. `UserDefaults` for preferences and lightweight application state.
+3. SQLite for structured vehicle history and historical telemetry.
+4. In-memory caches for short-lived runtime data.
 
-## Why each item is stored
+For privacy-sensitive data flows, see [`../security/privacy.md`](../security/privacy.md).
 
-- **Refresh tokens / passwords** — so the user doesn't have to sign in on every launch. Kept exclusively in Keychain, never in `UserDefaults` or on-disk caches.
-- **Feature selection, notification toggles, theme, etc.** — plain user preferences; no reason to protect them beyond normal `UserDefaults` behavior.
-- **Vehicle telemetry snapshot** — lets the app show *something* immediately at launch and during vehicle switching, without waiting on a network round trip, and lets it keep showing the last known state if the vehicle is asleep or the network is down.
-- **Charging baseline** — the charging state machine (`ChargingTransitionDetector`) needs to remember what state it last saw per VIN so a relaunch doesn't re-fire a "charging started" notification for a session that began before the app was last quit.
-- **Capability observations** — so a positively-observed capability (e.g., "this Polestar 3 does support the amp-limit endpoint") survives a relaunch instead of needing to be re-probed from the conservative static default every time.
+For retention and deletion behavior, see [`../data-retention.md`](../data-retention.md).
 
-## Cache design: `VehicleStateStore`
+For Keychain-specific security properties, see [`../security/keychain.md`](../security/keychain.md).
 
-**Purpose:** last-known-good telemetry and charging baseline, per VIN, safe to persist.
+---
 
-**Key:** VIN string (uppercased where relevant), two top-level `UserDefaults` keys hold a `[VIN: JSON]` dictionary each.
+## Principles
 
-**Scope:** per VIN — switching vehicles or brands never leaks one vehicle's cached state into another's.
+Persistence in Hisingen follows these principles:
 
-**TTL:** 7 days, enforced on *read*, not by a background sweep — `snapshot(for:)`/`baseline(for:)` check the stored `fetchedAt`/`sampledAt` against `Date()` and silently drop (and remove) anything older, returning `nil`. A vehicle that hasn't been polled in over a week shows the normal "no cached data" cold-start UI rather than a week-old snapshot.
+- authentication secrets belong in Keychain;
+- structured historical vehicle data belongs in SQLite;
+- ordinary preferences belong in `UserDefaults`;
+- unnecessary sensitive fields should not be persisted;
+- persisted data is scoped by VIN where practical;
+- cached data must fail safely when corrupt or incompatible;
+- location persistence must be explicit and documented;
+- local data must never be confused with a Hisingen-operated cloud service.
 
-**Schema/versioning:** the `_v1` suffix on both key names is the entire versioning scheme — there is no migration path from a `_v1` schema to a hypothetical `_v2`. If a future change to `VehicleState`'s `Codable` shape isn't backward-compatible, `try? decoder.decode(...)` simply fails and the store returns `nil` for that VIN, which the app treats identically to "never cached" — a cold start, not a crash. See [technical-debt.md](technical-debt.md) for whether this is adequate going forward.
+"Local" means stored on the user's Mac.
 
-**Corruption handling:** any JSON decode failure (`try?`) degrades to "no cache" — never a crash, never a partial/garbage state shown to the user.
+It does not mean the data cannot be copied by macOS backups, filesystem snapshots, exports, or a user with access to the filesystem.
 
-**Privacy scrubbing before persistence:** `VehicleState.cacheableCopy` — the version actually written to disk — is built by calling `VehicleState`'s initializer with only a specific subset of fields passed explicitly (VIN, battery/charging/range, availability, model name/year, powertrain/fuel, capability observations, charging samples/sessions, `fetchedAt`/`vehicleReportedAt`/`dataWarnings`). Every field *not* in that explicit list — including `registrationNo`, `ownerFirstName`, `odometerKm`, service/fluid warnings, `weather`, `imageData`, and also `exteriorStatus`, `healthDetails`, `softwareInfo`, schedules, `climateStatus`, trip meters, `connectivity`, `airQuality`, `batteryDiagnostics`, and `location` — silently falls back to that initializer's default (`nil`/empty), so none of it reaches disk. The on-disk cache is closer to "battery and charging state only" than a documented exclusion list would suggest; adding a new field to `VehicleState` does not cache it automatically — it has to be explicitly threaded through `cacheableCopy`. See [security/privacy.md](../security/privacy.md).
+---
 
-**What happens loading an older Hisingen version's cache:** because the storage is a `[VIN: JSON]`-shaped `UserDefaults` dictionary rather than a single monolithic blob, an old cache from a prior version simply decodes per-VIN — if the shape is compatible it loads, if not that one VIN's entry fails silently as above. There's no explicit cross-version migration test for this in the current test suite (see [testing/strategy.md](../testing/strategy.md) for coverage gaps).
+## Storage Inventory
 
-## Cache design: capability cache (per-provider, not `VehicleStateStore`)
+| Data | Storage | Scope | Lifetime | Sensitive? |
+|---|---|---|---|---|
+| Provider authentication/session material | Keychain | Provider/account | Until cleared, replaced, revoked, or sign-out | Yes |
+| Custom Volvo Client Secret | Keychain | Volvo configuration | Until replaced/default restored/cleared | Yes |
+| Custom Volvo VCC API Key | Keychain | Volvo configuration | Until replaced/default restored/cleared | Yes |
+| Volvo Client ID | `UserDefaults` or application configuration | Volvo configuration | Persistent | Usually not secret |
+| Selected provider/VIN | `UserDefaults` | Provider/VIN | Persistent | VIN is sensitive |
+| Vehicle nicknames | `UserDefaults` | VIN | Persistent | Potentially |
+| Feature selection | `UserDefaults` | Application | Persistent | Low |
+| Notification settings | `UserDefaults` | Application | Persistent | Low |
+| Theme/language/display settings | `UserDefaults` | Application | Persistent | Low |
+| Cached vehicle snapshot | SQLite + `UserDefaults` fallback | VIN | 7-day useful TTL | Yes |
+| Charging transition baseline | `UserDefaults` | VIN | 7 days | Moderate |
+| Charging-session history | SQLite | VIN | Until clear/sign-out | Yes |
+| Charging samples | SQLite | VIN/session | Maintenance-prunable after 90 days | Yes |
+| Battery-health milestones | SQLite | VIN | Long-term until clear/sign-out | Yes |
+| Historical telemetry | SQLite | VIN | Maintenance-prunable after 90 days | Yes |
+| Remote-command audit history | SQLite | VIN | Until clear/sign-out | Yes |
+| Reverse-geocode cache | Memory | Process | Process lifetime | Yes |
+| Provider capability/request caches | Memory | Provider/VIN | Short-lived | Low/moderate |
+| Vehicle images | Separate image cache/runtime storage | VIN | Implementation-specific | Potentially |
 
-Both `PolestarAPI` and `VolvoAPI` keep their own **in-memory-only** (not persisted directly — only the *result* embedded in `VehicleProbedCapabilities` on the returned `VehicleState` gets persisted, via `VehicleStateStore`) short-lived caches to avoid re-probing an endpoint on every single refresh:
+---
 
-- **Polestar:** `capabilityCache` — 10 minutes for climate/exterior/air-quality, 60 minutes for everything else; plus a separate negative-result `capabilityBackoff` table (6h for `incompatibleAPI`, 1h for `invalidResponse`, 5min otherwise).
-- **Volvo:** `capabilityCache` for the energy-capabilities endpoint (1 hour), plus a per-endpoint `endpointBackoff` (flat 5 minutes) for any other optional field that fails.
+## SQLite Database
 
-These are documented in full in [architecture/capabilities.md](capabilities.md) since they're inseparable from the capability-discovery model, not a generic caching concern.
+The local vehicle database is created under the user's Application Support directory:
+
+`~/Library/Application Support/Hisingen/hisingen.sqlite3`
+
+SQLite can create two companion files:
+
+- `hisingen.sqlite3-wal`
+- `hisingen.sqlite3-shm`
+
+All three must be treated as potentially containing sensitive application data.
+
+The database is opened and managed by `VehicleDatabase`.
+
+If the database cannot be opened, Hisingen should degrade safely rather than crashing the application.
+
+---
+
+## SQLite Schema
+
+The current database contains the following logical tables.
+
+### `vehicle_snapshots`
+
+Stores the latest persisted `VehicleState.cacheableCopy` for each VIN.
+
+Important fields include:
+
+- VIN;
+- provider/brand;
+- model;
+- fetch timestamp;
+- provider-reported timestamp; and
+- encoded snapshot payload.
+
+The payload is not the complete live `VehicleState`.
+
+See the snapshot privacy boundary below.
+
+### `charging_sessions`
+
+Stores charging-session summaries.
+
+A row can contain:
+
+- session identifier;
+- VIN;
+- start/end timestamps;
+- start/end state of charge;
+- calculated energy delivered;
+- peak power;
+- average power;
+- approximate location; and
+- creation timestamp.
+
+### `charging_samples`
+
+Stores time-series charging measurements.
+
+A sample can contain:
+
+- session ID;
+- VIN;
+- timestamp;
+- state of charge;
+- charging power;
+- voltage;
+- current.
+
+### `battery_health_history`
+
+Stores long-term battery-health milestones.
+
+A row can contain:
+
+- VIN;
+- timestamp;
+- odometer;
+- state of health;
+- degradation;
+- effective usable battery capacity; and
+- measurement classification.
+
+### `telemetry_logs`
+
+Stores historical drive/telemetry information.
+
+A row can contain:
+
+- VIN;
+- timestamp;
+- odometer;
+- trip meters;
+- average consumption;
+- ambient temperature;
+- latitude;
+- longitude.
+
+This table is an explicit location-persistence path.
+
+### `remote_commands_log`
+
+Stores local command-audit information.
+
+A row can contain:
+
+- command identifier;
+- VIN;
+- command name;
+- status;
+- execution time;
+- duration; and
+- error description.
+
+---
+
+## `VehicleStateStore`
+
+`VehicleStateStore` coordinates the local last-known vehicle state and historical database.
+
+On save, the current implementation performs several independent operations:
+
+1. persists a reduced snapshot through `VehicleDatabase`;
+2. records battery-health milestones when qualifying data is available;
+3. records historical telemetry when qualifying data is available;
+4. updates charging-session history while charging;
+5. stores a `UserDefaults` fallback copy of the reduced vehicle snapshot.
+
+This is why privacy documentation must distinguish between:
+
+- the reduced cached snapshot; and
+- separately recorded historical data.
+
+A field being removed from `cacheableCopy` does not automatically mean that the same information is absent from every other persistence path.
+
+---
+
+## Snapshot Loading
+
+`VehicleStateStore.snapshot(for:)` prefers the SQLite snapshot.
+
+If SQLite does not provide a snapshot, the legacy/current `UserDefaults` snapshot fallback is attempted.
+
+Both mechanisms use the reduced `VehicleState.cacheableCopy`.
+
+Snapshots older than seven days are treated as expired.
+
+An expired snapshot is deleted when encountered and is not returned to the UI.
+
+---
+
+## `VehicleState.cacheableCopy`
+
+The persisted vehicle snapshot is intentionally derived from the live state.
+
+It is not appropriate to persist the complete live `VehicleState` blindly.
+
+### Explicitly removed
+
+The current snapshot deliberately removes:
+
+- `registrationNo`;
+- `ownerFirstName`;
+- `location`;
+- exterior `imageData`;
+- interior image data; and
+- transient unavailable-feature state.
+
+### Retained
+
+The current snapshot retains a much broader set of data than older documentation described.
+
+Depending on availability, it can include:
+
+- VIN;
+- model;
+- model year;
+- battery level;
+- range;
+- charging state;
+- charging measurements;
+- vehicle availability;
+- odometer;
+- service information;
+- fluid warnings;
+- exterior/lock state;
+- health information;
+- software information;
+- charging schedules;
+- climate state and timers;
+- trip meters;
+- connectivity;
+- air quality;
+- battery diagnostics;
+- weather;
+- capability observations;
+- charging samples;
+- charging sessions embedded in the domain state;
+- powertrain;
+- fuel state;
+- reported battery capacity;
+- exterior colour;
+- gearbox;
+- service information;
+- average speed;
+- fuel consumption;
+- engine state;
+- structure/build information;
+- vehicle identifiers used by the provider;
+- account market;
+- upholstery;
+- wheels;
+- packages;
+- steering orientation;
+- charging-current limit;
+- warranty information;
+- timestamps; and
+- data warnings.
+
+The previous description that the persisted cache is effectively "battery and charging state only" is no longer accurate.
+
+---
+
+## Adding Fields to `VehicleState`
+
+Every new field added to `VehicleState` requires an explicit persistence decision.
+
+Before adding it to `cacheableCopy`, consider:
+
+- whether it contains personal information;
+- whether it contains precise location;
+- whether it identifies the vehicle or owner;
+- whether stale display of the value is safe;
+- whether long-term retention is necessary;
+- whether the information is available again from the provider; and
+- whether a different historical table is more appropriate.
+
+Do not automatically copy new fields into the persisted snapshot simply to make them survive restart.
+
+---
+
+## Location Persistence
+
+Location has multiple independent paths and must not be described using a single blanket statement.
+
+### Cached snapshot
+
+`VehicleState.cacheableCopy` sets `location` to `nil`.
+
+Therefore the encoded `vehicle_snapshots.payload` does not contain the live `VehicleState.location`.
+
+The `UserDefaults` snapshot fallback likewise uses `cacheableCopy` and does not contain the live location.
+
+### Historical telemetry
+
+`VehicleStateStore.save(_:)` passes:
+
+- `state.location?.latitude`
+- `state.location?.longitude`
+
+to `VehicleDatabase.recordTelemetry`.
+
+The SQLite `telemetry_logs` table therefore may contain precise historical coordinates.
+
+### Charging sessions
+
+When charging begins and coordinates are available, `VehicleStateStore` formats them to four decimal places and supplies the resulting value as the charging-session location.
+
+The SQLite `charging_sessions.location_name` field can therefore contain an approximate coordinate pair.
+
+### Reverse geocoding
+
+The `ReverseGeocoder` actor keeps its own address cache in memory only.
+
+It does not write its address cache to SQLite or `UserDefaults`.
+
+### Weather
+
+For Polestar, Vehicle Weather may independently obtain current vehicle coordinates and send them to Open-Meteo.
+
+If Vehicle Location itself is disabled, those internally retrieved weather coordinates are not automatically assigned to `VehicleState.location`, so the historical telemetry persistence path does not receive them merely because weather was requested.
+
+This distinction should be preserved.
+
+---
+
+## Telemetry Sampling
+
+Historical telemetry is intentionally not written on every refresh.
+
+Before adding a new row, the database compares the most recent stored movement-related readings.
+
+A stationary vehicle with unchanged odometer and trip-meter values is not repeatedly recorded during the telemetry heartbeat window.
+
+A new row is recorded when movement-related data changes or when the heartbeat interval requires another observation.
+
+This controls database growth but should not be treated as a privacy guarantee that only one coordinate is retained.
+
+---
+
+## Charging History
+
+`VehicleStateStore` maintains structured charging history separately from the reduced cached snapshot.
+
+When charging begins:
+
+- an existing active session is reused; or
+- a new charging session is created.
+
+If location is available when the session starts, an approximate coordinate string may be attached.
+
+Charging samples then record battery and electrical measurements.
+
+When charging stops, the active session is finalized with calculated values.
+
+Charging-session summaries and samples therefore have different retention rules.
+
+See [`../data-retention.md`](../data-retention.md).
+
+---
+
+## Battery-Health Milestones
+
+Battery-health history is intentionally milestone-based rather than refresh-based.
+
+A new row is written only when the reading is considered sufficiently different from the previous milestone according to the current implementation.
+
+This reduces unnecessary database growth while preserving useful long-term degradation history.
+
+Battery-health history is not subject to the charging/telemetry 90-day pruning operation.
+
+---
+
+## Remote-Command Audit
+
+Remote command execution can create a local audit record.
+
+The audit exists for diagnostics and operational history.
+
+Authentication tokens and raw authenticated provider responses must not be stored in this table.
+
+Error text should be reviewed to ensure upstream error messages cannot inadvertently inject sensitive authentication material.
+
+---
+
+## Historical Sample Pruning
+
+`VehicleDatabase.pruneHistoricalSamples(olderThanDays:)` currently removes:
+
+- charging samples older than the cutoff; and
+- telemetry rows older than the cutoff.
+
+The default cutoff is 90 days.
+
+The operation then performs SQLite maintenance.
+
+This is an explicit maintenance operation.
+
+Documentation should not imply that a background scheduler guarantees deletion exactly when a row reaches 90 days of age.
+
+The prune operation does not delete:
+
+- charging-session headers;
+- battery-health history; or
+- remote-command audit records.
+
+---
+
+## Database Clearing
+
+The global database wipe removes all rows from:
+
+- vehicle snapshots;
+- charging sessions;
+- charging samples;
+- battery-health history;
+- telemetry logs;
+- remote-command audit history.
+
+It then performs SQLite vacuuming.
+
+`VehicleStateStore.clear()` with no VIN invokes this global database wipe and removes the persisted snapshot and charging-baseline `UserDefaults` keys.
+
+Current sign-out behavior uses this global clear path.
+
+Therefore sign-out currently removes local vehicle-history data rather than preserving the SQLite database contents.
+
+---
+
+## Account Changes
+
+`RefreshCoordinator` also clears local persisted vehicle state when it detects a switch to a different configured account.
+
+This prevents cached or historical data belonging to one account from being accidentally presented after a new account is configured.
+
+Because the database is shared by the application, this clear operation affects the shared local vehicle-history store.
+
+---
+
+## UserDefaults
+
+`UserDefaults` remains appropriate for lightweight application state.
+
+Examples include:
+
+- selected provider;
+- selected VIN;
+- nicknames;
+- feature selection;
+- notification configuration;
+- UI preferences;
+- electricity price;
+- cached vehicle snapshot fallback;
+- charging transition baselines; and
+- non-secret identifiers.
+
+It is not an appropriate storage location for:
+
+- passwords;
+- access tokens;
+- refresh tokens;
+- Client Secrets; or
+- VCC API Keys.
+
+---
+
+## Keychain
+
+The macOS Keychain stores sensitive persisted authentication material.
+
+This separation is intentional:
+
+**vehicle history and authentication secrets must not share the same persistence mechanism.**
+
+See [`../security/keychain.md`](../security/keychain.md) for:
+
+- account names;
+- accessibility class;
+- migration behavior;
+- provider-specific credential bundles; and
+- deletion behavior.
+
+---
+
+## In-Memory Caches
+
+Several services maintain in-memory caches to reduce unnecessary network requests.
+
+Examples include:
+
+- reverse-geocode results;
+- provider capability results;
+- provider endpoint backoff state; and
+- short-lived request/session state.
+
+These caches disappear when the application process exits unless their result is explicitly copied into a persisted domain object elsewhere.
+
+A developer must not infer persistence solely from the word "cache."
+
+Always check which storage layer owns the data.
+
+---
+
+## Corruption and Compatibility
+
+Persisted cached state must fail safely.
+
+If a cached vehicle snapshot cannot be decoded, Hisingen should treat it as unavailable rather than:
+
+- crashing;
+- showing partially decoded garbage; or
+- attempting unsafe recovery.
+
+The application should be able to obtain a fresh state from the provider after cache failure.
+
+SQLite schema changes should use explicit migrations rather than assuming all existing installations start with an empty database.
+
+---
+
+## Backups
+
+SQLite, `UserDefaults`, and other application files may be included in:
+
+- Time Machine;
+- filesystem snapshots;
+- third-party backup products; or
+- disk images.
+
+Persistence documentation must not equate:
+
+> deleted from the active Hisingen database
+
+with:
+
+> permanently erased from every possible copy.
+
+Keychain backup and migration semantics are separate and documented in the Keychain documentation.
+
+---
+
+## Sensitive Files
+
+The following files should never be committed to the repository or included in release/debug artifacts:
+
+- real Hisingen SQLite databases;
+- SQLite WAL files;
+- SQLite SHM files;
+- exported production vehicle history;
+- authentication dumps;
+- raw provider responses containing user information; or
+- local preference files containing real VINs/account identifiers.
+
+Test databases must use obviously fake data.
+
+---
+
+## Testing Requirements
+
+Persistence tests should cover at least:
+
+- SQLite schema creation;
+- snapshot save/load;
+- seven-day snapshot expiry;
+- `cacheableCopy` exclusion of current location;
+- `cacheableCopy` exclusion of owner name;
+- `cacheableCopy` exclusion of registration number;
+- historical latitude/longitude persistence;
+- charging-session location handling;
+- charging-sample retention;
+- telemetry retention;
+- 90-day pruning;
+- battery-health milestone deduplication;
+- global wipe;
+- sign-out-triggered local state clearing; and
+- corrupt snapshot handling.
+
+Any test using VINs, coordinates, account identifiers, or authentication material must use sanitized fixtures.
+
+---
+
+## Documentation Invariant
+
+Persistence changes are not complete until the relevant documentation is updated.
+
+Changes involving storage must review:
+
+- [`../security/privacy.md`](../security/privacy.md)
+- [`../data-retention.md`](../data-retention.md)
+- [`../../PRIVACY.md`](../../PRIVACY.md)
+
+A pull request must not change how sensitive data is persisted while leaving privacy and retention documentation describing the old behavior.
