@@ -1,21 +1,461 @@
 # Data Retention
 
-Hisingen stores vehicle snapshots, charging history, battery-health milestones, telemetry, and
-remote-command audit records locally for the signed-in macOS user.
+This document describes how long Hisingen keeps locally stored information and what removes it.
 
-## Defaults
+For the user-facing privacy policy, see [`../PRIVACY.md`](../PRIVACY.md).
 
-- Cached vehicle snapshots older than 7 days are not served.
-- Charging samples and telemetry are pruned after 90 days by the maintenance action.
-- Charging-session headers are retained when their samples are pruned.
-- Battery-health milestones are retained for long-term degradation tracking.
-- Remote-command audit records are retained until the user signs out or clears application data.
+For privacy-sensitive data flows, see [`security/privacy.md`](security/privacy.md).
 
-## User Controls
+For the underlying storage architecture, see [`architecture/persistence.md`](architecture/persistence.md).
 
-The Settings maintenance actions are the authoritative way to prune history or clear all stored
-vehicle data. Sign-out clears cached vehicle snapshots and credentials; it does not remove the
-application database unless the user explicitly clears stored history.
+## Scope
 
-The database contains VINs and may contain location coordinates. It must not be copied into logs,
-diagnostic bundles, or release artifacts.
+Hisingen does not operate a backend containing users' vehicle histories.
+
+The retention periods in this document apply to information stored locally by the Hisingen application on the user's Mac.
+
+External providers such as Polestar, Volvo Cars, Apple, Open-Meteo, and GitHub have their own independent retention policies.
+
+---
+
+## Storage Locations
+
+Hisingen currently uses four local storage categories:
+
+1. macOS Keychain for sensitive authentication material.
+2. `UserDefaults` for preferences and selected application state.
+3. SQLite for vehicle history and historical telemetry.
+4. In-memory caches for short-lived application state.
+
+The primary SQLite database is stored at:
+
+`~/Library/Application Support/Hisingen/hisingen.sqlite3`
+
+SQLite may also create:
+
+- `hisingen.sqlite3-wal`
+- `hisingen.sqlite3-shm`
+
+These files should all be treated as parts of the same local database.
+
+---
+
+## Retention Summary
+
+| Data | Storage | Current retention |
+|---|---|---|
+| Provider authentication credentials/tokens | macOS Keychain | Until sign-out, replacement, revocation, or explicit removal |
+| Custom Volvo sensitive developer credentials | macOS Keychain | Until replaced, default configuration is restored, or credentials are cleared |
+| Non-secret configuration and preferences | `UserDefaults` | Until changed, reset, or application data is removed |
+| Cached vehicle snapshot | SQLite + `UserDefaults` fallback | Maximum useful age of 7 days; expired snapshot is removed when read |
+| Charging transition baseline | `UserDefaults` | 7 days; expired baseline is removed when read |
+| Charging-session header | SQLite | Retained until local history is cleared/sign-out removes database history |
+| Charging samples | SQLite | Can be pruned with a 90-day cutoff through maintenance |
+| Historical telemetry | SQLite | Can be pruned with a 90-day cutoff through maintenance |
+| Battery-health milestones | SQLite | Long-term; retained until local history is cleared |
+| Remote-command audit records | SQLite | Retained until local history is cleared |
+| Reverse-geocode cache | Memory | Process lifetime |
+| Temporary provider capability/request caches | Memory | Short-lived, provider-specific |
+| Exported CSV files | User-selected filesystem location | Controlled by the user after export |
+
+---
+
+## Cached Vehicle Snapshots
+
+Hisingen stores a reduced `VehicleState` snapshot for each VIN.
+
+The snapshot is written to:
+
+- SQLite `vehicle_snapshots`; and
+- the `cached_vehicle_snapshots_v1` `UserDefaults` fallback.
+
+The SQLite snapshot is preferred when loading.
+
+A snapshot older than seven days is considered expired.
+
+Expiration is enforced when the snapshot is read.
+
+Hisingen does not need a background deletion timer for snapshot expiration: when an expired snapshot is encountered, it is removed and not returned to the application.
+
+The cached snapshot excludes the live vehicle-location object, owner first name, registration number, and vehicle image data.
+
+It can still contain other vehicle information such as VIN, odometer, charging information, diagnostics, exterior state, software state, climate information, weather, and vehicle configuration.
+
+---
+
+## Charging Transition Baselines
+
+Charging transition baselines are stored in `UserDefaults`.
+
+They exist so Hisingen can distinguish a genuine charging-state transition from a state that was already active before the application restarted.
+
+Baselines older than seven days are considered expired and removed when read.
+
+---
+
+## Charging Sessions
+
+Charging-session headers are stored in SQLite.
+
+A charging session may contain:
+
+- session ID;
+- VIN;
+- start time;
+- end time;
+- starting battery percentage;
+- ending battery percentage;
+- calculated energy delivered;
+- peak charging power;
+- average charging power;
+- approximate location; and
+- record creation time.
+
+Charging-session headers are not removed by the 90-day sample-pruning operation.
+
+They remain until vehicle history is explicitly cleared or sign-out invokes the database-clear path.
+
+### Charging location retention
+
+When location data is available when a session starts, Hisingen may store the coordinates rounded to four decimal places as the charging-session location.
+
+This value should be treated as sensitive location information.
+
+Pruning individual charging samples does not remove the charging-session header or its stored location.
+
+---
+
+## Charging Samples
+
+Charging samples are stored separately from charging-session headers.
+
+A sample may contain:
+
+- session ID;
+- VIN;
+- timestamp;
+- battery percentage;
+- charging power;
+- voltage; and
+- current.
+
+Charging samples do not themselves contain latitude or longitude columns.
+
+The associated charging-session header may contain an approximate charging location.
+
+### 90-day pruning
+
+The database maintenance operation uses a default cutoff of 90 days for charging samples.
+
+The current implementation performs this pruning when the maintenance action is invoked.
+
+It is not an automatic guarantee that every sample disappears exactly 90 days after creation.
+
+Documentation should therefore say:
+
+> Charging samples can be pruned after 90 days through maintenance.
+
+rather than:
+
+> Charging samples are automatically deleted after 90 days.
+
+---
+
+## Historical Telemetry
+
+Historical telemetry is stored in the SQLite `telemetry_logs` table.
+
+A row may contain:
+
+- VIN;
+- timestamp;
+- odometer;
+- manual trip meter;
+- automatic trip meter;
+- average consumption;
+- ambient temperature;
+- latitude; and
+- longitude.
+
+Hisingen does not intentionally write a new telemetry row on every stationary refresh.
+
+The telemetry recorder skips repeated stationary readings during its heartbeat window and records when meaningful movement or the configured heartbeat condition warrants another row.
+
+### Location
+
+When `VehicleState.location` contains coordinates, those coordinates may be written to historical telemetry.
+
+This means precise vehicle coordinates can exist in the local SQLite database even though the cached `VehicleState` snapshot itself strips the location field.
+
+### 90-day pruning
+
+Historical telemetry uses the same maintenance pruning path as charging samples.
+
+The default cutoff is 90 days.
+
+As with charging samples, this occurs when the maintenance operation is invoked rather than through a guaranteed automatic deletion exactly at 90 days.
+
+---
+
+## Battery-Health History
+
+Battery-health milestones are stored in SQLite.
+
+A milestone can contain:
+
+- VIN;
+- timestamp;
+- odometer;
+- state of health;
+- degradation;
+- effective usable capacity; and
+- measurement classification.
+
+Hisingen avoids writing a duplicate row for every vehicle refresh.
+
+A new milestone is recorded only when the implementation determines that the reading carries sufficiently new information, such as elapsed time, mileage change, or meaningful SoH change.
+
+Battery-health milestones are intended for long-term trend history.
+
+They are not removed by the 90-day charging/telemetry pruning operation.
+
+They remain until local vehicle history is cleared.
+
+---
+
+## Remote-Command Audit History
+
+Hisingen stores remote-command audit records in SQLite.
+
+A record can contain:
+
+- identifier;
+- VIN;
+- command name;
+- status;
+- execution time;
+- duration; and
+- an error description.
+
+These records are not part of the 90-day historical-sample pruning operation.
+
+They remain until the local database is cleared.
+
+---
+
+## Reverse-Geocode Cache
+
+The reverse geocoder maintains a process-local cache of coordinate-to-address results.
+
+This cache exists only in memory.
+
+Hisingen does not persist the `ReverseGeocoder` cache to SQLite or `UserDefaults`.
+
+The cache disappears when the application process exits.
+
+This does not affect any independent processing or retention performed by Apple's geocoding infrastructure.
+
+---
+
+## Vehicle Weather
+
+Weather results may become part of the vehicle state and can therefore be included in locally persisted vehicle snapshots or telemetry-related information.
+
+For Polestar, enabling Vehicle Weather can cause Hisingen to retrieve vehicle coordinates and send them to Open-Meteo even when the separate Vehicle Location display feature is disabled.
+
+The internally obtained location used for the weather request is not automatically persisted as `VehicleState.location` when Vehicle Location itself is disabled.
+
+---
+
+## User Preferences
+
+Ordinary preferences stored in `UserDefaults` do not have a time-based expiration unless specifically documented.
+
+These may include:
+
+- selected provider;
+- selected VIN;
+- nicknames;
+- enabled features;
+- notification settings;
+- display preferences;
+- electricity price;
+- update-check state; and
+- non-secret developer configuration.
+
+Preferences generally remain until changed, reset, or the application's stored preferences are removed.
+
+---
+
+## Authentication Material
+
+Sensitive persisted authentication material is stored separately from the vehicle-history database.
+
+Depending on provider and configuration, this may include:
+
+- refresh tokens;
+- provider session material;
+- custom Volvo Client Secret;
+- custom Volvo VCC API Key; and
+- other sensitive authentication values.
+
+These values are retained until they are:
+
+- replaced;
+- cleared;
+- invalidated;
+- revoked by the provider; or
+- removed during sign-out as applicable.
+
+Authentication secrets must not be placed in SQLite vehicle-history tables.
+
+---
+
+## Sign-Out
+
+Sign-out currently clears local vehicle history.
+
+The current flow calls Hisingen's global state-store clear operation before completing provider-specific sign-out.
+
+That clears:
+
+- SQLite vehicle snapshots;
+- charging sessions;
+- charging samples;
+- battery-health history;
+- telemetry history;
+- remote-command audit history;
+- cached vehicle snapshots stored in `UserDefaults`; and
+- charging transition baselines stored in `UserDefaults`.
+
+Provider-specific sign-out then handles the associated authentication state.
+
+This means the previous documentation statement:
+
+> Sign-out clears cached vehicle snapshots and credentials; it does not remove the application database.
+
+is incorrect and must not be retained.
+
+Because the vehicle database is shared by the application, the current global clear operation removes locally stored vehicle history rather than preserving history for another account.
+
+---
+
+## Account Changes
+
+When Hisingen detects that the configured account has changed, the refresh coordinator also clears the shared local vehicle state before starting a session for the new account.
+
+This prevents stale vehicle history from one account being presented as data belonging to another account.
+
+---
+
+## Manual Maintenance
+
+The application can expose maintenance operations for local vehicle history.
+
+The historical-sample pruning operation removes:
+
+- charging samples older than the configured cutoff; and
+- telemetry rows older than the configured cutoff.
+
+The default cutoff is 90 days.
+
+After pruning, the database performs SQLite maintenance to reclaim space where possible.
+
+Pruning samples does not remove:
+
+- charging-session headers;
+- battery-health milestones; or
+- remote-command audit history.
+
+A full clear is required to remove those categories.
+
+---
+
+## Exported Data
+
+When the user exports Hisingen history to CSV or another file, that exported copy is outside Hisingen's internal retention lifecycle.
+
+Deleting Hisingen's SQLite database does not delete copies the user previously exported.
+
+Exports may contain sensitive values such as:
+
+- VIN;
+- timestamps;
+- charging history;
+- battery-health information; and
+- charging location.
+
+Users are responsible for storing and deleting exported files.
+
+---
+
+## Backups
+
+Local application data may be copied by:
+
+- Time Machine;
+- APFS snapshots;
+- third-party backup software;
+- disk cloning; or
+- other system-level backup mechanisms.
+
+Hisingen clearing its active local database cannot guarantee deletion of data already present in backups.
+
+---
+
+## Database Sensitivity
+
+The SQLite database should be treated as sensitive because it can contain:
+
+- VIN;
+- vehicle state;
+- charging history;
+- battery-health history;
+- remote-command history;
+- historical coordinates; and
+- approximate charging locations.
+
+The following files must not be committed, attached to public bug reports, or included in release artifacts:
+
+- `hisingen.sqlite3`
+- `hisingen.sqlite3-wal`
+- `hisingen.sqlite3-shm`
+
+Diagnostic tooling should not automatically attach these files.
+
+---
+
+## Development Requirements
+
+Changes to persistence must update this document when they modify:
+
+- a retention period;
+- a database table;
+- a persisted field;
+- location persistence;
+- sign-out deletion;
+- maintenance behavior;
+- CSV export behavior; or
+- credential storage.
+
+Tests should verify privacy-sensitive retention behavior where practical.
+
+At minimum, persistence tests should cover:
+
+- seven-day snapshot expiry;
+- seven-day baseline expiry;
+- telemetry pruning;
+- charging-sample pruning;
+- full database wipe;
+- location removal from `cacheableCopy`;
+- historical coordinate persistence when expected; and
+- deletion behavior during sign-out.
+
+---
+
+## Related Documentation
+
+- [`../PRIVACY.md`](../PRIVACY.md) — user-facing privacy policy
+- [`security/privacy.md`](security/privacy.md) — privacy-sensitive data flows
+- [`architecture/persistence.md`](architecture/persistence.md) — storage architecture
+- [`security/keychain.md`](security/keychain.md) — credential storage
