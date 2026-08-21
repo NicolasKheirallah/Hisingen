@@ -651,7 +651,7 @@ final class VehicleDatabase: @unchecked Sendable {
             }) ?? []
         }
 
-        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Energy Delivered (kWh),Peak Power (kW),Avg Power (kW),Location\n"
+        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location\n"
         let df = ISO8601DateFormatter()
         for s in sessions {
             let start = df.string(from: s.startedAt)

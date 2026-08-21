@@ -13,7 +13,7 @@
 | `make run` | `swift run` — unbundled dev run, no launch-at-login, no stable signing identity. |
 | `make test` | (depends on `doctor`) Runs `Scripts/test.sh`. |
 | `make clean` | Removes `.build`, `.build-arm64`, `.build-x86_64`, the app bundle, DMG, zip, `dmg-staging/`, `SHA256SUMS`, `notarize-app.zip`. |
-| `make release VERSION=x.y.z` | Validates the version format and a clean working tree, bumps `CFBundleShortVersionString` (via `PlistBuddy`) and increments `CFBundleVersion`, commits (`Release vX.Y.Z`), tags `vX.Y.Z`, and pushes both — which is what triggers `.github/workflows/release.yml`. See [releases.md](releases.md). |
+| `make release VERSION=x.y.z` | Requires a matching `CHANGELOG.md` entry, validates the version format and a clean working tree, bumps `CFBundleShortVersionString` (via `PlistBuddy`) and increments `CFBundleVersion`, commits, tags `vX.Y.Z`, and pushes both — which triggers `.github/workflows/release.yml`. See [releases.md](releases.md). |
 
 Default `IDENTITY` is `-` (ad-hoc). CI's release job passes a real `"Developer ID Application: ..."` identity resolved dynamically from an imported certificate.
 
@@ -23,11 +23,17 @@ Default `IDENTITY` is `-` (ad-hoc). CI's release job passes a real `"Developer I
 
 **`Scripts/test.sh`** (POSIX `sh`, `set -eu`) — detects whether the selected developer tools are the *standalone* Command Line Tools (as opposed to full Xcode). If so, it adds an extra `-F` framework search path (`$CLT/Library/Developer/Frameworks`) before invoking `swift test`, because standalone CLT ships the Swift Testing framework outside the SDK's normal search path — this mirrors equivalent logic duplicated in `Package.swift`'s `usesStandaloneCommandLineTools`/`testSwiftSettings`/`testLinkerSettings`. Forwards any extra arguments transparently (`--filter`, etc.).
 
+**`Scripts/select-xcode.sh`** (POSIX `sh`, `set -eu`) — selects a valid full
+Xcode developer directory from an explicit override, the active `xcode-select`
+path, or an installed `/Applications/Xcode*.app`. In GitHub Actions it persists
+the selection through `GITHUB_ENV`; CI, CodeQL, live integration, and release
+jobs all use this one implementation.
+
 **`Scripts/check-localization.py`** — a standalone Python QA script (not wired into `make`/CI as of this writing) that scans `Sources/Hisingen/Resources/*.lproj/Localizable.strings` for duplicate keys within a file and reports translation coverage gaps relative to the English base locale. It reports missing keys rather than failing on them, since `Support/L10n.swift` already falls back to English for anything missing from the active locale — an incomplete translation degrades gracefully, it isn't a build-breaking bug.
 
 ## Requirements
 
-macOS 13 Ventura or later; Xcode 15+ or compatible Command Line Tools with Swift 5.9+. `Package.swift` declares `swift-tools-version:5.9` and `platforms: [.macOS(.v13)]`. No external Swift package dependencies — `Package.swift`'s `dependencies:` array is empty.
+macOS 14 Sonoma or later; Xcode 15+ or compatible Command Line Tools with Swift 5.9+. `Package.swift` declares `swift-tools-version:5.9` and `platforms: [.macOS(.v14)]`. No external Swift package dependencies are declared.
 
 ## Strict concurrency
 

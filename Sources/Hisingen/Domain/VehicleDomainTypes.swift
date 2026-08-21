@@ -157,6 +157,17 @@ struct ExteriorSnapshot: Codable, Equatable, Sendable {
         openings.filter { $0.state == .open || $0.state == .ajar }.map(\.opening)
     }
 
+    var physicalDoorCount: Int {
+        openings.reduce(into: 0) { count, reading in
+            switch reading.opening {
+            case .frontLeftDoor, .frontRightDoor, .rearLeftDoor, .rearRightDoor:
+                count += 1
+            default:
+                break
+            }
+        }
+    }
+
     func merging(previous: ExteriorSnapshot?) -> ExteriorSnapshot {
         guard let previous else { return self }
         var byOpening: [VehicleOpening: OpeningState] = [:]
@@ -240,22 +251,33 @@ enum VehicleWarning: String, Codable, CaseIterable, Sendable {
 struct VehicleHealthDetails: Codable, Equatable, Sendable {
     let tyres: [TyrePressure]
     let warnings: [VehicleWarning]
+    /// Warning categories for which the provider returned an explicit status. A category can
+    /// be reported without being present in `warnings` (for example `NO_WARNING`). Keeping
+    /// this separate prevents an absent response from being displayed as a healthy reading.
+    var reportedWarnings: [VehicleWarning]
     var lightFailures: [String]
 
-    init(tyres: [TyrePressure], warnings: [VehicleWarning], lightFailures: [String] = []) {
+    init(
+        tyres: [TyrePressure],
+        warnings: [VehicleWarning],
+        reportedWarnings: [VehicleWarning] = [],
+        lightFailures: [String] = []
+    ) {
         self.tyres = tyres
         self.warnings = warnings
+        self.reportedWarnings = reportedWarnings
         self.lightFailures = lightFailures
     }
 
     private enum CodingKeys: String, CodingKey {
-        case tyres, warnings, lightFailures
+        case tyres, warnings, reportedWarnings, lightFailures
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         tyres = try c.decode([TyrePressure].self, forKey: .tyres)
         warnings = try c.decode([VehicleWarning].self, forKey: .warnings)
+        reportedWarnings = try c.decodeIfPresent([VehicleWarning].self, forKey: .reportedWarnings) ?? []
         lightFailures = try c.decodeIfPresent([String].self, forKey: .lightFailures) ?? []
     }
 }
@@ -322,7 +344,7 @@ enum SoftwareStateRaw: Int, Codable, Sendable {
     var displayName: String {
         switch self {
         case .unknown: return L10n.text("Unknown")
-        case .downloadReady: return L10n.text("Download ready")
+        case .downloadReady: return L10n.text("Download authorized")
         case .downloadStarted: return L10n.text("Downloading")
         case .downloadCompleted: return L10n.text("Downloaded")
         case .downloadFailed: return L10n.text("Download failed")
@@ -336,7 +358,7 @@ enum SoftwareStateRaw: Int, Codable, Sendable {
         case .installationScheduled: return L10n.text("Scheduled")
         case .installationScheduleTriggered: return L10n.text("Installing")
         case .installationUnknown: return L10n.text("Unknown")
-        case .updateAvailable: return L10n.text("Update available")
+        case .updateAvailable: return L10n.text("Update announced")
         }
     }
 
@@ -412,6 +434,25 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
         self.installedVersion = installedVersion
         self.latestAvailableVersion = latestAvailableVersion
+    }
+
+    /// Failed OTA states are backend event records, not a durable vehicle fault. Only surface
+    /// one as actionable while it identifies a different target version and is still recent.
+    func hasActionableFailure(at date: Date = Date(), maximumAge: TimeInterval = 30 * 86_400) -> Bool {
+        guard state == .failed,
+              let target = latestAvailableVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty,
+              target != installedVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let updatedAt else { return false }
+        let age = date.timeIntervalSince(updatedAt)
+        return age >= -300 && age <= maximumAge
+    }
+
+    /// Stable local identity for dismissing one backend event without suppressing a later one.
+    var eventIdentifier: String {
+        let eventTime = updatedAt.map { String(Int($0.timeIntervalSince1970)) } ?? "no-date"
+        return [String(rawState?.rawValue ?? -1), latestAvailableVersion ?? version ?? "no-version", eventTime]
+            .joined(separator: "|")
     }
 }
 
@@ -624,7 +665,7 @@ struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
         status: String? = nil,
         factoryWarrantyValidUntil: Date? = nil,
         batteryWarrantyValidUntil: Date? = nil,
-        batteryWarrantyKm: Int? = 160_000,
+        batteryWarrantyKm: Int? = nil,
         roadsideAssistanceValidUntil: Date? = nil,
         includedMaintenance: Bool? = nil,
         corrosionWarrantyValidUntil: Date? = nil,
@@ -994,5 +1035,3 @@ enum ScheduleSetBy: Int, Codable, Sendable {
         }
     }
 }
-
-

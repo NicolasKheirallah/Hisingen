@@ -204,12 +204,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyPlugInReminder,
               Self.plugInReminderCondition(current),
-              !Self.plugInReminderCondition(previous) else { return }
+              !Self.plugInReminderCondition(previous),
+              let batteryPercentage = current.batteryPercentage else { return }
 
         let brandTitle = current.model.brand.displayName
         let content = UNMutableNotificationContent()
         content.title = "⚡️ " + L10n.text("Plug-In Reminder")
-        content.body = L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, current.batteryPercentage ?? 40.0)
+        content.body = L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, batteryPercentage)
         content.threadIdentifier = "hisingen.charging.\(current.vin)"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).plugin-reminder", content: content, trigger: nil)

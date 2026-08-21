@@ -6,7 +6,7 @@ import Testing
 struct VolvoDecodingTests {
 
     #if SWIFT_PACKAGE
-    private func loadFixture<Payload: Decodable>(_ name: String, as: Payload.Type) throws -> Payload {
+    private func loadFixture<Payload: Decodable & Sendable>(_ name: String, as: Payload.Type) throws -> Payload {
         let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json"))
         let data = try Data(contentsOf: url)
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<Payload>.self, from: data)
@@ -262,6 +262,17 @@ struct VolvoDecodingTests {
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
+        XCTAssertTrue(warnings.hasReportedLightStatus)
+    }
+
+    @Test
+    func testEngineStatusPreservesUnknownInsteadOfAssumingStopped() throws {
+        let running = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"RUNNING"}}"#.utf8))
+        let stopped = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"STOPPED"}}"#.utf8))
+        let unspecified = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"UNSPECIFIED"}}"#.utf8))
+        XCTAssertEqual(running.isRunning, true)
+        XCTAssertEqual(stopped.isRunning, false)
+        XCTAssertNil(unspecified.isRunning)
     }
 
     @Test
@@ -289,7 +300,7 @@ struct VolvoDecodingTests {
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoEngineStatusDTO>.self, from: Data(json.utf8))
         let dto = try XCTUnwrap(envelope.data)
-        XCTAssertTrue(dto.isRunning)
+        XCTAssertEqual(dto.isRunning, true)
     }
 
     @Test
@@ -331,5 +342,3 @@ struct VolvoDecodingTests {
         XCTAssertEqual(state.chargingCurrentLimitAmps, 32)
     }
 }
-
-

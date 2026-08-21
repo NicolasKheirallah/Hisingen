@@ -22,7 +22,11 @@ struct VehicleTimelineProvider: TimelineProvider {
             let s = VehicleStateStore(database: VehicleDatabase()).snapshot(for: v)
             return (v, s)
         }
-        completion(VehicleWidgetEntry(date: Date(), state: state ?? sampleState, isPlaceholder: context.isPreview))
+        completion(VehicleWidgetEntry(
+            date: Date(),
+            state: context.isPreview ? (state ?? sampleState) : state,
+            isPlaceholder: context.isPreview
+        ))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<VehicleWidgetEntry>) -> Void) {
@@ -95,12 +99,14 @@ struct HisingenWidgetSmallView: View {
                 Spacer()
 
                 HStack(alignment: .lastTextBaseline, spacing: 2) {
-                    Text(String(format: "%.0f", state.batteryPercentage ?? 0))
+                    Text(state.batteryPercentage.map { String(format: "%.0f", $0) } ?? "—")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                    Text("%")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
+                    if state.batteryPercentage != nil {
+                        Text("%")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if let range = state.primaryRangeKm {
@@ -151,12 +157,14 @@ struct HisingenWidgetMediumView: View {
                     Spacer()
 
                     HStack(alignment: .lastTextBaseline, spacing: 2) {
-                        Text(String(format: "%.0f", state.batteryPercentage ?? 0))
+                        Text(state.batteryPercentage.map { String(format: "%.0f", $0) } ?? "—")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .monospacedDigit()
-                        Text("%")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.secondary)
+                        if state.batteryPercentage != nil {
+                            Text("%")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     if let range = state.primaryRangeKm {

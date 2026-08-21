@@ -38,6 +38,9 @@ The boundary that matters most in practice: **credentials and tokens never cross
 
 ## Credentials
 
+- **Polestar account email** — persisted in Keychain for relaunch sign-in; legacy
+  plaintext `UserDefaults` values are migrated and removed after a successful
+  Keychain write.
 - **Polestar password** — entered once, sent directly to Polestar ID during login, then persisted to Keychain (so a relaunch can re-authenticate without prompting). Never logged, never sent anywhere except Polestar's own login endpoint.
 - **Polestar refresh token** — the only Polestar credential kept long-term; the access token lives in memory only and is re-derived from the refresh token on every launch.
 - **Volvo Client ID / Client Secret / VCC API Key** — the user's own Developer Portal application credentials, entered in Settings, persisted to Keychain (secret + API key) or `UserDefaults` (Client ID, not secret).

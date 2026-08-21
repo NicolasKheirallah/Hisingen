@@ -360,8 +360,12 @@ struct VolvoLocationDTO: Decodable, Sendable {
 struct VolvoEngineStatusDTO: Decodable, Sendable {
     let engineStatus: VolvoField<String>?
 
-    var isRunning: Bool {
-        engineStatus?.value?.uppercased() == "RUNNING"
+    var isRunning: Bool? {
+        switch engineStatus?.value?.uppercased() {
+        case "RUNNING": return true
+        case "STOPPED": return false
+        default: return nil
+        }
     }
 }
 
@@ -434,6 +438,25 @@ struct VolvoWarningsDTO: Decodable, Sendable {
         return list.compactMap { field, name in
             guard let val = field?.value?.uppercased(), !val.contains("NO_WARNING"), val != "UNSPECIFIED", !val.isEmpty else { return nil }
             return "\(name): \(val)"
+        }
+    }
+
+    var hasReportedLightStatus: Bool {
+        let fields: [VolvoField<String>?] = [
+            brakeLightCenterWarning, brakeLightLeftWarning, brakeLightRightWarning,
+            fogLightFrontWarning, fogLightRearWarning,
+            positionLightFrontLeftWarning, positionLightFrontRightWarning,
+            positionLightRearLeftWarning, positionLightRearRightWarning,
+            highBeamLeftWarning, highBeamRightWarning, lowBeamLeftWarning, lowBeamRightWarning,
+            daytimeRunningLightLeftWarning, daytimeRunningLightRightWarning,
+            turnIndicationFrontLeftWarning, turnIndicationFrontRightWarning,
+            turnIndicationRearLeftWarning, turnIndicationRearRightWarning,
+            registrationPlateLightWarning, sideMarkLightsWarning, hazardLightsWarning,
+            reverseLightsWarning
+        ]
+        return fields.contains { field in
+            guard let value = field?.value?.uppercased() else { return false }
+            return !value.isEmpty && value != "UNSPECIFIED"
         }
     }
 }

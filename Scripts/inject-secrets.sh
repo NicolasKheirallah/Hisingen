@@ -25,12 +25,17 @@ VCC_API_KEY="${VOLVO_VCC_API_KEY:-}"
 if [ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] && [ -n "$VCC_API_KEY" ]; then
     echo "🔒 Injecting obfuscated Volvo Developer credentials..."
 
-    python3 - <<EOF
+    HISINGEN_GENERATED_CLIENT_ID="$CLIENT_ID" \
+    HISINGEN_GENERATED_CLIENT_SECRET="$CLIENT_SECRET" \
+    HISINGEN_GENERATED_VCC_API_KEY="$VCC_API_KEY" \
+    HISINGEN_GENERATED_OUTPUT="$OUTPUT_SWIFT" \
+    python3 - <<'PYTHON'
 import os
 
-client_id = """$CLIENT_ID""".strip()
-client_secret = """$CLIENT_SECRET""".strip()
-vcc_api_key = """$VCC_API_KEY""".strip()
+client_id = os.environ["HISINGEN_GENERATED_CLIENT_ID"].strip()
+client_secret = os.environ["HISINGEN_GENERATED_CLIENT_SECRET"].strip()
+vcc_api_key = os.environ["HISINGEN_GENERATED_VCC_API_KEY"].strip()
+output_path = os.environ["HISINGEN_GENERATED_OUTPUT"]
 
 mask_key = 0x5C
 
@@ -48,28 +53,28 @@ enum GeneratedVolvoSecrets {{
     static var clientID: String {{
         let key: UInt8 = 0x{mask_key:02X}
         let bytes: [UInt8] = [{obfuscate(client_id)}]
-        return String(bytes: bytes.map {{ \$0 ^ key }}, encoding: .utf8) ?? ""
+        return String(bytes: bytes.map {{ $0 ^ key }}, encoding: .utf8) ?? ""
     }}
 
     static var clientSecret: String {{
         let key: UInt8 = 0x{mask_key:02X}
         let bytes: [UInt8] = [{obfuscate(client_secret)}]
-        return String(bytes: bytes.map {{ \$0 ^ key }}, encoding: .utf8) ?? ""
+        return String(bytes: bytes.map {{ $0 ^ key }}, encoding: .utf8) ?? ""
     }}
 
     static var vccApiKey: String {{
         let key: UInt8 = 0x{mask_key:02X}
         let bytes: [UInt8] = [{obfuscate(vcc_api_key)}]
-        return String(bytes: bytes.map {{ \$0 ^ key }}, encoding: .utf8) ?? ""
+        return String(bytes: bytes.map {{ $0 ^ key }}, encoding: .utf8) ?? ""
     }}
 }}
 """
 
-with open("$OUTPUT_SWIFT", "w") as f:
+with open(output_path, "w", encoding="utf-8") as f:
     f.write(output)
 
 print("✅ Obfuscated credentials generated into Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift")
-EOF
+PYTHON
 else
     # Generate clean placeholder struct if no secrets provided
     cat <<EOF > "$OUTPUT_SWIFT"

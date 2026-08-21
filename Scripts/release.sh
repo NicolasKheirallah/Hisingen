@@ -15,6 +15,12 @@ if [ -n "$(git status --porcelain=v1)" ]; then
     exit 1
 fi
 
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "❌ Releases must be cut from the main branch (currently: ${CURRENT_BRANCH:-detached HEAD})." >&2
+    exit 1
+fi
+
 # Run test suite
 echo "🧪 Running full test suite..."
 sh Scripts/test.sh
@@ -28,6 +34,11 @@ fi
 # 2. Resolve version bump
 BUMP="${1:-patch}"
 LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 2>/dev/null || true)
+
+if ! echo "$BUMP" | grep -Eq '^(patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$'; then
+    echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+    exit 1
+fi
 
 if echo "$BUMP" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     NEW_VERSION="$BUMP"
@@ -49,11 +60,20 @@ else
             MINOR=$((MINOR + 1))
             PATCH=0
             ;;
-        patch|*)
+        patch)
             PATCH=$((PATCH + 1))
+            ;;
+        *)
+            echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+            exit 1
             ;;
     esac
     NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+fi
+
+if ! grep -Fq "## [$NEW_VERSION]" CHANGELOG.md; then
+    echo "CHANGELOG.md must contain a ## [$NEW_VERSION] release entry before releasing." >&2
+    exit 1
 fi
 
 echo "🚀 Preparing release v${NEW_VERSION} (previous tag: ${LATEST_TAG:-none})..."
@@ -78,6 +98,7 @@ sh Scripts/validate-release.sh
 git add Resources/Info.plist
 git commit -m "chore(release): bump version to v${NEW_VERSION} (build ${NEXT_BUILD})"
 git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+git push origin HEAD --tags
 
 echo "=========================================="
 echo "✅ Release v${NEW_VERSION} packaged successfully!"
@@ -87,8 +108,4 @@ echo "   - Hisingen.app (Universal: arm64 + x86_64)"
 echo "   - Hisingen.dmg"
 echo "   - Hisingen.dmg.sha256"
 echo ""
-echo "🚀 To publish this release to GitHub Actions:"
-echo "   git push origin HEAD --tags"
-echo ""
-echo "Or create a release directly via GitHub CLI if installed:"
-echo "   gh release create v${NEW_VERSION} Hisingen.dmg Hisingen.dmg.sha256 --title \"v${NEW_VERSION}\" --notes \"Release v${NEW_VERSION}\""
+echo "🚀 GitHub Actions release workflow triggered for v${NEW_VERSION}."

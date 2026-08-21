@@ -165,7 +165,9 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         }
     }
 
-    var hasVerifiedNominalSpecs: Bool { brand == .polestar }
+    /// Static model-family reference values are available. This does not mean the exact VIN,
+    /// battery, wheel, market or model-year variant has been verified.
+    var hasModelReferenceSpecs: Bool { brand == .polestar }
 
     var nominalBatteryCapacityKwh: Double {
         switch self {
@@ -227,7 +229,7 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     }
 
     var averageConsumptionWhPerKm: Double? {
-        guard hasVerifiedNominalSpecs, nominalWltpRangeKm > 0 else { return nil }
+        guard hasModelReferenceSpecs, nominalWltpRangeKm > 0 else { return nil }
         return (nominalUsableCapacityKwh * 1_000) / nominalWltpRangeKm
     }
 
@@ -594,5 +596,4 @@ private extension VehicleCapability {
         }
     }
 }
-
 

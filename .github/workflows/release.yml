@@ -15,8 +15,6 @@ jobs:
   build-and-release:
     runs-on: macos-15
     timeout-minutes: 45
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     permissions:
       contents: write
       attestations: write
@@ -36,12 +34,28 @@ jobs:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
         run: |
           test -n "$MACOS_CERT_P12" || { echo "MACOS_CERT_P12 is required"; exit 1; }
           test -n "$MACOS_CERT_PASSWORD" || { echo "MACOS_CERT_PASSWORD is required"; exit 1; }
           test -n "$NOTARY_APPLE_ID" || { echo "NOTARY_APPLE_ID is required"; exit 1; }
           test -n "$NOTARY_TEAM_ID" || { echo "NOTARY_TEAM_ID is required"; exit 1; }
           test -n "$NOTARY_APP_PASSWORD" || { echo "NOTARY_APP_PASSWORD is required"; exit 1; }
+          test -n "$VOLVO_CLIENT_ID" || { echo "VOLVO_CLIENT_ID is required"; exit 1; }
+          test -n "$VOLVO_CLIENT_SECRET" || { echo "VOLVO_CLIENT_SECRET is required"; exit 1; }
+          test -n "$VOLVO_VCC_API_KEY" || { echo "VOLVO_VCC_API_KEY is required"; exit 1; }
+
+      - name: Select available Xcode toolchain
+        run: sh Scripts/select-xcode.sh
+
+      - name: Generate production build configuration
+        env:
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+        run: sh Scripts/inject-secrets.sh
 
       - name: Verify version and toolchain
         run: |
@@ -51,6 +65,7 @@ jobs:
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be vMAJOR.MINOR.PATCH"; exit 1; }
           test "$PLIST_VERSION" = "$TAG_VERSION" || { echo "Info.plist has $PLIST_VERSION but tag is $TAG_VERSION"; exit 1; }
+          grep -Fq "## [$TAG_VERSION]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $TAG_VERSION"; exit 1; }
           git merge-base --is-ancestor HEAD origin/main || { echo "Release tag must point to a commit on main"; exit 1; }
           plutil -lint Resources/Info.plist
           xcodebuild -version
@@ -162,12 +177,10 @@ jobs:
           for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
             test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
           done
-          grep -q "Hisingen.dmg" SHA256SUMS
-          grep -q "Hisingen.zip" SHA256SUMS
-          grep -q "Hisingen.app.zip" SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             Hisingen.dmg
@@ -182,6 +195,7 @@ jobs:
             Hisingen.zip
             Hisingen.app.zip
             SHA256SUMS
+          fail_on_unmatched_files: true
           generate_release_notes: true
 
       - name: Verify assets were actually attached to the GitHub release

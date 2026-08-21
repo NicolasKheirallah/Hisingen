@@ -396,8 +396,7 @@ extension PolestarGRPC {
     }
 
     private func fetchOpenMeteoWeather(latitude: Double, longitude: Double) async -> VehicleWeather? {
-        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(latitude)&longitude=\(longitude)&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
-        guard let url = URL(string: urlString) else { return nil }
+        guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         guard let (data, response) = try? await session.data(for: request),
@@ -418,6 +417,19 @@ extension PolestarGRPC {
             relativeHumidity: humidity,
             timestamp: Date()
         )
+    }
+
+    static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "api.open-meteo.com"
+        components.path = "/v1/forecast"
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "current", value: "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature")
+        ]
+        return components.url
     }
 
     private static func wmoWeatherDescription(for code: Int) -> String {
@@ -508,15 +520,20 @@ extension PolestarGRPC {
             let warningRaw = varint(fields, warningFields[index])
             let warning = tyreWarning(warningRaw)
             let pressure = numeric(fields, pressureFields[index]).flatMap { $0 > 0 ? $0 : nil }
-            let effectiveWarning: TyrePressureWarning = (warning == .unknown && warningRaw == nil) ? .none : warning
-            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: effectiveWarning))
+            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
         }
         var warnings: [VehicleWarning] = []
+        var reportedWarnings: [VehicleWarning] = []
         if let value = varint(fields, 5), value > 1 { warnings.append(.service) }
-        if let value = varint(fields, 6), value > 1 { warnings.append(.brakeFluid) }
-        if let value = varint(fields, 7), value > 1 { warnings.append(.engineCoolant) }
-        if let value = varint(fields, 8), value > 1 { warnings.append(.oil) }
-        if let value = varint(fields, 13), value > 1 { warnings.append(.washerFluid) }
+        let warningFieldsByType: [(Int, VehicleWarning)] = [
+            (6, .brakeFluid), (7, .engineCoolant), (8, .oil), (13, .washerFluid)
+        ]
+        for (field, warning) in warningFieldsByType {
+            if let value = varint(fields, field) {
+                reportedWarnings.append(warning)
+                if value > 1 { warnings.append(warning) }
+            }
+        }
         var lightFailures: [String] = []
         let lightDescriptions: [Int: String] = [
             14: L10n.text("Left low beam"),
@@ -547,12 +564,23 @@ extension PolestarGRPC {
                 lightFailures.append(desc)
             }
         }
-        if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
-            warnings.append(.exteriorLight)
+        if (14...35).contains(where: { varint(fields, $0) != nil }) {
+            reportedWarnings.append(.exteriorLight)
+            if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
+                warnings.append(.exteriorLight)
+            }
         }
-        if varint(fields, 38) == 2 { warnings.append(.lowVoltageBattery) }
+        if let lowVoltage = varint(fields, 38) {
+            reportedWarnings.append(.lowVoltageBattery)
+            if lowVoltage == 2 { warnings.append(.lowVoltageBattery) }
+        }
         return GrpcHealthReport(
-            details: VehicleHealthDetails(tyres: tyres, warnings: warnings, lightFailures: lightFailures),
+            details: VehicleHealthDetails(
+                tyres: tyres,
+                warnings: warnings,
+                reportedWarnings: reportedWarnings,
+                lightFailures: lightFailures
+            ),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),
             serviceWarning: warnings.contains(.service)
@@ -1054,5 +1082,3 @@ extension PolestarGRPC {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-

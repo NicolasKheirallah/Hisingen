@@ -38,7 +38,18 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(report.details.tyres.first?.kilopascals, 208.5)
         XCTAssertEqual(report.details.tyres.first?.warning, .low)
         XCTAssertNil(report.details.tyres.last?.kilopascals)
+        XCTAssertEqual(report.details.tyres.last?.warning, .unknown)
         XCTAssertTrue(report.details.warnings.contains(.lowVoltageBattery))
+        XCTAssertTrue(report.details.reportedWarnings.contains(.lowVoltageBattery))
+        XCTAssertFalse(report.details.reportedWarnings.contains(.brakeFluid))
+    }
+
+    @Test
+    func testHealthDoesNotConvertAbsentFieldsIntoHealthyReadings() {
+        let report = PolestarGRPC.parseHealth(Data())
+        XCTAssertTrue(report.details.tyres.allSatisfy { $0.kilopascals == nil && $0.warning == .unknown })
+        XCTAssertTrue(report.details.warnings.isEmpty)
+        XCTAssertTrue(report.details.reportedWarnings.isEmpty)
     }
 
     @Test
@@ -366,6 +377,7 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(26, 2)) // Left brake light
         let report = PolestarGRPC.parseHealth(payload)
         XCTAssertTrue(report.details.warnings.contains(.exteriorLight))
+        XCTAssertTrue(report.details.reportedWarnings.contains(.exteriorLight))
         XCTAssertEqual(report.details.lightFailures.count, 3)
         XCTAssertTrue(report.details.lightFailures.contains("Left low beam"))
         XCTAssertTrue(report.details.lightFailures.contains("Right high beam"))
@@ -554,5 +566,4 @@ struct VehicleCapabilityParsingTests {
         return data
     }
 }
-
 

@@ -209,7 +209,7 @@ struct RemoteCommandTests {
     }
 
     @Test
-    func testVehicleWarrantyInfoDerivedAndExplicit() {
+    func testWarrantyDatesAreNeverDerivedFromBuildMetadata() {
         let state = VehicleState(
             batteryPercentage: 80.0,
             rangeKm: 50,
@@ -241,16 +241,7 @@ struct RemoteCommandTests {
             dataWarnings: []
         )
 
-        let warranty = state.effectiveWarrantyInfo
-        XCTAssertEqual(warranty.planName, "Care by Volvo")
-        XCTAssertEqual(warranty.status, "Active")
-        XCTAssertEqual(warranty.assistanceContact, "Volvo Assistance")
-        XCTAssertTrue(warranty.factoryWarrantyValidUntil != nil)
-        XCTAssertTrue(warranty.batteryWarrantyValidUntil != nil)
-        XCTAssertTrue(warranty.digitalServicesValidUntil != nil)
-        XCTAssertTrue(warranty.corrosionWarrantyValidUntil != nil)
-        XCTAssertEqual(warranty.batteryWarrantyKm, 160_000)
-        XCTAssertEqual(warranty.includedMaintenance, true)
+        XCTAssertNil(state.warrantyInfo)
 
         var polestarState = VehicleState(
             batteryPercentage: 75.0,
@@ -284,16 +275,7 @@ struct RemoteCommandTests {
         )
         polestarState.structureWeek = "202245"
 
-        let polestarWarranty = polestarState.effectiveWarrantyInfo
-        XCTAssertEqual(polestarWarranty.planName, "Polestar Care")
-        XCTAssertEqual(polestarWarranty.status, "Active")
-        XCTAssertEqual(polestarWarranty.assistanceContact, "Polestar Assistance")
-        XCTAssertTrue(polestarWarranty.factoryWarrantyValidUntil != nil)
-        XCTAssertTrue(polestarWarranty.batteryWarrantyValidUntil != nil)
-        XCTAssertTrue(polestarWarranty.digitalServicesValidUntil != nil)
-        XCTAssertTrue(polestarWarranty.corrosionWarrantyValidUntil != nil)
-        XCTAssertEqual(polestarWarranty.batteryWarrantyKm, 160_000)
-        XCTAssertEqual(polestarWarranty.includedMaintenance, true)
+        XCTAssertNil(polestarState.warrantyInfo)
     }
 
     @Test
@@ -510,5 +492,4 @@ struct RemoteCommandTests {
         return Float(bitPattern: bits)
     }
 }
-
 

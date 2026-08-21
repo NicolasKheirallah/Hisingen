@@ -204,6 +204,32 @@ extension PolestarAPI {
         if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
         if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
 
+        let healthDetails: VehicleHealthDetails? = {
+            guard features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings) else { return nil }
+            let details = c3Health.value?.details
+            let graphFields: [(String?, VehicleWarning)] = [
+                (health?.brakeFluidLevelWarning, .brakeFluid),
+                (health?.engineCoolantLevelWarning, .engineCoolant),
+                (health?.oilLevelWarning, .oil)
+            ]
+            let reported = graphFields.compactMap { raw, warning -> VehicleWarning? in
+                guard let raw, !raw.contains("UNSPECIFIED") else { return nil }
+                return warning
+            }
+            let active = graphFields.compactMap { raw, warning in Self.hasWarning(raw) ? warning : nil }
+            guard details != nil || !reported.isEmpty else { return nil }
+            var warnings = details?.warnings ?? []
+            var reportedWarnings = details?.reportedWarnings ?? []
+            for warning in active where !warnings.contains(warning) { warnings.append(warning) }
+            for warning in reported where !reportedWarnings.contains(warning) { reportedWarnings.append(warning) }
+            return VehicleHealthDetails(
+                tyres: details?.tyres ?? [],
+                warnings: warnings,
+                reportedWarnings: reportedWarnings,
+                lightFailures: details?.lightFailures ?? []
+            )
+        }()
+
         var state = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: range,
@@ -212,7 +238,7 @@ extension PolestarAPI {
             chargeTargetPercentage: chargeTarget,
             chargingPowerWatts: needsChargingContext ? Self.positive(extras?.chargingPowerWatts) : nil,
             chargingCurrentAmps: needsChargingContext
-                ? (Self.positive(extras?.chargingCurrentAmps) ?? ampLimit.value) : nil,
+                ? Self.positive(extras?.chargingCurrentAmps) : nil,
             chargingVoltageVolts: needsChargingContext ? Self.positive(extras?.chargingVoltageVolts) : nil,
             chargingType: needsChargingContext ? (extras?.chargingType ?? .unknown) : .unknown,
             chargerConnection: needsChargingContext ? (extras?.chargerConnection ?? .unknown) : .unknown,
@@ -231,10 +257,7 @@ extension PolestarAPI {
             serviceWarning: Self.hasWarning(health?.serviceWarning) || (c3ServiceHealth?.serviceWarning ?? false),
             fluidWarnings: Self.fluidWarnings(health),
             exteriorStatus: exterior.value,
-            healthDetails: features.contains(.tyreAndWarnings) ? (c3Health.value?.details ?? VehicleHealthDetails(
-                tyres: TyrePosition.allCases.map { TyrePressure(position: $0, kilopascals: nil, warning: .none) },
-                warnings: []
-            )) : nil,
+            healthDetails: healthDetails,
             softwareInfo: software.value,
             chargingSchedules: schedules.value ?? [],
             climateStatus: climate.value,
@@ -255,9 +278,9 @@ extension PolestarAPI {
         )
         state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
 
-        // Merge GetMyCars OTA capabilities: use the authoritative installed version from
-        // GetMyCars when GetSoftwareInfo doesn't provide one (during a rollout, GetSoftwareInfo
-        // only reports the target version, leaving installedVersion nil).
+        // Merge GetMyCars OTA capabilities: retain its backend-reported software version when
+        // GetSoftwareInfo only reports the rollout target. The field is undocumented and the
+        // UI deliberately labels it unverified rather than treating it as authoritative.
         if let otaCaps = otaCapabilities.value {
             state.otaCapabilities = otaCaps
             if var sw = state.softwareInfo, sw.installedVersion == nil,
@@ -274,6 +297,7 @@ extension PolestarAPI {
         state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
         state.packages = features.contains(.vehicleIdentity) ? packageNames : []
         state.accountMarket = market
+        state.chargingCurrentLimitAmps = ampLimit.value
         state.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
         return state
     }

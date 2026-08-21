@@ -7,7 +7,8 @@ Three independent storage layers, none of them a database. See [security/keychai
 | Data | Storage | Scope | Lifetime | Sensitive | Migration |
 |---|---|---|---|---|---|
 | Polestar refresh token | Keychain, account `polestar-refresh-token` | Per brand | Until sign-out or revoked | Yes | — |
-| Polestar password | Keychain, account `polestar-password` | Per brand | Until sign-out | Yes | Migrated from a legacy plaintext `polestar_password` UserDefaults key at launch (`Preferences.migrateLegacyPassword()`), which is then deleted regardless of migration success |
+| Polestar account email | Keychain, account `polestar-email` | Per brand | Until sign-out | Yes | Migrated from the legacy `polestar_email` UserDefaults key on first read; cleartext is removed after a successful Keychain write |
+| Polestar password | Keychain, account `polestar-password` | Per brand | Until sign-out | Yes | Migrated from a legacy plaintext `polestar_password` UserDefaults key at launch (`Preferences.migrateLegacyPassword()`); the legacy value is removed after the Keychain path succeeds and retained for retry on failure |
 | Volvo client secret, VCC API key, refresh token | Keychain, single JSON blob under account `volvo-credentials-bundle` | Per brand | Until sign-out or revoked | Yes | Self-healing: `readVolvoBundle()` falls back to three legacy single-purpose accounts (`volvo-client-secret`, `volvo-vcc-api-key`, `volvo-refresh-token`) and re-saves them into the bundle format on first read |
 | Volvo client ID | `UserDefaults` (`volvo_client_id`) | Per brand | Persistent | No (not a secret — public OAuth client identifier) | — |
 | Active brand, selected VIN, nicknames | `UserDefaults` | Per brand (VIN/nickname), global (active brand) | Persistent | No | Nicknames migrated from a legacy single-vehicle key; VIN keys are brand-specific (`polestar_vin`/`volvo_vin`) |
@@ -22,7 +23,7 @@ Three independent storage layers, none of them a database. See [security/keychai
 
 ## Why each item is stored
 
-- **Refresh tokens / passwords** — so the user doesn't have to sign in on every launch. Kept exclusively in Keychain, never in `UserDefaults` or on-disk caches.
+- **Account email / refresh tokens / passwords** — so the user doesn't have to sign in on every launch. Kept in Keychain, never newly written to `UserDefaults` or on-disk caches.
 - **Feature selection, notification toggles, theme, etc.** — plain user preferences; no reason to protect them beyond normal `UserDefaults` behavior.
 - **Vehicle telemetry snapshot** — lets the app show *something* immediately at launch and during vehicle switching, without waiting on a network round trip, and lets it keep showing the last known state if the vehicle is asleep or the network is down.
 - **Charging baseline** — the charging state machine (`ChargingTransitionDetector`) needs to remember what state it last saw per VIN so a relaunch doesn't re-fire a "charging started" notification for a session that began before the app was last quit.

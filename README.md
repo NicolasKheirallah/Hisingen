@@ -14,10 +14,10 @@ Where the vehicle, provider and account support them, Hisingen can also expose r
 
 Hisingen is open source, runs locally on your Mac, and has no Hisingen-operated vehicle-data backend or account service.
 
-[**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Vehicle support](#vehicle-support) · [Volvo setup](#volvo-setup) · [Documentation](docs/README.md) · [Security](SECURITY.md)
+[**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Changelog](CHANGELOG.md) · [Vehicle support](#vehicle-support) · [Volvo setup](#volvo-setup) · [Documentation](docs/README.md) · [Security](SECURITY.md)
 
 <p align="center">
-  <img src="website/public/assets/product/00-menu-bar-overview.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
+  <img src="website/public/assets/product/menu-bar-overview.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
 </p>
 
 ## Why Hisingen?
@@ -74,31 +74,31 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle overview</strong><br><br>
-<img src="website/public/assets/product/01-volvo-overview.png" width="420" alt="Hisingen Volvo vehicle overview">
+<img src="website/public/assets/product/volvo-vehicle-overview.png" width="420" alt="Hisingen Volvo vehicle overview">
 </td>
 <td width="50%" align="center">
 <strong>Energy and powertrain telemetry</strong><br><br>
-<img src="website/public/assets/product/02-volvo-charging-and-fuel.png" width="420" alt="Hisingen Volvo energy and powertrain telemetry">
+<img src="website/public/assets/product/volvo-energy-powertrain.png" width="420" alt="Hisingen Volvo energy and powertrain telemetry">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Trip and diagnostic information</strong><br><br>
-<img src="website/public/assets/product/03-volvo-trip-diagnostics.png" width="420" alt="Hisingen Volvo trip and diagnostic information">
+<img src="website/public/assets/product/volvo-trip-diagnostics.png" width="420" alt="Hisingen Volvo trip and diagnostic information">
 </td>
 <td width="50%" align="center">
 <strong>Powertrain, health and service</strong><br><br>
-<img src="website/public/assets/product/04-volvo-powertrain-health.png" width="420" alt="Hisingen Volvo powertrain, vehicle health and service information">
+<img src="website/public/assets/product/volvo-health-service.png" width="420" alt="Hisingen Volvo powertrain, vehicle health and service information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle identity and ownership information</strong><br><br>
-<img src="website/public/assets/product/05-volvo-warranty-identity.png" width="420" alt="Hisingen Volvo vehicle identity information">
+<img src="website/public/assets/product/volvo-identity.png" width="420" alt="Hisingen Volvo vehicle identity information">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle controls</strong><br><br>
-<img src="website/public/assets/product/06-volvo-controls.png" width="420" alt="Hisingen Volvo capability-aware vehicle controls">
+<img src="website/public/assets/product/volvo-controls.png" width="420" alt="Hisingen Volvo capability-aware vehicle controls">
 </td>
 </tr>
 </table>
@@ -114,31 +114,31 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle overview</strong><br><br>
-<img src="website/public/assets/product/07-polestar-overview.png" width="420" alt="Hisingen Polestar vehicle overview">
+<img src="website/public/assets/product/polestar-vehicle-overview.png" width="420" alt="Hisingen Polestar vehicle overview">
 </td>
 <td width="50%" align="center">
 <strong>Charging history</strong><br><br>
-<img src="website/public/assets/product/08-polestar-charging-history.png" width="420" alt="Hisingen charging history with session information">
+<img src="website/public/assets/product/polestar-charging-history.png" width="420" alt="Hisingen charging history with session information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Openings and tyre state</strong><br><br>
-<img src="website/public/assets/product/09-polestar-openings-and-tyres.png" width="420" alt="Hisingen vehicle openings and tyre status">
+<img src="website/public/assets/product/polestar-openings-tyres.png" width="420" alt="Hisingen vehicle openings and tyre status">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle health and climate</strong><br><br>
-<img src="website/public/assets/product/10-polestar-health-climate.png" width="420" alt="Hisingen vehicle health and climate information">
+<img src="website/public/assets/product/polestar-health-climate.png" width="420" alt="Hisingen vehicle health and climate information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle software</strong><br><br>
-<img src="website/public/assets/product/11-polestar-software.png" width="420" alt="Hisingen Polestar vehicle software information">
+<img src="website/public/assets/product/polestar-software.png" width="420" alt="Hisingen Polestar vehicle software information">
 </td>
 <td width="50%" align="center">
 <strong>Detailed openings and tyre view</strong><br><br>
-<img src="website/public/assets/product/17-polestar-openings-and-tyres.png" width="420" alt="Hisingen detailed doors, windows, charge lid and tyre status">
+<img src="website/public/assets/product/polestar-openings-tyres-detail.png" width="420" alt="Hisingen detailed doors, windows, charge lid and tyre status">
 </td>
 </tr>
 </table>
@@ -154,27 +154,27 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <tr>
 <td width="50%" align="center">
 <strong>Account and provider setup</strong><br><br>
-<img src="website/public/assets/product/12-polestar-settings-account.png" width="420" alt="Hisingen account and provider settings">
+<img src="website/public/assets/product/settings-account.png" width="420" alt="Hisingen account and provider settings">
 </td>
 <td width="50%" align="center">
 <strong>Appearance and themes</strong><br><br>
-<img src="website/public/assets/product/13-polestar-settings-themes.png" width="420" alt="Hisingen appearance and theme settings">
+<img src="website/public/assets/product/settings-appearance.png" width="420" alt="Hisingen appearance and theme settings">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Storage and local-data settings</strong><br><br>
-<img src="website/public/assets/product/14-polestar-settings-storage.png" width="420" alt="Hisingen storage and local-data settings">
+<img src="website/public/assets/product/settings-storage.png" width="420" alt="Hisingen storage and local-data settings">
 </td>
 <td width="50%" align="center">
 <strong>Telemetry and feature settings</strong><br><br>
-<img src="website/public/assets/product/15-polestar-settings-telemetry.png" width="420" alt="Hisingen telemetry and feature settings">
+<img src="website/public/assets/product/settings-telemetry.png" width="420" alt="Hisingen telemetry and feature settings">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Additional storage state</strong><br><br>
-<img src="website/public/assets/product/23-polestar-settings-storage.png" width="420" alt="Hisingen storage settings in another application state">
+<img src="website/public/assets/product/settings-storage-detail.png" width="420" alt="Hisingen storage settings in another application state">
 </td>
 <td width="50%"></td>
 </tr>
@@ -191,27 +191,27 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <tr>
 <td width="50%" align="center">
 <strong>Powertrain, battery health and service</strong><br><br>
-<img src="website/public/assets/product/16-polestar-info-overview.png" width="420" alt="Hisingen powertrain, battery health, service and vehicle information">
+<img src="website/public/assets/product/polestar-info-overview.png" width="420" alt="Hisingen powertrain, battery health, service and vehicle information">
 </td>
 <td width="50%" align="center">
 <strong>Location and environmental information</strong><br><br>
-<img src="website/public/assets/product/18-polestar-location-and-cleanzone.png" width="420" alt="Hisingen vehicle location and environmental information">
+<img src="website/public/assets/product/polestar-location-environment.png" width="420" alt="Hisingen vehicle location and environmental information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Diagnostics</strong><br><br>
-<img src="website/public/assets/product/19-polestar-diagnostics.png" width="420" alt="Hisingen vehicle diagnostic information">
+<img src="website/public/assets/product/polestar-diagnostics.png" width="420" alt="Hisingen vehicle diagnostic information">
 </td>
 <td width="50%" align="center">
 <strong>Powertrain and vehicle health detail</strong><br><br>
-<img src="website/public/assets/product/20-polestar-powertrain-health.png" width="420" alt="Hisingen detailed powertrain and vehicle health information">
+<img src="website/public/assets/product/polestar-powertrain-health.png" width="420" alt="Hisingen detailed powertrain and vehicle health information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle identity and warranty detail</strong><br><br>
-<img src="website/public/assets/product/21-polestar-warranty-identity.png" width="420" alt="Hisingen vehicle identity and warranty information">
+<img src="website/public/assets/product/polestar-identity-warranty.png" width="420" alt="Hisingen vehicle identity and warranty information">
 </td>
 <td width="50%"></td>
 </tr>
@@ -230,17 +230,17 @@ Remote controls are capability-gated. A control appearing in a screenshot does n
 <tr>
 <td width="50%" align="center">
 <strong>Extended vehicle controls</strong><br><br>
-<img src="website/public/assets/product/22-polestar-controls-extended.png" width="420" alt="Hisingen extended capability-aware vehicle controls">
+<img src="website/public/assets/product/polestar-controls-extended.png" width="420" alt="Hisingen extended capability-aware vehicle controls">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle controls</strong><br><br>
-<img src="website/public/assets/product/24-polestar-controls.png" width="420" alt="Hisingen vehicle-dependent remote controls">
+<img src="website/public/assets/product/polestar-identity-health.png" width="420" alt="Hisingen vehicle identity and health information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Charging controls and configuration</strong><br><br>
-<img src="website/public/assets/product/25-polestar-charging-controls.png" width="420" alt="Hisingen charging controls and configuration">
+<img src="website/public/assets/product/polestar-charging-controls.png" width="420" alt="Hisingen charging controls and configuration">
 </td>
 <td width="50%"></td>
 </tr>
@@ -259,17 +259,17 @@ Hisingen exposes capability state instead of assuming that a recognized vehicle 
 <tr>
 <td width="50%" align="center">
 <strong>Capability overview</strong><br><br>
-<img src="website/public/assets/product/capability-matrix-polestar-overview.png" width="420" alt="Hisingen capability inspector overview">
+<img src="website/public/assets/product/capability-matrix-overview.png" width="420" alt="Hisingen capability inspector overview">
 </td>
 <td width="50%" align="center">
 <strong>Capability detail</strong><br><br>
-<img src="website/public/assets/product/capability-matrix-polestar-detail.png" width="420" alt="Hisingen detailed capability inspector">
+<img src="website/public/assets/product/capability-matrix-detail.png" width="420" alt="Hisingen detailed capability inspector">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Unavailable control state</strong><br><br>
-<img src="website/public/assets/product/capability-controls-unavailable.png" width="420" alt="Hisingen showing vehicle controls as unavailable">
+<img src="website/public/assets/product/controls-unavailable.png" width="420" alt="Hisingen showing vehicle controls as unavailable">
 </td>
 <td width="50%"></td>
 </tr>

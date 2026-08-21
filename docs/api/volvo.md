@@ -31,6 +31,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
 | Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure) | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
 | Diagnostics | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, fluid warnings, days/distance to service | `daysToService`, `distanceToServiceKm`, `fluidWarnings` |
+| Engine diagnostics | `GET /connected-vehicle/v2/vehicles/{vin}/engine` | Coolant and oil warning enums (not measured levels) | `healthDetails.warnings` / `reportedWarnings` |
 | Brakes | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid warning | Merged into `healthDetails` |
 | Bulb/light warnings | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16+ individual light sensors | Synthesized into a single `.exteriorLight` warning if any are active |
 | Odometer | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total mileage | `odometerKm` |
@@ -38,7 +39,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 | Location | `GET /location/v1/vehicles/{vin}/location` | GeoJSON coordinates + heading | `location` (requires subscribing to the Location API product separately) |
 | Engine status | `GET /connected-vehicle/v2/vehicles/{vin}/engine-status` | Running state | Minor |
 | Command accessibility | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Whether commands are currently deliverable | `availability` — the **only** source of Volvo's online/offline state; there's no `.unavailable` mapping, only `.available`/`.unknown` |
-| Climatization status | `GET /connected-vehicle/v2/vehicles/{vin}/climatization-status` | Activity, interior/target temperature, timer | `climateStatus` |
+| Climate commands | `POST .../commands/climatization-start|stop` | Command result only; no live activity, cabin temperature or setpoint resource | Remote commands only; `climateStatus` remains unavailable |
 | Remote commands | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | — | See below |
 
 **Fetched by no code path despite having a fixture/DTO:** `VolvoFuelDTO` (dead — only exercised by a decode test) and `VolvoCommandDTO`/`VolvoCommandsListDTO`.

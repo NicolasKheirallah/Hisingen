@@ -23,6 +23,20 @@ enum Format {
         return "\(value) \(unit.suffix)"
     }
 
+    static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit) -> String {
+        let value = unit == .kilometers ? km : km * 0.621371
+        return String(format: "%.*f %@", decimals, value, unit.suffix)
+    }
+
+    static func temperature(celsius: Double, unit: TemperatureUnit, decimals: Int = 1) -> String {
+        String(format: "%.*f %@", decimals, unit.convert(celsius: celsius), unit.suffix)
+    }
+
+    static func pressure(kilopascals: Double, unit: PressureUnit) -> String {
+        let decimals = unit == .kilopascals ? 0 : 1
+        return String(format: "%.*f %@", decimals, unit.convert(kilopascals: kilopascals), unit.suffix)
+    }
+
     static func batteryColor(percentage: Double, charging: Bool) -> NSColor {
         if charging { return .systemGreen }
         if percentage <= 20 { return .systemOrange }
@@ -54,6 +68,13 @@ enum Format {
         return "battery.0percent"
     }
 
+    /// A crisp SF Symbol for the security state. Keeping this separate from the menu-bar
+    /// text lets AppKit render a real template image instead of a tiny, ambiguous emoji.
+    static func lockStatusSymbol(for data: VehicleState?) -> String? {
+        guard let isLocked = data?.exteriorStatus?.isLocked else { return nil }
+        return isLocked ? "lock.fill" : "lock.open.fill"
+    }
+
     static func completionTime(from minutes: Int, baseDate: Date = Date(), timeZone: TimeZone = .current) -> String {
         let target = baseDate.addingTimeInterval(TimeInterval(minutes * 60))
         let formatter = DateFormatter()
@@ -78,6 +99,11 @@ enum Format {
         let converted = unit == .kilometers ? kmH : Int((Double(kmH) * 0.621371).rounded())
         let speedSuffix = unit == .kilometers ? "km/h" : "mph"
         return "+\(converted) \(speedSuffix)"
+    }
+
+    static func speed(kmH: Int, unit: DistanceUnit) -> String {
+        let converted = unit == .kilometers ? kmH : Int((Double(kmH) * 0.621371).rounded())
+        return "\(converted) \(unit == .kilometers ? "km/h" : "mph")"
     }
 
     static func fuelVolume(liters: Double, unit: FuelVolumeUnit) -> String {
@@ -200,13 +226,9 @@ enum Format {
             return ""
 
         case .lockAndBattery:
-            let lockGlyph: String = {
-                guard let isLocked = data.exteriorStatus?.isLocked else { return "" }
-                return isLocked ? "🔒" : "🔓"
-            }()
-            if !lockGlyph.isEmpty, let pct = primaryPct {
-                return "\(lockGlyph) \(pct)"
-            }
+            // StatusItemController and the settings preview render the lock as a native
+            // SF Symbol. The title remains text-only so it is never mistaken for a lock
+            // emoji with a nearly invisible open shackle.
             return primaryPct ?? "--"
         }
     }
@@ -215,5 +237,3 @@ enum Format {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-

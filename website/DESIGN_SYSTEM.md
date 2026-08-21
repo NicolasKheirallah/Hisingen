@@ -1,108 +1,110 @@
 # Hisingen Website Design System
 
-This is the design system for the Hisingen **website**, not the native macOS application. It describes how the website presents a small, technical product with clarity and restraint.
+This document covers the Hisingen **website only**. It does not describe native macOS application components.
 
 ## Direction
 
-Hisingen is a Swedish product site for an independent native Mac utility. The visual language is built from a deep blue-green product shell, a single ochre signal colour, warm paper surfaces, technical labels, real product screens and plainspoken copy. It should feel considered rather than luxurious, and technical rather than futuristic.
+Hisingen is an independent, Swedish-made native Mac utility for supported Polestar and Volvo vehicles. The website should feel precise, calm and technically honest. Product screenshots carry the visual story; typography, rules and spacing provide the structure.
 
-Polestar influence means architectural composition, typographic confidence, negative space and product-first imagery. Volvo influence means readable hierarchy, calm information design, clear actions and inclusive responsive behavior. Neither brand supplies Hisingen's colours, logos, typography or navigation patterns. Polestar and Volvo are supported ecosystems, not the site's visual owners.
+Polestar contributes architectural composition, restraint, strong alignment and product-first imagery. Volvo contributes clarity, readable hierarchy, inclusive behavior and functional simplicity. Hisingen owns the mineral-green palette, system typography, direct voice and menu-bar context. Vehicle manufacturers are supported ecosystems, never the site's visual owners.
 
-## Grid and layout
+## Grid and spacing
 
-- Content container: `min(1200px, calc(100% - 48px))`.
-- Wide media may use the full container; prose is capped at `62ch`.
-- Desktop gutters: 24px minimum, 48px preferred at large widths.
-- Mobile gutters: 20px at widths below 600px.
-- Narrative sections use a 5/7 or 7/5 split. Do not center every section.
-- Breakpoints: 600px mobile, 900px tablet, 1200px desktop.
-- Use alignment, rules and whitespace before adding a panel or card.
-
-## Spacing
-
-Use the finite scale: `4, 8, 12, 16, 24, 32, 48, 64, 96, 128` pixels.
-
-- Inline/component spacing: 4–16px.
-- Control and list internals: 12–24px.
-- Section spacing: 64–96px.
-- Major narrative breaks: 96–128px.
+- Content width: `1200px` maximum.
+- Wide media may fill the content width; prose is limited to roughly `55–75ch`.
+- Gutters: 28px desktop, 20px below 600px, 24px at tablet widths.
+- Narrative layouts use asymmetric 7/5 or 5/7 columns. Centering is reserved for focused actions.
+- Breakpoints: 600px mobile, 1000px tablet, 1200px wide desktop.
+- Spacing scale: `4, 8, 12, 16, 24, 32, 48, 64, 96, 128`.
+- Inline spacing is 4–16px; component internals 12–24px; section spacing 86–128px.
 
 ## Typography
 
-The site uses the system sans stack so it feels natural on macOS, loads no remote font, and remains fast and legally uncomplicated. `SF Pro Display` is used when available, with Segoe UI and Arial fallbacks. Monospace labels use the system mono stack for technical context.
+The site uses the macOS system stack: `-apple-system, BlinkMacSystemFont, SF Pro Display, Segoe UI, Arial, sans-serif`. No remote font is loaded, so the site is fast, legally uncomplicated and native to the audience's platform. System mono is reserved for technical labels and section numbering.
 
-- Display: `clamp(3rem, 6vw, 6.6rem)`, tight leading; use sparingly for the hero.
-- H1: `clamp(3.25rem, 6.2vw, 6.6rem)`, 0.96 leading.
-- H2: `clamp(2.5rem, 4.2vw, 4.6rem)`, 0.98 leading.
-- H3: 1.25–1.6rem, 1.1 leading.
-- Body large: 1.1rem, 1.55 leading.
-- Body: 1rem, 1.6 leading; prose stays near 60–70 characters.
-- Small: 0.875rem; label/caption: 0.6875rem in uppercase mono.
-- Buttons: 0.875rem, semibold.
-- Use tabular numerals for metrics and metadata.
+| Style | Guidance |
+| --- | --- |
+| Display / H1 | `clamp(3.25rem, 6vw, 6rem)`, tight leading; mention the product context |
+| H2 | `clamp(2.5rem, 4.6vw, 4.5rem)`, use for narrative turns |
+| H3 | 1.55–2.2rem, 1.02 leading |
+| Body large | 1.1–1.15rem, 1.6 leading |
+| Body | 1rem, 1.6 leading |
+| Small | .75–.875rem |
+| Label | .68rem mono, uppercase, letter spacing |
+| Button | .84rem, bold, minimum 50px high |
 
-## Colour
+Use tabular numerals when displaying vehicle metrics. Do not use oversized headlines merely to create drama.
 
-Light mode uses porcelain and mineral mist rather than pure white. The primary product shell is deep slate, with a soft sage Hisingen signal colour used for action and state. Dark mode uses layered blue-slate surfaces rather than black. The accent is Hisingen's own mineral signal colour; it is not a Polestar or Volvo brand colour.
+## Colour tokens
+
+Light mode uses warm porcelain, mineral mist and deep slate. Dark mode uses layered blue-green neutrals, not black or neon.
 
 ```css
---surface-primary: #f5f7f4;
---surface-secondary: #e7ece9;
---surface-raised: #fcfdfb;
---text-primary: #1d2a2e;
---text-secondary: #617074;
---text-muted: #879391;
---border-subtle: #cbd5d2;
---border-strong: #617074;
---accent: #b7cbbd;
---accent-hover: #456b5a;
+--surface-primary: #f4f5f1;
+--surface-secondary: #e7ebe5;
+--surface-raised: #fbfcf9;
+--text-primary: #17221f;
+--text-secondary: #53645d;
+--text-muted: #74827b;
+--border-subtle: #ccd5ce;
+--border-strong: #6c7b73;
+--accent: #b9d2bd;
+--accent-hover: #d2e5d4;
+--success: #47765b;
+--warning: #9b6c2d;
+--danger: #a5514c;
+--info: #587d93;
 ```
 
-Dark equivalents are `#111a1e`, `#1d2b30`, `#eef4f0`, `#eaf1ed`, `#a9b9b5`, `#3b4c4e`, and `#bcd5c5`. Semantic states use green, amber, red and blue only when communicating state, never as decoration.
+Dark equivalents are defined in `src/styles.css` under `data-theme` and the system preference media query. Semantic colours communicate state only. Polestar and Volvo identifiers are small neutral marks, never dominant brand colour fields.
 
-## Controls
+## Controls, links and radii
 
-Primary buttons are deep slate with a soft sage hover state. Secondary actions are text links with an underline. Controls have a minimum 44px target, a visible `:focus-visible` ring and a restrained 2px radius. Full pills are reserved for real status indicators. Links remain identifiable without colour alone.
+- Primary: mineral-green fill for download and the main decision.
+- Secondary: outlined control on dark surfaces or an underlined text link.
+- Tertiary: underlined inline/standalone link with an arrow for direction.
+- All controls have at least a 44px target and a visible keyboard focus ring.
+- Radius scale: 2px for buttons and screenshot frames, 8px only for independent raised objects, full radius only for genuine status dots/chips.
+- Hover changes colour or border; it does not make controls jump.
+- Disabled controls must be visibly muted and retain readable text.
 
-## Cards and radii
+## Screenshots and vehicle imagery
 
-Cards are reserved for an independent object, such as a download block or a capability state. A product screenshot is not automatically placed in a card. Default radii are 2px and 8px; 999px is reserved for status chips. Avoid nested cards and glass effects.
+Real Hisingen screens are the primary product evidence. Use a sharp source image, stable dimensions, meaningful alt text and a short caption. Do not add fake browser chrome, laptop frames, gradient halos, glass, or a decorative rounded container. Below-the-fold images are lazy-loaded; the hero is eager and dimensioned to prevent layout shift.
 
-## Imagery
-
-Real Hisingen screens are the primary visual language. Screenshots are sharp, consistently cropped, labelled by nearby text and allowed to breathe. Do not add fake browser chrome, decorative device frames, glow, gradients or oversized rounded masks. Below-the-fold images are lazy-loaded; the hero image is eager and has dimensions to prevent layout shift.
-
-Vehicle imagery, when added, should identify a supported ecosystem without turning the page into a manufacturer campaign. Manufacturer logos are not decorative ornaments.
+Vehicle imagery should identify a supported ecosystem only when it adds comprehension. Never use manufacturer logos as decoration, imitate a manufacturer campaign, or let vehicle photography overwhelm the software story.
 
 ## Capability and trust UI
 
-Use plain-language states: Supported, Vehicle dependent, Region dependent, Unavailable and Experimental. Always explain what the state means. Technical uncertainty is a trust feature, not a defect to hide. Authentication, Keychain storage, direct provider connections, optional location and the independent status belong near the decision to download.
+Use plain status language: **Supported**, **Vehicle dependent**, **Region dependent**, **Unavailable**, and **Experimental**. Explain the implication next to the state. Never imply that a model name guarantees a capability. Authentication, Keychain storage, direct provider requests, optional location, no tracking and independent status belong near the download decision.
 
-## Motion
-
-Motion communicates state or provides small interaction feedback only. Use short opacity/transform transitions for navigation and buttons. No scroll hijacking, parallax, pulsing CTAs or reveal animation on every section. Disable non-essential motion under `prefers-reduced-motion: reduce`.
+The website should represent the documented product surface: energy and fuel, charging history, openings, health and service, climate, software, optional location/weather, notifications, remote controls, multiple vehicles and macOS integration. Use the real screenshot that best proves each claim. Do not imply that Polestar and Volvo expose the same data: Polestar software information is shown where available, while Volvo's public APIs do not expose an equivalent state.
 
 ## Responsive behavior
 
-Mobile is a composed reading order, not a squeezed desktop. The header becomes a full-width disclosure menu with large links. Hero actions stack only when needed. Screenshot pairs become a deliberate sequence, not an undifferentiated card list. Tables remain scrollable with a visible label. Text stays readable at 200% zoom and no content depends on hover.
+Mobile is a deliberate reading order. The full-width menu is a disclosure with large links and a clear download action. The hero stacks copy before the product screenshot. Screenshot pairs remain a visual pair where readable and switch to a vertical sequence only when necessary. Wide support tables scroll inside a labelled focusable region. No content requires hover, and the layout remains usable at 200% zoom.
+
+## Motion and accessibility
+
+Motion communicates state or provides short interaction feedback. There is no scroll hijacking, parallax, pulsing CTA or reveal animation on every section. `prefers-reduced-motion: reduce` disables non-essential transitions and smooth scrolling.
+
+Use semantic landmarks, one page H1, ordered heading levels, labelled navigation, descriptive alt text, native `details` for FAQ, visible focus, sufficient contrast and keyboard-accessible menus. Accessibility overrides brand expression. Never communicate status by colour alone; the capability key uses colour plus text.
 
 ## Copy tone
 
-Use direct, specific language: “Check battery, range and charging from the menu bar.” Avoid inflated claims and words such as “seamlessly”, “next-generation”, “unlock”, “transformative” and “powerful”. State limitations, provider differences and independence plainly.
+Write as a technically literate builder explaining the product plainly. Prefer “Check battery, range and charging from the menu bar” over “Unlock powerful vehicle insights.” Avoid “seamlessly”, “next-generation”, “transformative”, “cutting-edge”, “elevate” and unsupported marketing claims. State limitations directly.
 
 ## Component decisions
 
-- **KEEP:** skip link, semantic sections, real screenshots, support table, native details FAQ, static Pages architecture.
-- **REFINE:** header, theme control, buttons, metadata row, screenshot captions, footer and focus treatment.
-- **REDESIGN:** hero hierarchy, provider presentation, capability explanation and install path.
-- **REMOVE:** decorative screenshot frames, redundant provider card treatment, excessive shadows, oversized closing type and any decorative badge that does not convey state.
+- **KEEP:** static Pages architecture, real screenshots, semantic FAQ, support table, skip link, local theme preference.
+- **REFINE:** header, metadata row, buttons, focus treatment, footer and screenshot captions.
+- **REDESIGN:** hero hierarchy, product story, capability gallery, provider comparison, capability key, native macOS section, trust section and install path.
+- **REMOVE:** runtime screenshot swapping, duplicate feature catalogue, redundant cards, decorative frames and unsupported “read-only by default” claims.
 
 ## Anti-patterns
 
-Do not use a card when spacing or a rule groups content adequately. Do not use a pill for ordinary text, navigation or headings. Do not use glass when it lowers contrast or exists only as decoration. Do not animate when no state or hierarchy changes. Do not add a three-column feature grid, fake metric, testimonial, gradient blob or manufacturer-branded theme without a real product reason.
+Do not use a card when a rule or whitespace groups content. Do not use a pill for ordinary text, navigation or headings. Do not use glass when it reduces readability or is purely decorative. Do not animate when no state or hierarchy changes. Do not add generic three-column feature grids, fake statistics, testimonials, gradient blobs, glowing borders or manufacturer-branded themes.
 
-## Correct / incorrect
+**Correct:** a large screenshot beside one sentence explaining its value; a thin rule separating supported model groups; a capability state followed by its limitation.
 
-**Correct:** a large, sharp menu-bar screenshot next to one sentence explaining what it shows; a thin rule separating supported model groups; a status label followed by its limitation.
-
-**Incorrect:** three rounded feature cards with generic icons; a screenshot inside a fake laptop with a glow; a “Supported” pill with no model or capability context; a giant headline that does not mention macOS, vehicles or Hisingen.
+**Incorrect:** three rounded feature cards with generic icons; a screenshot in a glowing laptop frame; a “Supported” badge with no model or capability context; a headline that never says what Hisingen is.

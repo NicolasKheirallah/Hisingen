@@ -3,6 +3,8 @@ name: Security
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     # 04:17 UTC every Monday — off-peak, avoids stacking with other scheduled jobs.
     - cron: "17 4 * * 1"
@@ -31,8 +33,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Select available Xcode toolchain
+        run: sh Scripts/select-xcode.sh
+
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           languages: swift
           build-mode: manual
@@ -41,10 +46,10 @@ jobs:
         run: sh Scripts/inject-secrets.sh
 
       - name: Build (same command as CI)
-        run: swift build -Xswiftc -whole-module-optimization
+        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: "/language:swift"
 
@@ -63,7 +68,7 @@ jobs:
           persist-credentials: false
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@3b139cfc5fae8b618d3eae3675e383bb1769c019 # v4.5.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: never

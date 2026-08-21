@@ -20,14 +20,12 @@ struct ControlsTabView: View {
     /// Charge target derived from state (not @State) so it survives view rebuilds.
     /// When a command is in progress or the optimistic lock is active, use the optimistic
     /// value from the state; otherwise use the backend-reported value.
-    private var chargeTarget: Int {
-        if let target = state.chargeTargetPercentage, target > 0 { return target }
-        return 80
+    private var chargeTarget: Int? {
+        state.chargeTargetPercentage.flatMap { $0 > 0 ? $0 : nil }
     }
     /// Amp limit derived from state (not @State) for the same reason.
-    private var ampLimit: Int {
-        if let amps = state.chargingCurrentAmps, amps > 0 { return amps }
-        return 16
+    private var ampLimit: Int? {
+        state.chargingCurrentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
     }
 
     private var isBrandVolvo: Bool { preferences.activeBrand == .volvo }
@@ -122,6 +120,12 @@ struct ControlsTabView: View {
         .sheet(isPresented: $showScheduleEditor) {
             ScheduleEditorSheet(state: state, onRemoteCommand: onRemoteCommand)
         }
+        .onAppear {
+            targetTemperature = preferences.remoteClimateTemperature
+            driverSeat = preferences.remoteDriverSeatHeating
+            passengerSeat = preferences.remoteFrontRightSeatHeating
+            steeringHeating = preferences.remoteSteeringWheelHeating
+        }
     }
 
     private var restrictedNoticeBanner: some View {
@@ -181,9 +185,12 @@ struct ControlsTabView: View {
                         VStack(spacing: 10) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(L10n.text("Target Cabin Temperature"))
+                                    Text(L10n.text("Preconditioning Command Setpoint"))
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.secondary)
+                                    Text(L10n.text("Saved command setting; not live cabin telemetry"))
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.tertiary)
                                     if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive {
                                         Text(L10n.format("%d min remaining", remaining))
                                             .font(.system(size: 10, weight: .medium))
@@ -191,7 +198,7 @@ struct ControlsTabView: View {
                                     }
                                 }
                                 Spacer()
-                                Text(String(format: "%.1f °C", targetTemperature))
+                                Text(Format.temperature(celsius: targetTemperature, unit: preferences.temperatureUnit))
                                     .font(.system(size: 22, weight: .bold))
                                     .monospacedDigit()
                                     .foregroundStyle(HisingenTheme.temperatureColor(celsius: targetTemperature))
@@ -219,7 +226,7 @@ struct ControlsTabView: View {
                                             targetTemperature = Double(temp)
                                         preferences.remoteClimateTemperature = Double(temp)
                                         } label: {
-                                            Text("\(temp)°")
+                                            Text(String(format: "%.0f°", preferences.temperatureUnit.convert(celsius: Double(temp))))
                                                 .font(.system(size: 11, weight: isSelected ? .bold : .medium))
                                                 .frame(maxWidth: .infinity)
                                         }
@@ -268,7 +275,7 @@ struct ControlsTabView: View {
                                         Text(L10n.text("Interior"))
                                             .font(.system(size: 9.5))
                                             .foregroundStyle(.secondary)
-                                        Text(String(format: "%.1f °C", interior))
+                                        Text(Format.temperature(celsius: interior, unit: preferences.temperatureUnit))
                                             .font(.system(size: 16, weight: .bold))
                                             .monospacedDigit()
                                             .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
@@ -284,7 +291,7 @@ struct ControlsTabView: View {
                                     .foregroundStyle(.secondary)
                                 Spacer()
                                 if let interior = state.climateStatus?.interiorTemperatureCelsius {
-                                    Text(String(format: "%.1f °C", interior))
+                                    Text(Format.temperature(celsius: interior, unit: preferences.temperatureUnit))
                                         .font(.system(size: 12.5, weight: .semibold))
                                         .monospacedDigit()
                                         .foregroundStyle(.secondary)
@@ -399,7 +406,7 @@ struct ControlsTabView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text("\(chargeTarget)%")
+                            Text(chargeTarget.map { "\($0)%" } ?? L10n.text("Unavailable"))
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(.primary)
@@ -412,9 +419,7 @@ struct ControlsTabView: View {
                                 onRemoteCommand(.setChargeTarget(80))
                             } label: {
                                 HStack(spacing: 3) {
-                                    Image(systemName: "shield.fill")
-                                        .font(.system(size: 9))
-                                    Text("80% " + L10n.text("Daily"))
+                                    Text("80%")
                                         .font(.system(size: 10, weight: chargeTarget == 80 ? .bold : .medium))
                                 }
                                 .padding(.horizontal, 7)
@@ -430,9 +435,7 @@ struct ControlsTabView: View {
                                 onRemoteCommand(.setChargeTarget(90))
                             } label: {
                                 HStack(spacing: 3) {
-                                    Image(systemName: "battery.75percent")
-                                        .font(.system(size: 9))
-                                    Text("90% " + L10n.text("Standard"))
+                                    Text("90%")
                                         .font(.system(size: 10, weight: chargeTarget == 90 ? .bold : .medium))
                                 }
                                 .padding(.horizontal, 7)
@@ -448,9 +451,7 @@ struct ControlsTabView: View {
                                 onRemoteCommand(.setChargeTarget(100))
                             } label: {
                                 HStack(spacing: 3) {
-                                    Image(systemName: "road.lanes")
-                                        .font(.system(size: 9))
-                                    Text("100% " + L10n.text("Road Trip"))
+                                    Text("100%")
                                         .font(.system(size: 10, weight: chargeTarget == 100 ? .bold : .medium))
                                 }
                                 .padding(.horizontal, 7)
@@ -464,18 +465,24 @@ struct ControlsTabView: View {
                         }
 
                         // Slider for granular control (40-100%)
-                        Slider(value: Binding(
-                            get: { chargeTargetDraft ?? Double(chargeTarget) },
-                            set: { chargeTargetDraft = $0 }
-                        ), in: 40...100, step: 5, onEditingChanged: { editing in
-                            guard !editing, let draft = chargeTargetDraft else { return }
-                            chargeTargetDraft = nil
-                            let rounded = Int(draft.rounded())
-                            guard rounded != chargeTarget else { return }
-                            onRemoteCommand(.setChargeTarget(rounded))
-                        })
-                        .tint(.green)
-                        .disabled(isDisabled(.setChargeTarget(chargeTarget)))
+                        if let chargeTarget {
+                            Slider(value: Binding(
+                                get: { chargeTargetDraft ?? Double(chargeTarget) },
+                                set: { chargeTargetDraft = $0 }
+                            ), in: 40...100, step: 5, onEditingChanged: { editing in
+                                guard !editing, let draft = chargeTargetDraft else { return }
+                                chargeTargetDraft = nil
+                                let rounded = Int(draft.rounded())
+                                guard rounded != chargeTarget else { return }
+                                onRemoteCommand(.setChargeTarget(rounded))
+                            })
+                            .tint(.green)
+                            .disabled(isDisabled(.setChargeTarget(chargeTarget)))
+                        } else {
+                            Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -486,25 +493,31 @@ struct ControlsTabView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text("\(ampLimit) A")
+                            Text(ampLimit.map { "\($0) A" } ?? L10n.text("Unavailable"))
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(.primary)
                                 .contentTransition(reduceMotion ? .identity : .numericText())
                         }
 
-                        Slider(value: Binding(
-                            get: { ampLimitDraft ?? Double(ampLimit) },
-                            set: { ampLimitDraft = $0 }
-                        ), in: 6...32, step: 1, onEditingChanged: { editing in
-                            guard !editing, let draft = ampLimitDraft else { return }
-                            ampLimitDraft = nil
-                            let rounded = Int(draft.rounded())
-                            guard rounded != ampLimit else { return }
-                            onRemoteCommand(.setAmpLimit(rounded))
-                        })
-                        .tint(.orange)
-                        .disabled(isDisabled(.setAmpLimit(ampLimit)))
+                        if let ampLimit {
+                            Slider(value: Binding(
+                                get: { ampLimitDraft ?? Double(ampLimit) },
+                                set: { ampLimitDraft = $0 }
+                            ), in: 6...32, step: 1, onEditingChanged: { editing in
+                                guard !editing, let draft = ampLimitDraft else { return }
+                                ampLimitDraft = nil
+                                let rounded = Int(draft.rounded())
+                                guard rounded != ampLimit else { return }
+                                onRemoteCommand(.setAmpLimit(rounded))
+                            })
+                            .tint(.orange)
+                            .disabled(isDisabled(.setAmpLimit(ampLimit)))
+                        } else {
+                            Text(L10n.text("The vehicle did not report a configurable current limit."))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -786,14 +799,20 @@ struct ControlsTabView: View {
             otaStatusRow(symbol: "calendar.badge.clock", tint: .blue,
                          text: when.map { L10n.format("Installation is scheduled for %@.", $0) }
                             ?? L10n.text("An installation is scheduled."))
-        case .failed:
+        case .failed where software.hasActionableFailure():
             otaStatusRow(symbol: "exclamationmark.triangle.fill", tint: HisingenTheme.semanticWarning,
                          text: L10n.text("The last software update failed."))
-        case .completed, .unknown:
+        case .failed:
+            otaStatusRow(symbol: "clock.arrow.circlepath", tint: .secondary,
+                         text: L10n.text("An older software event is recorded, but no current update failure requires attention."))
+        case .completed:
             let installed = software.installedVersion ?? software.version
             otaStatusRow(symbol: "checkmark.circle.fill", tint: HisingenTheme.semanticGood,
-                         text: installed.map { L10n.format("Software is up to date (%@).", $0) }
-                            ?? L10n.text("Software is up to date"))
+                         text: installed.map { L10n.format("Backend reports installation completed for version %@.", $0) }
+                            ?? L10n.text("Backend reports that installation completed."))
+        case .unknown:
+            otaStatusRow(symbol: "questionmark.circle", tint: .secondary,
+                         text: L10n.text("Software status is unavailable; the app cannot confirm that the vehicle is up to date."))
         }
     }
 
@@ -868,8 +887,15 @@ struct ControlsTabView: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
-                    } else {
+                    } else if state.isEngineRunning == false {
                         Text(L10n.text("Engine Stopped"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                    } else {
+                        Text(L10n.text("Status Unavailable"))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 7)

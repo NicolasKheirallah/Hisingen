@@ -1,27 +1,32 @@
 # CI
 
-Four GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
-`security.yml`, `live-integration.yml`, and `release.yml`. All actions used
+Six GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
+`security.yml`, `pages.yml`, `live-integration.yml`, `tag-release.yml`, and
+`release.yml`. All actions used
 across them are pinned to commit SHAs with a version comment (e.g.
-`actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0`) —
+`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`) —
 preserve that pinning style when bumping any of them. This document covers
 `ci.yml` and `security.yml`; see [releases.md](./releases.md) for
 `release.yml` and `live-integration.yml`.
 
 ```mermaid
 flowchart LR
-    subgraph Push["push to main / any PR"]
+    subgraph Push["push to main / PR targeting main"]
         Lint["ci.yml: lint-workflows-and-scripts<br/>actionlint + shellcheck"]
         L10n["ci.yml: check-localization<br/>duplicate-key detection + coverage report"]
         Docs["ci.yml: check-docs<br/>broken links + unbalanced fences"]
         CI["ci.yml: build-and-test<br/>macos-14 + macos-15 matrix<br/>build, test, bundle validation"]
         Sec["security.yml<br/>CodeQL (Swift) + Dependency Review"]
+        Pages["pages.yml<br/>website typecheck + build + Pages deploy"]
     end
     subgraph Manual["workflow_dispatch"]
         Live["live-integration.yml<br/>real Polestar/Volvo calls, read-only"]
     end
     subgraph Tag["push tag v*"]
         Release["release.yml<br/>test → sign → notarize → DMG → GH Release"]
+    end
+    subgraph Prepare["manual release preparation"]
+        TagPR["tag-release.yml<br/>version validation + release PR"]
     end
 ```
 
@@ -59,22 +64,18 @@ access in this job) or Mermaid diagram *syntax* (only that fences are
 balanced) — Mermaid syntax errors are still visible whenever the page
 actually renders on GitHub.
 
-### Job `build-and-test` (matrix: `macos-14`, `macos-15`, `fail-fast: false`, 20-minute timeout)
+### Job `build-and-test` (matrix: `macos-14`, `macos-15`, `fail-fast: false`, 25-minute timeout)
 
 Checkout → cache SwiftPM checkout data (keyed on
 `${{ matrix.os }}-spm-${{ hashFiles('Package.resolved','Package.swift') }}`)
-→ `swift --version` + `make doctor` → (macos-15 leg only) warn via
-`::warning::` if `/Applications/Xcode_16.2.app` is missing from the runner
-image, since `release.yml` hard-pins that exact version — an early canary for
-release-toolchain drift, checked on every PR rather than only discovered
-during an actual release → `swift build -Xswiftc -strict-concurrency=complete
+→ select the runner's active full Xcode with `Scripts/select-xcode.sh` →
+`swift --version` + `make doctor` → `swift build -Xswiftc -strict-concurrency=complete
 -Xswiftc -warn-concurrency` → `swift test --disable-xctest --enable-swift-testing
 --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`
 → `make app SWIFT_FLAGS="..."` → bundle validation: binary executable bit
-set, `plutil -lint` on `Info.plist`, `lipo -verify_arch arm64`, `codesign
---verify --deep --strict`, and an explicit assertion that `LSUIElement ==
-true`; and that `Info.plist`'s `CFBundleIconFile` actually resolves to a
-present file under `Contents/Resources/`.
+set, `plutil -lint` on `Info.plist`, `codesign --verify --deep --strict`, and
+an explicit assertion that `LSUIElement == true`. The `macos-15` leg also
+builds and verifies an ad-hoc DMG and uploads it as a validation artifact.
 
 `--skip Live` is defense-in-depth, not the only safeguard: the live
 integration suites already gate themselves on credential env vars via Swift
@@ -91,9 +92,9 @@ anywhere in the repo (workflow/shell-script linting now does exist, via
 are the closest thing to automated Swift style/correctness enforcement
 beyond the test suite itself.
 
-**No signing/notarization** — ad-hoc (`IDENTITY` defaults to `-`).
+**No production signing/notarization** — CI uses ad-hoc signing (`IDENTITY=-`).
 
-**Artifacts:** none produced.
+**Artifacts:** the `macos-15` leg uploads `Hisingen.dmg` and its SHA-256 file.
 
 **Fails on:** a bad toolchain (`make doctor`), a build or test failure, an
 actionlint/shellcheck finding, a duplicate localization key, a broken docs
@@ -104,17 +105,20 @@ catch).
 
 ## `security.yml`
 
-**Trigger:** `push` to `main`, a weekly schedule (Mondays 04:17 UTC), and manual
-dispatch. Dependency Review remains the pull-request security check; CodeQL
-Swift runs off the PR path because its instrumented compiled-language build can
-take 20+ minutes on hosted macOS runners.
+**Trigger:** `push` to `main`, pull requests targeting `main`, a weekly schedule
+(Mondays 04:17 UTC), and manual dispatch. CodeQL runs for same-repository pull
+requests but skips untrusted forks, where GitHub does not grant the
+`security-events: write` permission. Dependency Review runs for every pull
+request.
 **Secrets:** none.
 
 ### Job `codeql` (macos-15, `security-events: write`, ~10–15 min)
 
-CodeQL Swift analysis using `build-mode: manual` with a plain `swift build`
-(the same command CI/Makefile use), rather than the `autobuild` heuristic, so
-the analyzed build matches what actually ships. Results land under the
+CodeQL Swift analysis using `build-mode: manual`, the shared Xcode-selection
+script, and the same strict-concurrency `swift build` command as CI rather than
+the `autobuild` heuristic. Whole-module optimization must not be added here: it
+previously caused index-output mismatches and compiler type-check timeouts under
+CodeQL tracing. Results land under the
 repo's **Security → Code scanning alerts**.
 
 ### Job `dependency-review` (ubuntu-latest, `pull_request` only, ~1 min)
@@ -127,10 +131,25 @@ Neither `security.yml` job is currently wired into required branch checks
 (see the branch protection recommendation in [releases.md](./releases.md)) —
 treat them as advisory signal to triage unless you decide otherwise.
 
+The repository currently allows all GitHub Actions and does not enforce SHA
+pinning at the repository-settings layer. The workflows nevertheless pin every
+action to an immutable commit. Enabling repository-level SHA enforcement is a
+useful additional control once all future workflows are expected to follow the
+same convention.
+
 ## `live-integration.yml` and `release.yml`
 
 Covered in full in [releases.md](./releases.md), including the secrets
 checklist for both.
+
+## `pages.yml`
+
+**Trigger:** changes under `website/` on `main`, changes to the workflow itself,
+or manual dispatch. It installs the lockfile-resolved Node dependencies, runs
+the website typecheck and production build, verifies required static entry
+points, uploads the Pages artifact, and deploys it with job-scoped `pages: write`
+and `id-token: write` permissions. Every third-party action is commit-pinned and
+checkout credentials are not persisted.
 
 ## Troubleshooting
 

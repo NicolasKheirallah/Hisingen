@@ -39,6 +39,72 @@ struct MeasurementUnitsAndThemeTests {
     }
 
     @Test
+    func testUSUnitFormatting() {
+        XCTAssertEqual(Format.temperature(celsius: 20, unit: .fahrenheit), "68.0 °F")
+        XCTAssertEqual(Format.pressure(kilopascals: 241.3, unit: .psi), "35.0 psi")
+        XCTAssertEqual(Format.distance(km: 13.1, unit: .miles), "8.1 mi")
+    }
+
+    @Test
+    func testExteriorDoorCountExcludesOtherOpenings() {
+        let snapshot = ExteriorSnapshot(
+            openings: [
+                .init(opening: .frontLeftDoor, state: .closed),
+                .init(opening: .frontRightDoor, state: .closed),
+                .init(opening: .rearLeftDoor, state: .closed),
+                .init(opening: .rearRightDoor, state: .closed),
+                .init(opening: .frontLeftWindow, state: .closed),
+                .init(opening: .frontRightWindow, state: .closed),
+                .init(opening: .rearLeftWindow, state: .closed),
+                .init(opening: .rearRightWindow, state: .closed),
+                .init(opening: .hood, state: .closed),
+                .init(opening: .tailgate, state: .closed),
+                .init(opening: .chargeLid, state: .closed)
+            ],
+            isLocked: true,
+            alarmTriggered: false
+        )
+        XCTAssertEqual(snapshot.openings.count, 11)
+        XCTAssertEqual(snapshot.physicalDoorCount, 4)
+    }
+
+    @Test
+    func testOnlyRecentDistinctSoftwareFailuresRequireAttention() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let recent = VehicleSoftwareInfo(
+            version: "5.1", state: .failed, updatedAt: now.addingTimeInterval(-86_400),
+            installedVersion: "5.0", latestAvailableVersion: "5.1"
+        )
+        let old = VehicleSoftwareInfo(
+            version: "5.1", state: .failed, updatedAt: now.addingTimeInterval(-31 * 86_400),
+            installedVersion: "5.0", latestAvailableVersion: "5.1"
+        )
+        let alreadyInstalled = VehicleSoftwareInfo(
+            version: "5.1", state: .failed, updatedAt: now,
+            installedVersion: "5.1", latestAvailableVersion: "5.1"
+        )
+        XCTAssertTrue(recent.hasActionableFailure(at: now))
+        XCTAssertFalse(old.hasActionableFailure(at: now))
+        XCTAssertFalse(alreadyInstalled.hasActionableFailure(at: now))
+    }
+
+    @Test
+    @MainActor
+    func testSoftwareEventDismissalIsPerVehicleAndReversible() throws {
+        let suiteName = "hisingen.tests.software-dismissal.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        store.setDismissedSoftwareEventIdentifier("event-a", for: "YSMTESTA")
+        XCTAssertEqual(store.dismissedSoftwareEventIdentifier(for: "ysmtesta"), "event-a")
+        XCTAssertNil(store.dismissedSoftwareEventIdentifier(for: "YSMTESTB"))
+
+        store.setDismissedSoftwareEventIdentifier(nil, for: "YSMTESTA")
+        XCTAssertNil(store.dismissedSoftwareEventIdentifier(for: "YSMTESTA"))
+    }
+
+    @Test
     func testThemeSystemCatalog() {
         XCTAssertEqual(AppTheme.allCases.count, 9)
 
@@ -169,7 +235,13 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(Format.barTitle(for: sample, style: .battery, unit: .kilometers), "85%")
         XCTAssertEqual(Format.barTitle(for: sample, style: .range, unit: .kilometers), "350km")
         XCTAssertEqual(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers), "")
-        XCTAssertEqual(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers), "🔒 85%")
+        XCTAssertEqual(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers), "85%")
+        XCTAssertEqual(Format.lockStatusSymbol(for: sample), "lock.fill")
+        XCTAssertEqual(sample.currentRangeVsModelWltpPercent, 85.8)
+
+        var unlockedSample = sample
+        unlockedSample.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false)
+        XCTAssertEqual(Format.lockStatusSymbol(for: unlockedSample), "lock.open.fill")
     }
 
     @Test

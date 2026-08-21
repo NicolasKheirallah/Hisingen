@@ -24,7 +24,7 @@ npm run preview
 
 Production builds use `/Hisingen/` as the Vite base path. The output in `website/dist` is the complete static site and can be served by any static host.
 
-The site copies selected, source-controlled screenshots into `website/public/assets/product/` with semantic, ordered names that match the product story. Source screenshots in the repository are not modified. The page deliberately uses a small set of readable product screens rather than loading the complete screenshot archive.
+The site copies selected, source-controlled screenshots into `website/public/assets/product/` with semantic names based on what each screen actually shows. The numeric source filenames and older labels are not treated as authoritative. Source screenshots in the repository are not modified. The page deliberately uses a small set of readable product screens rather than loading the complete screenshot archive.
 
 ## Design system
 

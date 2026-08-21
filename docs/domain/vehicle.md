@@ -13,8 +13,8 @@ Key computed properties:
 - `isComplete` — `chargingState == .complete`, or battery% within 0.5 of target, or ≥99.5% with no target set.
 - `isStale(at:)` / `dataTimestamp` / `freshnessDescription` — see [freshness in data-flow.md](../architecture/data-flow.md#freshness).
 - `capabilityProfile: VehicleCapabilityProfile` — built on demand from `modelName`, `vin`, and `probedCapabilities`.
-- `estimatedRangeHealth` — a range-based health estimate (see below), only computed for Polestar models with verified nominal specs.
-- `stateSummary: VehicleStateSummary` — the single most-important-thing-to-show string, prioritized: alarm triggered > low battery (≤15%, not charging) > openings needing attention > unlocked > charging fault > service warning > fluid warning > health warning > tyre warning > software failure > unavailable > "no issues detected"/"secured".
+- `currentRangeVsModelWltpPercent` — a range comparison against static model-family reference data (see below), only computed where a Polestar model reference is available.
+- `stateSummary: VehicleStateSummary` — the single most-important-thing-to-show string, prioritized: alarm triggered > low battery (≤15%, not charging) > openings needing attention > unlocked > charging fault > service warning > fluid warning > health warning > tyre warning > actionable software failure > unavailable > engine running/secured > neutral "no active warnings reported".
 - `cacheableCopy` — the version persisted to `VehicleStateStore`. Built by passing only a specific subset of fields (VIN, battery/charging/range, availability, model name/year, powertrain/fuel, capability observations, charging history, timestamps) into the initializer — every other field, including PII *and* location/exterior/lock status, is dropped by omission rather than an explicit strip list. See [architecture/persistence.md](../architecture/persistence.md).
 - `mergingLastKnown(from:features:)` — see [architecture/data-flow.md#data-merging](../architecture/data-flow.md#data-merging).
 
@@ -58,9 +58,9 @@ Remote command dispatch is compiled into every build for both brands ([ADR-0009]
 
 `AppDelegate.performRemoteCommand` patches `latest` in place for four commands (`startClimate`, `stopClimate`, `lock`, `unlock`) once `executeRemoteCommand` returns *any* result, including a merely-`.accepted` outcome — not waiting for the next real refresh to confirm the change. This is a UX choice (instant feedback rather than a multi-second wait for the lock icon to flip), documented here because it's easy to mistake for a bug when a command's outcome doesn't match what actually happened on the vehicle. See [architecture/technical-debt.md](../architecture/technical-debt.md#optimistic-local-state-patch-on-remote-commands-vs-ack-execution-stance).
 
-## Range Health Estimate
+## Current Range vs Model WLTP
 
-`VehicleState.estimatedRangeHealth` — explicitly **not** a measured battery State of Health. It compares the currently reported range at the currently reported SOC against the model's nominal WLTP range at that same SOC, clamps the ratio to a plausible band (0.70–1.05), and maps that into an 80–99.5% "health" score with a qualitative rating (Excellent/Good/Normal/Degraded). Only computed when `battery > 10%` and the model has verified nominal specs (Polestar only). The app's own FAQ is explicit that this is range-based, not a real capacity measurement — weather, tyres, speed, terrain, HVAC, and recent driving all move it independently of actual battery health.
+`VehicleState.currentRangeVsModelWltpPercent` — compares the currently reported range at the currently reported SOC with the static model-family WLTP range at the same SOC. It is shown as a direct percentage without a health score or qualitative rating. It is not measured battery State of Health; weather, tyres, speed, terrain, HVAC, vehicle variant and recent driving can all change it.
 
 ## Where types live
 

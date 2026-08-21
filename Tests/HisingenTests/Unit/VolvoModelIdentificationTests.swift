@@ -43,8 +43,8 @@ struct VolvoModelIdentificationTests {
 
     @Test
     func testVolvoHasNoVerifiedNominalSpecs() {
-        XCTAssertFalse(VehicleModelFamily.volvoEX30.hasVerifiedNominalSpecs)
-        XCTAssertTrue(VehicleModelFamily.polestar2.hasVerifiedNominalSpecs)
+        XCTAssertFalse(VehicleModelFamily.volvoEX30.hasModelReferenceSpecs)
+        XCTAssertTrue(VehicleModelFamily.polestar2.hasModelReferenceSpecs)
         XCTAssertNil(VehicleModelFamily.volvoEX30.averageConsumptionWhPerKm)
         XCTAssertNotNil(VehicleModelFamily.polestar2.averageConsumptionWhPerKm)
     }
@@ -100,5 +100,4 @@ struct VolvoModelIdentificationTests {
         XCTAssertEqual(profile.support(for: .locks), .supported)
     }
 }
-
 

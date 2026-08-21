@@ -99,7 +99,7 @@ struct ChargingTransitionDetector {
             baseline.interruptionSamples = 0
         }
 
-        if current.isCharging || (current.batteryPercentage ?? 100) > Double(lowBatteryThreshold + 5) {
+        if current.isCharging || current.batteryPercentage.map({ $0 > Double(lowBatteryThreshold + 5) }) == true {
             baseline.lowBatteryNotified = false
         } else if let level = current.batteryPercentage,
                   level <= Double(lowBatteryThreshold), !previous.lowBatteryNotified {
@@ -131,5 +131,4 @@ struct ChargingTransitionDetector {
         return "\(state.vin)|\(event.identifierComponent)|\(timestamp)"
     }
 }
-
 

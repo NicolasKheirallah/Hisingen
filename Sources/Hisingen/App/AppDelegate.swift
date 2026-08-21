@@ -474,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .setChargeTarget(let target):
             current.chargeTargetPercentage = target
         case .setAmpLimit(let amps):
-            current.chargingCurrentAmps = amps
+            current.chargingCurrentLimitAmps = amps
         default:
             return
         }

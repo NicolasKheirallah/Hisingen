@@ -38,6 +38,9 @@ extension VolvoAPI {
         async let diagnosticsTask: VolvoDiagnosticsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "diagnostics", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/diagnostics") }
+        async let engineDiagnosticsTask: VolvoDiagnosticsDTO? = optional(
+            enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "engine-diagnostics", vin: vin
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine") }
         async let odometerTask: VolvoOdometerDTO? = optional(
             enabled: features.contains(.vehicleHealth), key: "odometer", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/odometer") }
@@ -66,6 +69,7 @@ extension VolvoAPI {
         let windows = try await windowsTask
         let tyres = try await tyresTask
         let diagnostics = try await diagnosticsTask
+        let engineDiagnostics = try await engineDiagnosticsTask
         let odometer = try await odometerTask
         let statistics = try await statisticsTask
         let location = try await locationTask
@@ -90,25 +94,21 @@ extension VolvoAPI {
             )
         }
 
-        let reportedAt: Date? = [energy?.batteryChargeLevel?.updatedAt, diagnostics?.serviceWarning?.updatedAt]
+        let reportedAt: Date? = [
+            energy?.batteryChargeLevel?.updatedAt,
+            diagnostics?.serviceWarning?.updatedAt,
+            engineDiagnostics?.engineCoolantLevelWarning?.updatedAt,
+            engineDiagnostics?.oilLevelWarning?.updatedAt
+        ]
             .compactMap { $0 }.max()
 
         // Volvo exposes no climate-status resource. Climatization is command-only
         // (POST .../commands/climatization-start|stop); every GET spelling under
         // connected-vehicle/v2, energy/v2 and location/v1 404s at the gateway's routing
         // layer, before authentication, exactly like a path that was never registered.
-        // With remote climate commands available we still show a clean Idle/Standby state
-        // rather than a broken unavailable badge.
-        let climate: VehicleClimateStatus? = {
-            guard features.contains(.climateStatus), features.contains(.remoteClimate) else { return nil }
-            return VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
-                timerTriggered: false,
-                interiorTemperatureCelsius: nil,
-                requestedTemperatureCelsius: 22.0
-            )
-        }()
+        // Climate is command-only in Connected Vehicle API v2. Do not synthesize a current
+        // activity or setpoint from the availability of start/stop commands.
+        let climate: VehicleClimateStatus? = nil
 
         // Volvo publishes no software/OTA resource. The Connected Vehicle API v2 surface is
         // details, doors, windows, tyres, warnings, diagnostics, engine, engine-status, brakes,
@@ -121,7 +121,7 @@ extension VolvoAPI {
         if features.contains(.softwareUpdates) { unavailable.append(.softwareUpdates) }
         if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
         if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
-        if features.contains(.vehicleHealth), diagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
+        if features.contains(.vehicleHealth), diagnostics == nil, engineDiagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
         if features.contains(.tripMeters), statistics == nil { unavailable.append(.tripMeters) }
         if features.contains(.vehicleLocation), vehicleLocation == nil { unavailable.append(.vehicleLocation) }
         if features.contains(.chargingSchedule) { unavailable.append(.chargingSchedule) }
@@ -185,6 +185,9 @@ extension VolvoAPI {
         let distToService: Int? = diagnostics?.distanceToService?.value
         let serviceWarn: Bool = diagnostics?.hasServiceWarning ?? false
         var fluidWarns: [String] = diagnostics?.fluidWarnings ?? []
+        for warning in engineDiagnostics?.fluidWarnings ?? [] where !fluidWarns.contains(warning) {
+            fluidWarns.append(warning)
+        }
         if let brakeWarning = brakes?.brakeFluidLevelWarning?.value?.uppercased(),
            !brakeWarning.contains("NO_WARNING"), !brakeWarning.isEmpty,
            !fluidWarns.contains(L10n.text("Brake fluid")) {
@@ -192,13 +195,37 @@ extension VolvoAPI {
         }
 
         var vehicleWarnings: [VehicleWarning] = diagnostics?.vehicleWarnings ?? []
+        for warning in engineDiagnostics?.vehicleWarnings ?? [] where !vehicleWarnings.contains(warning) {
+            vehicleWarnings.append(warning)
+        }
+        var reportedWarnings: [VehicleWarning] = []
+        let diagnosticWarningFields: [(String?, VehicleWarning)] = [
+            (diagnostics?.brakeFluidLevelWarning?.value, .brakeFluid),
+            (engineDiagnostics?.engineCoolantLevelWarning?.value, .engineCoolant),
+            (engineDiagnostics?.oilLevelWarning?.value, .oil),
+            (diagnostics?.washerFluidLevelWarning?.value, .washerFluid),
+            (diagnostics?.batteryChargeLevelWarning?.value, .lowVoltageBattery),
+            (brakes?.brakeFluidLevelWarning?.value, .brakeFluid)
+        ]
+        for (raw, warning) in diagnosticWarningFields {
+            guard let raw = raw?.uppercased(), !raw.isEmpty, raw != "UNSPECIFIED" else { continue }
+            if !reportedWarnings.contains(warning) { reportedWarnings.append(warning) }
+        }
         let activeBulbWarnings = warnings?.activeWarnings ?? []
         if !activeBulbWarnings.isEmpty && !vehicleWarnings.contains(.exteriorLight) {
             vehicleWarnings.append(.exteriorLight)
         }
+        if warnings?.hasReportedLightStatus == true {
+            reportedWarnings.append(.exteriorLight)
+        }
 
-        let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil || warnings != nil || brakes != nil)
-            ? VehicleHealthDetails(tyres: tyres?.readings ?? [], warnings: vehicleWarnings)
+        let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil || engineDiagnostics != nil || warnings != nil || brakes != nil)
+            ? VehicleHealthDetails(
+                tyres: tyres?.readings ?? [],
+                warnings: vehicleWarnings,
+                reportedWarnings: reportedWarnings,
+                lightFailures: activeBulbWarnings
+            )
             : nil
         let batteryDiag: BatteryDiagnostics? = features.contains(.batteryDiagnostics)
             ? BatteryDiagnostics(
@@ -213,7 +240,7 @@ extension VolvoAPI {
         let tripManual: Double? = statistics?.tripMeterManual?.value
         let tripAuto: Double? = statistics?.tripMeterAutomatic?.value
         let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
-        let fuelPct: Double? = fuel?.percentage ?? (fuel?.liters.map { min(100.0, max(0.0, ($0 / 60.0) * 100.0)) })
+        let fuelPct: Double? = fuel?.percentage
         let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTank?.value
         let fuelLiters: Double? = fuel?.liters
         let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value

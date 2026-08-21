@@ -13,7 +13,8 @@ extension PolestarAPI {
             }
             await APIDiagnosticLogStore.shared.record(
                 provider: .polestar, request: request, operation: operation,
-                statusCode: http.statusCode, responseBytes: data.count, startedAt: startedAt
+                statusCode: http.statusCode, responseBytes: data.count,
+                responseData: data, startedAt: startedAt
             )
             return (data, http)
         } catch let error as URLError {

@@ -132,6 +132,7 @@ enum VehicleAvailability: Codable, Equatable, Sendable {
 }
 
 enum VehicleStateSeverity: Equatable, Sendable {
+    case neutral
     case good
     case warning
     case critical
@@ -479,80 +480,32 @@ struct VehicleState: Codable, Equatable, Sendable {
         return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
     }
 
-    var effectiveWarrantyInfo: VehicleWarrantyInfo {
-        if let explicit = warrantyInfo {
-            return explicit
-        }
-        let calendar = Calendar.current
-        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
-
-        let baselineDeliveryDate: Date = {
-            if let rawWeek = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines),
-               rawWeek.count >= 6,
-               let year = Int(rawWeek.prefix(4)),
-               let week = Int(rawWeek.suffix(2)) {
-                var components = DateComponents()
-                components.yearForWeekOfYear = year
-                components.weekOfYear = week
-                components.weekday = 2
-                if let buildDate = calendar.date(from: components) {
-                    return calendar.date(byAdding: .weekOfYear, value: 4, to: buildDate) ?? buildDate
-                }
-            }
-
-            let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
-            var components = DateComponents()
-            components.year = yearInt
-            components.month = 6
-            components.day = 1
-            return calendar.date(from: components) ?? Date()
-        }()
-
-        let factoryEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let batteryEnd = calendar.date(byAdding: .year, value: 8, to: baselineDeliveryDate)
-        let roadsideEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let digitalServicesEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let corrosionEnd = calendar.date(byAdding: .year, value: 12, to: baselineDeliveryDate)
-
-        let plan = isVolvo ? "Care by Volvo" : "Polestar Care"
-        let assistanceName = isVolvo ? "Volvo Assistance" : "Polestar Assistance"
-
-        return VehicleWarrantyInfo(
-            planName: plan,
-            status: L10n.text("Active"),
-            factoryWarrantyValidUntil: factoryEnd,
-            batteryWarrantyValidUntil: powertrain.hasElectricRange ? batteryEnd : nil,
-            batteryWarrantyKm: powertrain.hasElectricRange ? 160_000 : nil,
-            roadsideAssistanceValidUntil: roadsideEnd,
-            includedMaintenance: true,
-            corrosionWarrantyValidUntil: corrosionEnd,
-            digitalServicesValidUntil: digitalServicesEnd,
-            assistanceContact: assistanceName
-        )
-    }
-
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+        let yearInt = modelYear.flatMap(Int.init)
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
+           let yearInt, yearInt >= 2024 {
             return 82.0
         }
         if powertrain == .phev {
+            guard let yearInt else { return model.nominalBatteryCapacityKwh }
             return yearInt >= 2022 ? 18.8 : 11.6
         }
-        return model.nominalBatteryCapacityKwh > 0 ? model.nominalBatteryCapacityKwh : 78.0
+        return model.nominalBatteryCapacityKwh
     }
 
     var factoryUsableBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+        let yearInt = modelYear.flatMap(Int.init)
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
+           let yearInt, yearInt >= 2024 {
             return 79.0
         }
         if powertrain == .phev {
+            guard let yearInt else { return model.nominalUsableCapacityKwh }
             return yearInt >= 2022 ? 14.9 : 9.1
         }
-        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
+        return model.nominalUsableCapacityKwh
     }
 
     var effectiveNominalBatteryCapacityKwh: Double {
@@ -668,7 +621,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         if healthDetails?.tyres.contains(where: { $0.warning.needsAttention }) == true {
             return VehicleStateSummary(message: L10n.text("Tyre pressure warning"), severity: .warning)
         }
-        if softwareInfo?.state == .failed {
+        if softwareInfo?.hasActionableFailure() == true {
             return VehicleStateSummary(message: L10n.text("Software update failed"), severity: .warning)
         }
         if case .unavailable = availability {
@@ -680,7 +633,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         if exteriorStatus?.isLocked == true {
             return VehicleStateSummary(message: L10n.text("Vehicle secured"), severity: .good)
         }
-        return VehicleStateSummary(message: L10n.text("No issues detected"), severity: .good)
+        return VehicleStateSummary(message: L10n.text("No active warnings reported"), severity: .neutral)
     }
 
     var capabilityProfile: VehicleCapabilityProfile {
@@ -710,21 +663,16 @@ struct VehicleState: Codable, Equatable, Sendable {
         vin.uppercased().hasPrefix("YV")
     }
 
-    var estimatedRangeHealth: (percentage: Double, rating: String)? {
-        guard model.hasVerifiedNominalSpecs,
+    /// Current vehicle-reported range at the present SOC compared with the model-reference
+    /// WLTP range at the same SOC. This is a range comparison, not battery State of Health.
+    var currentRangeVsModelWltpPercent: Double? {
+        guard model.hasModelReferenceSpecs,
               let battery = batteryPercentage, battery > 10,
-              let range = rangeKm, range > 0 else { return nil }
-        let nominalRange = model.nominalWltpRangeKm
-        let expectedRangeAtCurrentSoC = nominalRange * (battery / 100.0)
-        let ratio = Double(range) / expectedRangeAtCurrentSoC
-        let clampedRatio = min(max(ratio, 0.70), 1.05)
-        let soh = min(100.0, max(80.0, (clampedRatio >= 1.0 ? 99.5 : (85.0 + (clampedRatio - 0.70) / 0.30 * 14.5))))
-        let rating: String
-        if soh >= 95.0 { rating = L10n.text("Excellent") }
-        else if soh >= 90.0 { rating = L10n.text("Good") }
-        else if soh >= 80.0 { rating = L10n.text("Normal") }
-        else { rating = L10n.text("Degraded") }
-        return (percentage: (soh * 10).rounded() / 10, rating: rating)
+              let range = rangeKm, range > 0,
+              model.nominalWltpRangeKm > 0 else { return nil }
+        let expectedRangeAtCurrentSoC = model.nominalWltpRangeKm * (battery / 100.0)
+        guard expectedRangeAtCurrentSoC > 0 else { return nil }
+        return (Double(range) / expectedRangeAtCurrentSoC * 1000).rounded() / 10
     }
 
     var estimatedChargingCompletion: Date? {

@@ -282,7 +282,7 @@ final class StatusItemController: NSObject {
                     || state.climateStatus?.activity == .cooling
                     || state.climateStatus?.activity == .ventilating
                 let climateItem = NSMenuItem(
-                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(preferences.remoteClimateTemperature)) °C"),
+                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
                     action: #selector(contextToggleClimate),
                     keyEquivalent: ""
                 )
@@ -353,7 +353,7 @@ final class StatusItemController: NSObject {
                     || state.climateStatus?.activity == .cooling
                     || state.climateStatus?.activity == .ventilating
                 let climateItem = NSMenuItem(
-                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", "\(Int(preferences.remoteClimateTemperature)) °C"),
+                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
                     action: #selector(contextToggleClimate),
                     keyEquivalent: ""
                 )
@@ -409,11 +409,25 @@ final class StatusItemController: NSObject {
     @objc private func contextOpenMaps() {
         guard let location = latestState?.location,
               let latitude = location.latitude,
-              let longitude = location.longitude,
-              let label = preferences.activeBrand.displayName
-                  .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "maps://?q=\(label)&ll=\(latitude),\(longitude)") else { return }
+              let longitude = location.longitude else { return }
+        guard let url = Self.appleMapsURL(
+            latitude: latitude,
+            longitude: longitude,
+            label: preferences.activeBrand.displayName
+        ) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    static func appleMapsURL(latitude: Double, longitude: Double, label: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "maps.apple.com"
+        components.path = "/"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: label),
+            URLQueryItem(name: "ll", value: "\(latitude),\(longitude)")
+        ]
+        return components.url
     }
 
     @objc private func contextCopyVIN() {
@@ -619,9 +633,41 @@ final class StatusItemController: NSObject {
         let isStale = data?.isStale() ?? false
         icon = dimmed(icon, when: isStale)
         statusItem.button?.image = icon
-        statusItem.button?.title = title.isEmpty ? "" : " " + title
+        setStatusBarTitle(title, for: data)
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
         refreshPopoverIfNeeded()
+    }
+
+    private func setStatusBarTitle(_ title: String, for data: VehicleState?) {
+        guard let button = statusItem.button else { return }
+        guard preferences.menuBarStyle == .lockAndBattery,
+              let symbolName = Format.lockStatusSymbol(for: data),
+              let isLocked = data?.exteriorStatus?.isLocked,
+              let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        else {
+            button.title = title.isEmpty ? "" : " " + title
+            return
+        }
+
+        let color: NSColor = isLocked ? .secondaryLabelColor : .systemOrange
+        let pointSize: CGFloat = isLocked ? 12 : 14
+        let symbol = image.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
+                .applying(.init(paletteColors: [color]))
+        ) ?? image
+        symbol.isTemplate = false
+
+        let attachment = NSTextAttachment()
+        attachment.image = symbol
+        attachment.bounds = NSRect(x: 0, y: -2, width: pointSize, height: pointSize)
+
+        let renderedTitle = NSMutableAttributedString(string: " ")
+        renderedTitle.append(NSAttributedString(attachment: attachment))
+        renderedTitle.append(NSAttributedString(
+            string: title.isEmpty ? "" : "  \(title)",
+            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)]
+        ))
+        button.attributedTitle = renderedTitle
     }
 
     private func dimmed(_ image: NSImage?, when isStale: Bool) -> NSImage? {
@@ -688,10 +734,14 @@ final class StatusItemController: NSObject {
 
     private func accessibilitySummary(data: VehicleState?, title: String) -> String {
         guard let data else { return L10n.text("Hisingen, no vehicle data") }
-        if data.isStale() {
-            return L10n.format("Hisingen, %@, %@, data may be stale", title, data.chargingState.displayName)
+        let security = data.exteriorStatus?.isLocked.map {
+            $0 ? L10n.text("Vehicle Locked") : L10n.text("Vehicle Unlocked")
         }
-        return L10n.format("Hisingen, %@, %@", title, data.chargingState.displayName)
+        let summary = [title.nilIfEmpty, security].compactMap { $0 }.joined(separator: ", ")
+        if data.isStale() {
+            return L10n.format("Hisingen, %@, %@, data may be stale", summary, data.chargingState.displayName)
+        }
+        return L10n.format("Hisingen, %@, %@", summary, data.chargingState.displayName)
     }
 }
 

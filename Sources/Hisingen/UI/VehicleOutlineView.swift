@@ -123,6 +123,29 @@ struct VehicleSideProfileDoorsView: View {
     private var chargeLidHovered: Bool { hoveredOpening == .chargeLid }
     private var fuelFlapHovered: Bool { hoveredOpening == .fuelFlap }
 
+    /// This schematic depicts the left side. Opposite-side readings use a neutral tint and
+    /// an abbreviation so hovering left and right can never produce identical feedback.
+    private var hoveredOpeningIsOppositeSide: Bool {
+        switch hoveredOpening {
+        case .frontRightDoor, .rearRightDoor, .frontRightWindow, .rearRightWindow: return true
+        default: return false
+        }
+    }
+
+    private var hoverTint: Color {
+        hoveredOpeningIsOppositeSide ? Color.gray : HisingenTheme.accent
+    }
+
+    private var hoverAbbreviation: String? {
+        switch hoveredOpening {
+        case .frontLeftDoor, .frontLeftWindow: return "FL"
+        case .frontRightDoor, .frontRightWindow: return "FR"
+        case .rearLeftDoor, .rearLeftWindow: return "RL"
+        case .rearRightDoor, .rearRightWindow: return "RR"
+        default: return nil
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
@@ -186,7 +209,7 @@ struct VehicleSideProfileDoorsView: View {
                     u: 0.5830, v: 0.5416,
                     wFraction: 0.2183, hFraction: 0.3108,
                     open: frontDoorOpen, hovered: frontDoorHovered,
-                    label: "Front Door", og: og
+                    label: "Front Door", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
                 // 6. Rear Door Zone (traced door skin + rocker sill: SVG X=[414..781], Y=[276..539])
@@ -195,7 +218,7 @@ struct VehicleSideProfileDoorsView: View {
                     u: 0.3632, v: 0.5299,
                     wFraction: 0.2075, hFraction: 0.3181,
                     open: rearDoorOpen, hovered: rearDoorHovered,
-                    label: "Rear Door", og: og
+                    label: "Rear Door", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
                 // 7. Front Window Zone (SVG X=[730..1125], Y=[153..293])
@@ -204,7 +227,7 @@ struct VehicleSideProfileDoorsView: View {
                     u: 0.5638, v: 0.2900,
                     wFraction: 0.2401, hFraction: 0.1820,
                     open: frontWindowOpen, hovered: frontWindowHovered,
-                    label: "Front Window", og: og
+                    label: "Front Window", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
                 // 8. Rear Window Zone (SVG X=[414..759], Y=[152..275])
@@ -213,7 +236,7 @@ struct VehicleSideProfileDoorsView: View {
                     u: 0.3565, v: 0.2776,
                     wFraction: 0.2097, hFraction: 0.1599,
                     open: rearWindowOpen, hovered: rearWindowHovered,
-                    label: "Rear Window", og: og
+                    label: "Rear Window", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
                 // 9. Sunroof Zone (Roofline: SVG X=[432..965], Y=[124..160])
@@ -249,31 +272,42 @@ struct VehicleSideProfileDoorsView: View {
         u: CGFloat, v: CGFloat,
         wFraction: CGFloat, hFraction: CGFloat,
         open: Bool, hovered: Bool,
-        label: String, og: OutlineGeometry
+        label: String, hoverColor: Color? = nil,
+        hoverBadge: String? = nil, og: OutlineGeometry
     ) -> some View {
         if open || hovered {
-            let activeColor = open ? HisingenTheme.semanticWarning : HisingenTheme.accent
+            let activeColor = open ? HisingenTheme.semanticWarning : (hoverColor ?? HisingenTheme.accent)
             let pos = og.point(u: u, v: v)
             let size = og.size(wFraction: wFraction, hFraction: hFraction)
 
-            zoneShape(kind: kind)
-                .fill(
-                    RadialGradient(
-                        colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
-                        center: .center,
-                        startRadius: 2,
-                        endRadius: max(size.width, size.height) * 0.55
+            ZStack {
+                zoneShape(kind: kind)
+                    .fill(
+                        RadialGradient(
+                            colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: max(size.width, size.height) * 0.55
+                        )
                     )
-                )
-                .overlay(
-                    zoneShape(kind: kind)
-                        .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
-                )
-                .frame(width: size.width, height: size.height)
-                .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
-                .scaleEffect(hovered || open ? 1.02 : 1.0)
-                .position(pos)
-                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
+                    .overlay(
+                        zoneShape(kind: kind)
+                            .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
+                    )
+                if hovered, let hoverBadge {
+                    Text(hoverBadge)
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .foregroundStyle(activeColor)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(.regularMaterial, in: Capsule())
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
+            .scaleEffect(hovered || open ? 1.02 : 1.0)
+            .position(pos)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
         }
     }
 

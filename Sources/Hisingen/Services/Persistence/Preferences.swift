@@ -339,6 +339,36 @@ enum DistanceUnit: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum TemperatureUnit: String, CaseIterable, Codable, Sendable {
+    case celsius
+    case fahrenheit
+
+    var title: String {
+        self == .celsius ? L10n.text("Celsius (°C)") : L10n.text("Fahrenheit (°F)")
+    }
+
+    var suffix: String { self == .celsius ? "°C" : "°F" }
+
+    func convert(celsius: Double) -> Double {
+        self == .celsius ? celsius : (celsius * 9 / 5) + 32
+    }
+}
+
+enum PressureUnit: String, CaseIterable, Codable, Sendable {
+    case kilopascals
+    case psi
+
+    var title: String {
+        self == .kilopascals ? L10n.text("Kilopascals (kPa)") : L10n.text("PSI")
+    }
+
+    var suffix: String { self == .kilopascals ? "kPa" : "psi" }
+
+    func convert(kilopascals: Double) -> Double {
+        self == .kilopascals ? kilopascals : kilopascals * 0.145037738
+    }
+}
+
 enum FuelVolumeUnit: String, CaseIterable, Codable, Sendable {
     case liters = "liters"
     case gallonsUS = "gallons_us"
@@ -416,8 +446,33 @@ enum Preferences {
     private static let d = UserDefaults.standard
 
     static var email: String {
-        get { d.string(forKey: "polestar_email") ?? "" }
-        set { d.set(newValue, forKey: "polestar_email") }
+        get {
+            if let secure = (try? Keychain.readEmail()) ?? nil, !secure.isEmpty {
+                d.removeObject(forKey: "polestar_email")
+                return secure
+            }
+            guard let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty else { return "" }
+            do {
+                try Keychain.saveEmail(legacy)
+                d.removeObject(forKey: "polestar_email")
+            } catch {
+                // Preserve the legacy value until Keychain is available.
+            }
+            return legacy
+        }
+        set {
+            if newValue.isEmpty {
+                try? Keychain.deleteEmail()
+                d.removeObject(forKey: "polestar_email")
+            } else {
+                do {
+                    try Keychain.saveEmail(newValue)
+                    d.removeObject(forKey: "polestar_email")
+                } catch {
+                    // Never write a new account identifier to UserDefaults.
+                }
+            }
+        }
     }
 
 
@@ -628,6 +683,26 @@ enum Preferences {
             return raw == "Miles (mi)" ? .miles : .kilometers
         }
         set { d.set(newValue.rawValue, forKey: "distance_unit") }
+    }
+
+    static var temperatureUnit: TemperatureUnit {
+        get {
+            if let raw = d.string(forKey: "temperature_unit"), let unit = TemperatureUnit(rawValue: raw) {
+                return unit
+            }
+            return distanceUnit == .miles ? .fahrenheit : .celsius
+        }
+        set { d.set(newValue.rawValue, forKey: "temperature_unit") }
+    }
+
+    static var pressureUnit: PressureUnit {
+        get {
+            if let raw = d.string(forKey: "pressure_unit"), let unit = PressureUnit(rawValue: raw) {
+                return unit
+            }
+            return distanceUnit == .miles ? .psi : .kilopascals
+        }
+        set { d.set(newValue.rawValue, forKey: "pressure_unit") }
     }
 
     static var fuelVolumeUnit: FuelVolumeUnit {
@@ -932,4 +1007,3 @@ enum Preferences {
         }
     }
 }
-

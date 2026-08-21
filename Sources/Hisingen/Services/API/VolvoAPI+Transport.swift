@@ -13,7 +13,8 @@ extension VolvoAPI {
             }
             await APIDiagnosticLogStore.shared.record(
                 provider: .volvo, request: request, operation: operation,
-                statusCode: http.statusCode, responseBytes: data.count, startedAt: startedAt
+                statusCode: http.statusCode, responseBytes: data.count,
+                responseData: data, startedAt: startedAt
             )
             return (data, http)
         } catch {

@@ -36,6 +36,8 @@ struct SettingsView: View {
     @State private var vehicleLabelFormat: VehicleLabelFormat = .modelAndYear
     @State private var menuBarStyle = MenuBarStyle.battery
     @State private var distanceUnit = DistanceUnit.kilometers
+    @State private var temperatureUnit = TemperatureUnit.celsius
+    @State private var pressureUnit = PressureUnit.kilopascals
     @State private var fuelVolumeUnit = FuelVolumeUnit.liters
     @State private var fuelEconomyUnit = FuelEconomyUnit.litersPer100Km
     @State private var selectedThemeCategory: ThemeCategory = .all
@@ -57,6 +59,8 @@ struct SettingsView: View {
     @State private var currencySymbol = "kr"
     @State private var storeChargingHistory = false
     @State private var requireBiometrics = false
+    @State private var hasWarrantyInServiceDate = false
+    @State private var warrantyInServiceDate = Date()
     @Environment(\.preferencesStore) private var preferences
     @State private var databaseVacuumed = false
     @State private var databasePruned = false
@@ -64,6 +68,14 @@ struct SettingsView: View {
         counts: (0, 0, 0, 0, 0, 0), sizeBytes: 0
     )
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var settingsVehicleVIN: String { state?.vin ?? preferences.vin }
+
+    private var availableRenderAngles: [CarRenderAngle] {
+        CarRenderAngle.allCases.filter {
+            imageCache.image(for: settingsVehicleVIN, angle: $0.rawValue) != nil
+        }
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -88,11 +100,18 @@ struct SettingsView: View {
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
             carRenderAngle = preferences.carRenderAngle
+            if let firstAvailable = availableRenderAngles.first,
+               !availableRenderAngles.contains(preferences.carRenderAngle) {
+                carRenderAngle = firstAvailable
+                preferences.carRenderAngle = firstAvailable
+            }
             vehicleModelBadgePosition = preferences.vehicleModelBadgePosition
             registrationBadgePosition = preferences.registrationBadgePosition
             vehicleLabelFormat = preferences.vehicleLabelFormat
             menuBarStyle = preferences.menuBarStyle
             distanceUnit = preferences.distanceUnit
+            temperatureUnit = preferences.temperatureUnit
+            pressureUnit = preferences.pressureUnit
             fuelVolumeUnit = preferences.fuelVolumeUnit
             fuelEconomyUnit = preferences.fuelEconomyUnit
             interfaceLanguage = preferences.interfaceLanguage
@@ -113,6 +132,11 @@ struct SettingsView: View {
             currencySymbol = preferences.currencySymbol
             storeChargingHistory = preferences.storeChargingHistory
             requireBiometrics = preferences.requireBiometricsForRemoteControls
+            let warrantyVIN = state?.vin ?? preferences.vin
+            if let savedDate = preferences.warrantyInServiceDate(for: warrantyVIN) {
+                hasWarrantyInServiceDate = true
+                warrantyInServiceDate = savedDate
+            }
         }
         .task {
             await loadDatabaseStats()
@@ -189,7 +213,8 @@ struct SettingsView: View {
 
     private var appearanceCard: some View {
         let vehicleLabel = preferences.lastVehicleLabel(for: preferences.activeBrand)
-        let supportsMultipleAngles = preferences.activeBrand == .polestar
+        let availableAngles = availableRenderAngles
+        let supportsMultipleAngles = availableAngles.count > 1
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -259,8 +284,9 @@ struct SettingsView: View {
 
                     // Live Studio Render Preview
                     let previewData = supportsMultipleAngles
-                        ? (imageCache.image(for: preferences.vin, angle: carRenderAngle.rawValue) ?? imageCache.image(for: preferences.vin))
-                        : imageCache.image(for: preferences.vin)
+                        ? imageCache.image(for: settingsVehicleVIN, angle: carRenderAngle.rawValue)
+                        : (availableAngles.first.flatMap { imageCache.image(for: settingsVehicleVIN, angle: $0.rawValue) }
+                            ?? imageCache.image(for: settingsVehicleVIN))
                     if let previewData, let nsImg = NSImage(data: previewData) {
                         Image(nsImage: nsImg)
                             .resizable()
@@ -277,7 +303,7 @@ struct SettingsView: View {
 
                     if supportsMultipleAngles {
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            ForEach(CarRenderAngle.allCases, id: \.self) { angle in
+                            ForEach(availableAngles, id: \.self) { angle in
                                 let isAngleSelected = carRenderAngle == angle
                                 Button {
                                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
@@ -605,8 +631,9 @@ struct SettingsView: View {
                         chargingType: .ac, chargerConnection: .connected, availability: .available,
                         modelName: "Polestar 2", modelYear: "2024", registrationNo: nil, vin: "YSMTEST",
                         ownerFirstName: nil, odometerKm: 12500, daysToService: nil, distanceToServiceKm: nil,
-                        serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: Date(),
-                        vehicleReportedAt: Date(), dataWarnings: []
+                        serviceWarning: false, fluidWarnings: [],
+                        exteriorStatus: ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false),
+                        imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
                     )
                     let previewText = Format.barTitle(for: previewSample, style: menuBarStyle, unit: distanceUnit)
                     let previewIcon = Format.icon(for: previewSample)
@@ -618,6 +645,12 @@ struct SettingsView: View {
                             Image(systemName: previewIcon)
                                 .font(.system(size: 10))
                                 .foregroundStyle(tintMenuBarIcon ? Color.green : Color.primary)
+                            if menuBarStyle == .lockAndBattery,
+                               let lockSymbol = Format.lockStatusSymbol(for: previewSample) {
+                                Image(systemName: lockSymbol)
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(HisingenTheme.semanticWarning)
+                            }
                             Text(previewText)
                                 .font(.system(size: 11, weight: .medium))
                                 .monospacedDigit()
@@ -666,6 +699,52 @@ struct SettingsView: View {
                         .frame(maxWidth: 160)
                         .onChange(of: distanceUnit) { _, _ in
                             preferences.distanceUnit = distanceUnit
+                            if !preferences.hasExplicitTemperatureUnit {
+                                temperatureUnit = distanceUnit == .miles ? .fahrenheit : .celsius
+                            }
+                            if !preferences.hasExplicitPressureUnit {
+                                pressureUnit = distanceUnit == .miles ? .psi : .kilopascals
+                            }
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text(L10n.text("Temperature unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $temperatureUnit) {
+                            ForEach(TemperatureUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: temperatureUnit) { _, _ in
+                            preferences.temperatureUnit = temperatureUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text(L10n.text("Tyre pressure unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $pressureUnit) {
+                            ForEach(PressureUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: pressureUnit) { _, _ in
+                            preferences.pressureUnit = pressureUnit
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -864,6 +943,47 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
 
+                let warrantyVIN = state?.vin ?? preferences.vin
+                if !warrantyVIN.isEmpty, state?.warrantyInfo == nil {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.text("Warranty in-service date"))
+                                    .font(.system(size: 11, weight: .medium))
+                                Text(L10n.text("Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents."))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $hasWarrantyInServiceDate)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .controlSize(.mini)
+                                .onChange(of: hasWarrantyInServiceDate) { _, enabled in
+                                    preferences.setWarrantyInServiceDate(enabled ? warrantyInServiceDate : nil, for: warrantyVIN)
+                                    onSettingsChanged(.presentation)
+                                }
+                        }
+                        if hasWarrantyInServiceDate {
+                            DatePicker(
+                                L10n.text("In-Service Date"),
+                                selection: $warrantyInServiceDate,
+                                in: ...Date(),
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.compact)
+                            .controlSize(.small)
+                            .onChange(of: warrantyInServiceDate) { _, date in
+                                preferences.setWarrantyInServiceDate(date, for: warrantyVIN)
+                                onSettingsChanged(.presentation)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+
                 subsectionHeader("Vehicle & Identity")
                 VStack(spacing: 4) {
                     featureToggleRow(.vehicleIdentity, symbol: "car.side", title: "Vehicle Identity", detail: "Model, year, license plate & VIN")
@@ -992,7 +1112,7 @@ struct SettingsView: View {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
-                Text(L10n.format("Probed capabilities for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
+                Text(L10n.format("Capability assessment for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
 
@@ -1322,13 +1442,13 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "stethoscope")
-                            Text(L10n.text("Export Redacted API Logs"))
+                            Text(L10n.text("Export Redacted API Data"))
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .help(L10n.text("Exports request metadata only. Vehicle identifiers, credentials, headers, bodies, and response payloads are excluded."))
+                    .help(L10n.text("Exports only sanitized JSON response bodies. Paths, metadata, vehicle identifiers, credentials, locations, and image URLs are removed."))
                 }
             }
         }
