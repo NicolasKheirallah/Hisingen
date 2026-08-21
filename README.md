@@ -1,18 +1,17 @@
 # Hisingen
 
-[![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://www.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift)](https://swift.org)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple\&logoColor=white)](https://www.apple.com/macos/)
 [![CI](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml/badge.svg)](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/NicolasKheirallah/Hisingen)](https://github.com/NicolasKheirallah/Hisingen/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Your Polestar or Volvo, in the macOS menu bar.**
+**Your Polestar or Volvo, right in the macOS menu bar.**
 
-Hisingen is a native macOS app for checking your car without reaching for your phone. Battery, range, charging, locks, vehicle health and other useful information stay one click away in the menu bar.
+Hisingen is a native macOS app that puts the things you normally open your phone to check directly on your Mac.
 
-Where the vehicle, provider and account support them, Hisingen can also expose remote controls.
+Battery, range, charging, locks, climate, vehicle health, location and more are only a click away. On supported vehicles, Hisingen can also control things like climate, locks, charging and other remote functions.
 
-Hisingen is open source, runs locally on your Mac, and has no Hisingen-operated vehicle-data backend or account service.
+No Electron. No Hisingen cloud account. No analytics platform sitting between you and your car.
 
 [**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Changelog](CHANGELOG.md) · [Vehicle support](#vehicle-support) · [Volvo setup](#volvo-setup) · [Documentation](docs/README.md) · [Security](SECURITY.md)
 
@@ -20,55 +19,54 @@ Hisingen is open source, runs locally on your Mac, and has no Hisingen-operated 
   <img src="website/public/assets/product/menu-bar-overview.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
 </p>
 
+---
+
 ## Why Hisingen?
 
-The Polestar and Volvo mobile apps are useful, but checking something simple like battery level, charging state or whether the car is locked should not always require reaching for your phone.
+Sometimes you just want to know whether the car is charged, locked or ready to go.
 
-Hisingen keeps the information you are most likely to check during the day directly on your Mac.
+You shouldn't always have to find your phone, unlock it, open another app and wait for it to connect just to check something simple.
 
-Depending on the vehicle and provider, Hisingen can show:
+Hisingen keeps that information close by on the Mac you're already using.
 
-- battery level, range and charging
-- fuel and hybrid information
-- doors, windows, locks and other openings
-- tyre and vehicle-health information
-- service and trip information
-- climate status
-- software information where exposed by the provider
-- last reported vehicle location
-- charging history and estimated charging cost
-- useful vehicle notifications
-- supported remote controls
+With Hisingen you can:
 
-Support is capability-aware. Hisingen does not assume that every feature exists simply because a particular vehicle model is recognized.
+* check battery, range, fuel and charging status
+* see whether doors, windows and the car itself are locked
+* keep an eye on vehicle health and service information
+* view trips, odometer and consumption data
+* check climate and cabin information
+* see your car's latest reported location
+* keep a local history of charging sessions
+* receive useful macOS notifications
+* manage multiple vehicles
+* use supported remote controls without picking up your phone
+* bring vehicle information into Apple Shortcuts
 
-## At a Glance
+What appears in Hisingen depends on what your individual car actually supports.
 
-| | Polestar | Volvo |
-| --- | :---: | :---: |
-| Battery, range and charging | ✓ | ✓ |
-| Doors, windows and locks | ✓ | ✓ |
-| Vehicle health and service | ✓ | ✓ |
-| BEV support | ✓ | ✓ |
-| PHEV / combustion support | X | ✓ |
-| Multiple vehicles | ✓ | ✓ |
-| Vehicle location | Capability dependent | Capability dependent |
-| Remote controls | Capability dependent | Capability / scope dependent |
-| Multi-angle vehicle images | Up to 6 exterior views | Provider-supplied imagery |
-| Public documented vehicle API | No | Yes |
+---
 
-Availability can vary by model, model year, vehicle software, region, account, permissions and backend rollout.
+## Polestar and Volvo
 
-## Product Tour
+Hisingen supports both Polestar and Volvo, but the two integrations work differently.
 
-These captures show different parts and states of the current Hisingen interface.
+|                         | Polestar                                | Volvo                                                |
+| ----------------------- | --------------------------------------- | ---------------------------------------------------- |
+| **Setup**               | Sign in with your Polestar account      | Volvo account + your own Volvo Developer application |
+| **Battery EVs**         | Yes                                     | Yes                                                  |
+| **Plug-in hybrids**     | No                                      | Yes                                                  |
+| **Combustion vehicles** | No                                      | Yes                                                  |
+| **Multiple vehicles**   | Yes                                     | Yes                                                  |
+| **Vehicle location**    | Where available                         | Where available                                      |
+| **Remote controls**     | Experimental and vehicle-dependent      | API and vehicle-dependent                            |
+| **Vehicle images**      | Multiple exterior views where available | Volvo-provided imagery where available               |
 
-The gallery is deliberately grouped by **what the screen communicates**, rather than relying on the source filename. Similar-looking captures are kept when they represent different application states or different parts of the same workflow.
+### Polestar
 
-<details open>
-<summary><strong>Volvo — overview, energy, diagnostics and controls</strong></summary>
+Polestar doesn't currently provide a supported public vehicle API for third-party applications like Hisingen.
 
-<br>
+The Polestar integration therefore uses interfaces based on the services used by Polestar's own applications and real-world vehicle testing.
 
 <table>
 <tr>
@@ -103,12 +101,19 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 </tr>
 </table>
 
-</details>
+### Volvo
 
-<details open>
-<summary><strong>Polestar — everyday vehicle status</strong></summary>
+Volvo provides official developer APIs, but setup takes a few more steps.
 
-<br>
+You'll need your own Volvo Cars Developer application and API credentials before signing in through Hisingen.
+
+[Jump to Volvo setup](#volvo-setup)
+
+---
+
+# A quick look
+
+Here are a few of the main parts of Hisingen.
 
 <table>
 <tr>
@@ -143,10 +148,272 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 </tr>
 </table>
 
-</details>
+---
+
+# What Hisingen can show
+
+The exact information varies by car, but Hisingen can work with much more than just battery percentage.
+
+## Battery & range
+
+For electric and plug-in hybrid vehicles, Hisingen can show information such as:
+
+* state of charge
+* electric range
+* charging state
+* charger connection
+* AC or DC charging
+* charging power
+* current and voltage
+* charge target
+* charging-current limit
+* estimated charging completion
+* energy consumption
+
+The interface only shows values that make sense for the selected vehicle.
+
+---
+
+## Fuel & hybrid information
+
+Volvo support isn't limited to electric cars.
+
+On compatible hybrid and combustion vehicles, Hisingen can also show:
+
+* fuel level
+* remaining fuel
+* distance to empty
+* fuel consumption
+* combined battery and fuel information on plug-in hybrids
+
+A combustion Volvo won't be shown a meaningless EV battery interface, and an EV won't be shown fuel information it doesn't have.
+
+---
+
+## Charging history
+
+Hisingen can keep a local record of charging sessions.
+
+Depending on the telemetry available, a session can include:
+
+* starting battery level
+* ending battery level
+* estimated energy added
+* charging duration
+* peak charging power
+* electricity price
+* estimated charging cost
+
+Charging data can also be exported for your own analysis.
+
+Energy and cost figures are estimates based on available vehicle data rather than utility-grade metering.
+
+---
+
+## Doors, windows & locks
+
+Hisingen can show the state reported for things such as:
+
+* central locking
+* individual doors
+* windows
+* hood
+* tailgate
+* charge flap
+* fuel filler
+* sunroof
+* alarm
+
+If the car doesn't report something, Hisingen doesn't quietly turn that missing information into “closed” or “locked”.
+
+---
+
+## Vehicle health
+
+Depending on the car, Hisingen can surface:
+
+* tyre warnings
+* individual tyre-pressure information
+* exterior-light warnings
+* fluid warnings
+* 12 V battery warnings
+* service information
+* service countdown
+* odometer
+* trip meters
+* average speed
+* consumption data
+* battery and powertrain health information
+
+Different vehicle platforms expose different levels of detail.
+
+---
+
+## Climate
+
+Hisingen can show climate information and, where supported, control climatization remotely.
+
+Depending on the vehicle this can include:
+
+* current climate state
+* heating or cooling activity
+* cabin-temperature information
+* remaining runtime
+* climate timers
+* seat-heating capabilities
+* steering-wheel heating
+* cabin cleaning
+
+Climate is a good example of why Hisingen adapts to the individual car.
+
+A Polestar 2, for example, may allow climatization to be started without exposing the same temperature controls available on newer platforms.
+
+Instead of presenting controls that won't work, Hisingen adjusts the interface to what's actually available.
+
+---
+
+## Location
+
+When enabled and available from the vehicle provider, Hisingen can show the car's latest reported location and open it in Apple Maps.
+
+Vehicle location should be treated as the **latest location reported by the car**, not as guaranteed real-time tracking.
+
+A parked or sleeping vehicle may report an older position.
+
+---
+
+## Weather at the car
+
+Vehicle weather is optional.
+
+When enabled, Hisingen can use the vehicle's reported location to show local weather around the car.
+
+Weather data comes from [Open-Meteo](https://open-meteo.com/).
+
+Because coordinates are needed to retrieve local weather, the vehicle's latitude and longitude are sent to Open-Meteo while this feature is enabled.
+
+---
+
+## Vehicle software
+
+Where the provider exposes it, Hisingen can show vehicle software and update-related information.
+
+Polestar currently exposes more software information to Hisingen than Volvo's developer APIs do, so this section can look different between the two brands.
+
+---
+
+# Remote controls
+
+Hisingen can control supported vehicle functions directly from your Mac.
+
+The controls you see depend on the selected vehicle rather than on a fixed list that is shown to everyone.
+
+Examples include:
+
+* start or stop climate
+* lock or unlock the car
+* horn and lights
+* windows
+* tailgate
+* cabin cleaning
+* charging settings
+* charging schedules
+* climate schedules
+* supported OTA functions
+* engine start or stop on compatible Volvo vehicles
+
+## Current implementation
+
+This table describes the commands currently implemented in Hisingen itself.
+
+It does **not** mean every car supports every command.
+
+| Function               |    Polestar   | Volvo |
+| ---------------------- | :-----------: | :---: |
+| Climate start / stop   |       ✓*      |   ✓*  |
+| Lock / unlock          |       ✓*      |   ✓*  |
+| Horn / lights          |       ✓*      |   ✓*  |
+| Window controls        |       ✓*      |   —   |
+| Tailgate controls      |       ✓*      |   —   |
+| Cabin cleaning         |       ✓*      |   —   |
+| Charge target          |       ✓*      |   —   |
+| Charging-current limit |       ✓*      |   —   |
+| Charging override      |       ✓*      |   —   |
+| Charging schedules     |       ✓*      |   —   |
+| Climate schedules      |       ✓*      |   —   |
+| OTA controls           | Experimental* |   —   |
+| Engine start / stop    |       —       |   ✓*  |
+
+* Availability still depends on the vehicle, account and services available for that car.
+
+For sensitive commands such as unlocking the car, Hisingen can require authentication through Touch ID or the Mac password.
+
+### About Polestar remote controls
+
+Polestar remote commands use undocumented interfaces and should be considered experimental.
+
+They can change independently of Hisingen if Polestar changes its backend.
+
+Hisingen tries to distinguish between a command being accepted by the server and the vehicle actually completing it whenever the available service makes that possible.
+
+---
+
+# Vehicle support
+
+A model appearing here means Hisingen knows how to identify and handle that vehicle family.
+
+It does **not** mean every feature has been tested on every model year, region and software version.
+
+## Polestar
+
+Hisingen currently recognizes:
+
+* Polestar 1
+* Polestar 2
+* Polestar 3
+* Polestar 4
+* Polestar 5
+
+Support differs between platforms.
+
+For example, a Polestar 2 and Polestar 4 may expose different climate, charging and remote-control capabilities even though both appear in the same app.
+
+## Volvo
+
+Hisingen currently recognizes:
+
+* XC40
+* EX40
+* C40
+* EC40
+* XC60
+* XC90
+* S60
+* S90
+* V60
+* V90
+* EX30
+* EX90
+* ES90
+
+Other vehicles may still be discovered through Volvo's API, but Hisingen won't assume a complete capability profile until enough is known about that model.
+
+Real-world testing across different model years, regions and vehicle configurations is extremely useful.
+
+If you're using Hisingen with a car or configuration that hasn't been tested before, feedback is welcome.
+
+---
+
+# Product tour
+
+The screenshots below show more of Hisingen in detail.
+
+They're grouped by the part of the app they show rather than by the filenames of the image files.
+
+---
 
 <details>
-<summary><strong>Settings, appearance and local data</strong></summary>
+<summary><strong>Volvo: vehicle information</strong></summary>
 
 <br>
 
@@ -171,6 +438,7 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <img src="website/public/assets/product/settings-telemetry.png" width="420" alt="Hisingen telemetry and feature settings">
 </td>
 </tr>
+
 <tr>
 <td width="50%" align="center">
 <strong>Additional storage state</strong><br><br>
@@ -180,12 +448,11 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 </tr>
 </table>
 
-</details>
+### Trips & driving information
 
-<details>
-<summary><strong>Detailed vehicle information</strong></summary>
+<img src="website/public/assets/product/03-volvo-trip-diagnostics.png" width="100%" alt="Hisingen showing trip, odometer, consumption and other driving information for a Volvo">
 
-<br>
+Trip and driving data such as distance, odometer, average speed and consumption when reported by the vehicle.
 
 <table>
 <tr>
@@ -198,6 +465,7 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 <img src="website/public/assets/product/polestar-location-environment.png" width="420" alt="Hisingen vehicle location and environmental information">
 </td>
 </tr>
+
 <tr>
 <td width="50%" align="center">
 <strong>Diagnostics</strong><br><br>
@@ -219,12 +487,12 @@ The gallery is deliberately grouped by **what the screen communicates**, rather 
 
 </details>
 
+---
+
 <details>
-<summary><strong>Remote and charging controls</strong></summary>
+<summary><strong>Polestar: everyday information</strong></summary>
 
 <br>
-
-Remote controls are capability-gated. A control appearing in a screenshot does not mean that the same operation is available on every vehicle, account or region.
 
 <table>
 <tr>
@@ -242,18 +510,16 @@ Remote controls are capability-gated. A control appearing in a screenshot does n
 <strong>Charging controls and configuration</strong><br><br>
 <img src="website/public/assets/product/polestar-charging-controls.png" width="420" alt="Hisingen charging controls and configuration">
 </td>
-<td width="50%"></td>
 </tr>
-</table>
 
-</details>
+<tr>
+<td width="50%" valign="top">
 
-<details>
-<summary><strong>Capability inspector and unavailable states</strong></summary>
+### Doors, windows & tyres
 
-<br>
+<img src="website/public/assets/product/09-polestar-openings-and-tyres.png" width="100%" alt="Hisingen showing the reported state of doors, openings and tyres on a Polestar">
 
-Hisingen exposes capability state instead of assuming that a recognized vehicle supports every operation.
+A quick check of the parts of the car you normally want to know about before walking away from it.
 
 <table>
 <tr>
@@ -266,6 +532,7 @@ Hisingen exposes capability state instead of assuming that a recognized vehicle 
 <img src="website/public/assets/product/capability-matrix-detail.png" width="420" alt="Hisingen detailed capability inspector">
 </td>
 </tr>
+
 <tr>
 <td width="50%" align="center">
 <strong>Unavailable control state</strong><br><br>
@@ -275,504 +542,477 @@ Hisingen exposes capability state instead of assuming that a recognized vehicle 
 </tr>
 </table>
 
+### Vehicle software
+
+<img src="website/public/assets/product/11-polestar-software.png" width="100%" alt="Hisingen showing software information reported for a Polestar">
+
+Software and update-related information reported by the vehicle services used by Hisingen.
+
+</td>
+<td width="50%" valign="top">
+
+### Detailed openings & tyres
+
+<img src="website/public/assets/product/17-polestar-openings-and-tyres.png" width="100%" alt="Hisingen showing a detailed view of openings and tyre information for a Polestar">
+
+A more detailed look at individual openings and tyre information when the car exposes it.
+
+</td>
+</tr>
+</table>
+
 </details>
 
-## How Vehicle Support Works
+---
 
-Vehicle-cloud functionality is not always binary, so Hisingen deliberately avoids treating every model as having the same feature set.
+<details>
+<summary><strong>Polestar: detailed vehicle information</strong></summary>
 
-A capability can be treated as:
+<br>
 
-- **Supported** — Hisingen and the vehicle are expected to support it.
-- **Vehicle managed** — the vehicle handles the behavior without exposing the same user control.
-- **Backend dependent** — support depends on the service available for the individual vehicle.
-- **Unavailable** — the capability is known not to be available.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Runtime observations can further refine what is available for a particular vehicle.
+### Vehicle information
 
-This is especially important for remote controls, charging settings, climate functions and diagnostics.
+<img src="website/public/assets/product/16-polestar-info-overview.png" width="100%" alt="Hisingen showing detailed information about the selected Polestar">
 
-See [Vehicle Capabilities](docs/domain/capability-matrix.md) for the detailed model.
+More detailed vehicle information for when you want to go beyond the everyday overview.
 
-## Features
+</td>
+<td width="50%" valign="top">
 
-### Battery, Range & Charging
+### Location & cabin environment
 
-For electric and plug-in hybrid vehicles, Hisingen can show available information such as:
+<img src="website/public/assets/product/18-polestar-location-and-cleanzone.png" width="100%" alt="Hisingen showing vehicle location and cabin-environment information for a Polestar">
 
-- battery state of charge
-- electric range
-- charging state
-- charger connection
-- AC/DC charging type
-- charging power
-- charging current and voltage
-- charge target
-- charging-current limit
-- estimated completion time
-- charging speed
-- average consumption
+Location and environmental information made available for the selected car.
 
-Exactly which fields are available depends on the vehicle and provider.
+</td>
+</tr>
 
-### Fuel & Hybrid Vehicles
+<tr>
+<td width="50%" valign="top">
 
-Hisingen also understands vehicles that are not purely electric.
+### Diagnostics
 
-Depending on what the provider reports, the interface can adapt to BEV, plug-in hybrid and combustion powertrains and display relevant information such as:
+<img src="website/public/assets/product/19-polestar-diagnostics.png" width="100%" alt="Hisingen showing diagnostic and vehicle-status information for a Polestar">
 
-- fuel level
-- remaining fuel volume
-- distance to empty
-- average fuel consumption
-- battery and fuel information together on hybrids
+Vehicle information useful for understanding warnings, status and reported diagnostic conditions.
 
-Irrelevant EV or combustion information is hidden rather than left as meaningless empty values.
+</td>
+<td width="50%" valign="top">
 
-### Charging History
+### Battery & powertrain health
 
-Hisingen can keep local summaries of charging sessions.
+<img src="website/public/assets/product/20-polestar-powertrain-health.png" width="100%" alt="Hisingen showing battery, powertrain and vehicle-health information for a Polestar">
 
-A session can include:
+Available health and powertrain information presented without mixing it into the main day-to-day overview.
 
-- starting and ending battery level
-- estimated energy added
-- charging duration
-- peak charging power
-- configured electricity price
-- estimated charging cost
+</td>
+</tr>
 
-Charging history can be exported for further analysis.
+<tr>
+<td width="50%" valign="top">
 
-Energy and cost calculations are estimates based on the telemetry available to Hisingen. They are not utility-grade metering.
+### Vehicle identity & ownership details
 
-### Doors, Windows & Openings
+<img src="website/public/assets/product/21-polestar-warranty-identity.png" width="100%" alt="Hisingen showing vehicle identity and other detailed information for a Polestar">
 
-Where the provider exposes them, Hisingen can show:
+Detailed information tied to the selected vehicle and the data made available for it.
 
-- central lock state
-- doors
-- windows
-- hood
-- tailgate
-- charge lid
-- fuel filler
-- sunroof
-- alarm state
+</td>
+<td width="50%"></td>
+</tr>
+</table>
 
-The interface only presents values actually reported by the provider.
+</details>
 
-### Vehicle Health
+---
 
-Available health information can include:
+<details>
+<summary><strong>Remote controls</strong></summary>
 
-- tyre warnings
-- individual tyre pressure where supported
-- lighting warnings
-- fluid warnings
-- 12 V battery warnings
-- service state
-- service countdown
-- odometer
-- trip meters
-- average speed
+<br>
 
-Different providers and vehicle platforms expose different levels of detail.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-### Climate
+### Vehicle controls
 
-Hisingen can show vehicle climatization information where supported.
+<img src="website/public/assets/product/24-polestar-controls.png" width="100%" alt="Hisingen showing the main remote vehicle controls for a Polestar">
 
-Depending on the vehicle this can include:
+The main remote operations available for the selected vehicle.
 
-- climate activity
-- heating or cooling state
-- temperature information
-- remaining climate runtime
-- climate timers
-- heating-related capability information
-- cabin-cleaning information where exposed
+</td>
+<td width="50%" valign="top">
 
-Climate capabilities differ significantly between vehicle platforms. A Polestar 2 should not be assumed to expose the same selectable climate controls as newer Polestar platforms.
+### Additional controls
 
-### Vehicle Software
+<img src="website/public/assets/product/22-polestar-controls-extended.png" width="100%" alt="Hisingen showing additional remote controls supported by a Polestar">
 
-Polestar vehicles can expose vehicle-software and OTA-related information through the services Hisingen uses.
+Additional controls appear when Hisingen knows the selected vehicle can expose them.
 
-Volvo's public developer APIs do not expose the same software information, so Hisingen does not fabricate a vehicle-software state for Volvo vehicles.
+</td>
+</tr>
 
-### Location
+<tr>
+<td width="50%" valign="top">
 
-Vehicle location is optional.
+### Charging controls
 
-When enabled, Hisingen can show the latest location reported by the provider and provide Apple Maps integration.
+<img src="website/public/assets/product/25-polestar-charging-controls.png" width="100%" alt="Hisingen showing charging controls and charging settings for a Polestar">
 
-Location is the latest position made available by the provider and should not be treated as guaranteed real-time tracking.
+Charging-related controls and configuration available for the selected vehicle.
 
-### Vehicle Weather
+</td>
+<td width="50%" valign="top">
 
-Weather is a separate optional feature.
+### When a control isn't available
 
-When enabled, Hisingen can retrieve weather for the vehicle's location using Open-Meteo.
+<img src="website/public/assets/product/capability-controls-unavailable.png" width="100%" alt="Hisingen showing a vehicle control that is unavailable for the selected vehicle">
 
-Because this requires coordinates, the vehicle's location is sent to Open-Meteo when the feature is enabled.
+Hisingen can explain when a feature isn't available instead of leaving behind a control that looks like it should work.
 
-Leave Vehicle Weather disabled if you do not want vehicle coordinates sent to that service.
+</td>
+</tr>
+</table>
 
-## Vehicle Images
+</details>
 
-### Polestar
+---
 
-Where image data is available, Hisingen supports six Polestar exterior render positions:
+<details>
+<summary><strong>Settings & personalization</strong></summary>
 
-1. Front three-quarter
-2. Front
-3. Side
-4. Rear three-quarter
-5. Rear
-6. Overhead
+<br>
 
-Available images are cached locally.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-### Volvo
+### Accounts & vehicle providers
 
-Volvo provides vehicle imagery differently from Polestar.
+<img src="website/public/assets/product/12-polestar-settings-account.png" width="100%" alt="Hisingen settings for vehicle accounts and provider configuration">
 
-Where available, Hisingen uses the exterior and interior vehicle images supplied by Volvo rather than presenting a Polestar-style multi-angle selector.
+Manage connected vehicle accounts and provider-specific configuration.
 
-## Remote Controls
+</td>
+<td width="50%" valign="top">
 
-Remote controls are **opt-in** and capability-aware.
+### Appearance
 
-A control is only made available when the relevant conditions are met, including:
+<img src="website/public/assets/product/13-polestar-settings-themes.png" width="100%" alt="Hisingen appearance settings showing the available application themes">
 
-1. Hisingen implements the operation for the active provider.
-2. The vehicle capability model permits the operation.
-3. The feature is enabled.
-4. Required authentication and provider permissions are available.
+Choose the look that fits your Mac, from understated manufacturer-inspired themes to more colorful Hisingen styles.
 
-Depending on the vehicle and provider, controls can include operations related to:
+</td>
+</tr>
 
-- climate
-- locking
-- windows
-- horn and exterior lights
-- charging settings
-- charging schedules
-- climate schedules
-- other provider-specific functions
+<tr>
+<td width="50%" valign="top">
 
-Not every control is available on every vehicle.
+### Local data
 
-### Sensitive Operations
+<img src="website/public/assets/product/14-polestar-settings-storage.png" width="100%" alt="Hisingen settings for locally stored vehicle and application data">
 
-Sensitive remote operations can require device-owner authentication through macOS using Touch ID or the Mac password.
+See and manage data Hisingen keeps locally on your Mac.
 
-### Command Results
+</td>
+<td width="50%" valign="top">
 
-Vehicle commands are often asynchronous.
+### Features & telemetry
 
-There is an important difference between:
+<img src="website/public/assets/product/15-polestar-settings-telemetry.png" width="100%" alt="Hisingen settings for vehicle data, telemetry and optional functionality">
 
-- the backend accepting a command
-- the backend delivering it
-- the vehicle completing it
+Control optional features and how Hisingen uses the information available from your vehicle.
 
-Hisingen does not treat a simple backend acknowledgement as proof that the physical vehicle completed an operation.
+</td>
+</tr>
 
-Where possible, provider command status and subsequent vehicle telemetry are used to determine the result.
+<tr>
+<td width="50%" valign="top">
 
-### Polestar Remote Controls
+### Storage details
 
-Polestar remote functionality uses undocumented vehicle-cloud interfaces.
+<img src="website/public/assets/product/23-polestar-settings-storage.png" width="100%" alt="Hisingen showing additional details about local vehicle and application storage">
 
-These interfaces can change without notice and can behave differently depending on model, model year, vehicle software, account, region, backend rollout and current vehicle state.
+A more detailed look at locally stored Hisingen data and storage-related controls.
 
-A working command on one Polestar model does not imply the same operation works identically on another.
+</td>
+<td width="50%"></td>
+</tr>
+</table>
 
-### Volvo Remote Controls
+</details>
 
-Volvo remote commands use the documented Connected Vehicle API.
+---
 
-Availability can depend on:
+<details>
+<summary><strong>Vehicle capabilities</strong></summary>
 
-- vehicle
-- model year
-- region
-- Volvo account
-- Developer application
-- subscribed API products
-- granted OAuth scopes
-- application approval
-- current vehicle state
+<br>
 
-Some Volvo OAuth scopes and vehicle operations require additional approval beyond basic read access.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-## Notifications
+### Capability overview
 
-Depending on enabled features and available telemetry, Hisingen can notify you about events such as:
+<img src="website/public/assets/product/capability-matrix-polestar-overview.png" width="100%" alt="Hisingen showing an overview of features and capabilities available for a Polestar">
 
-- charging started
-- charging completed
-- charging interrupted or failed
-- low battery
-- service or vehicle-health warnings
-- tyre warnings
-- software-update information
-- authentication problems
-- an unlocked parked vehicle
-- weather-related opening warnings
+See which vehicle functions Hisingen currently understands for the selected car.
 
-Notification behavior can be configured in Settings.
+</td>
+<td width="50%" valign="top">
 
-## macOS Integration
+### Capability details
 
-Hisingen is a native macOS application rather than a wrapped web application.
+<img src="website/public/assets/product/capability-matrix-polestar-detail.png" width="100%" alt="Hisingen showing detailed capability information for a selected Polestar feature">
 
-### Menu Bar
+Detailed information helps explain why a feature is available, unavailable or still unknown for a particular vehicle.
 
-The menu bar can be configured to show combinations such as:
+</td>
+</tr>
+</table>
 
-- battery level
-- range
-- charging time
-- charging power
-- lock state
-- icon-only status
+</details>
 
-### Launch at Login
+---
 
-Hisingen supports the normal macOS Login Items mechanism.
+# Multiple vehicles
 
-### Keyboard Shortcuts
+Hisingen supports accounts with more than one vehicle.
 
-Keyboard shortcuts are available for common navigation and vehicle-switching actions.
+Each vehicle keeps its own:
 
-Some global shortcuts require macOS Accessibility permission.
+* current cached state
+* charging history
+* charging baselines
+* capability observations
+* local nickname
+* vehicle-specific settings
 
-### URL Scheme
+Polestar and Volvo authentication are also kept separate.
 
-Hisingen registers the:
+Switching cars doesn't mean mixing their histories or cached information together.
+
+---
+
+# Notifications
+
+Hisingen can let you know about useful vehicle events without requiring the app to stay open in front of you.
+
+Depending on the vehicle and the features you've enabled, notifications can include:
+
+* charging started
+* charging completed
+* charging interrupted
+* low battery
+* tyre warnings
+* service or vehicle-health warnings
+* software-update information
+* authentication issues
+* an unlocked parked vehicle
+* weather-related warnings when openings are detected
+
+Notification behaviour can be configured in Settings.
+
+---
+
+# macOS integration
+
+Hisingen is built as a native Mac application rather than a wrapped web app.
+
+## Menu bar
+
+The menu bar can show useful information without even opening the Hisingen window.
+
+Depending on your preferences this can include:
+
+* battery level
+* range
+* charging time
+* charging power
+* lock state
+* compact status
+* icon-only status
+
+## Launch at Login
+
+Hisingen can start automatically using the normal macOS Login Items system.
+
+## Keyboard shortcuts
+
+Keyboard shortcuts are available for common actions such as navigating the app or switching between vehicles.
+
+Global shortcuts can require macOS Accessibility permission.
+
+## Apple Shortcuts
+
+Hisingen exposes cached vehicle information to Apple Shortcuts using App Intents.
+
+That makes it possible to use information such as:
+
+* battery percentage
+* range
+* charging state
+
+inside your own macOS automations.
+
+## URL scheme
+
+Hisingen also registers:
 
 ```text
 hisingen://
 ```
 
-URL scheme for local automation.
+for local application navigation and automation.
 
-Available routes include application navigation and operations implemented by Hisingen, such as refreshing vehicle data, opening Settings and copying the current VIN.
+---
 
-Remote actions still pass through Hisingen's normal capability and authorization checks.
+# Make it yours
 
-### Apple Shortcuts
+Hisingen doesn't need to look identical on every Mac.
 
-Hisingen includes a read-only App Intent that can expose cached vehicle information such as battery, range and charging status to Apple Shortcuts.
+## Themes
 
-Remote command App Intents are not advertised as a supported feature until they dispatch through the same validated command path as the main application.
+Nine themes are currently included:
 
-## Multiple Vehicles
+* Hisingen Glass
+* Polestar Minimal
+* Volvo Iron
+* Nordic Night
+* Aurora Borealis
+* Swedish Gold
+* Cyan Racing
+* Gothenburg Forest
+* Sand Dune
 
-Hisingen supports accounts containing multiple vehicles.
+Theme names are visual references only and don't imply affiliation or endorsement.
 
-Vehicle-specific state is kept separate by VIN, including information such as:
-
-- cached vehicle state
-- charging history
-- charging baselines
-- capability observations
-- local nicknames
-
-If both Polestar and Volvo are configured, each provider retains separate authentication and vehicle state.
-
-## Appearance, Units & Languages
+## Units
 
 Hisingen supports:
 
-- System appearance
-- Light appearance
-- Dark appearance
-- configurable themes
-- kilometers and miles
-- liters, US gallons and Imperial gallons
-- several fuel-economy formats
-- multiple interface languages with an in-app language selector
+* kilometers
+* miles
+* liters
+* US gallons
+* Imperial gallons
+* L/100 km
+* US MPG
+* Imperial MPG
+* km/L
 
-Nine optional themes are currently included:
+## Languages
 
-- Hisingen Glass
-- Polestar Minimal
-- Volvo Iron
-- Nordic Night
-- Aurora Borealis
-- Swedish Gold
-- Cyan Racing
-- Gothenburg Forest
-- Sand Dune
+Hisingen currently includes:
 
-Theme names are visual references only and do not imply endorsement or affiliation.
+* English
+* Swedish
+* German
+* Norwegian
+* Danish
+* Dutch
+* French
+* Spanish
+* Italian
+* Finnish
+* Portuguese
+* Polish
+* Simplified Chinese
+* Korean
 
-## Vehicle Support
+You can also let Hisingen follow the system language automatically.
 
-### Polestar
+---
 
-Hisingen recognizes:
+# Privacy
 
-- Polestar 1
-- Polestar 2
-- Polestar 3
-- Polestar 4
-- Polestar 5
+Hisingen doesn't operate a vehicle-data backend.
 
-Recognizing a model does **not** mean that every Hisingen capability is available on it.
+Your Mac communicates directly with the services needed for the features you use.
 
-Polestar 2, Polestar 3 and Polestar 4 have different capability profiles, particularly around climate, charging, connectivity and remote controls.
+In practical terms:
 
-Less widely tested models should be considered backend-dependent until their capabilities have been confirmed against real vehicles.
+|                                  |                                                           |
+| -------------------------------- | --------------------------------------------------------- |
+| **Hisingen account required**    | No                                                        |
+| **Hisingen vehicle-data server** | No                                                        |
+| **Analytics**                    | No                                                        |
+| **Advertising**                  | No                                                        |
+| **Credentials**                  | Stored using macOS Keychain where persistence is required |
+| **Vehicle cache**                | Stored locally                                            |
+| **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
+| **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
+| **Map integration**              | Uses Apple services where applicable                      |
+| **Update checks**                | Uses GitHub Releases                                      |
 
-### Volvo
+Your vehicle account, VIN, location and remote-control access are sensitive information, so Hisingen treats them accordingly.
 
-Hisingen contains model handling for:
+For the full breakdown, see [Privacy](docs/security/privacy.md) and [Security](docs/security/overview.md).
 
-- XC40
-- EX40
-- C40
-- EC40
-- XC60
-- XC90
-- S60
-- S90
-- V60
-- V90
-- EX30
-- EX90
-- ES90
+---
 
-Other Volvo models can still be discovered without Hisingen pretending their capability profile is already known.
-
-The support decision is made from both vehicle identification and runtime capability information.
-
-## Polestar Integration
-
-Polestar does not currently provide a supported public third-party vehicle-cloud API for this use case.
-
-Hisingen therefore uses interfaces derived from current first-party client behavior and vehicle testing.
-
-These services can change without notice, making upstream change the largest external reliability risk for the Polestar integration.
-
-See [Polestar API](docs/api/polestar.md) for technical details.
-
-## Volvo Integration
-
-Volvo support uses Volvo Cars' documented developer APIs, including:
-
-- Connected Vehicle API v2
-- Energy API v2
-- Location API v1 when authorized
-
-Vehicle and command availability remain vehicle-specific. The APIs expose different capabilities depending on vehicle platform and application permissions.
-
-See [Volvo API](docs/api/volvo.md) for implementation details.
-
-## Privacy at a Glance
-
-| Data or service | What happens |
-| --- | --- |
-| Polestar account | Communicates with Polestar services |
-| Volvo account | Communicates with Volvo services |
-| Persistent secrets / refresh sessions | Stored in macOS Keychain |
-| Vehicle telemetry | Fetched from the selected vehicle provider |
-| Persistent vehicle cache | Stored locally on the Mac |
-| VIN | Can be retained in local vehicle state |
-| Current vehicle coordinates | Not persisted in the normal vehicle-state cache |
-| Reverse geocoding | Uses Apple's system services when enabled |
-| Vehicle weather | Coordinates sent to Open-Meteo when enabled |
-| Update checks | GitHub Releases when enabled |
-| Analytics | None |
-| Advertising | None |
-| Hisingen vehicle-data backend | None |
-| Hisingen account service | None |
-
-For exact field-by-field behavior, see [Privacy](docs/security/privacy.md).
-
-## Credentials & Keychain
-
-Sensitive credentials and refresh tokens that need to persist are stored in the macOS Keychain.
-
-Hisingen uses:
-
-```text
-AfterFirstUnlockThisDeviceOnly
-```
-
-Keychain accessibility.
-
-This means the stored item remains tied to the Mac and does not sync through iCloud Keychain.
-
-Hisingen uses the macOS Keychain. It does **not** claim that ordinary vehicle-account credentials are stored as Secure Enclave-backed cryptographic keys.
-
-Polestar and Volvo credentials are stored separately.
-
-## Security
-
-Hisingen handles information that deserves careful treatment, including account sessions, VINs, location, telemetry and remote vehicle operations.
-
-See:
-
-- [Security Policy](SECURITY.md)
-- [Security Overview](docs/security/overview.md)
-- [Privacy](docs/security/privacy.md)
-- [Keychain Storage](docs/security/keychain.md)
-- [Threat Model](docs/security/threat-model.md)
-
-If you discover a security problem, report it privately through the process in [SECURITY.md](SECURITY.md).
-
-Do not post real credentials, access tokens, API secrets or full VINs in public issues.
-
-## Installation
+# Installation
 
 Hisingen requires **macOS 14 Sonoma or later**.
 
-Published releases support:
+Releases are universal and support both:
 
-- Apple Silicon
-- Intel Macs
+* Apple Silicon
+* Intel Macs
 
-### Install a Release
+Published releases are Developer ID signed, hardened-runtime enabled, notarized by Apple and distributed with SHA-256 checksums and GitHub build provenance.
 
-1. Download `Hisingen.dmg` from the [latest release](https://github.com/NicolasKheirallah/Hisingen/releases/latest).
+## Install
+
+1. [Download the latest `Hisingen.dmg`](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg).
 2. Open the disk image.
 3. Drag **Hisingen.app** into **Applications**.
 4. Open Hisingen.
-5. Open **Settings** and choose your vehicle provider.
+5. Open **Settings** and connect your vehicle account.
 
-Production releases are built as universal binaries, Developer ID signed, hardened-runtime enabled, notarized by Apple and stapled before publication.
+[View all releases](https://github.com/NicolasKheirallah/Hisingen/releases)
 
-SHA-256 checksums are published with release artifacts.
+---
 
-## Polestar Setup
+# Polestar setup
+
+Polestar setup is straightforward.
 
 1. Open **Settings**.
 2. Select **Polestar**.
-3. Sign in using your Polestar account.
-4. Select your vehicle if the account contains more than one.
+3. Sign in with your Polestar account.
+4. Select your vehicle if your account contains more than one.
 
-Hisingen communicates directly with the services used by the Polestar integration. There is no Hisingen account or Hisingen authentication server in between.
+There is no Hisingen account or Hisingen authentication server between the app and Polestar.
 
-Because the Polestar vehicle interfaces are undocumented, authentication or vehicle functionality can occasionally require a Hisingen update after an upstream change.
+Because the services used for vehicle data aren't a documented third-party API, an upstream change can occasionally require a Hisingen update.
 
-## Volvo Setup
+---
 
-Volvo support requires your own application in the [Volvo Cars Developer Portal](https://developer.volvocars.com/).
+# Volvo setup
 
-### 1. Create a Volvo Developer Application
+Volvo takes a little more initial setup because Volvo requires third-party applications to use the Volvo Cars Developer Platform.
 
-Create an application and add the API products required for the features you intend to use.
+You only need to configure this once.
 
-Location and remote commands can require additional products, scopes or approval.
+## 1. Create a Volvo Developer application
 
-### 2. Register the OAuth Callback
+Go to the [Volvo Cars Developer Portal](https://developer.volvocars.com/) and create your own application.
 
-Configure this callback URL:
+Enable the API products needed for the information and functionality you want to use.
+
+Some features, particularly location and remote operations, can require additional API products or permissions.
+
+## 2. Configure the callback
+
+Add this exact OAuth callback URL to your Volvo Developer application:
 
 ```text
 https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html
@@ -780,150 +1020,212 @@ https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html
 
 Volvo requires an HTTP(S) OAuth callback.
 
-Hisingen therefore uses a small static GitHub Pages bridge. Volvo redirects the authorization response there and the page passes the response back to Hisingen through its local `hisingen://` URL scheme.
+The small Hisingen GitHub Pages callback passes the authorization result back to the installed app through the local `hisingen://` URL scheme.
 
-The bridge is not a Hisingen account or vehicle-data backend.
+It isn't a Hisingen login service and doesn't act as a vehicle-data backend.
 
-### 3. Add Your Volvo Credentials
+## 3. Add your Volvo credentials
 
-Enter the credentials for your Volvo Developer application in Hisingen Settings:
+In Hisingen Settings, enter the values from your Volvo Developer application:
 
-- Client ID
-- Client Secret
-- VCC API Key
+* Client ID
+* Client Secret
+* VCC API Key
 
-Then choose **Sign In with Volvo ID** and complete authorization in your browser.
+Then choose **Sign In with Volvo ID** and complete authentication in your browser.
 
-Secrets and session material that need to persist are stored locally using the macOS Keychain.
+Credentials and long-lived session material that need to persist are stored using macOS Keychain.
 
-See [Authentication](docs/api/authentication.md) for the complete flow.
+For the technical details, see [Authentication](docs/api/authentication.md).
 
-## Troubleshooting
+---
 
-### The vehicle shows old data
+# Troubleshooting
 
-A parked vehicle may enter a low-power state and stop reporting fresh telemetry.
+## The car is showing old information
 
-Hisingen keeps the last usable snapshot instead of replacing missing values with zeroes. Check the timestamp in the interface to understand how fresh the state is.
+Parked cars can enter low-power or sleep states and stop sending fresh telemetry.
 
-### A feature is missing
+Hisingen keeps the last useful information rather than replacing missing values with zeroes.
 
-Recognizing a vehicle does not guarantee every service is available.
+Check the last-updated time in Hisingen to see how fresh the displayed data is.
 
-Features can vary by model, model year, region, vehicle software, account permissions, backend rollout and — for Volvo — Developer application permissions.
+## A feature is missing
 
-### A Polestar feature suddenly stopped working
+Not every model exposes the same online functionality.
 
-The Polestar interfaces used by Hisingen are undocumented. An upstream service change can therefore break a previously working feature even when nothing changed locally.
+Availability can depend on:
 
-Check the latest release and open issues before reporting a new problem.
+* vehicle model
+* model year
+* vehicle software
+* region
+* account
+* provider service
+* API permissions
 
-### Volvo sign-in fails
+For Volvo, the products and permissions enabled for your Developer application matter too.
+
+## Polestar suddenly stopped updating
+
+The interfaces used by the Polestar integration aren't a supported public third-party API and can change.
+
+Check the [latest release](https://github.com/NicolasKheirallah/Hisingen/releases/latest) and [existing issues](https://github.com/NicolasKheirallah/Hisingen/issues) first.
+
+## Volvo sign-in isn't working
 
 Check that:
 
-- the Client ID is correct
-- the Client Secret is correct
-- the VCC API Key is correct
-- the required API products are enabled
-- the OAuth callback URL matches exactly
-- the application has the scopes required for the requested functionality
+* Client ID is correct
+* Client Secret is correct
+* VCC API Key is correct
+* the required API products are enabled
+* the callback URL matches exactly
+* the application has the permissions required for the feature you're trying to use
 
-### A Volvo command is unavailable
+## A remote control isn't available
 
-Volvo commands can require permissions beyond ordinary telemetry access.
+The command has to be supported by Hisingen **and** available for your individual vehicle.
 
-The vehicle, Developer application and OAuth grant all need to support the operation.
+If it isn't, Hisingen keeps the control unavailable rather than showing something that looks like it should work.
 
-## Known Limitations
+---
 
-Hisingen depends on vehicle-cloud services it does not control.
+# Known limitations
 
-Keep these limitations in mind:
+Hisingen depends on vehicle services it doesn't control.
 
-- Polestar's vehicle interfaces used by Hisingen are undocumented and can change without notice.
-- Volvo API availability varies between vehicles, regions and Developer applications.
-- A supported model does not imply support for every capability.
-- Vehicle data can be delayed while a car is asleep or offline.
-- Some telemetry is not exposed by every provider.
-- Location is the latest position reported by the provider, not guaranteed live tracking.
-- Charging energy and cost calculations are estimates.
-- Remote commands can be accepted by a backend before the physical vehicle has completed them.
-- Backend changes can temporarily break a feature without any Hisingen code change.
+A few things are worth keeping in mind:
 
-Hisingen tries to expose uncertainty rather than turning missing information into a successful-looking result.
+* Polestar's vehicle interfaces can change without notice.
+* Volvo API availability varies between vehicles, regions and Developer applications.
+* A recognized vehicle model doesn't mean every feature has been tested on every model year.
+* Parked or sleeping vehicles can report older data.
+* Some information simply isn't exposed by every vehicle.
+* Location is the latest reported position, not guaranteed live tracking.
+* Charging energy and cost are estimates.
+* A cloud service can accept a remote command before the physical vehicle completes it.
+* Experimental remote functionality shouldn't be relied on for safety-critical or time-critical use.
 
-## Build From Source
+---
 
-Requirements:
+# Build from source
 
-- macOS 14 or later
-- Swift 5.9 or later
-- Xcode or compatible Command Line Tools
+## Requirements
+
+* macOS 14 or later
+* Xcode 16 or a compatible Apple development toolchain
+* Git
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/NicolasKheirallah/Hisingen.git
 cd Hisingen
+```
+
+Check your environment:
+
+```bash
 make doctor
+```
+
+Run the same validation used by CI:
+
+```bash
 make ci
+```
+
+Build the app:
+
+```bash
 make app
+```
+
+Then open it:
+
+```bash
 open Hisingen.app
 ```
 
-Normal CI does not require a real vehicle account and keeps live integration testing separate from the deterministic test suite.
+Normal CI doesn't need access to a real Polestar or Volvo account. Live integration testing is kept separate from the deterministic test suite.
 
-See [Getting Started](docs/development/getting-started.md) for the development workflow.
+See [Getting Started](docs/development/getting-started.md) for the development setup.
 
-## Contributing
+---
 
-Issues, testing and pull requests are welcome.
+# Documentation
 
-Before making a larger change:
+This README is meant for people who want to understand, install or try Hisingen.
+
+The deeper engineering material lives under [`docs/`](docs/README.md).
+
+Useful places to start:
+
+* [Documentation Index](docs/README.md)
+* [Architecture](docs/architecture/overview.md)
+* [Vehicle Capabilities](docs/domain/capability-matrix.md)
+* [API Overview](docs/api/overview.md)
+* [Polestar Integration](docs/api/polestar.md)
+* [Volvo Integration](docs/api/volvo.md)
+* [Authentication](docs/api/authentication.md)
+* [Privacy](docs/security/privacy.md)
+* [Security](docs/security/overview.md)
+* [Threat Model](docs/security/threat-model.md)
+* [Testing](docs/testing/strategy.md)
+* [Release Process](docs/operations/releases.md)
+
+---
+
+# Contributing
+
+Bug reports, pull requests and real-world vehicle testing are welcome.
+
+Different cars, model years, regions and software versions don't always behave the same way, so testing on vehicles that aren't already well covered is especially useful.
+
+Before submitting a change:
 
 1. Read the [development guide](docs/development/getting-started.md).
 2. Run `make ci`.
-3. Add or update tests for behavior you change where practical.
-4. Keep provider functionality capability-aware.
-5. Prefer an explicit unavailable or unknown state over fabricated data.
-6. Do not add real credentials, tokens or VINs to fixtures, documentation or public issues.
-7. Keep deep implementation detail under `/docs` rather than growing duplicate explanations in the root README.
+3. Add or update tests where practical.
+4. Keep vehicle behaviour tied to what the individual car supports.
+5. Don't commit real credentials, access tokens, secrets or full VINs.
+6. Keep detailed implementation documentation under `/docs` rather than growing the root README indefinitely.
 
-## Documentation
+Security vulnerabilities should be reported privately through [SECURITY.md](SECURITY.md), not through a public issue.
 
-Detailed engineering documentation lives under [`docs/`](docs/README.md).
+---
 
-Useful starting points:
+# Project history
 
-- [Documentation Index](docs/README.md)
-- [Architecture Overview](docs/architecture/overview.md)
-- [Vehicle Capabilities](docs/domain/capability-matrix.md)
-- [API Overview](docs/api/overview.md)
-- [Polestar API](docs/api/polestar.md)
-- [Volvo API](docs/api/volvo.md)
-- [Authentication](docs/api/authentication.md)
-- [Privacy](docs/security/privacy.md)
-- [Security](docs/security/overview.md)
-- [Testing](docs/testing/strategy.md)
-- [Release Process](docs/operations/releases.md)
+Hisingen started from a pretty simple frustration: I was sitting at my Mac and wanted to check or control something on the car without having to reach for my phone.
 
-## Project History
+The name **Hisingen** comes from Gothenburg, where both Volvo and Polestar have strong roots, and reflects where the project itself comes from as well.
 
-Hisingen originally started as because I got tired of not being able to control the fan control in my car from my Mac because my phone was dead or I was in the zone
+---
 
-## Credits
+# Credits
 
 Hisingen is maintained by [Nicolas Kheirallah](https://github.com/NicolasKheirallah).
 
-Thanks to everyone testing Hisingen across different vehicles, model years, regions and configurations. Real-world feedback is especially useful because vehicle-cloud behavior often varies beyond what a model name alone can tell us.
+Thanks as well to everyone testing the app on different cars and configurations. Real-world feedback is one of the most useful ways to improve Hisingen, especially when vehicle behaviour differs between models in ways that aren't obvious from documentation alone.
 
-## License
+---
+
+# License
 
 Hisingen is released under the [MIT License](LICENSE).
 
-## Disclaimer
+---
+
+# Disclaimer
 
 Hisingen is independent open-source software.
-It is **not affiliated with, endorsed by, sponsored by, or maintained by Polestar Performance AB or Volvo Car Corporation**.
+
+It is **not affiliated with, endorsed by, sponsored by or maintained by Polestar Performance AB or Volvo Car Corporation**.
+
 Polestar and Volvo are trademarks of their respective owners and are referenced only to describe vehicle compatibility.
-Use of their accounts, APIs and vehicle services remains subject to the terms, policies and availability of the respective providers.
+
+Vehicle accounts, APIs and cloud services remain subject to the terms, policies and availability of their respective providers.
+
 See [Terms & Conditions](TERMS.md) for additional information.
