@@ -3,6 +3,14 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-22
+
+### Fixed
+
+- Added fallback code signing and packaging in the release workflow when Apple Developer ID certificates are not configured.
+- Defaulted the Polestar public render-CDN key in `Scripts/inject-secrets.sh` to the documented public AppSync key.
+- Updated all GitHub Actions workflow pins to their latest verified immutable commit SHAs.
+
 ## [1.2.0] - 2026-08-22
 
 ### Added
