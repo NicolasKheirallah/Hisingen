@@ -212,7 +212,7 @@ struct HistoryDashboardView: View {
             .padding(14)
             .frame(width: 260)
         }
-        .onChange(of: period) { newValue in
+        .onChange(of: period) { _, newValue in
             if newValue == .custom { showCustomRangeEditor = true }
         }
     }

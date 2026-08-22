@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 /// contains only what the dashboard already shows, and is wiped on sign-out.
 @MainActor
 enum SpotlightIndexer {
-    private static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "spotlight")
+    // Logger is Sendable, so completion closures outside the actor may use it.
+    private nonisolated static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "spotlight")
     private static let domainIdentifier = "io.kheirallah.hisingen.vehicle"
 
     /// Re-indexes (or replaces) the entry for this VIN.

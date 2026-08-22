@@ -1,1248 +1,1298 @@
 import AppKit
 import Charts
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
-struct InfoTabView: View {
+struct HistoryDashboardView: View {
     let state: VehicleState
     let database: VehicleDatabase
-    let imageCache: CarImageCache
-    let reverseGeocoder: ReverseGeocoder
 
-    @State private var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
-    @State private var addressText: String?
-    @State private var addressResolved = false
     @Environment(\.preferencesStore) private var preferences
-    @State private var vinCopied = false
+    @State private var period: HistoryPeriod = .month
+    @State private var selectedSessionID: String?
+    @State private var sessionSearchText: String = ""
 
-    private var availableExteriorAngles: [CarRenderAngle] {
-        CarRenderAngle.allCases.filter { angle in
-            imageCache.image(for: state.vin, angle: angle.rawValue) != nil
-                || (angle == preferences.carRenderAngle && state.imageData != nil)
+    private enum HistoryPeriod: String, CaseIterable, Identifiable {
+        case week = "7 Days"
+        case month = "30 Days"
+        case all = "All"
+        case custom = "Custom…"
+        var id: String { rawValue }
+        var days: Int? { self == .week ? 7 : (self == .month ? 30 : nil) }
+    }
+
+    @State private var fuelLitersText: String = ""
+    @State private var fuelPriceText: String = ""
+    @State private var fuelOdometerText: String = ""
+    @State private var showFuelSheet = false
+    @State private var customRangeStart: Date = Calendar.current.date(byAdding: .day, value: -14, to: Date()) ?? Date()
+    @State private var customRangeEnd: Date = Date()
+    @State private var showCustomRangeEditor = false
+
+    private var cutoff: Date? {
+        if period == .custom {
+            return customRangeStart
         }
+        return period.days.flatMap { Calendar.current.date(byAdding: .day, value: -$0, to: Date()) }
+    }
+
+    private var trips: [TripHistoryEntry] {
+        database.derivedTrips(for: state.vin, limit: 1_000).filter { trip in
+            cutoff.map { trip.endedAt >= $0 } ?? true
+        }
+    }
+
+    private var chargingSessions: [HistoricalChargingSession] {
+        database.recentChargingSessions(for: state.vin, limit: 1_000).filter { session in
+            cutoff.map { session.startedAt >= $0 } ?? true
+        }
+    }
+
+    private var commands: [RemoteCommandAuditRecord] {
+        database.recentCommandAudits(for: state.vin, limit: 250).filter { command in
+            cutoff.map { command.executedAt >= $0 } ?? true
+        }
+    }
+
+    /// Battery-health milestones deliberately ignore the period picker: state of health moves
+    /// over months, so a "7 days" window would usually show a single point and read as broken.
+    private var batteryHealthRecords: [BatteryHealthRecord] {
+        database.batteryHealthHistory(for: state.vin, limit: 200)
+    }
+
+    private var airQualityRecords: [AirQualityRecord] {
+        database.recentAirQuality(for: state.vin, limit: 500).filter { record in
+            cutoff.map { record.timestamp >= $0 } ?? true
+        }
+    }
+
+    private var telemetryRecords: [HistoricalTelemetryRecord] {
+        database.recentTelemetry(for: state.vin, limit: 2_000).filter { record in
+            cutoff.map { record.timestamp >= $0 } ?? true
+        }
+    }
+
+    private var efficiencyPoints: [HistoryInsights.EfficiencyPoint] {
+        guard state.powertrain.hasElectricRange else { return [] }
+        return HistoryInsights.efficiencyTrend(from: telemetryRecords)
+    }
+
+    private var odometerPoints: [HistoryInsights.OdometerPoint] {
+        HistoryInsights.odometerTrend(from: telemetryRecords)
+    }
+
+    private var selectedSession: HistoricalChargingSession? {
+        let sessions = chargingSessions
+        guard !sessions.isEmpty else { return nil }
+        return sessions.first(where: { $0.id == selectedSessionID }) ?? sessions.first
+    }
+
+    private var selectedSessionCurve: [HistoryInsights.ChargingCurvePoint] {
+        guard let session = selectedSession else { return [] }
+        return HistoryInsights.chargingCurve(from: database.chargingSamples(for: session.id))
+    }
+
+    private var selectedSessionSamples: [HistoricalChargingSample] {
+        guard let session = selectedSession else { return [] }
+        return database.chargingSamples(for: session.id)
+    }
+
+    private var filteredSessionsForPicker: [HistoricalChargingSession] {
+        let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return Array(chargingSessions.prefix(500)) }
+        return chargingSessions.filter { sessionLabel($0).localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    /// Odometer/telemetry history ignoring the period picker — mirrors `batteryHealthRecords`:
+    /// monthly mileage and the km/day rate are only meaningful over a long span, so a "7 days"
+    /// window would usually collapse them to noise or nothing at all.
+    private var allTimeTelemetryRecords: [HistoricalTelemetryRecord] {
+        database.recentTelemetry(for: state.vin, limit: 2_000)
+    }
+
+    private var fuelEntries: [VehicleDatabase.FuelEntry] {
+        state.powertrain.hasCombustionEngine ? database.recentFuelEntries(for: state.vin, limit: 50) : []
+    }
+
+    private var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] {
+        database.recentCabinClimate(for: state.vin, limit: 200)
+    }
+
+    private var allTimeOdometerPoints: [HistoryInsights.OdometerPoint] {
+        HistoryInsights.odometerTrend(from: allTimeTelemetryRecords)
+    }
+
+    private var commandStatistics: HistoryInsights.CommandStatistics {
+        HistoryInsights.commandStatistics(from: commands)
+    }
+
+    private struct MonthComparison {
+        let distanceKm: Double
+        let energyKwh: Double
+        let averageConsumption: Double?
+    }
+
+    private struct SmoothedPoint: Identifiable {
+        let id: Int64
+        let timestamp: Date
+        let value: Double
+    }
+
+    /// Current-vs-previous calendar month, independent of the period picker (which the user
+    /// might have set to "7 Days") so this comparison always has something to compare.
+    private func monthComparison(monthsAgo: Int, calendar: Calendar = .current) -> MonthComparison {
+        guard let monthStart = calendar.date(byAdding: .month, value: -monthsAgo, to: HistoryInsights.monthBucket(Date(), calendar: calendar)),
+              let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+            return MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
+        }
+        let monthTrips = database.derivedTrips(for: state.vin, limit: 2_000).filter {
+            $0.endedAt >= monthStart && $0.endedAt < monthEnd
+        }
+        let monthSessions = database.recentChargingSessions(for: state.vin, limit: 2_000).filter {
+            $0.startedAt >= monthStart && $0.startedAt < monthEnd
+        }
+        let consumptionValues = monthTrips.compactMap { trip -> Double? in
+            guard let value = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(value) else { return nil }
+            return value
+        }
+        return MonthComparison(
+            distanceKm: monthTrips.reduce(0) { $0 + $1.distanceKm },
+            energyKwh: monthSessions.reduce(0) { $0 + $1.energyDeliveredKwh },
+            averageConsumption: consumptionValues.isEmpty ? nil : consumptionValues.reduce(0, +) / Double(consumptionValues.count)
+        )
     }
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            heroVisualSection
-            if let ext = state.exteriorStatus, !ext.openings.isEmpty {
-                DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked)
+            periodPicker
+            overviewCard
+            monthComparisonCard
+            if selectedSession != nil && !selectedSessionCurve.isEmpty { chargingCurveCard }
+            if !trips.isEmpty {
+                distanceChartCard
+                tripListCard
             }
-            if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
-                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }))
-            }
-            if state.location?.latitude != nil {
-                parkingLocationCard
-            }
-            if state.airQuality != nil {
-                airQualityCleanZoneCard
-            }
-            if state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil || state.averageSpeedKmH != nil {
-                tripComputerCard
-            }
-            fluidsAndLightingCard
-            connectivityWakeCard
-            exteriorStylingCard
-            interiorCabinCard
-            powertrainSpecsCard
-            batteryHealthCard
-            serviceAndHealthCard
-            warrantyAndProtectionCard
-            factoryBuildCard
-            capabilityInspectorCard
-            activityHistoryCard
+            if !chargingSessions.isEmpty { chargingHistoryCard }
+            if !fuelEntries.isEmpty { recentFillsCard }
+            if efficiencyPoints.count >= 3 { efficiencyChartCard }
+            if odometerPoints.count >= 3 { odometerChartCard }
+            if !batteryHealthRecords.isEmpty { batteryHealthCard }
+            if airQualityRecords.count >= 2 { airQualityCard }
+            if cabinClimateRecords.count >= 2 { cabinClimateCard }
+            if !commands.isEmpty { automationHistoryCard }
+            if trips.isEmpty && chargingSessions.isEmpty && commands.isEmpty
+                && batteryHealthRecords.isEmpty && airQualityRecords.count < 2 { emptyCard }
         }
-        .onAppear {
-            let preferred = preferences.carRenderAngle
-            selectedAngleIndex = availableExteriorAngles.contains(preferred)
-                ? preferred.rawValue
-                : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
+        .sheet(isPresented: $showFuelSheet) { fuelEntrySheet }
+    }
+
+    private var periodPicker: some View {
+        Picker(L10n.text("History Period"), selection: $period) {
+            ForEach(HistoryPeriod.allCases) { item in
+                Text(L10n.text(item.rawValue)).tag(item)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel(L10n.text("History Period"))
+        .popover(isPresented: $showCustomRangeEditor, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.text("Custom Range")).font(.system(size: 12, weight: .semibold))
+                DatePicker(L10n.text("From"), selection: $customRangeStart,
+                           in: ...customRangeEnd, displayedComponents: .date)
+                    .font(.system(size: 11))
+                DatePicker(L10n.text("To"), selection: $customRangeEnd,
+                           in: customRangeStart...Date(), displayedComponents: .date)
+                    .font(.system(size: 11))
+                Text(period == .custom ? "" : L10n.text("Choose “Custom…” to apply."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .frame(width: 260)
+        }
+        .onChange(of: period) { _, newValue in
+            if newValue == .custom { showCustomRangeEditor = true }
         }
     }
 
-    private var activityHistoryCard: some View {
-        let telemetry = database.recentTelemetry(for: state.vin, limit: 30)
-        let commands = database.recentCommandAudits(for: state.vin, limit: 5)
-        guard !telemetry.isEmpty || !commands.isEmpty else { return AnyView(EmptyView()) }
-
-        return AnyView(Card {
+    private var overviewCard: some View {
+        let totalDistance = trips.reduce(0) { $0 + $1.distanceKm }
+        let drivingTime = trips.reduce(0) { $0 + $1.duration }
+        let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
+        let estimatedCost = energy * preferences.electricityPricePerKwh
+        // Predicted service date from the observed km/day rate and the vehicle's own
+        // remaining-distance/time countdowns.
+        let serviceProjection = HistoryInsights.projectService(
+            currentOdometerKm: state.odometerKm.map(Double.init),
+            distanceToServiceKm: state.distanceToServiceKm,
+            daysToService: state.daysToService,
+            odometerPoints: odometerPoints
+        )
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
-                if let newest = telemetry.first, let oldest = telemetry.last,
-                   let newOdometer = newest.odometerKm, let oldOdometer = oldest.odometerKm,
-                   newOdometer >= oldOdometer {
-                    KVRow(
-                        L10n.text("Distance Recorded"),
-                        Format.distance(km: newOdometer - oldOdometer, unit: preferences.distanceUnit),
-                        symbol: "road.lanes"
-                    )
-                }
-                if !commands.isEmpty {
-                    Divider().opacity(0.4)
-                    Text(L10n.text("Recent remote commands"))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    ForEach(commands) { record in
-                        HStack(spacing: 7) {
-                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
-                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                .font(.system(size: 10.5, weight: .medium))
-                            Spacer()
-                            Text(record.executedAt, style: .relative)
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(.secondary)
+                HStack {
+                    CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("History Overview"), color: .indigo)
+                    Spacer()
+                    if state.powertrain.hasCombustionEngine {
+                        Button {
+                            showFuelSheet = true
+                        } label: {
+                            Label(L10n.text("Add Fuel"), systemImage: "drop.fill")
+                                .font(.system(size: 10, weight: .medium))
                         }
-                        .help(record.errorMessage ?? record.status.capitalized)
+                        .buttonStyle(.borderless)
+                        .help(L10n.text("Log a fill-up so fuel spend is included in cost estimates"))
+                    }
+                    exportMenu
+                }
+                HStack(spacing: 8) {
+                    metric(L10n.text("Distance"), Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit), "road.lanes")
+                    metric(L10n.text("Trips"), "\(trips.count)", "car.side")
+                    metric(L10n.text("Driving"), Format.shortDuration(minutes: Int(drivingTime / 60)), "clock")
+                }
+                HStack(spacing: 8) {
+                    metric(L10n.text("Charge Sessions"), "\(chargingSessions.count)", "bolt.fill")
+                    metric(L10n.text("Estimated Energy"), String(format: "%.1f kWh", energy), "bolt.circle")
+                    metric(L10n.text("Estimated Cost"), String(format: "%.2f %@", estimatedCost, preferences.currencySymbol), "creditcard")
+                }
+                if let serviceProjection {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 10))
+                            .foregroundStyle(HisingenTheme.accent)
+                        Text(L10n.format("Next service projected around %@",
+                                         Format.dateFormatter.string(from: serviceProjection.projectedDate ?? Date())))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                        if let odo = serviceProjection.projectedOdometerKm {
+                            Text("· " + Format.distance(km: Int(odo.rounded()), unit: preferences.distanceUnit))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                // Lifetime figure — deliberately ignores the period filter so it answers
+                // "what has ownership cost me so far" rather than "this month".
+                let fuelSpend = database.lifetimeFuelCost(for: state.vin)
+                let lifetimeCostPerKm = HistoryInsights.costPerKm(
+                    totalEnergyKwh: database.lifetimeChargingEnergyKwh(for: state.vin),
+                    pricePerKwh: preferences.electricityPricePerKwh,
+                    odometerPoints: allTimeOdometerPoints,
+                    fuelCost: fuelSpend
+                )
+                if let costPerKm = lifetimeCostPerKm, preferences.electricityPricePerKwh > 0 {
+                    HStack(spacing: 5) {
+                        Image(systemName: "speedometer")
+                            .font(.system(size: 10))
+                            .foregroundStyle(HisingenTheme.accent)
+                        Text(L10n.format("Lifetime charging cost ≈ %@ per %@",
+                                         String(format: "%.3f %@", costPerKm * (preferences.distanceUnit == .kilometers ? 1 : 1.609344), preferences.currencySymbol),
+                                         preferences.distanceUnit == .kilometers ? "km" : "mi"))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                        Text(L10n.text("(estimated)"))
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+    }
+
+    private var exportMenu: some View {
+        Menu {
+            Button(L10n.text("Trips")) { exportCSV(database.exportTripsCSV(for: state.vin),
+                                                    name: "Trips") }
+                .disabled(trips.isEmpty)
+            Button(L10n.text("Charging Sessions")) {
+                exportCSV(database.exportChargingSessionsCSV(for: state.vin), name: "Charging-Sessions")
+            }
+            .disabled(chargingSessions.isEmpty)
+            Button(L10n.text("Battery Health")) {
+                exportCSV(database.exportBatteryHealthCSV(for: state.vin), name: "Battery-Health")
+            }
+            .disabled(batteryHealthRecords.isEmpty)
+            Button(L10n.text("Air Quality")) {
+                exportCSV(database.exportAirQualityCSV(for: state.vin), name: "Air-Quality")
+            }
+            .disabled(airQualityRecords.isEmpty)
+            Button(L10n.text("Telemetry")) {
+                exportCSV(database.exportTelemetryCSV(for: state.vin), name: "Telemetry")
+            }
+            .disabled(telemetryRecords.isEmpty)
+            Button(L10n.text("Session Samples")) {
+                guard let session = selectedSession else { return }
+                exportCSV(database.exportChargingSamplesCSV(sessionID: session.id),
+                          name: "Charging-Samples")
+            }
+            .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
+        } label: {
+            Label(L10n.text("Export"), systemImage: "square.and.arrow.up")
+                .font(.system(size: 10, weight: .medium))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel(L10n.text("Export history data"))
+    }
+
+    private func metric(_ title: String, _ value: String, _ symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Image(systemName: symbol).font(.system(size: 10)).foregroundStyle(HisingenTheme.accent)
+            Text(value).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+            Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var monthComparisonCard: some View {
+        let thisMonth = monthComparison(monthsAgo: 0)
+        let lastMonth = monthComparison(monthsAgo: 1)
+        guard thisMonth.distanceKm > 0 || thisMonth.energyKwh > 0 || lastMonth.distanceKm > 0 || lastMonth.energyKwh > 0 else {
+            return AnyView(EmptyView())
+        }
+        func delta(_ current: Double, _ previous: Double) -> String? {
+            guard previous > 0 else { return nil }
+            let pct = (current - previous) / previous * 100
+            return String(format: "%@%.0f%%", pct >= 0 ? "+" : "", pct)
+        }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "calendar", title: L10n.text("This Month vs Last"), color: .cyan)
+                HStack(spacing: 8) {
+                    comparisonMetric(L10n.text("Distance"),
+                                     Format.distance(km: thisMonth.distanceKm, decimals: 0, unit: preferences.distanceUnit),
+                                     delta(thisMonth.distanceKm, lastMonth.distanceKm))
+                    comparisonMetric(L10n.text("Energy"),
+                                     String(format: "%.1f kWh", thisMonth.energyKwh),
+                                     delta(thisMonth.energyKwh, lastMonth.energyKwh))
+                    if let thisConsumption = thisMonth.averageConsumption {
+                        comparisonMetric(L10n.text("Consumption"),
+                                         preferences.energyConsumptionUnit.format(kwhPer100Km: thisConsumption),
+                                         lastMonth.averageConsumption.flatMap { delta(thisConsumption, $0) })
                     }
                 }
-                Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
-                    .font(.system(size: 9.5))
+            }
+        })
+    }
+
+    private func comparisonMetric(_ title: String, _ value: String, _ delta: String?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
+                if let delta {
+                    Text(delta).font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(delta.hasPrefix("+") ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+    }
+
+    // MARK: - Charging Curve
+
+    private var chargingCurveCard: some View {
+        let session = selectedSession
+        let curve = selectedSessionCurve
+        let samples = selectedSessionSamples
+        let peak = curve.compactMap(\.powerKw).max()
+        let socGain = (curve.last?.soc ?? 0) - (curve.first?.soc ?? 0)
+        let durationMinutes = session.map { max(0, Int(($0.endedAt ?? Date()).timeIntervalSince($0.startedAt) / 60)) }
+        let chargingType = HistoryInsights.chargingType(from: samples, peakPowerKw: peak)
+        let tenToEighty = HistoryInsights.tenToEightyDuration(from: curve)
+        let idleTail = HistoryInsights.idleTailDuration(from: curve)
+        let lossPct: Double? = state.powertrain.hasElectricRange
+            ? HistoryInsights.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
+            : nil
+        let tariffCost: HistoryInsights.TariffCost? = preferences.nightTariffEnabled
+            ? HistoryInsights.tariffAwareCost(from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
+                                              nightRatePerKwh: preferences.nightElectricityPricePerKwh,
+                                              nightStartHour: preferences.nightTariffStartHour,
+                                              nightEndHour: preferences.nightTariffEndHour)
+            : nil
+        // A shorter gap threshold than the daily-cadence charts: a session spans hours, so a
+        // hole of a couple of hours mid-session (app closed, car briefly unplugged) is exactly
+        // the kind of gap that shouldn't be smoothed over with an interpolated line.
+        let curveSegmentByID = gapSegmentIndex(of: curve, maxGap: HistoryInsights.chargingCurveGapThreshold, timestamp: \.timestamp)
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: .green)
+                    if selectedSession?.endedAt == nil {
+                        // Live session: the curve keeps growing as polls arrive.
+                        HStack(spacing: 3) {
+                            Circle().fill(HisingenTheme.chartPositive).frame(width: 5, height: 5)
+                            Text(L10n.text("Live"))
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        }
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.green.opacity(0.15), in: Capsule())
+                        .accessibilityLabel(L10n.text("Session in progress"))
+                    }
+                    if let badgeColor = chargingTypeBadgeColor(chargingType) {
+                        Text(chargingType.displayName)
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(badgeColor.opacity(0.18), in: Capsule())
+                            .foregroundStyle(badgeColor)
+                    }
+                    Spacer()
+                    Picker(L10n.text("Session"), selection: Binding(
+                        get: { selectedSession?.id },
+                        set: { selectedSessionID = $0 }
+                    )) {
+                        ForEach(filteredSessionsForPicker) { item in
+                            Text(sessionLabel(item)).tag(item.id as String?)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 200)
+                }
+                if chargingSessions.count > 8 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 9)).foregroundStyle(.tertiary)
+                        TextField(L10n.text("Search sessions by date or energy"), text: $sessionSearchText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 9.5))
+                        if !sessionSearchText.isEmpty {
+                            Text("\(filteredSessionsForPicker.count)/\(chargingSessions.count)")
+                                .font(.system(size: 8.5))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(5)
+                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 5))
+                }
+                Chart(curve) { point in
+                    AreaMark(
+                        x: .value(L10n.text("Time"), point.timestamp),
+                        y: .value(L10n.text("Charge level"), point.soc)
+                    )
+                    .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartPositive.opacity(0.28), HisingenTheme.chartPositive.opacity(0.02)],
+                                                     startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.catmullRom)
+                    LineMark(
+                        x: .value(L10n.text("Time"), point.timestamp),
+                        y: .value(L10n.text("Charge level"), point.soc),
+                        series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
+                    )
+                    .foregroundStyle(HisingenTheme.chartPositive)
+                    .lineStyle(StrokeStyle(lineWidth: 1.6))
+                    .interpolationMethod(.catmullRom)
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxisLabel("%")
+                .frame(height: 105)
+                .accessibilityLabel(L10n.text("Charging curve charge-level chart"))
+                if let peak, peak > 0 {
+                    Chart(curve.filter { $0.powerKw != nil }) { point in
+                        AreaMark(
+                            x: .value(L10n.text("Time"), point.timestamp),
+                            y: .value(L10n.text("Power"), point.powerKw ?? 0)
+                        )
+                        .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartAttention.opacity(0.25), HisingenTheme.chartAttention.opacity(0.02)],
+                                                         startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.catmullRom)
+                        LineMark(
+                            x: .value(L10n.text("Time"), point.timestamp),
+                            y: .value(L10n.text("Power"), point.powerKw ?? 0),
+                            series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
+                        )
+                        .foregroundStyle(Color.orange)
+                        .lineStyle(StrokeStyle(lineWidth: 1.4))
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .chartYAxisLabel("kW")
+                    .frame(height: 80)
+                    .accessibilityLabel(L10n.text("Charging curve power chart"))
+                }
+                if curve.contains(where: { $0.voltageVolts != nil || $0.currentAmps != nil }) {
+                    Chart(curve) { point in
+                        if let voltage = point.voltageVolts {
+                            LineMark(
+                                x: .value(L10n.text("Time"), point.timestamp),
+                                y: .value(L10n.text("Voltage"), voltage),
+                                series: .value(L10n.text("Segment"), "voltage-\(curveSegmentByID[point.id] ?? 0)")
+                            )
+                            .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Voltage (V)")))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .interpolationMethod(.catmullRom)
+                        }
+                        if let current = point.currentAmps {
+                            LineMark(
+                                x: .value(L10n.text("Time"), point.timestamp),
+                                y: .value(L10n.text("Current"), current),
+                                series: .value(L10n.text("Segment"), "current-\(curveSegmentByID[point.id] ?? 0)")
+                            )
+                            .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Current (A)")))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .interpolationMethod(.catmullRom)
+                        }
+                    }
+                    .chartForegroundStyleScale([
+                        L10n.text("Voltage (V)"): Color.purple,
+                        L10n.text("Current (A)"): Color.yellow
+                    ])
+                    .frame(height: 70)
+                    .accessibilityLabel(L10n.text("Charging curve voltage and current chart"))
+                }
+                HStack(spacing: 12) {
+                    if let session, session.energyDeliveredKwh > 0 {
+                        curveStat(L10n.text("Energy"), String(format: "%.1f kWh", session.energyDeliveredKwh))
+                    }
+                    if socGain > 0.05 {
+                        curveStat(L10n.text("Added"), String(format: "+%.0f%%", socGain))
+                    }
+                    if let minutes = durationMinutes, minutes > 0 {
+                        curveStat(L10n.text("Duration"), Format.shortDuration(minutes: minutes))
+                    }
+                    if let peak, peak > 0 {
+                        curveStat(L10n.text("Peak"), String(format: "%.1f kW", peak))
+                    }
+                }
+                if tenToEighty != nil || idleTail != nil || lossPct != nil || tariffCost != nil {
+                    HStack(spacing: 12) {
+                        if let tenToEighty {
+                            curveStat("10→80%", Format.shortDuration(minutes: max(1, Int(tenToEighty / 60))))
+                        }
+                        if let idleTail, idleTail >= 60 {
+                            curveStat(L10n.text("Idle Tail"), Format.shortDuration(minutes: max(1, Int(idleTail / 60))))
+                        }
+                        if let lossPct, lossPct >= 1 {
+                            curveStat(L10n.text("Estimated Loss"), String(format: "%.0f%%", lossPct))
+                        }
+                        if let tariffCost {
+                            curveStat(L10n.text("Tariff Cost"), String(format: "%.2f %@", tariffCost.cost, preferences.currencySymbol))
+                        }
+                    }
+                }
+                Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: curve.map(\.timestamp))
+            }
+        }
+    }
+
+    private func sessionLabel(_ session: HistoricalChargingSession) -> String {
+        var label = Format.dateTimeFormatter.string(from: session.startedAt)
+        if session.energyDeliveredKwh > 0 {
+            label += String(format: " · %.1f kWh", session.energyDeliveredKwh)
+        }
+        if session.endedAt == nil {
+            label += " · " + L10n.text("Active")
+        }
+        return label
+    }
+
+    /// `nil` suppresses the badge entirely — an `.unknown` type has nothing useful to show.
+    private func chargingTypeBadgeColor(_ type: ChargingType) -> Color? {
+        switch type {
+        case .ac: return .blue
+        case .dc: return .orange
+        case .wireless: return .purple
+        case .none: return .gray
+        case .unknown: return nil
+        }
+    }
+
+    private func curveStat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.system(size: 11, weight: .bold, design: .rounded)).lineLimit(1)
+            Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    // MARK: - Trips
+
+    private var distanceChartCard: some View {
+        let longest = HistoryInsights.longestTrip(from: trips)
+        let correlation = HistoryInsights.temperatureConsumptionCorrelation(from: trips)
+        let weekly = HistoryInsights.weeklyDistance(from: trips)
+        let bestDay = HistoryInsights.dailyDistance(from: trips).max { $0.distanceKm < $1.distanceKm }
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: .blue)
+                Chart(trips) { trip in
+                    BarMark(
+                        x: .value(L10n.text("Date"), trip.endedAt, unit: .day),
+                        y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: trip.distanceKm))
+                    )
+                    .foregroundStyle(HisingenTheme.accent.gradient)
+                    .cornerRadius(2)
+                }
+                .chartYAxisLabel(preferences.distanceUnit.suffix)
+                .frame(height: 125)
+                .accessibilityLabel(L10n.text("Trip distance history chart"))
+                // Only once there's enough span for a weekly view to say something a daily bar
+                // chart doesn't already show — under 3 weeks it would just repeat the same bars.
+                if weekly.count >= 3 {
+                    Chart(weekly) { bucket in
+                        BarMark(
+                            x: .value(L10n.text("Week"), bucket.week, unit: .weekOfYear),
+                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
+                        )
+                        .foregroundStyle(HisingenTheme.accent.opacity(0.55).gradient)
+                        .cornerRadius(2)
+                    }
+                    .chartYAxisLabel(preferences.distanceUnit.suffix)
+                    .frame(height: 70)
+                    .accessibilityLabel(L10n.text("Weekly distance chart"))
+                }
+                if let longest {
+                    HStack(spacing: 12) {
+                        curveStat(L10n.text("Longest Trip"), Format.distance(km: longest.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                        if let speed = HistoryInsights.averageSpeedKmh(longest) {
+                            curveStat(L10n.text("Longest Trip Avg Speed"), String(format: "%.0f km/h", speed))
+                        }
+                        if let bestDay {
+                            curveStat(L10n.text("Best Day"), Format.distance(km: bestDay.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                        }
+                    }
+                }
+                if let correlation, correlation < -0.2 {
+                    Text(L10n.text("Colder trips consume more: consumption rises as ambient temperature drops."))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                dataConfidenceNote(for: trips.map(\.endedAt))
+            }
+        }
+    }
+
+    private var tripListCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: .teal)
+                ForEach(trips.prefix(20)) { trip in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Format.dateTimeFormatter.string(from: trip.endedAt))
+                                .font(.system(size: 10.5, weight: .semibold))
+                            HStack(spacing: 5) {
+                                Text(Format.shortDuration(minutes: max(1, Int(trip.duration / 60))))
+                                if let speed = HistoryInsights.averageSpeedKmh(trip) {
+                                    Text("· " + String(format: "%.0f km/h", speed))
+                                }
+                                if let temperature = trip.ambientTemperatureCelsius {
+                                    Text("· " + Format.temperature(celsius: temperature, unit: preferences.temperatureUnit))
+                                }
+                                // Only an electric powertrain's stored figure is
+                                // kWh/100 km; a combustion vehicle's telemetry row carries
+                                // L/100 km, which must not be formatted as energy.
+                                if let consumption = trip.averageConsumption,
+                                   state.powertrain.hasElectricRange,
+                                   HistoryInsights.efficiencyBounds.contains(consumption) {
+                                    Text("· " + Format.energyConsumption(
+                                        kwhPer100Km: consumption,
+                                        unit: preferences.energyConsumptionUnit))
+                                }
+                            }
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(Format.distance(km: trip.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                        if let lat = trip.endLatitude, let lon = trip.endLongitude {
+                            Button { openMap(latitude: lat, longitude: lon) } label: {
+                                Image(systemName: "map")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(L10n.text("Open trip endpoint in Apple Maps"))
+                        }
+                    }
+                    if trip.id != trips.prefix(20).last?.id { Divider().opacity(0.25) }
+                }
+                Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Charging Summary
+
+    /// Sums each session's tariff-aware (day/night-split) cost when a night tariff is
+    /// configured, falling back per-session to the flat rate for any session whose samples
+    /// can't support the split (too few samples, or recorded before per-sample power existed) —
+    /// so the aggregate is never silently short of a session's contribution.
+    private func aggregateChargingCost() -> Double {
+        guard preferences.nightTariffEnabled else {
+            return chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh * preferences.electricityPricePerKwh }
+        }
+        return chargingSessions.reduce(0.0) { total, session in
+            let samples = database.chargingSamples(for: session.id)
+            if let tariff = HistoryInsights.tariffAwareCost(
+                from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
+                nightRatePerKwh: preferences.nightElectricityPricePerKwh,
+                nightStartHour: preferences.nightTariffStartHour, nightEndHour: preferences.nightTariffEndHour) {
+                return total + tariff.cost
+            }
+            return total + session.energyDeliveredKwh * preferences.electricityPricePerKwh
+        }
+    }
+
+    private var chargingHistoryCard: some View {
+        let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
+        let averagePeak = chargingSessions.isEmpty ? 0 : chargingSessions.reduce(0) { $0 + $1.peakPowerKw } / Double(chargingSessions.count)
+        // The 90th-percentile peak is a more honest "typical fast peak" than the plain average:
+        // one outlier DC session in an otherwise all-AC history would drag the average up
+        // without actually being representative of what a normal session looks like.
+        let p90Peak = Statistics.percentile(chargingSessions.map(\.peakPowerKw).filter { $0 > 0 }, 90)
+        let perWeek = HistoryInsights.sessionsPerWeek(from: chargingSessions)
+        let byTimeOfDay = HistoryInsights.energyByTimeOfDay(from: chargingSessions)
+        let dominantTimeOfDay = byTimeOfDay.max { $0.value < $1.value }
+        let cost = aggregateChargingCost()
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "bolt.badge.clock.fill", title: L10n.text("Charging Trends"), color: .green)
+                KVRow(L10n.text("Sessions"), "\(chargingSessions.count)", symbol: "number")
+                if let perWeek {
+                    KVRow(L10n.text("Sessions Per Week"), String(format: "%.1f", perWeek), symbol: "calendar.badge.clock")
+                }
+                KVRow(L10n.text("Estimated Energy Added"), String(format: "%.1f kWh", energy), symbol: "bolt.fill", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
+                if averagePeak > 0 {
+                    KVRow(L10n.text("Average Observed Peak"), String(format: "%.1f kW", averagePeak), symbol: "waveform.path.ecg")
+                }
+                if let p90Peak, p90Peak > 0 {
+                    KVRow(L10n.text("Typical Fast Peak (p90)"), String(format: "%.1f kW", p90Peak), symbol: "chart.bar.xaxis",
+                          info: L10n.text("90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average."))
+                }
+                if let dominantTimeOfDay, dominantTimeOfDay.value > 0 {
+                    KVRow(L10n.text("Mostly Charges"), L10n.text(dominantTimeOfDay.key.rawValue), symbol: "clock.badge")
+                }
+                KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, preferences.currencySymbol), symbol: "creditcard",
+                      info: preferences.nightTariffEnabled
+                        ? L10n.text("Day/night tariff applied per session from its actual charging times, not a flat multiply.")
+                        : nil)
+            }
+        }
+    }
+
+    // MARK: - Driving Trends
+
+    private var efficiencyChartCard: some View {
+        let average = HistoryInsights.averageEfficiency(of: efficiencyPoints)
+        let median = Statistics.median(efficiencyPoints.map(\.kwhPer100Km))
+        let segmentByID = gapSegmentIndex(of: efficiencyPoints, timestamp: \.timestamp)
+        let seasonal = HistoryInsights.seasonalEfficiency(from: telemetryRecords)
+        let slopePerDay = HistoryInsights.efficiencyTrendSlopePerDay(from: efficiencyPoints)
+        // A 5-point trailing average smooths out the point-to-point noise a raw consumption
+        // series always has (one short cold drive, one motorway cruise) so the underlying trend
+        // reads clearly without needing to squint at the raw line.
+        let smoothed: [SmoothedPoint] = efficiencyPoints.count >= 8
+            ? zip(efficiencyPoints, Statistics.movingAverage(efficiencyPoints.map(\.kwhPer100Km), windowSize: 5))
+                .map { point, value in SmoothedPoint(id: point.id, timestamp: point.timestamp, value: value) }
+            : []
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "gauge.high", title: L10n.text("Consumption Trend"), color: .mint)
+                    Spacer()
+                    if let average {
+                        Text(preferences.energyConsumptionUnit.format(kwhPer100Km: average))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Chart {
+                    ForEach(efficiencyPoints) { point in
+                        LineMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), point.kwhPer100Km),
+                            series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
+                        )
+                        .foregroundStyle(HisingenTheme.chartInfo)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                        PointMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), point.kwhPer100Km)
+                        )
+                        .symbolSize(14)
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.85))
+                    }
+                    ForEach(smoothed) { point in
+                        LineMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Smoothed"), point.value)
+                        )
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+                .frame(height: 110)
+                .accessibilityLabel(L10n.text("Energy consumption trend chart"))
+                if let median, let average, abs(median - average) > 0.5 {
+                    Text(L10n.format("Typical drive: %@ (average is pulled by outlier trips)",
+                                     preferences.energyConsumptionUnit.format(kwhPer100Km: median)))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                if seasonal.coldAverage != nil || seasonal.warmAverage != nil {
+                    HStack(spacing: 12) {
+                        if let cold = seasonal.coldAverage {
+                            curveStat(L10n.text("Cold (<5°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: cold))
+                        }
+                        if let mild = seasonal.mildAverage {
+                            curveStat(L10n.text("Mild (5–15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: mild))
+                        }
+                        if let warm = seasonal.warmAverage {
+                            curveStat(L10n.text("Warm (>15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: warm))
+                        }
+                    }
+                }
+                if let slopePerDay {
+                    let monthlySlope = slopePerDay * 30
+                    // Number pre-formatted with the plain (locale-invariant) `String(format:)`
+                    // overload and passed as a `%@` string, not a numeric argument to
+                    // `L10n.format` — matching `Format.swift`'s convention — so a comma-decimal
+                    // system locale can't turn this into "Trending +0,42 kWh/100km per month".
+                    let sign = monthlySlope >= 0 ? "+" : ""
+                    let numberText = String(format: "%.2f", monthlySlope)
+                    Text(L10n.format("Trending %@%@ kWh/100km per month", sign, numberText))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(monthlySlope > 0.5 ? HisingenTheme.semanticWarning : .secondary)
+                }
+                Text(L10n.text("Vehicle-reported consumption between charges. Short drives and climate use raise it; motorway cruising lowers it."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: efficiencyPoints.map(\.timestamp))
+            }
+        }
+    }
+
+    /// Only surfaced when confidence is low, so a well-populated chart doesn't carry a
+    /// permanent "trust me" caption nobody needs to read.
+    private func dataConfidenceNote(for timestamps: [Date]) -> some View {
+        let coverage = HistoryInsights.dataCoverage(timestamps: timestamps)
+        return Group {
+            if coverage.confidence == .low || coverage.confidence == .insufficient {
+                Text(L10n.format("Limited data (%@ points) — treat this trend as indicative, not conclusive.", "\(coverage.sampleCount)"))
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.85))
+            }
+        }
+    }
+
+    /// Maps each point's id to a segment index so a chart can pass it as a `series:` value —
+    /// Swift Charts only breaks a `LineMark` at a gap when consecutive points belong to
+    /// different series, not automatically from a large timestamp delta.
+    private func gapSegmentIndex<T: Identifiable>(of points: [T], maxGap: TimeInterval = HistoryInsights.defaultChartGapThreshold,
+                                                   timestamp: (T) -> Date) -> [T.ID: Int] {
+        let runs = HistoryInsights.segments(of: points, maxGap: maxGap, timestamp: timestamp)
+        var result: [T.ID: Int] = [:]
+        for (index, run) in runs.enumerated() {
+            for point in run { result[point.id] = index }
+        }
+        return result
+    }
+
+    private var odometerChartCard: some View {
+        let covered = HistoryInsights.distanceCovered(from: odometerPoints)
+        let segmentByID = gapSegmentIndex(of: odometerPoints, timestamp: \.timestamp)
+        let kmPerDay = HistoryInsights.averageKmPerDay(from: allTimeOdometerPoints)
+        let monthly = HistoryInsights.monthlyMileage(from: allTimeOdometerPoints)
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "road.lanes", title: L10n.text("Odometer History"), color: .indigo)
+                    Spacer()
+                    if let covered {
+                        Text("+\(Format.distance(km: covered, decimals: 0, unit: preferences.distanceUnit))")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Chart(odometerPoints) { point in
+                    LineMark(
+                        x: .value(L10n.text("Date"), point.timestamp),
+                        y: .value(L10n.text("Odometer"), convertDistance(point.odometerKm)),
+                        series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
+                    )
+                    .foregroundStyle(HisingenTheme.accent)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                }
+                .chartYAxisLabel(preferences.distanceUnit.suffix)
+                .frame(height: 110)
+                .accessibilityLabel(L10n.text("Odometer history chart"))
+                if monthly.count >= 2 {
+                    Chart(monthly) { bucket in
+                        BarMark(
+                            x: .value(L10n.text("Month"), bucket.month, unit: .month),
+                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
+                        )
+                        .foregroundStyle(Color.indigo.opacity(0.6))
+                        .cornerRadius(2)
+                    }
+                    .chartYAxisLabel(preferences.distanceUnit.suffix)
+                    .frame(height: 80)
+                    .accessibilityLabel(L10n.text("Monthly mileage chart"))
+                }
+                if let kmPerDay {
+                    curveStat(L10n.text("Average Daily Distance"), Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit) + "/" + L10n.text("day"))
+                }
+                Text(L10n.text("Monthly totals and the daily average use all recorded odometer history, independent of the period selector above."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: allTimeOdometerPoints.map(\.timestamp))
+            }
+        }
+    }
+
+    // MARK: - Battery Health
+
+    private var batteryHealthCard: some View {
+        let records = Array(batteryHealthRecords.reversed())
+        let latest = batteryHealthRecords.first
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "heart.text.square", title: L10n.text("Battery Health Trend"), color: .pink)
+                    Spacer()
+                    if let latest {
+                        Text(String(format: "%.1f%%", latest.stateOfHealthPct))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if records.count >= 2 {
+                    Chart(records) { record in
+                        LineMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("State of Health"), record.stateOfHealthPct)
+                        )
+                        .foregroundStyle(HisingenTheme.chartHealth)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                        PointMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("State of Health"), record.stateOfHealthPct)
+                        )
+                        .symbolSize(16)
+                        .foregroundStyle(HisingenTheme.chartHealth.opacity(0.85))
+                    }
+                    .chartYScale(domain: sohDomain(records))
+                    .chartYAxisLabel("%")
+                    .frame(height: 115)
+                    .accessibilityLabel(L10n.text("Battery health trend chart"))
+                }
+                if let latest {
+                    KVRow(L10n.text("Degradation"),
+                          String(format: "%.1f%%", latest.degradationPct), symbol: "arrow.down.right")
+                    KVRow(L10n.text("Estimated Usable Capacity"),
+                          String(format: "%.1f kWh", latest.effectiveUsableKwh), symbol: "battery.100")
+                    KVRow(L10n.text("Recorded At Odometer"),
+                          Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit),
+                          symbol: "road.lanes")
+                    if let slope = HistoryInsights.batteryHealthTrend(from: batteryHealthRecords).stateOfHealthPctPer10kKm,
+                       batteryHealthRecords.count >= 3 {
+                        KVRow(L10n.text("Trend"), String(format: "%.2f%% / 10,000 km", slope), symbol: "chart.line.downtrend.xyaxis",
+                              info: L10n.text("Slope of a straight-line fit through the recorded milestones. A small sample or a recent measurement-method change can swing this significantly."))
+                        if let projected = HistoryInsights.projectedStateOfHealth(from: batteryHealthRecords, atOdometerKm: latest.odometerKm + 10_000) {
+                            KVRow(L10n.text("Projected in +10,000 km"), String(format: "%.1f%%", projected), symbol: "arrow.turn.right.up",
+                                  info: L10n.text("A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear."))
+                        }
+                    }
+                    KVRow(latest.measurementSource == "calculated-v2"
+                          ? L10n.text("Calculated estimate")
+                          : L10n.text("Legacy estimate"),
+                          "\(batteryHealthRecords.count)",
+                          symbol: "questionmark.circle",
+                          info: L10n.text("This is a calculated trend from observed telemetry, not a battery-management-system measurement. Rows are only recorded when the estimate moves meaningfully."))
+                }
+                Text(L10n.text("Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: batteryHealthRecords.map(\.timestamp))
+            }
+        }
+    }
+
+    private func sohDomain(_ records: [BatteryHealthRecord]) -> ClosedRange<Double> {
+        let values = records.map(\.stateOfHealthPct)
+        let minimum = (values.min() ?? 90) - 0.75
+        return max(50, minimum)...100
+    }
+
+    // MARK: - Cabin Air Quality
+
+    /// Trend view over locally recorded CleanZone samples. The provider APIs expose no
+    /// air-quality history of their own; this is reconstructed from what Hisingen stored
+    /// during normal refreshes (see `VehicleDatabase.recordAirQuality`).
+    private var airQualityCard: some View {
+        let chronological = airQualityRecords.sorted { $0.timestamp < $1.timestamp }
+        let aqiPoints = chronological.compactMap { record -> (record: AirQualityRecord, aqi: Double)? in
+            record.airQualityIndex.map { (record, $0) }
+        }
+        let pm25Points = chronological.compactMap { record -> (record: AirQualityRecord, pm25: Double)? in
+            record.particulateMatter25.map { (record, $0) }
+        }
+        let latest = chronological.last
+        let aqiSegmentByID = Dictionary(uniqueKeysWithValues:
+            HistoryInsights.segments(of: aqiPoints, maxGap: HistoryInsights.defaultChartGapThreshold, timestamp: { $0.record.timestamp })
+                .enumerated().flatMap { index, run in run.map { ($0.record.id, index) } })
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: .teal)
+                    Spacer()
+                    if let latestAqi = latest?.airQualityIndex {
+                        Text("\(latestAqi) AQI")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !aqiPoints.isEmpty {
+                    Chart(aqiPoints, id: \.record.id) { item in
+                        LineMark(
+                            x: .value(L10n.text("Date"), item.record.timestamp),
+                            y: .value(L10n.text("Air Quality Index"), item.aqi),
+                            series: .value(L10n.text("Segment"), aqiSegmentByID[item.record.id] ?? 0)
+                        )
+                        .foregroundStyle(Color.teal)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                        RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
+                            .foregroundStyle(.orange.opacity(0.35))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    }
+                    .chartYAxisLabel(L10n.text("AQI"))
+                    .frame(height: 105)
+                    .accessibilityLabel(L10n.text("Air quality index trend chart"))
+                }
+                if pm25Points.count >= 2 {
+                    Chart(pm25Points, id: \.record.id) { item in
+                        AreaMark(
+                            x: .value(L10n.text("Date"), item.record.timestamp),
+                            y: .value(L10n.text("PM2.5"), item.pm25)
+                        )
+                        .foregroundStyle(.linearGradient(colors: [Color.teal.opacity(0.25), Color.teal.opacity(0.02)],
+                                                         startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .chartYAxisLabel("µg/m³")
+                    .frame(height: 80)
+                    .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
+                }
+                if let filter = latest?.filterRemainingPercent {
+                    KVRow(L10n.text("HEPA Filter Life"), "\(filter)%", symbol: "allergens",
+                          valueWarning: filter <= 20)
+                }
+                Text(L10n.text("Recorded from vehicle-reported CleanZone readings during normal refreshes. The provider keeps no history of its own, so coverage depends on how often Hisingen was running."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: chronological.map(\.timestamp))
+            }
+        }
+    }
+
+    // MARK: - Automation
+
+    private var automationHistoryCard: some View {
+        let stats = commandStatistics
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: .orange)
+                    Spacer()
+                    if let rate = stats.successRatePct {
+                        Text(String(format: "%.0f%%", rate))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(rate >= 90 ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
+                    }
+                }
+                if stats.totalCount > 0 {
+                    HStack(spacing: 12) {
+                        curveStat(L10n.text("Success Rate"), stats.successRatePct.map { String(format: "%.0f%%", $0) } ?? "—")
+                        if let mostUsed = stats.mostUsedCommand {
+                            curveStat(L10n.text("Most Used"), mostUsed.replacingOccurrences(of: "-", with: " ").capitalized)
+                        }
+                    }
+                }
+                ForEach(commands.prefix(12)) { record in
+                    HStack {
+                        Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
+                        Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
+                            .font(.system(size: 10.5, weight: .medium))
+                        Spacer()
+                        Text(record.executedAt, style: .relative)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    .help(record.errorMessage ?? record.status.capitalized)
+                }
+                dataConfidenceNote(for: commands.map(\.executedAt))
+            }
+        }
+    }
+
+    private var emptyCard: some View {
+        Card {
+            VStack(spacing: 8) {
+                Image(systemName: "chart.xyaxis.line").font(.system(size: 22)).foregroundStyle(.secondary)
+                Text(L10n.text("No history recorded yet")).font(.system(size: 12, weight: .semibold))
+                Text(L10n.text("Hisingen records meaningful odometer changes, charging sessions and remote-command outcomes locally as new telemetry arrives."))
+                    .font(.system(size: 10)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func convertDistance(_ km: Double) -> Double {
+        preferences.distanceUnit == .kilometers ? km : km * 0.621371
+    }
+
+    private func exportCSV(_ contents: String, name: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.vin.suffix(6)).csv"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? contents.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func openMap(latitude: Double, longitude: Double) {
+        guard let url = URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Fuel Entries (hybrid / combustion)
+
+    private var fuelEntrySheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.text("Log Fuel Fill-Up")).font(.system(size: 13, weight: .semibold))
+            LabeledField(title: L10n.text("Volume (litres)"), text: $fuelLitersText)
+            LabeledField(title: L10n.text("Price per litre"), text: $fuelPriceText)
+            LabeledField(title: L10n.text("Odometer (km), optional"), text: $fuelOdometerText)
+            HStack {
+                Spacer()
+                Button(L10n.text("Cancel"), role: .cancel) { showFuelSheet = false }
+                Button(L10n.text("Save")) {
+                    guard let liters = Double(fuelLitersText.replacingOccurrences(of: ",", with: ".")),
+                          liters > 0,
+                          let price = Double(fuelPriceText.replacingOccurrences(of: ",", with: ".")) else { return }
+                    let odo = Double(fuelOdometerText.replacingOccurrences(of: ",", with: "."))
+                    _ = database.addFuelEntry(vin: state.vin, date: Date(), liters: liters,
+                                              pricePerLiter: price, odometerKm: odo)
+                    fuelLitersText = ""; fuelPriceText = ""; fuelOdometerText = ""
+                    showFuelSheet = false
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            Text(L10n.text("Fill-ups are stored locally and included in lifetime cost-per-distance estimates."))
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 300)
+    }
+
+    private var recentFillsCard: AnyView {
+        guard !fuelEntries.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: .mint)
+                ForEach(fuelEntries.prefix(8)) { entry in
+                    HStack {
+                        Text(Format.dateFormatter.string(from: entry.date))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f L · %.2f %@", entry.liters,
+                                    entry.liters * entry.pricePerLiter, preferences.currencySymbol))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        Button {
+                            database.deleteFuelEntry(id: entry.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(L10n.text("Delete fill-up"))
+                    }
+                    if entry.id != fuelEntries.prefix(8).last?.id { Divider().opacity(0.25) }
+                }
+            }
+        })
+    }
+
+    private struct LabeledField: View {
+        let title: String
+        @Binding var text: String
+        var body: some View {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+                TextField("", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            }
+        }
+    }
+
+    /// Cabin temperature trend from digital-twin climate readings (Polestar 3/4-class
+    /// platforms). Hidden entirely on vehicles that never report interior temperature.
+    private var cabinClimateCard: AnyView {
+        let chronological = cabinClimateRecords.sorted { $0.timestamp < $1.timestamp }
+        guard let latest = chronological.last?.interiorCelsius else { return AnyView(EmptyView()) }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "thermometer.medium",
+                               title: L10n.text("Cabin Temperature Trend"), color: .orange)
+                    Spacer()
+                    Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+                Chart(chronological) { record in
+                    LineMark(
+                        x: .value(L10n.text("Date"), record.timestamp),
+                        y: .value(L10n.text("Interior"), record.interiorCelsius ?? 0)
+                    )
+                    .foregroundStyle(HisingenTheme.chartAttention)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                    if let requested = record.requestedCelsius {
+                        LineMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("Setpoint"), requested)
+                        )
+                        .foregroundStyle(HisingenTheme.accent.opacity(0.45))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
+                }
+                .frame(height: 100)
+                .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
+                Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
+                    .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         })
-    }
-
-    /// Capability flags observed in the undocumented GetMyCars response. A true flag is a
-    /// positive observation; false can also mean the field was absent, so it is not proof that
-    /// the vehicle lacks the capability.
-    private var capabilityInspectorCard: some View {
-        guard let caps = state.otaCapabilities, state.isVolvo == false else { return AnyView(EmptyView()) }
-        var rows: [KVRow] = []
-        rows.append(KVRow(L10n.text("Full OTA Updates"),
-                          caps.supportsFullOtaUpdates ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "arrow.down.circle",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Remote Install Scheduling"),
-                          caps.supportsRemoteOtaInstallSchedule ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "calendar.badge.clock",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Cloud Download Consent"),
-                          caps.supportsCloudBasedOtaDownloadConsent ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "icloud.and.arrow.down",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Tailgate Open/Close"),
-                          caps.supportsTrunkControl ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "car.side.rear.open",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Trunk Unlock"),
-                          caps.supportsTrunkUnlock ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "lock.open",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Honk & Flash"),
-                          caps.supportsHonkAndFlash ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "light.beacon",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Windows Control"),
-                          caps.supportsWindowsControl ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "rectangle.arrowtriangle.2.outward",
-                          valueWarning: false))
-        rows.append(KVRow(L10n.text("Charging Functions"),
-                          caps.supportsChargingFunctions ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                          symbol: "bolt.fill",
-                          valueWarning: false))
-        if caps.supportsPlugAndCharge {
-            rows.append(KVRow(L10n.text("Plug & Charge"),
-                              L10n.text("Supported"),
-                              symbol: "plug"))
-        }
-        if caps.hasPerformanceSoftwareUpgrade {
-            rows.append(KVRow(L10n.text("Performance Software Upgrade"),
-                              L10n.text("Available"),
-                              symbol: "gauge.with.needle.100percent.high"))
-        }
-        if let installed = caps.installedSoftwareVersion {
-            rows.append(KVRow(L10n.text("Backend-Reported Software"),
-                              installed, symbol: "checkmark.seal", info: L10n.text("Unverified value from an undocumented backend field.")))
-        }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
-                Text(L10n.text("Positive flags were reported by the backend. “Not reported” does not prove that the vehicle lacks a capability."))
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-                Text(L10n.text("Reported by the vehicle cloud backend — exact support per VIN."))
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.tertiary)
-            }
-        })
-    }
-
-    private var heroVisualSection: some View {
-        let isInterior = selectedAngleIndex == -1
-        let currentImageData: Data? = {
-            if isInterior {
-                return state.interiorImageData ?? imageCache.interiorImage(for: state.vin)
-            }
-            return imageCache.image(for: state.vin, angle: selectedAngleIndex)
-                 ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.imageData : nil)
-        }()
-
-        let exteriorAngles = availableExteriorAngles
-        let supportsMultipleAngles = exteriorAngles.count > 1
-        let hasInterior = (state.interiorImageData != nil)
-            || (imageCache.interiorImage(for: state.vin) != nil)
-
-        return Card {
-            VStack(spacing: 12) {
-                // Angle & Interior View Switcher
-                if supportsMultipleAngles || hasInterior {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 5) {
-                                if supportsMultipleAngles {
-                                    ForEach(exteriorAngles, id: \.self) { angle in
-                                        angleButton(title: angle.title, angle: angle.rawValue, icon: angle.symbol, proxy: proxy)
-                                    }
-                                } else {
-                                    let exteriorAngle = exteriorAngles.first?.rawValue ?? preferences.carRenderAngle.rawValue
-                                    angleButton(title: L10n.text("Exterior"), angle: exteriorAngle, icon: "car.side.fill", proxy: proxy)
-                                }
-                                if hasInterior {
-                                    angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill", proxy: proxy)
-                                }
-                            }
-                            .padding(.horizontal, 2)
-                            .padding(.vertical, 2)
-                        }
-                    }
-                    .zIndex(10)
-                }
-
-                if let currentImageData {
-                    ZStack {
-                        RadialGradient(
-                            colors: [Color.primary.opacity(0.06), Color.clear],
-                            center: .center,
-                            startRadius: 40,
-                            endRadius: 170
-                        )
-
-                        VehiclePresentationView(
-                            identity: VehiclePresentationIdentity(vin: state.vin, angle: selectedAngleIndex),
-                            imageData: currentImageData
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 220)
-                    .padding(.horizontal, -HisingenTheme.cardPadding)
-                    .padding(.top, -4)
-                    .clipped()
-                    .allowsHitTesting(false)
-                } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.primary.opacity(0.04))
-                            .frame(height: 120)
-                        VStack(spacing: 6) {
-                            Image(systemName: isInterior ? "carseat.left.fill" : "car.side.fill")
-                                .font(.system(size: 38))
-                                .foregroundStyle(HisingenTheme.accent.opacity(0.7))
-                            Text(isInterior ? L10n.text("Interior View") : L10n.text("Studio Render"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .allowsHitTesting(false)
-                }
-
-                let primaryTitle = preferences.formattedVehicleTitle(
-                    vin: state.vin,
-                    modelName: state.modelName,
-                    modelYear: state.modelYear,
-                    registrationNo: state.registrationNo
-                )
-                let showRegBadge: Bool = {
-                    guard let reg = state.registrationNo, !reg.isEmpty else { return false }
-                    return preferences.vehicleLabelFormat != .registration
-                        && preferences.vehicleLabelFormat != .nicknameAndRegistration
-                        && preferences.vehicleLabelFormat != .registrationAndModel
-                }()
-                let subtitleText: String? = {
-                    switch preferences.vehicleLabelFormat {
-                    case .registration, .nickname, .nicknameAndRegistration:
-                        let model = state.modelName
-                        let year = state.modelYear.map { L10n.format("Model Year %@", $0) }
-                        let combined = [model, year].compactMap { $0 }.joined(separator: " · ")
-                        return combined.isEmpty ? nil : combined
-                    case .modelAndYear, .modelOnly, .registrationAndModel:
-                        if let year = state.modelYear {
-                            return L10n.format("Model Year %@", year)
-                        }
-                        return nil
-                    }
-                }()
-
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(primaryTitle)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(HisingenTheme.ink)
-                            if let color = state.externalColour, !color.isEmpty && !isInterior {
-                                Pill(
-                                    text: color,
-                                    color: HisingenTheme.accent,
-                                    symbol: "paintpalette.fill"
-                                )
-                            } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
-                                Pill(
-                                    text: upholstery,
-                                    color: HisingenTheme.accent,
-                                    symbol: "carseat.left.fill"
-                                )
-                            }
-                        }
-                        if let subtitleText, !subtitleText.isEmpty {
-                            Text(subtitleText)
-                                .font(.system(size: 11))
-                                .foregroundStyle(HisingenTheme.inkMuted)
-                        }
-                    }
-                    Spacer()
-                    if showRegBadge, let reg = state.registrationNo, !reg.isEmpty {
-                        Text(reg)
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
-                    }
-                }
-            }
-        }
-    }
-
-    private func angleButton(title: String, angle: Int, icon: String, proxy: ScrollViewProxy? = nil) -> some View {
-        let isSelected = selectedAngleIndex == angle
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedAngleIndex = angle
-                proxy?.scrollTo(angle, anchor: .center)
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 9.5))
-                Text(title)
-                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? HisingenTheme.accent.opacity(0.45) : Color.clear, lineWidth: 1)
-            )
-            .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .withoutFocusRing()
-        .id(angle)
-    }
-
-    private var parkingLocationCard: some View {
-        guard let location = state.location, let lat = location.latitude, let lon = location.longitude else {
-            return AnyView(EmptyView())
-        }
-
-        let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? "N" : "S")
-        let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? "E" : "W")
-        Task { await resolveAddress(latitude: lat, longitude: lon) }
-        let modelTitle = state.modelName ?? L10n.text("Vehicle")
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: .blue)
-                    Spacer()
-                    Button {
-                        let query = "\(lat),\(lon)"
-                        if let url = URL(string: "https://maps.apple.com/?q=\(modelTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Car")&ll=\(query)") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "map.fill")
-                                .font(.system(size: 10))
-                            Text(L10n.text("Open in Maps"))
-                                .font(.system(size: 10.5, weight: .semibold))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(Color.blue.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.blue)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                VStack(spacing: 6) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 11))
-                                .foregroundStyle(HisingenTheme.accent)
-                                .frame(width: 14)
-                            Text(L10n.text("Address"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.trailing)
-                            .privacySensitive()
-                    }
-                    .padding(.vertical, 1)
-                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
-                        .privacySensitive()
-                    if let alt = location.altitudeMeters {
-                        KVRow(L10n.text("Altitude"), String(format: "%.0f m", alt), symbol: "mountain.2.fill")
-                    }
-                    if let heading = location.heading {
-                        let cardinal = headingToCardinal(heading)
-                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", heading)))", symbol: "safari.fill")
-                    }
-                    if let brake = location.parkingBrakeEngaged {
-                        KVRow(L10n.text("Parking Brake"), brake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle.fill", valueWarning: !brake)
-                    }
-                    if let gear = location.gear, !gear.isEmpty {
-                        KVRow(L10n.text("Gear Selector"), gear.uppercased(), symbol: "gearshape.fill")
-                    }
-                }
-            }
-        })
-    }
-
-    private var airQualityCleanZoneCard: some View {
-        guard let air = state.airQuality else { return AnyView(EmptyView()) }
-
-        let aqiVal = air.airQualityIndex
-        let cleaningText: String
-        let cleaningSymbol: String
-        let cleaningColor: Color
-        switch air.cleaningState {
-        case .on:
-            cleaningText = L10n.text("Purifying")
-            cleaningSymbol = "sparkles"
-            cleaningColor = .teal
-        case .off:
-            cleaningText = L10n.text("Off")
-            cleaningSymbol = "power"
-            cleaningColor = .secondary
-        case .pending:
-            cleaningText = L10n.text("Pending")
-            cleaningSymbol = "clock"
-            cleaningColor = .orange
-        case .unknown:
-            cleaningText = L10n.text("Unavailable")
-            cleaningSymbol = "questionmark.circle"
-            cleaningColor = .secondary
-        }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "wind", title: L10n.text("CleanZone Air Quality & Filter"), color: .teal)
-                    Spacer()
-                    Pill(
-                        text: cleaningText,
-                        color: cleaningColor,
-                        symbol: cleaningSymbol
-                    )
-                }
-
-                VStack(spacing: 6) {
-                    if let aqiVal {
-                        let aqiLabel = aqiVal <= 50 ? L10n.text("Good") : (aqiVal <= 100 ? L10n.text("Moderate") : L10n.text("Unhealthy"))
-                        KVRow(L10n.text("Air Quality Index"), "\(aqiVal) AQI (\(aqiLabel))", symbol: "aqi.low", valueWarning: aqiVal > 100)
-                    } else {
-                        KVRow(L10n.text("Air Quality Index"), L10n.text("Unavailable"), symbol: "aqi.low", info: L10n.text("The vehicle did not report an air-quality index."))
-                    }
-
-                    if let cabinPM = air.particulateMatter25 {
-                        let formattedCabin = cabinPM == 0 ? "< 1 µg/m³" : "\(cabinPM) µg/m³"
-                        KVRow(L10n.text("Cabin PM2.5"), formattedCabin, symbol: "aqi.medium")
-                    }
-                    if let cabinPM10 = air.particulateMatter10 {
-                        let formattedPM10 = cabinPM10 == 0 ? "< 1 µg/m³" : "\(cabinPM10) µg/m³"
-                        KVRow(L10n.text("Cabin PM10"), formattedPM10, symbol: "aqi.high")
-                    }
-                    if let outdoorPM = air.externalParticulateMatter25 {
-                        KVRow(L10n.text("Outdoor PM2.5"), "\(outdoorPM) µg/m³", symbol: "sun.haze.fill")
-                        if let cabinPM = air.particulateMatter25 {
-                            let delta = max(0, outdoorPM - cabinPM)
-                            KVRow(L10n.text("Purifier Effect"),
-                                  delta >= 1 ? L10n.format("%d µg/m³ PM2.5 removed", delta)
-                                             : L10n.text("No measurable reduction"),
-                                  symbol: "arrow.down.forward.and.arrow.up.backward",
-                                  info: L10n.text("Difference between the outdoor and in-cabin PM2.5 readings at the same sample."))
-                        }
-                    }
-                    if let runtimeLeft = air.runtimeRemainingMinutes, air.cleaningState == .on || air.cleaningState == .pending {
-                        KVRow(L10n.text("Purification Time Left"),
-                              Format.shortDuration(minutes: runtimeLeft), symbol: "timer")
-                    }
-                    if let endingAt = air.endingAt, air.cleaningState == .on,
-                       endingAt.timeIntervalSinceNow > 0 {
-                        KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endingAt),
-                              symbol: "clock.badge.checkmark")
-                    }
-                    if let reason = air.startReason, reason != .unspecified,
-                       air.cleaningState == .on || air.cleaningState == .pending {
-                        KVRow(L10n.text("Started By"), reason.displayName, symbol: "person.wave.2")
-                    }
-                    if let lastValid = air.lastCycleValid {
-                        KVRow(L10n.text("Last Cycle"),
-                              lastValid ? L10n.text("Completed normally") : L10n.text("Did not complete"),
-                              symbol: lastValid ? "checkmark.seal" : "exclamationmark.triangle",
-                              valueWarning: !lastValid)
-                    }
-                    if let errorKind = air.errorKind, errorKind != .none {
-                        KVRow(L10n.text("Purifier Status"), errorKind.displayName,
-                              symbol: errorKind == .interrupted ? "pause.circle" : "xmark.octagon",
-                              warning: errorKind == .generic)
-                    }
-                    if let filterLife = air.filterRemainingPercent {
-                        HStack {
-                            HStack(spacing: 6) {
-                                Image(systemName: "allergens")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(HisingenTheme.accent)
-                                    .frame(width: 14)
-                                Text(L10n.text("HEPA Filter Life"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            HStack(spacing: 6) {
-                                ProgressView(value: Double(filterLife), total: 100)
-                                    .progressViewStyle(.linear)
-                                    .frame(width: 60)
-                                    .tint(filterLife > 20 ? .teal : .orange)
-                                Text("\(filterLife)%")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(filterLife > 20 ? Color.primary : Color.orange)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    if let estimate = HistoryInsights.filterLifeEstimate(
-                        from: database.recentAirQuality(for: state.vin, limit: 500)) {
-                        KVRow(L10n.text("Filter Replacement (estimate)"),
-                              L10n.format("≈ %d days", Int(estimate.daysRemaining.rounded())),
-                              symbol: "calendar.badge.exclamationmark",
-                              info: L10n.text("A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
-                    }
-
-                    airQualityTrendChart
-                }
-            }
-        })
-    }
-
-    /// Local trend view over `air_quality_history` — the vehicle/provider APIs don't expose any
-    /// history of their own, so this is entirely reconstructed from samples Hisingen has already
-    /// recorded during normal refreshes (see `VehicleStateStore.save(_:)` /
-    /// `VehicleDatabase.recordAirQuality`).
-    @ViewBuilder
-    private var airQualityTrendChart: some View {
-        let history = database.recentAirQuality(for: state.vin, limit: 200)
-            .filter { $0.airQualityIndex != nil }
-            .sorted { $0.timestamp < $1.timestamp }
-        if history.count >= 2 {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Air Quality Trend"))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                Chart(history) { record in
-                    LineMark(
-                        x: .value(L10n.text("Date"), record.timestamp),
-                        y: .value(L10n.text("Air Quality Index"), record.airQualityIndex ?? 0)
-                    )
-                    .foregroundStyle(.teal)
-                    .interpolationMethod(.monotone)
-                    RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
-                        .foregroundStyle(.orange.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                }
-                .chartYAxisLabel(L10n.text("AQI"))
-                .frame(height: 90)
-                .accessibilityLabel(L10n.text("Air quality index history chart"))
-            }
-        }
-    }
-
-    private var tripComputerCard: some View {
-        var rows: [KVRow] = []
-
-        if let manualKm = state.tripMeterManualKm {
-            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle.fill"))
-        }
-        if let autoKm = state.tripMeterAutomaticKm {
-            rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
-        }
-        if let electricKm = state.electricDistanceKm, electricKm > 0 {
-            rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
-        }
-        if let fuelKm = state.fuelDistanceKm, fuelKm > 0 {
-            rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump.fill"))
-        }
-        if let regen = state.regeneratedEnergyKwh, regen > 0 {
-            rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
-        }
-        if let speed = state.averageSpeedKmH, speed > 0 {
-            rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
-        }
-        if let odo = state.odometerKm {
-            rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
-        }
-
-        guard !rows.isEmpty else { return AnyView(EmptyView()) }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "gauge.with.dots.needle.bottom.50percent", title: L10n.text("Trip Computer & Distance"), color: .indigo)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        })
-    }
-
-    private var connectivityWakeCard: AnyView {
-        let current = state.connectivity
-        guard current?.wakeReason != nil || current?.networkType != nil else {
-            return AnyView(EmptyView())
-        }
-        let wakeReason = current?.wakeReason ?? current?.networkType
-        let history = database.recentConnectivity(for: state.vin, limit: 60)
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "antenna.radiowaves.left.and.right",
-                           title: L10n.text("Connectivity & Wake"), color: .cyan)
-                if let reason = current?.wakeReason {
-                    KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
-                }
-                if let network = current?.networkType {
-                    KVRow(L10n.text("Network"), network, symbol: "dot.radiowaves.up.forward")
-                }
-                if let bars = current?.signalBars {
-                    KVRow(L10n.text("Signal"), "\(bars)/4", symbol: "signalbars")
-                }
-                if history.count >= 3 {
-                    Chart(history.reversed()) { record in
-                        PointMark(
-                            x: .value(L10n.text("Date"), record.timestamp),
-                            y: .value(L10n.text("Signal"), record.signalBars ?? 0)
-                        )
-                        .symbolSize(20)
-                        .foregroundStyle(Color.cyan.opacity(0.8))
-                    }
-                    .chartYScale(domain: 0...4)
-                    .chartYAxisLabel(L10n.text("Bars"))
-                    .frame(height: 70)
-                    .accessibilityLabel(L10n.text("Signal strength history chart"))
-                    let wakes = history.compactMap(\.wakeReason)
-                    if !wakes.isEmpty {
-                        KVRow(L10n.text("Recent Wake Reasons"),
-                              Dictionary(grouping: wakes, by: { $0 })
-                                  .map { "\($0.key) ×\($0.value.count)" }
-                                  .sorted()
-                                  .joined(separator: " · "),
-                              symbol: "clock.arrow.circlepath")
-                    }
-                }
-            }
-        })
-    }
-
-    private var fluidsAndLightingCard: some View {
-        var rows: [KVRow] = []
-
-        if let health = state.healthDetails {
-            let hasBrake = health.warnings.contains(.brakeFluid)
-            let brakeReported = health.reportedWarnings.contains(.brakeFluid)
-            rows.append(KVRow(
-                L10n.text("Brake Fluid"),
-                hasBrake ? L10n.text("Low / Check Required") : (brakeReported ? L10n.text("No warning reported") : L10n.text("Unavailable")),
-                symbol: "circle.circle",
-                valueWarning: hasBrake,
-                info: L10n.text("Warning status only. The provider does not report a measured brake-fluid level.")
-            ))
-
-            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
-                let warn = frontPads.uppercased() != "NORMAL" && !frontPads.uppercased().contains("NO_WARNING")
-                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle", valueWarning: warn))
-            }
-            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
-                let warn = rearPads.uppercased() != "NORMAL" && !rearPads.uppercased().contains("NO_WARNING")
-                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle", valueWarning: warn))
-            }
-
-            let hasWasher = health.warnings.contains(.washerFluid)
-            let washerReported = health.reportedWarnings.contains(.washerFluid)
-            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : (washerReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "drop.triangle.fill", valueWarning: hasWasher, info: L10n.text("Warning status only. The provider does not report a measured washer-fluid level.")))
-
-            let hasCoolant = health.warnings.contains(.engineCoolant)
-            let coolantReported = health.reportedWarnings.contains(.engineCoolant)
-            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : (coolantReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "thermometer.sun.fill", valueWarning: hasCoolant, info: L10n.text("Warning status only. The provider does not report a measured coolant level.")))
-
-            let hasLight = health.warnings.contains(.exteriorLight) || !health.lightFailures.isEmpty
-            let lightsReported = health.reportedWarnings.contains(.exteriorLight)
-            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb.fill", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
-
-            if !health.tyres.isEmpty {
-                let hasTyreWarning = health.tyres.contains { $0.warning.needsAttention }
-                let allReported = health.tyres.count == 4 && health.tyres.allSatisfy { $0.warning != .unknown || $0.kilopascals != nil }
-                let tyreStatus = hasTyreWarning
-                    ? L10n.text("Pressure Warning")
-                    : (allReported ? L10n.text("No warning reported") : L10n.text("Unavailable"))
-                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyreStatus, symbol: "circle.dashed", valueWarning: hasTyreWarning, info: L10n.text("Some providers expose warning status without a numeric tyre-pressure measurement.")))
-            }
-        } else {
-            rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Unavailable"), symbol: "circle.circle"))
-            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
-                rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle"))
-            }
-            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
-                rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
-            }
-            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Unavailable"), symbol: "drop.triangle.fill"))
-            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Unavailable"), symbol: "thermometer.sun.fill"))
-            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("Unavailable"), symbol: "lightbulb.fill"))
-        }
-
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Fluids & Lighting Diagnostics"), color: .orange)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        }
-    }
-
-    private var exteriorStylingCard: some View {
-        var rows: [KVRow] = []
-
-        if let color = state.externalColour, !color.isEmpty {
-            rows.append(KVRow(L10n.text("Exterior Paint"), color, symbol: "paintpalette.fill"))
-        }
-        if let wheels = state.wheels, !wheels.isEmpty {
-            rows.append(KVRow(L10n.text("Wheels & Rims"), wheels, symbol: "circle.circle.fill"))
-        }
-        if let doorCount = state.exteriorStatus?.physicalDoorCount, doorCount > 0 {
-            rows.append(KVRow(L10n.text("Door Sensors Reported"), L10n.format("%d Doors", doorCount), symbol: "car.side.fill", info: L10n.text("Count of physical door records returned by the vehicle API; this is not a decoded body-style specification.")))
-        }
-
-        guard !rows.isEmpty || !state.packages.isEmpty else { return AnyView(EmptyView()) }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "car.fill", title: L10n.text("Exterior & Styling"), color: .blue)
-
-                VStack(spacing: 6) {
-                    ForEach(rows.indices, id: \.self) { rows[$0] }
-
-                    if !state.packages.isEmpty {
-                        HStack(alignment: .top) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "shippingbox.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(HisingenTheme.accent)
-                                    .frame(width: 14)
-                                Text(L10n.text("Factory Packages"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            HStack(spacing: 4) {
-                                ForEach(state.packages, id: \.self) { pkg in
-                                    Text(pkg)
-                                        .font(.system(size: 9.5, weight: .semibold))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
-                                        .foregroundStyle(HisingenTheme.accent)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-        })
-    }
-
-    private var interiorCabinCard: some View {
-        var rows: [KVRow] = []
-
-        if let upholstery = state.upholstery, !upholstery.isEmpty {
-            rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
-        }
-        if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
-            rows.append(KVRow(L10n.text("Steering Orientation"), steering, symbol: "steeringwheel"))
-        }
-
-        guard !rows.isEmpty else { return AnyView(EmptyView()) }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: .purple)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        })
-    }
-
-    private var powertrainSpecsCard: some View {
-        var rows: [KVRow] = []
-
-        rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
-        let specification = preferences.vehicleSpecificationOverride(for: state.vin)
-        let configuredCapacity = state.powertrain.hasElectricRange
-            ? (specification?.usableBatteryCapacityKwh
-                ?? state.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
-            : nil
-        if let capacity = configuredCapacity, capacity > 0 {
-            let isUserReference = specification?.usableBatteryCapacityKwh != nil
-            let isProviderReported = !isUserReference && state.reportedBatteryCapacityKwh != nil
-            rows.append(KVRow(
-                isUserReference ? L10n.text("User-Entered Usable Capacity")
-                    : (isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity")),
-                String(format: "%.1f kWh", capacity),
-                symbol: "battery.100.bolt",
-                info: isUserReference
-                    ? L10n.text("VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry.")
-                    : isProviderReported
-                    ? L10n.text("Vehicle specification returned by the provider. This is not measured battery health or current usable capacity.")
-                    : L10n.text("Static model-family reference used because the provider did not report the exact vehicle variant capacity.")
-            ))
-        }
-        let wltp = specification?.wltpRangeKm ?? state.model.nominalWltpRangeKm
-        if state.powertrain.hasElectricRange && wltp > 0 {
-            rows.append(KVRow(
-                specification?.wltpRangeKm != nil ? L10n.text("User-Entered WLTP Range") : L10n.text("Model-Reference WLTP Range"),
-                Format.distance(km: wltp, decimals: 0, unit: preferences.distanceUnit), symbol: "road.lanes",
-                info: specification?.wltpRangeKm != nil
-                    ? L10n.text("VIN-specific reference entered in Settings. It is not a live range value.")
-                    : L10n.text("Static model-family benchmark, not a VIN-specific rating or live vehicle estimate. Exact range varies by variant, wheels, market and model year.")
-            ))
-        }
-        if let gearbox = state.gearbox, !gearbox.isEmpty {
-            rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
-        }
-        if let fuel = state.fuelType, !fuel.isEmpty {
-            rows.append(KVRow(L10n.text("Fuel Type"), fuel, symbol: "fuelpump.fill"))
-        }
-        if let liters = state.fuelAmountLiters, liters > 0 {
-            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
-        }
-        if let avgFuel = state.averageFuelConsumptionLPer100Km, avgFuel > 0 {
-            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
-        }
-
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bolt.fill", title: L10n.text("Powertrain & Specs"), color: .green)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        }
-    }
-
-    private var batteryHealthCard: some View {
-        let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
-            .map { $0.toDomainSession(database: database) }
-        // Reads the same last-stored estimate `VehicleStateStore.save` smoothed toward, so this
-        // card's number matches whatever gets persisted rather than showing an independently
-        // unsmoothed figure.
-        let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
-            .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
-        guard let estimate = BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: sessions,
-            specification: preferences.vehicleSpecificationOverride(for: state.vin),
-            previous: previousHealth
-        ) else {
-            return AnyView(EmptyView())
-        }
-
-        let soh = estimate.stateOfHealthPercent
-        let deg = estimate.degradationPercent
-        let status = L10n.text("Calculated") + " · " + estimate.confidence.displayName
-        let usable = estimate.estimatedUsableCapacityKwh
-        let factoryUsable = estimate.referenceUsableCapacityKwh
-        let nominal = state.effectiveNominalBatteryCapacityKwh
-        let packDesc = state.batteryPackDescription
-        let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "battery.100.bolt", title: L10n.text("Battery Health & Longevity"), color: .green)
-                    Spacer()
-                    Pill(
-                        text: status,
-                        color: statusColor,
-                        symbol: "function"
-                    )
-                }
-
-                VStack(spacing: 6) {
-                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill", info: L10n.text("Manufacturer Specification. Architecture, chemical composition, and gross capacity of the high-voltage battery."))
-
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "heart.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(HisingenTheme.accent)
-                                .frame(width: 14)
-                            Text(L10n.text("Calculated State of Health (SoH)"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            InformationButton(message: estimate.methodologySummary)
-                        }
-                        Spacer()
-                        HStack(spacing: 6) {
-                            ProgressView(value: min(100, soh), total: 100)
-                                .progressViewStyle(.linear)
-                                .frame(width: 60)
-                                .tint(statusColor)
-                            Text(String(format: "%.1f%%", soh))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(statusColor)
-                        }
-                    }
-                    .padding(.vertical, 2)
-
-                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
-                    KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
-                    KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
-
-                    DisclosureGroup(L10n.text("Calculation Signals")) {
-                        VStack(spacing: 7) {
-                            ForEach(estimate.signals) { signal in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack {
-                                        Text(signal.title.capitalized)
-                                            .font(.system(size: 10.5, weight: .semibold))
-                                        Spacer()
-                                        Text(String(format: "%.1f%% · %.0f%% weight", signal.estimatedSOHPercent, signal.weight * 100))
-                                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Text(signal.explanation)
-                                        .font(.system(size: 9.5))
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                        .padding(.top, 6)
-                    }
-                    .font(.system(size: 11, weight: .medium))
-
-                    let history = database.batteryHealthHistory(for: state.vin)
-                    if !history.isEmpty {
-                        Divider().opacity(0.4)
-                            .padding(.vertical, 2)
-
-                        DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(history.prefix(5)) { r in
-                                    HStack {
-                                        Text(Format.dateTimeFormatter.string(from: r.timestamp))
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.secondary)
-                                        Spacer()
-                                        Text(String(format: "%.0f km", r.odometerKm))
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundStyle(.secondary)
-                                        Text(String(format: "%.1f%% SoH", r.stateOfHealthPct))
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(HisingenTheme.semanticGood)
-                                    }
-                                    .padding(.vertical, 1)
-                                    .help(r.measurementSource == "calculated-v2"
-                                        ? L10n.text("Calculated estimate using Hisingen's current multi-signal method; not a BMS measurement.")
-                                        : L10n.text("Legacy calculated estimate retained for trend continuity; not a BMS measurement."))
-                                }
-                                HStack {
-                                    Spacer()
-                                    Button {
-                                         let csv = database.exportBatteryHealthCSV(for: state.vin)
-                                        let panel = NSSavePanel()
-                                        panel.allowedContentTypes = [.commaSeparatedText]
-                                        panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"
-                                        panel.begin { response in
-                                            if response == .OK, let url = panel.url {
-                                                try? csv.write(to: url, atomically: true, encoding: .utf8)
-                                                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "square.and.arrow.up")
-                                            Text(L10n.text("Export Health Log (CSV)"))
-                                        }
-                                        .font(.system(size: 10, weight: .medium))
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .controlSize(.mini)
-                                }
-                                .padding(.top, 2)
-                            }
-                            .padding(.top, 4)
-                        } label: {
-                            HStack {
-                                Text(L10n.text("Calculated SoH Milestones"))
-                                Spacer()
-                                Text(L10n.format("%d logs", history.count))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .font(.system(size: 11, weight: .medium))
-                        }
-                        .disclosureGroupStyle(WholeRowDisclosureStyle())
-                    }
-                }
-            }
-        })
-    }
-
-    private var serviceAndHealthCard: some View {
-        var rows: [KVRow] = []
-
-        if let days = state.daysToService {
-            var val = L10n.format("in %d days", days)
-            if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: preferences.distanceUnit))" }
-            if let trigger = state.formattedServiceTrigger { val += " (\(trigger))" }
-            rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
-        }
-        if let hours = state.engineHoursToService, hours > 0 {
-            rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
-        }
-        if let workshopName = state.preferredWorkshopName, !workshopName.isEmpty {
-            var val = workshopName
-            if let id = state.preferredWorkshopId, !id.isEmpty { val += " (\(id))" }
-            rows.append(KVRow(L10n.text("Service Center"), val, symbol: "building.2.fill"))
-        } else if let id = state.preferredWorkshopId, !id.isEmpty {
-            rows.append(KVRow(L10n.text("Service Center ID"), id, symbol: "building.2.fill"))
-        }
-
-        guard !rows.isEmpty else { return AnyView(EmptyView()) }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "heart.text.square.fill", title: L10n.text("Service Schedule"), color: .orange)
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        })
-    }
-
-    private var factoryBuildCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.2.square.on.square", title: L10n.text("Factory Build & Identity"), color: HisingenTheme.accent)
-
-                VStack(spacing: 6) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "number.square.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(HisingenTheme.accent)
-                                .frame(width: 14)
-                            Text(L10n.text("VIN"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(state.vin, forType: .string)
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                                vinCopied = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                withAnimation { vinCopied = false }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(state.vin)
-                                    .font(.system(size: 10.5, design: .monospaced))
-                                    .foregroundStyle(.primary)
-                                    .privacySensitive()
-                                Image(systemName: vinCopied ? "checkmark" : "doc.on.doc")
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(vinCopied ? Color.green : Color.secondary)
-                            }
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 4))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 2)
-
-                    if let internalID = state.internalVehicleIdentifier, !internalID.isEmpty {
-                        KVRow(L10n.text("Vehicle ID"), internalID, symbol: "barcode")
-                    }
-                    if let week = state.formattedBuildWeek ?? state.structureWeek, !week.isEmpty {
-                        KVRow(L10n.text("Factory Build Week"), week, symbol: "calendar")
-                    }
-                    if let pno = state.pno34, !pno.isEmpty {
-                        KVRow(L10n.text("Factory Spec (PNO34)"), pno, symbol: "tag.fill")
-                    }
-                    if let market = state.accountMarket, !market.isEmpty {
-                        KVRow(L10n.text("Market Delivery"), market, symbol: "globe")
-                    }
-                    if state.availability == .available {
-                        KVRow(L10n.text("Cloud Connectivity"), state.availability.displayName, symbol: "antenna.radiowaves.left.and.right")
-                    }
-                    if let sw = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version, !sw.isEmpty {
-                        KVRow(L10n.text("Backend-Reported Software"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard", info: L10n.text("Unverified value from an undocumented Polestar backend field; compare it with the version shown in the vehicle."))
-                    }
-                }
-            }
-        }
-    }
-
-    private var warrantyAndProtectionCard: AnyView {
-        let warranty = state.warrantyInfo
-        let userInServiceDate = preferences.warrantyInServiceDate(for: state.vin)
-        let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
-        let planTitle = warranty?.planName
-        let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
-        let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(
-                        symbol: "shield.lefthalf.filled.badge.checkmark",
-                        title: L10n.text("Warranty & Protection"),
-                        color: brandColor
-                    )
-                    Spacer()
-                    if let planTitle {
-                        Pill(text: planTitle, color: brandColor, symbol: brandIcon)
-                    }
-                }
-
-                VStack(spacing: 6) {
-                    if warranty == nil, userInServiceDate == nil {
-                        HStack(alignment: .top, spacing: 7) {
-                            Image(systemName: "calendar.badge.exclamationmark")
-                                .foregroundStyle(.secondary)
-                            Text(L10n.text("Warranty dates are not supplied by the vehicle API. Add the verified in-service date in Settings → Vehicle Data if you want it recorded here."))
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(8)
-                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    }
-
-                    if let userInServiceDate {
-                        KVRow(
-                            L10n.text("In-Service Date"),
-                            Format.dateFormatter.string(from: userInServiceDate),
-                            symbol: "calendar.badge.checkmark",
-                            info: L10n.text("User-entered from warranty or delivery documents. The vehicle API does not provide this date.")
-                        )
-                    }
-
-                    if let factoryDate = warranty?.factoryWarrantyValidUntil {
-                        let isExpired = factoryDate < Date()
-                        KVRow(
-                            L10n.text("Manufacturer Warranty"),
-                            Format.dateFormatter.string(from: factoryDate),
-                            symbol: "checkmark.shield.fill",
-                            warning: isExpired
-                        )
-                    }
-
-                    if let batteryDate = warranty?.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
-                        let isExpired = batteryDate < Date()
-                        KVRow(
-                            L10n.text("EV Battery (8 yr / 160k km)"),
-                            Format.dateFormatter.string(from: batteryDate),
-                            symbol: "bolt.shield.fill",
-                            warning: isExpired
-                        )
-                    }
-
-                    if state.powertrain.hasElectricRange,
-                       let maxKm = warranty?.batteryWarrantyKm,
-                       let odo = state.odometerKm {
-                        let remainingKm = max(0, maxKm - odo)
-                        let isMileageExpired = odo >= maxKm
-                        KVRow(
-                            L10n.text("Battery Warranty Remaining"),
-                            Format.distance(km: remainingKm, grouped: true, unit: preferences.distanceUnit),
-                            symbol: "gauge.with.needle",
-                            warning: isMileageExpired
-                        )
-                    }
-
-                    if let roadsideDate = warranty?.roadsideAssistanceValidUntil {
-                        let isExpired = roadsideDate < Date()
-                        let label = warranty?.assistanceContact ?? L10n.text("Roadside Assistance")
-                        KVRow(
-                            label,
-                            Format.dateFormatter.string(from: roadsideDate),
-                            symbol: "phone.badge.checkmark",
-                            warning: isExpired
-                        )
-                    }
-
-                    if warranty?.includedMaintenance == true {
-                        KVRow(
-                            L10n.text("Scheduled Maintenance"),
-                            L10n.text("Included (3 Years / 50,000 km)"),
-                            symbol: "wrench.and.screwdriver.fill"
-                        )
-                    }
-
-                    if let digitalDate = warranty?.digitalServicesValidUntil {
-                        let isExpired = digitalDate < Date()
-                        KVRow(
-                            L10n.text("Digital Services & Data"),
-                            Format.dateFormatter.string(from: digitalDate),
-                            symbol: "antenna.radiowaves.left.and.right",
-                            warning: isExpired
-                        )
-                    }
-
-                    if let corrosionDate = warranty?.corrosionWarrantyValidUntil {
-                        let isExpired = corrosionDate < Date()
-                        KVRow(
-                            L10n.text("Corrosion Protection (12 yr)"),
-                            Format.dateFormatter.string(from: corrosionDate),
-                            symbol: "shield.fill",
-                            warning: isExpired
-                        )
-                    }
-                }
-            }
-        })
-    }
-
-    private func headingToCardinal(_ heading: Double) -> String {
-        let normalized = (heading.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
-        let directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        let index = Int(((normalized + 22.5) / 45.0).truncatingRemainder(dividingBy: 8))
-        return directions[index]
-    }
-
-    private func resolveAddress(latitude: Double, longitude: Double) async {
-        addressResolved = false
-        addressText = nil
-        let resolved = await reverseGeocoder.geocode(latitude: latitude, longitude: longitude)
-        addressText = resolved
-        addressResolved = true
     }
 }

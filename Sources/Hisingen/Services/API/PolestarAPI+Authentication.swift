@@ -53,7 +53,7 @@ extension PolestarAPI {
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession)
-                await self.applyCommandToken(token, fallbackRefresh: refresh)
+                self.applyCommandToken(token, fallbackRefresh: refresh)
                 return token.accessToken
             } catch {
                 // Distinguish "not authorized" from "network hiccup" at least in the log so
