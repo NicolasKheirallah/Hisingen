@@ -83,6 +83,25 @@ All notable changes to Hisingen are documented in this file. The project follows
   sign-in.
 - Added ADR-0010 documenting why biometric confirmation defaults off for
   routine remote commands.
+- Added Polestar saved charge-location management: create a location at the
+  car's current position, rename it, set its per-location charging-current
+  limit and minimum charge level, toggle optimised charging, and delete it,
+  all through the vehicle's own Chronos charge-location service with wire
+  shapes cross-checked against independent implementations. Controls appear
+  only after a fetch returns locations, so unverified platforms show nothing
+  rather than controls that may not exist.
+- Expanded the History dashboard with charging-curve drill-down (charge level,
+  power, voltage, and current traces with session picker), 10–80% charge-time
+  estimation, idle-tail detection, charging-loss and tariff-aware cost
+  estimates, energy-by-time-of-day breakdown, seasonal efficiency split,
+  monthly mileage buckets, battery-health slope and next-10,000 km projection,
+  remote-command success statistics, data-coverage confidence labels, an air
+  quality trend card, and CSV exports for air quality, telemetry, battery
+  health, and charging sessions alongside trips.
+- Added ADR-0011 documenting the two-OAuth-client constraints behind Polestar
+  sign-in: why the telemetry client cannot use a standards-compliant browser
+  handoff today, what would trigger redesigning it, and why the password path
+  is treated as accepted risk rather than silently carried.
 
 ### Changed
 
@@ -188,9 +207,31 @@ All notable changes to Hisingen are documented in this file. The project follows
   perpetually "backend dependent" instead of a definitive unavailable —
   Volvo's tyre API is indirect (inferred from wheel-speed-sensor imbalance)
   and has no numeric-pressure field on any model, so this can never resolve
-  through a live probe and belongs in the static baseline, matching how
-  Polestar 2's equivalent case is already handled. Tyre *warning* status
-  (OK/low/very low/high) is unaffected and remains fully supported.
+  through a live probe and belongs in the static baseline. Tyre *warning*
+  status (OK/low/very low/high) is unaffected and remains fully supported.
+- Fixed Polestar 2 tyre pressures being hard-blocked as permanently
+  unavailable off a single reference-car capture: the capability now probes at
+  runtime, and the health parser scans neighbouring protobuf fields for a
+  coherent pressure quadruple when the documented positions are empty, so
+  firmware or model-year variants that report values elsewhere start working
+  without an app update. The capability matrix also explains the difference
+  between numeric kPa readings and warning-level indirect TPMS.
+- Fixed signing out leaving Polestar session-scoped caches behind — OTA
+  software ids and states, vehicle-advertised charging limits, and cached
+  exterior snapshots survived into the next account sign-in on the same Mac,
+  potentially mixing one account's vehicle state into another's.
+- Fixed charge-target and charging-current commands being validated against
+  hardcoded ranges instead of the bounds the vehicle itself advertises;
+  rejections now name the vehicle-specific limit rather than failing opaquely
+  server-side.
+- Fixed combustion vehicles' fuel consumption (litres/100 km) being formatted
+  as electric consumption (kWh/100 km) in detected-trip lists.
+
+### Removed
+
+- Removed an unused widget scaffold that compiled but had no widget extension
+  target, so it could never appear in macOS's widget gallery; it only read as
+  a shipped feature while doing nothing.
 
 ### Security and CI
 
