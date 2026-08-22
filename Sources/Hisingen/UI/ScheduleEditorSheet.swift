@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ScheduleEditorSheet: View {
     let state: VehicleState
     let onRemoteCommand: (RemoteCommand) -> Void
