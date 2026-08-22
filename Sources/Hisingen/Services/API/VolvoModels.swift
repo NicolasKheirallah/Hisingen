@@ -4,6 +4,16 @@ import Foundation
 struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
     let updatedAt: Date?
+    /// Decoded but not currently used anywhere. Investigated 2026-08: every field in every real
+    /// captured response this project has (all `Tests/HisingenTests/Fixtures/volvo-*.json`
+    /// fixtures, sanitized from live captures) reports `"OK"`, and no Volvo documentation
+    /// referenced elsewhere in this repo enumerates other values. `unavailableReason` (below) is
+    /// the field this codebase already reads for "why is this unavailable" — that's likely where
+    /// any real signal lives. Wiring `status` into anything beyond this would mean inventing
+    /// semantics for values that have never actually been observed; needs a live capture of a
+    /// genuinely degraded/erroring field (a car with a real reported fault, or a field the active
+    /// API product doesn't cover) before it's safe to act on. See
+    /// `docs/research/api-investigation-backlog.md` #2.
     let status: String?
     let unit: String?
     let code: String?

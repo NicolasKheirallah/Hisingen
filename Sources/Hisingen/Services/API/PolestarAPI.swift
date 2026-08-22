@@ -383,7 +383,7 @@ actor PolestarAPI {
                                      invalidReason: AuthFailureReason) async throws -> TokenResponseDTO {
         do {
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "token response"
+                for: request, using: session, limit: 256_000, operation: "token response", provider: .polestar
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "token response")
@@ -626,7 +626,7 @@ actor PolestarAPI {
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 256_000, operation: "user information"),
+                  for: request, using: session, limit: 256_000, operation: "user information", provider: .polestar),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
         ownerFirstName = info.givenName ?? info.firstName
@@ -657,7 +657,7 @@ actor PolestarAPI {
         request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata"),
+                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata", provider: .polestar),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
@@ -672,7 +672,7 @@ actor PolestarAPI {
         if carImageData == nil, let string = pick?["url"] as? String, let url = URL(string: string),
            url.scheme == "https" {
             if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
-                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
+                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image", provider: .polestar),
                   let http = imageResponse as? HTTPURLResponse,
                   http.statusCode == 200,
                   http.mimeType?.hasPrefix("image/") == true,
@@ -729,7 +729,7 @@ actor PolestarAPI {
         let task = Task { [weak self, session] in
             do {
                 let (data, response) = try await HTTPBodyReader.data(
-                    for: request, using: session, limit: 5_000_000, operation: operation
+                    for: request, using: session, limit: 5_000_000, operation: operation, provider: .polestar
                 )
                 if (response as? HTTPURLResponse)?.statusCode == 200,
                    data.count <= 5_000_000 {

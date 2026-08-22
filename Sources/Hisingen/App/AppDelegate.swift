@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         preferences.migrateLegacyPassword()
+        pruneDatabaseIfDue()
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.refreshCoordinator.refreshNow() },
             onSettings: { [weak self] in self?.toggleSettingsInPopover() },
@@ -387,6 +388,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
             await self?.refreshGarageVehicles()
         }
+    }
+
+    /// Runs `VehicleDatabase.pruneAgedHistory()` automatically, at most once every 7 days —
+    /// previously the only way to bound `charging_sessions`/`battery_health_history`/
+    /// `remote_commands_log` growth was the user manually clicking "Prune Old Samples" in
+    /// Settings, which doesn't even touch those three tables (see `pruneHistoricalSamples`).
+    /// Cheap enough to run synchronously on launch: these are low-row-count tables and the
+    /// existing "Prune Old Samples" Settings action already runs its own prune this same way.
+    private func pruneDatabaseIfDue() {
+        let key = "last_automatic_history_prune"
+        let interval: TimeInterval = 7 * 86400
+        if let last = UserDefaults.standard.object(forKey: key) as? Date,
+           Date().timeIntervalSince(last) < interval {
+            return
+        }
+        vehicleDatabase.pruneAgedHistory()
+        UserDefaults.standard.set(Date(), forKey: key)
     }
 
     /// Performs a real, cheap, read-only connectivity check for `brand` by re-running the same

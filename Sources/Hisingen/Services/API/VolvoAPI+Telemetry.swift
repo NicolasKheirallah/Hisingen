@@ -246,6 +246,18 @@ extension VolvoAPI {
             reportedWarnings.append(.exteriorLight)
         }
 
+        // Tyre pressure warnings live on `tyres[].warning`, not their own diagnostics field, so
+        // they must be folded into `vehicleWarnings`/`reportedWarnings` explicitly — otherwise
+        // `Notifier.warningLabels` (which only reads `healthDetails.warnings`) never sees a
+        // flagged tyre and no notification fires even though the UI already shows it.
+        let tyreReadings = tyres?.readings ?? []
+        if tyreReadings.contains(where: { $0.warning != .unknown }) {
+            if !reportedWarnings.contains(.tyrePressure) { reportedWarnings.append(.tyrePressure) }
+            if tyreReadings.contains(where: { $0.warning.needsAttention }), !vehicleWarnings.contains(.tyrePressure) {
+                vehicleWarnings.append(.tyrePressure)
+            }
+        }
+
         let health: VehicleHealthDetails? = (tyres != nil || diagnostics != nil || engineDiagnostics != nil || warnings != nil || brakes != nil)
             ? VehicleHealthDetails(
                 tyres: tyres?.readings ?? [],

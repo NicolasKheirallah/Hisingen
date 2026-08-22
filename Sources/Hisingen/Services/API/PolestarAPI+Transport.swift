@@ -6,7 +6,7 @@ extension PolestarAPI {
         let startedAt = Date()
         do {
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: limit, operation: operation
+                for: request, using: session, limit: limit, operation: operation, provider: .polestar
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "HTTP request")

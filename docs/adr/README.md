@@ -28,3 +28,4 @@ Status: Accepted
 | [0007](0007-vin-scoped-state.md) | VIN-scoped state throughout, not account- or session-scoped |
 | [0008](0008-hand-rolled-grpc-no-swiftprotobuf.md) | Hand-rolled gRPC/protobuf engine instead of SwiftProtobuf |
 | [0009](0009-remote-commands-compiled-into-all-builds.md) | Remote commands are compiled into all builds (supersedes 0005) |
+| [0010](0010-biometric-confirmation-default-off-for-routine-commands.md) | Biometric confirmation defaults off for routine remote commands |

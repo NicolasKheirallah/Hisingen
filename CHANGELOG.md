@@ -66,6 +66,23 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Added regression coverage for provider warning provenance, software-event
   dismissal, unit formatting, Volvo engine decoding, and model-reference range
   comparisons.
+- Added a local cabin air-quality history: samples are recorded during normal
+  refreshes, a trend chart appears on the CleanZone card, and history is
+  exportable to CSV alongside the existing charging, battery-health, trip, and
+  command exports.
+- Added notifications for the software-update states between "available" and
+  "completed"—scheduled, downloading, and installing—so a pending install
+  isn't silent.
+- Added a Settings toggle for the low-battery plug-in reminder notification,
+  which previously fired by default with no way to see or disable it.
+- Added automatic retention for charging-session, battery-health, and
+  remote-command-audit history (previously only charging samples and drive
+  telemetry were ever pruned, manually).
+- Added a browser-based sign-in for authorizing Polestar remote commands
+  ("Authorize Remote Commands" in Settings), separate from the account
+  sign-in.
+- Added ADR-0010 documenting why biometric confirmation defaults off for
+  routine remote commands.
 
 ### Changed
 
@@ -109,6 +126,18 @@ All notable changes to Hisingen are documented in this file. The project follows
   backend-reported and unverified instead of authoritative installed versions.
 - Updated the product website, design documentation, screenshots, and gallery
   asset names to match the current interface.
+- Authorizing Polestar remote commands now happens through a real browser
+  sign-in instead of Hisingen submitting the account password to the login
+  form itself; the previous silent password-based re-authorization path was
+  removed, so a signed-out command session now requires a one-time browser
+  step rather than resolving itself invisibly.
+- The battery-pack description shown in Vehicle Info now derives its kWh
+  figures from the same computed capacity values shown elsewhere in the app,
+  instead of separately hardcoded numbers that could drift out of sync with
+  them.
+- Volvo's tyre-status card now explains that Volvo reports a warning level
+  per tyre rather than an exact pressure reading, matching what the API
+  actually returns.
 
 ### Fixed
 
@@ -136,6 +165,21 @@ All notable changes to Hisingen are documented in this file. The project follows
   notification fallbacks that could leak invented numeric values into the UI.
 - Fixed duplicate calculated charging rows and removed unsupported battery
   degradation and range-health claims.
+- Fixed tyre-pressure warnings never reaching the general vehicle-warnings
+  notification—a flagged tyre was already visible in the app but had no
+  path into the notification the same warning class otherwise fires.
+- Fixed a self-contradicting Polestar 4 battery-pack description that stated
+  two different capacities ("100.0 kWh" and "102 kWh") in the same sentence.
+- Fixed climate-timer editing being unreachable in practice: only
+  delete-then-recreate worked despite an "Edit Schedule" label in the UI.
+- Fixed signing out of a vehicle leaving orphaned charging-sample and
+  remote-command-audit rows behind instead of clearing them with the rest of
+  that vehicle's local data.
+- Fixed a shared HTTP-response-reading utility always throwing Polestar's
+  error type, even on the Volvo request path, which meant a Volvo-specific
+  `catch` for a too-large or network-failed response could never match.
+- Fixed the Settings "Test Connection" button reporting success and a
+  latency figure without making any network request.
 
 ### Security and CI
 
@@ -158,3 +202,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   monotonic version checks, required changelog entries, explicitly dispatched
   CI/security validation for release pull requests, notarization validation,
   and build-provenance attestations.
+- Moved the Polestar public vehicle-image API key out of a plaintext source
+  constant into the same build-time-injected, obfuscated pattern already
+  used for the Volvo developer secrets, with a working built-in default so
+  vehicle images function without any configuration.
+- Documented the actual Keychain accessibility level in ADR-0004 (it
+  previously stated a stricter level than the implementation has ever used).

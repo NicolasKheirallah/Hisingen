@@ -169,6 +169,13 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     /// battery, wheel, market or model-year variant has been verified.
     var hasModelReferenceSpecs: Bool { brand == .polestar }
 
+    /// Base per-model-family capacity table. This is the single source of truth for battery
+    /// capacity — `VehicleState.factoryNominalBatteryCapacityKwh`/`factoryUsableBatteryCapacityKwh`
+    /// read these values and layer year/powertrain-specific overrides on top (a 2024+ Polestar 2
+    /// or Volvo XC40-family pack revision, or a PHEV's year-dependent pack), rather than
+    /// maintaining a second independent table. `VehicleState.batteryPackDescription`'s prose
+    /// strings interpolate those same computed values instead of hardcoding their own numbers,
+    /// for the same reason: one place to update if a figure changes.
     var nominalBatteryCapacityKwh: Double {
         switch self {
         case .polestar1: return 34.0

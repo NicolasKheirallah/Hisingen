@@ -6,7 +6,7 @@ extension VolvoAPI {
         let startedAt = Date()
         do {
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: limit, operation: operation
+                for: request, using: session, limit: limit, operation: operation, provider: .volvo
             )
             guard let http = response as? HTTPURLResponse else {
                 throw VolvoError.invalidResponse(operation: operation)

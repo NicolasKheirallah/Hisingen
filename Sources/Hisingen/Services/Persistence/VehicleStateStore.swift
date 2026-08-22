@@ -40,6 +40,16 @@ final class VehicleStateStore {
     func save(_ state: VehicleState) {
         database.saveSnapshot(state)
 
+        if let airQuality = state.airQuality {
+            database.recordAirQuality(
+                vin: state.vin,
+                airQualityIndex: airQuality.airQualityIndex.map(Double.init),
+                particulateMatter25: airQuality.particulateMatter25.map(Double.init),
+                particulateMatter10: airQuality.particulateMatter10.map(Double.init),
+                filterRemainingPercent: airQuality.filterRemainingPercent.map(Double.init)
+            )
+        }
+
         if state.odometerKm != nil || state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil {
             let persistLocation = defaults.bool(forKey: "persist_location_history")
             database.recordTelemetry(

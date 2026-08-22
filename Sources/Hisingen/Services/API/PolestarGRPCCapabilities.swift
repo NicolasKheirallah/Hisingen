@@ -572,6 +572,14 @@ extension PolestarGRPC {
             reportedWarnings.append(.lowVoltageBattery)
             if lowVoltage == 2 { warnings.append(.lowVoltageBattery) }
         }
+        // Tyre pressure warnings live on `tyres[].warning`, not a dedicated proto field, so they
+        // must be folded into `warnings` explicitly — otherwise `Notifier.warningLabels` (which
+        // only reads `healthDetails.warnings`) never sees a flagged tyre and no notification
+        // fires even though the UI already shows it under "Needs Attention."
+        if tyres.contains(where: { $0.warning != .unknown }) {
+            reportedWarnings.append(.tyrePressure)
+            if tyres.contains(where: { $0.warning.needsAttention }) { warnings.append(.tyrePressure) }
+        }
         return GrpcHealthReport(
             details: VehicleHealthDetails(
                 tyres: tyres,

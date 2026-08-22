@@ -60,6 +60,7 @@ struct SettingsView: View {
     @State private var notifyServiceDue = true
     @State private var notifyStaleTelemetry = true
     @State private var notifySlowCharging = true
+    @State private var notifyPlugInReminder = true
     @State private var lowBatteryThreshold = 20
     @State private var notifyRainWithWindows = true
     @State private var notifyEveningUnlocked = true
@@ -141,6 +142,7 @@ struct SettingsView: View {
             notifyServiceDue = preferences.notifyServiceDue
             notifyStaleTelemetry = preferences.notifyStaleTelemetry
             notifySlowCharging = preferences.notifySlowCharging
+            notifyPlugInReminder = preferences.notifyPlugInReminder
             lowBatteryThreshold = preferences.lowBatteryThreshold
             notifyRainWithWindows = preferences.notifyRainWithWindowsOpen
             notifyEveningUnlocked = preferences.notifyEveningUnlocked
@@ -1433,6 +1435,14 @@ struct SettingsView: View {
                         persist: { preferences.notifySlowCharging = $0 }
                     )
 
+                    notificationRow(
+                        symbol: "powerplug.fill",
+                        title: "Plug-In Reminder",
+                        detail: "Alert once at 40% or below while unplugged and not charging",
+                        isOn: $notifyPlugInReminder,
+                        persist: { preferences.notifyPlugInReminder = $0 }
+                    )
+
                     if notifyLowBattery {
                         HStack(spacing: 8) {
                             Image(systemName: "slider.horizontal.below.rectangle")
@@ -1681,6 +1691,21 @@ struct SettingsView: View {
                         .controlSize(.small)
                         .disabled(state == nil)
                     }
+
+                    Button {
+                        guard let vin = state?.vin else { return }
+                        saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv",
+                                         csvContent: database.exportAirQualityCSV(for: vin))
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text(L10n.text("Export Air Quality (CSV)"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(state == nil)
 
                     Button {
                         Task { @MainActor in

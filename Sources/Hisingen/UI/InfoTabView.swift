@@ -1,4 +1,5 @@
 import AppKit
+import Charts
 import SwiftUI
 
 @MainActor
@@ -25,7 +26,8 @@ struct InfoTabView: View {
                 DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked)
             }
             if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
-                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }))
+                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }),
+                                   isVolvo: state.isVolvo)
             }
             if state.location?.latitude != nil {
                 parkingLocationCard
@@ -466,9 +468,44 @@ struct InfoTabView: View {
                         }
                         .padding(.vertical, 2)
                     }
+
+                    airQualityTrendChart
                 }
             }
         })
+    }
+
+    /// Local trend view over `air_quality_history` — the vehicle/provider APIs don't expose any
+    /// history of their own, so this is entirely reconstructed from samples Hisingen has already
+    /// recorded during normal refreshes (see `VehicleStateStore.save(_:)` /
+    /// `VehicleDatabase.recordAirQuality`).
+    @ViewBuilder
+    private var airQualityTrendChart: some View {
+        let history = database.recentAirQuality(for: state.vin, limit: 200)
+            .filter { $0.airQualityIndex != nil }
+            .sorted { $0.timestamp < $1.timestamp }
+        if history.count >= 2 {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Air Quality Trend"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                Chart(history) { record in
+                    LineMark(
+                        x: .value(L10n.text("Date"), record.timestamp),
+                        y: .value(L10n.text("Air Quality Index"), record.airQualityIndex ?? 0)
+                    )
+                    .foregroundStyle(.teal)
+                    .interpolationMethod(.monotone)
+                    RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
+                        .foregroundStyle(.orange.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+                .chartYAxisLabel(L10n.text("AQI"))
+                .frame(height: 90)
+                .accessibilityLabel(L10n.text("Air quality index history chart"))
+            }
+        }
     }
 
     private var tripComputerCard: some View {

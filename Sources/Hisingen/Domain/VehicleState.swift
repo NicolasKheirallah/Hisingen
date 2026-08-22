@@ -508,6 +508,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
     }
 
+    /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
+    /// (the base per-model table) — not an independent capacity table. Falls through to the base
+    /// table for anything without a known year-specific pack revision or a PHEV-specific figure.
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
         let yearInt = modelYear.flatMap(Int.init)
@@ -557,51 +560,74 @@ struct VehicleState: Codable, Equatable, Sendable {
         return factoryUsableBatteryCapacityKwh
     }
 
+    /// Every capacity figure below is interpolated from `factoryNominalBatteryCapacityKwh`/
+    /// `factoryUsableBatteryCapacityKwh` — the same computed values shown elsewhere in the UI —
+    /// rather than restated as separate hardcoded numbers, so this description can't silently
+    /// drift out of sync with them. Only the chemistry/module/voltage prose is hand-authored.
+    ///
+    /// Some branches below (Polestar 2 and Volvo XC40-family "Standard Range," Volvo EX30
+    /// "Standard Range") describe real-world pack variants that exist in the market but that
+    /// `VehicleModelFamily.nominalBatteryCapacityKwh` has no signal to distinguish from the
+    /// higher-capacity variant of the same model — the current capacity table only knows one
+    /// figure per model family (plus year), not per-trim. Those branches are therefore currently
+    /// unreachable; they're left in place, clearly labelled, rather than silently deleted, in
+    /// case a future capability signal makes the distinction possible.
     var batteryPackDescription: String {
         let nominal = factoryNominalBatteryCapacityKwh
+        let usable = factoryUsableBatteryCapacityKwh
+        // Formatted with the plain (locale-invariant) `String(format:)` overload — matching
+        // `Format.swift`'s convention for every other numeric readout in the app — rather than
+        // `L10n.format`, whose `locale:` argument follows the interface language/system region
+        // and would otherwise render these as "78,0 kWh" under a comma-decimal locale.
+        let nominalText = String(format: "%.1f", nominal)
+        let usableText = String(format: "%.1f", usable)
+        let nominalWhole = String(format: "%.0f", nominal)
         switch model {
         case .polestar2:
             if nominal >= 80.0 {
-                return L10n.text("82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)")
+                return L10n.format("%@ kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)", nominalText)
             } else if nominal >= 75.0 {
-                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)")
+                return L10n.format("%@ kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)", nominalText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)")
             }
         case .polestar3:
-            return L10n.text("111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)")
+            return L10n.format("%@ kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)", nominalText)
         case .polestar4:
-            return L10n.text("100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)")
+            return L10n.format("%@ kWh Long Range (CATL / VREMT · %@ kWh Nominal · 400V)", nominalWhole, nominalWhole)
         case .polestar1:
-            return L10n.text("34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)")
+            return L10n.format("%@ kWh High-Output Hybrid (%@ kWh Usable · Triple Pack)", nominalText, usableText)
         case .volvoEX30:
             if nominal >= 65.0 {
-                return L10n.text("69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Extended Range (NMC · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)")
             }
         case .volvoEX90, .volvoES90:
-            return L10n.text("111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)")
+            return L10n.format("%@ kWh Extended Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
         case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
             if nominal >= 80.0 {
-                return L10n.text("82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Long Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else if nominal >= 75.0 {
-                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Long Range (LG Energy / CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)")
             }
         case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
             if powertrain == .phev {
                 if nominal >= 16.0 {
-                    return L10n.text("18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)")
+                    return L10n.format("%@ kWh T8 Recharge PHEV (96 Cells · %@ kWh Usable)", nominalText, usableText)
                 } else {
-                    return L10n.text("11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)")
+                    return L10n.format("%@ kWh T8 Twin Engine PHEV (%@ kWh Usable)", nominalText, usableText)
                 }
             }
-            return L10n.format("%.1f kWh High-Voltage Pack", nominal)
+            return L10n.format("%@ kWh High-Voltage Pack", nominalText)
         default:
             if nominal > 0 {
-                return L10n.format("%.1f kWh Lithium-ion Pack", nominal)
+                return L10n.format("%@ kWh Lithium-ion Pack", nominalText)
             }
             return L10n.text("High-Voltage Traction Battery")
         }

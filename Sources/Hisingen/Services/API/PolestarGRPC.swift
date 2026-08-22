@@ -253,7 +253,7 @@ actor PolestarGRPC {
             request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "C3 discovery"
+                for: request, using: session, limit: 256_000, operation: "C3 discovery", provider: .polestar
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "C3 discovery")

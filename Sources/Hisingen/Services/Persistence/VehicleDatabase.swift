@@ -77,6 +77,16 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+struct AirQualityRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: Int64
+    let vin: String
+    let timestamp: Date
+    let airQualityIndex: Double?
+    let particulateMatter25: Double?
+    let particulateMatter10: Double?
+    let filterRemainingPercent: Double?
+}
+
 struct HistoricalTelemetryRecord: Codable, Equatable, Identifiable, Sendable {
     let id: Int64
     let vin: String
@@ -235,6 +245,17 @@ final class VehicleDatabase: @unchecked Sendable {
             duration_ms INTEGER,
             error_message TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS air_quality_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            air_quality_index REAL,
+            particulate_matter_25 REAL,
+            particulate_matter_10 REAL,
+            filter_remaining_percent REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_air_quality_vin ON air_quality_history(vin, timestamp DESC);
         """
         do {
             try db.execute(sql: sql)
@@ -546,6 +567,93 @@ final class VehicleDatabase: @unchecked Sendable {
         }) ?? []
     }
 
+    // MARK: - Cabin Air Quality History
+
+    /// Minimum spacing between recorded samples, mirroring the battery-health-milestone
+    /// approach: a sample is only worth keeping if enough time has passed or the reading moved
+    /// meaningfully, not on every refresh cycle.
+    private static let airQualityHeartbeat: TimeInterval = 60 * 60
+    private static let airQualityIndexDelta: Double = 5.0
+    private static let airQualityPM25Delta: Double = 5.0
+
+    private func lastAirQualitySample(for vin: String) -> (timestamp: Date, aqi: Double?, pm25: Double?)? {
+        let sql = """
+        SELECT timestamp, air_quality_index, particulate_matter_25
+        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
+        """
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> (Date, Double?, Double?)? in
+            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2))
+        } ?? nil
+    }
+
+    /// Records a cabin air-quality sample, skipping ones that would just duplicate the last
+    /// recorded reading. Returns whether a row was actually written.
+    @discardableResult
+    func recordAirQuality(vin: String, airQualityIndex: Double?, particulateMatter25: Double?,
+                          particulateMatter10: Double?, filterRemainingPercent: Double?) -> Bool {
+        guard airQualityIndex != nil || particulateMatter25 != nil else { return false }
+        if let last = lastAirQualitySample(for: vin),
+           Date().timeIntervalSince(last.timestamp) < Self.airQualityHeartbeat,
+           abs((airQualityIndex ?? 0) - (last.aqi ?? 0)) < Self.airQualityIndexDelta,
+           abs((particulateMatter25 ?? 0) - (last.pm25 ?? 0)) < Self.airQualityPM25Delta {
+            return false
+        }
+        let sql = """
+        INSERT INTO air_quality_history (vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDouble(airQualityIndex, at: 3)
+            try stmt.bindDouble(particulateMatter25, at: 4)
+            try stmt.bindDouble(particulateMatter10, at: 5)
+            try stmt.bindDouble(filterRemainingPercent, at: 6)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        return true
+    }
+
+    func recentAirQuality(for vin: String, limit: Int = 200) -> [AirQualityRecord] {
+        let sql = """
+        SELECT id, vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent
+        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
+        """
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindInt64(Int64(limit), at: 2)
+        } process: { stmt -> [AirQualityRecord] in
+            var records: [AirQualityRecord] = []
+            while stmt.step() {
+                guard let id = stmt.columnInt64(at: 0),
+                      let vin = stmt.columnText(at: 1),
+                      let ts = stmt.columnDate(at: 2) else { continue }
+                records.append(AirQualityRecord(
+                    id: id, vin: vin, timestamp: ts,
+                    airQualityIndex: stmt.columnDouble(at: 3),
+                    particulateMatter25: stmt.columnDouble(at: 4),
+                    particulateMatter10: stmt.columnDouble(at: 5),
+                    filterRemainingPercent: stmt.columnDouble(at: 6)
+                ))
+            }
+            return records
+        }) ?? []
+    }
+
+    func exportAirQualityCSV(for vin: String) -> String {
+        let records = recentAirQuality(for: vin, limit: 10_000)
+        let formatter = ISO8601DateFormatter()
+        var csv = "Record ID,VIN,Date,Air Quality Index,PM2.5,PM10,Filter Remaining (%)\n"
+        for r in records {
+            func number(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "" }
+            csv += "\(r.id),\(r.vin),\(formatter.string(from: r.timestamp)),\(number(r.airQualityIndex)),\(number(r.particulateMatter25)),\(number(r.particulateMatter10)),\(number(r.filterRemainingPercent))\n"
+        }
+        return csv
+    }
+
     // MARK: - Telemetry Logging
 
     /// Heartbeat for a vehicle that hasn't moved. Drive telemetry is only interesting when
@@ -829,6 +937,45 @@ final class VehicleDatabase: @unchecked Sendable {
         vacuum()
     }
 
+    /// Bounds growth of the three tables that previously had no retention path at all (manual or
+    /// automatic) — `charging_sessions`, `battery_health_history`, `remote_commands_log`. Defaults
+    /// are deliberately longer than `pruneHistoricalSamples`'s 90 days: these are low-volume
+    /// summary/audit rows (one per charge session, one per command, and `battery_health_history`
+    /// is already change-gated to at most a few rows a week), so there's little storage pressure
+    /// to justify discarding a user's longer-term charging or health history as aggressively as
+    /// the high-volume per-sample tables.
+    func pruneAgedHistory(
+        chargingSessionsOlderThanDays: Int = 730,
+        batteryHealthOlderThanDays: Int = 730,
+        commandAuditsOlderThanDays: Int = 180,
+        airQualityOlderThanDays: Int = 365
+    ) {
+        let sessionsCutoff = Date().addingTimeInterval(-Double(chargingSessionsOlderThanDays * 86400))
+        try? db.query(sql: "DELETE FROM charging_sessions WHERE started_at < ?;") { stmt in
+            try stmt.bindDate(sessionsCutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+
+        let healthCutoff = Date().addingTimeInterval(-Double(batteryHealthOlderThanDays * 86400))
+        try? db.query(sql: "DELETE FROM battery_health_history WHERE timestamp < ?;") { stmt in
+            try stmt.bindDate(healthCutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+
+        let commandsCutoff = Date().addingTimeInterval(-Double(commandAuditsOlderThanDays * 86400))
+        try? db.query(sql: "DELETE FROM remote_commands_log WHERE executed_at < ?;") { stmt in
+            try stmt.bindDate(commandsCutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+
+        let airQualityCutoff = Date().addingTimeInterval(-Double(airQualityOlderThanDays * 86400))
+        try? db.query(sql: "DELETE FROM air_quality_history WHERE timestamp < ?;") { stmt in
+            try stmt.bindDate(airQualityCutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        vacuum()
+    }
+
     func clearStoredLocations(for vin: String? = nil) {
         if let vin {
             try? db.query(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL WHERE vin = ?;") { stmt in
@@ -972,6 +1119,21 @@ final class VehicleDatabase: @unchecked Sendable {
                 try stmt.bindText(vin, at: 1)
                 try stmt.executeUpdate()
             } process: { _ in }
+            // `charging_samples` and `remote_commands_log` both carry a `vin` column but were
+            // previously left out of the per-VIN wipe, orphaning rows for a signed-out vehicle
+            // instead of actually clearing its data.
+            try? db.query(sql: "DELETE FROM charging_samples WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+            try? db.query(sql: "DELETE FROM remote_commands_log WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+            try? db.query(sql: "DELETE FROM air_quality_history WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
         } else {
             try? db.execute(sql: "DELETE FROM vehicle_snapshots;")
             try? db.execute(sql: "DELETE FROM charging_sessions;")
@@ -979,6 +1141,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try? db.execute(sql: "DELETE FROM battery_health_history;")
             try? db.execute(sql: "DELETE FROM telemetry_logs;")
             try? db.execute(sql: "DELETE FROM remote_commands_log;")
+            try? db.execute(sql: "DELETE FROM air_quality_history;")
             try? db.execute(sql: "VACUUM;")
         }
     }

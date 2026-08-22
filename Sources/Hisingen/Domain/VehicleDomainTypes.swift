@@ -234,6 +234,7 @@ enum VehicleWarning: String, Codable, CaseIterable, Sendable {
     case washerFluid
     case exteriorLight
     case lowVoltageBattery
+    case tyrePressure
 
     var displayName: String {
         switch self {
@@ -244,6 +245,7 @@ enum VehicleWarning: String, Codable, CaseIterable, Sendable {
         case .washerFluid: return L10n.text("Washer fluid")
         case .exteriorLight: return L10n.text("Exterior light")
         case .lowVoltageBattery: return L10n.text("12 V battery")
+        case .tyrePressure: return L10n.text("Tyre pressure")
         }
     }
 }

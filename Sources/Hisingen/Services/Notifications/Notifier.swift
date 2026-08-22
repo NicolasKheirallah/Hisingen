@@ -175,6 +175,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         case .available, .downloaded:
             title = L10n.text("Vehicle software update available")
             body = software.version ?? software.title ?? L10n.text("Open Hisingen for details.")
+        case .scheduled:
+            title = L10n.text("Vehicle software update scheduled")
+            body = software.scheduledAt.map { Format.dateTimeFormatter.string(from: $0) }
+                ?? L10n.text("The vehicle has an install time scheduled.")
+        case .downloading:
+            title = L10n.text("Vehicle software downloading")
+            body = software.version ?? L10n.text("The vehicle has started downloading a software update.")
+        case .installing:
+            title = L10n.text("Vehicle software installing")
+            body = L10n.text("The vehicle may be briefly unavailable while it installs the update.")
         case .completed:
             title = L10n.text("Vehicle software updated")
             body = software.version ?? L10n.text("The vehicle completed its software update.")
