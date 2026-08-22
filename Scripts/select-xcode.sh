@@ -12,21 +12,25 @@ selected=""
 
 if is_xcode_developer_dir "${DEVELOPER_DIR:-}"; then
     selected=$DEVELOPER_DIR
-else
-    active=$(/usr/bin/xcode-select -p 2>/dev/null || true)
-    if is_xcode_developer_dir "$active"; then
-        selected=$active
-    fi
 fi
 
 if [ -z "$selected" ]; then
-    for app in /Applications/Xcode.app /Applications/Xcode_*.app; do
+    # Sort available Xcode installations in reverse version order to pick the newest (e.g. Xcode 16+ with Swift Testing support)
+    # shellcheck disable=SC2012
+    for app in $(find /Applications -maxdepth 1 -name 'Xcode*.app' 2>/dev/null | sort -V -r); do
         candidate="$app/Contents/Developer"
         if is_xcode_developer_dir "$candidate"; then
             selected=$candidate
             break
         fi
     done
+fi
+
+if [ -z "$selected" ]; then
+    active=$(/usr/bin/xcode-select -p 2>/dev/null || true)
+    if is_xcode_developer_dir "$active"; then
+        selected=$active
+    fi
 fi
 
 if [ -z "$selected" ]; then
