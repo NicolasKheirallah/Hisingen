@@ -604,7 +604,6 @@ extension PolestarGRPC {
     static func parseHealth(_ data: Data) -> GrpcHealthReport {
         let fields = Protobuf.fields(data)
         let warningFields = [9, 10, 11, 12]
-        var pressureFields = [39, 40, 41, 42]
         // The documented positions are FL/FR/RL/RR at fields 39–42 (verified against
         // Polestar 3-era captures). The reference Polestar 2 capture returned warning level
         // only — but that is a backend/firmware fact for ONE car, not a platform law. Before
@@ -612,19 +611,15 @@ extension PolestarGRPC {
         // quadruple: four CONSECUTIVE numeric fields whose values all sit in a plausible kPa
         // band (150–400; cold-to-hot passenger-tyre range). Read-only and deterministic, so
         // the worst case is identical to today's behaviour.
-        if !pressureFields.contains(where: { field in
-            numeric(fields, field).flatMap { $0 >= 150 && $0 <= 400 } ?? false
-        }) {
-            if let alternate = Self.discoverPressureQuadruple(fields, window: 36...52) {
-                pressureFields = alternate
-            }
-        }
+        let pressureFields = Self.discoverPressureQuadruple(fields, window: 36...52)
         let positions = TyrePosition.allCases
         var tyres: [TyrePressure] = []
         for index in positions.indices {
             let warningRaw = varint(fields, warningFields[index])
             let warning = tyreWarning(warningRaw)
-            let pressure = numeric(fields, pressureFields[index]).flatMap { $0 > 0 ? $0 : nil }
+            let pressure = pressureFields.flatMap { pFields in
+                numeric(fields, pFields[index]).flatMap { $0 > 0 ? $0 : nil }
+            }
             tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
         }
         var warnings: [VehicleWarning] = []
