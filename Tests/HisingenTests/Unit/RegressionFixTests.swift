@@ -6,6 +6,21 @@ import Testing
 @MainActor
 struct RegressionFixTests {
 
+    @Test
+    func testLocationURLsRequireHTTPS() {
+        let mapsURL = StatusItemController.appleMapsURL(
+            latitude: 57.7089,
+            longitude: 11.9746,
+            label: "Polestar"
+        )
+        XCTAssertEqual(mapsURL?.scheme, "https")
+        XCTAssertEqual(mapsURL?.host, "maps.apple.com")
+
+        let weatherURL = PolestarGRPC.openMeteoURL(latitude: 57.7089, longitude: 11.9746)
+        XCTAssertEqual(weatherURL?.scheme, "https")
+        XCTAssertEqual(weatherURL?.host, "api.open-meteo.com")
+    }
+
 
     @Test
     func testUpdateCheckerPointsToMaintainedFork() {
@@ -190,4 +205,3 @@ struct RegressionFixTests {
         XCTAssertNil(copy.location)
     }
 }
-

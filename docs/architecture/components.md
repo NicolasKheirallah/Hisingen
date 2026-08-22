@@ -96,7 +96,7 @@ See [domain/notifications.md](../domain/notifications.md).
 
 ## Persistence trio (`Services/Persistence/*.swift`)
 
-**Keychain.swift** — `KeychainStore` (value type) + `InMemorySecretCache` (the one manual-lock singleton in the codebase). Stores Polestar's password/refresh-token and Volvo's client-secret/API-key/refresh-token, each brand in its own Keychain account.
+**Keychain.swift** — `KeychainStore` (value type) + `InMemorySecretCache` (the one manual-lock singleton in the codebase). Stores Polestar's email/password/refresh-token and Volvo's client-secret/API-key/refresh-token in purpose-specific Keychain accounts.
 
 **Preferences.swift** — `@MainActor enum Preferences`, a typed façade over `UserDefaults` for every non-secret setting (VIN, nicknames, feature selection, notification toggles, theme, etc.).
 

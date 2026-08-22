@@ -29,7 +29,7 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(profile.support(for: .steeringWheelHeating), .vehicleManaged)
         XCTAssertEqual(profile.support(for: .chargingCurrentLimit), .supported)
         XCTAssertEqual(profile.support(for: .preCleaning), .supported)
-        XCTAssertEqual(profile.support(for: .tyrePressureValues), .unavailable)
+        XCTAssertEqual(profile.support(for: .tyrePressureValues), .backendDependent)
         XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
         XCTAssertEqual(profile.support(for: .locks), .supported)
         XCTAssertEqual(profile.support(for: .windows), .supported)
@@ -291,7 +291,7 @@ struct VehicleCrossModelTests {
         VehicleStateStore(defaults: defaults, database: database).save(state)
         let counts = database.recordCounts()
         XCTAssertEqual(counts.telemetry, 1)
-        XCTAssertEqual(counts.batteryHealth, 0)
+        XCTAssertEqual(counts.batteryHealth, 1)
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
     }
 

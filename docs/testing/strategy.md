@@ -43,7 +43,9 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 
 - **No UI test coverage at all.** Verified manually before release, not automated.
 - **No cross-version cache-migration test** — nothing in the suite loads an old-format `VehicleStateStore` cache and asserts graceful degradation; the behavior is understood from reading the code (`try?` decode → silent cold start) but not pinned by a test. See [architecture/persistence.md](../architecture/persistence.md#cache-design-vehiclestatestore).
-- **`InMemorySecretCache`'s account-only cache key** (see [architecture/technical-debt.md](../architecture/technical-debt.md)) has no test demonstrating the collision risk — it's currently masked by the Keychain draft methods being no-ops.
+- **Production Keychain integration behavior** still relies primarily on the
+  Security framework itself; unit tests use isolated service names and verify
+  email migration plus separation between draft and committed credentials.
 - **No cross-provider concurrency test** exercises Polestar and Volvo sessions running at once, since only one brand is ever active at a time in the current UI — see [architecture/technical-debt.md](../architecture/technical-debt.md).
 
 ## Live integration tests

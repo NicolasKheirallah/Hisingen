@@ -13,6 +13,7 @@ struct HisingenContentView: View {
     let updateVersion: String?
     let checkingForUpdates: Bool
     let notificationPermission: NotificationPermission
+    let diagnostics: DiagnosticsSnapshot?
     let onRefresh: () -> Void
     let onSettings: () -> Void
     let onCheckForUpdates: () -> Void
@@ -21,6 +22,7 @@ struct HisingenContentView: View {
     let onSelectCar: (String) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
+    let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String)
     let settingsMode: Bool
     let database: VehicleDatabase
     let reverseGeocoder: ReverseGeocoder
@@ -40,6 +42,7 @@ struct HisingenContentView: View {
     enum Tab: String, CaseIterable {
         case vehicle = "Vehicle"
         case info = "Info"
+        case history = "History"
         case controls = "Controls"
         case settings = "Settings"
 
@@ -47,6 +50,7 @@ struct HisingenContentView: View {
             switch self {
             case .vehicle: return "bolt.car"
             case .info: return "info.circle"
+            case .history: return "chart.xyaxis.line"
             case .controls: return "slider.horizontal.3"
             case .settings: return "gearshape"
             }
@@ -57,13 +61,17 @@ struct HisingenContentView: View {
         state: VehicleState?, error: String?, authenticated: Bool, cars: [CarSummary],
         activeVin: String?, cachedSnapshots: [String: VehicleState],
         remoteCommandInProgress: Bool, updateVersion: String?, checkingForUpdates: Bool,
-        notificationPermission: NotificationPermission,
+        notificationPermission: NotificationPermission, diagnostics: DiagnosticsSnapshot?,
         onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void, onOpenUpdate: @escaping () -> Void,
         onRemoteCommand: @escaping (RemoteCommand) -> Void,
         onSelectCar: @escaping (String) -> Void,
         onSettingsChanged: @escaping (SettingsChange) -> Void,
-        onSignOut: @escaping () -> Void, settingsMode: Bool,
+        onSignOut: @escaping () -> Void,
+        onTestConnection: @escaping (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+            (false, L10n.text("Connection testing is not available."))
+        },
+        settingsMode: Bool,
         selectedTab: Binding<Tab>, database: VehicleDatabase,
          reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache
     ) {
@@ -77,6 +85,7 @@ struct HisingenContentView: View {
         self.updateVersion = updateVersion
         self.checkingForUpdates = checkingForUpdates
         self.notificationPermission = notificationPermission
+        self.diagnostics = diagnostics
         self.onRefresh = onRefresh
         self.onSettings = onSettings
         self.onCheckForUpdates = onCheckForUpdates
@@ -85,6 +94,7 @@ struct HisingenContentView: View {
         self.onSelectCar = onSelectCar
         self.onSettingsChanged = onSettingsChanged
         self.onSignOut = onSignOut
+        self.onTestConnection = onTestConnection
         self.settingsMode = settingsMode
         self.database = database
         self.reverseGeocoder = reverseGeocoder
@@ -105,15 +115,21 @@ struct HisingenContentView: View {
                                       tabSelection.wrappedValue = .vehicle
                                  }
                                  onSettingsChanged(change)
-                             }, onSignOut: onSignOut)
+                             }, onSignOut: onSignOut, onTestConnection: onTestConnection)
                      .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
             } else if !authenticated {
-                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged)
+                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged, onTestConnection: onTestConnection)
             } else if let state {
                 tabBar
                 Divider().opacity(0.4)
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: HisingenTheme.sectionSpacing) {
+                        if selectedTab == .vehicle, garageStates.count > 1 {
+                            garageOverview
+                        }
+                        if !state.retainedDataCategories.isEmpty {
+                            retainedDataNotice(state)
+                        }
                         switch selectedTab {
                         case .vehicle:
                             VehicleTabView(state: state, cars: cars, activeVin: activeVin,
@@ -123,6 +139,9 @@ struct HisingenContentView: View {
                                 .id(state.vin)
                         case .info:
                             InfoTabView(state: state, database: database, imageCache: imageCache)
+                                .id(state.vin)
+                        case .history:
+                            HistoryDashboardView(state: state, database: database)
                                 .id(state.vin)
                         case .controls:
                             ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
@@ -159,6 +178,91 @@ struct HisingenContentView: View {
         .id(preferences.interfaceLanguage.rawValue)
     }
 
+    private var garageStates: [VehicleState] {
+        var values = cachedSnapshots
+        if let state { values[state.vin] = state }
+        return values.values.sorted {
+            if $0.model.brand != $1.model.brand { return $0.model.brand.rawValue < $1.model.brand.rawValue }
+            return ($0.modelName ?? $0.vin) < ($1.modelName ?? $1.vin)
+        }
+    }
+
+    private var garageOverview: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "car.2.fill", title: L10n.text("Garage"), color: HisingenTheme.accent)
+                ForEach(garageStates, id: \.vin) { vehicle in
+                    Button {
+                        if vehicle.model.brand == preferences.activeBrand {
+                            onSelectCar(vehicle.vin)
+                        } else {
+                            onSettingsChanged(.switchToBrand(vehicle.model.brand))
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: vehicle.vin == state?.vin ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(vehicle.vin == state?.vin ? HisingenTheme.accent : Color.secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(preferences.formattedVehicleTitle(
+                                    vin: vehicle.vin, modelName: vehicle.modelName,
+                                    modelYear: vehicle.modelYear, registrationNo: vehicle.registrationNo,
+                                    fallbackBrand: vehicle.model.brand
+                                ))
+                                .font(.system(size: 10.5, weight: .semibold))
+                                Text(vehicle.model.brand.displayName + " · " + vehicle.freshnessDescription)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if let battery = vehicle.batteryPercentage {
+                                Text(String(format: "%.0f%%", battery))
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                            } else if let fuel = vehicle.fuelLevelPercent {
+                                Text(String(format: "%.0f%%", fuel))
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                            }
+                            if let range = vehicle.primaryRangeKm {
+                                Text(Format.distance(km: range, unit: preferences.distanceUnit))
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.format("Switch to %@", vehicle.modelName ?? vehicle.model.brand.displayName))
+                }
+            }
+        }
+    }
+
+    private func retainedDataNotice(_ state: VehicleState) -> some View {
+        let names = state.retainedDataCategories.map(\.title).joined(separator: ", ")
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .foregroundStyle(HisingenTheme.semanticWarning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.text("Showing last-known values"))
+                    .font(.system(size: 11, weight: .semibold))
+                Text(names)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let timestamp = state.retainedDataAt {
+                    Text(L10n.format("Source data from %@", Format.relativeAge(since: timestamp)))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+        }
+        .padding(9)
+        .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(HisingenTheme.semanticWarning.opacity(0.22)))
+        .help(L10n.text("The newest provider refresh did not include these fields. Hisingen retained the previous successful readings and labels them here instead of presenting them as live."))
+        .accessibilityElement(children: .combine)
+    }
+
 
     private var tabIndicatorAnimation: Animation? {
         reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.8)
@@ -173,14 +277,15 @@ struct HisingenContentView: View {
                         tabSelection.wrappedValue = tab
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         Image(systemName: tab.symbol)
-                            .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                            .font(.system(size: 10.5, weight: selectedTab == tab ? .semibold : .regular))
                         Text(L10n.text(tab.rawValue))
-                            .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .medium))
+                            .font(.system(size: 10, weight: selectedTab == tab ? .semibold : .medium))
+                            .lineLimit(1)
                     }
                     .foregroundStyle(selectedTab == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 6)
                     .background(alignment: .bottom) {
                         if selectedTab == tab {
@@ -205,6 +310,7 @@ struct HisingenContentView: View {
                 }
                 .buttonStyle(.plain)
                 .withoutFocusRing()
+                .help(L10n.text(tab.rawValue))
             }
             Spacer()
         }
@@ -380,6 +486,22 @@ struct HisingenContentView: View {
                 }
                 .help(L10n.format("Last updated %@", Format.dateTimeFormatter.string(from: fetchedAt)))
             }
+            if diagnostics?.liveStreamConnected == true {
+                HStack(spacing: 3) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                    Text(L10n.text("Live"))
+                }
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(HisingenTheme.semanticGood)
+                .help(L10n.text("Connected to the Polestar server stream. Battery and exterior changes are applied as the provider sends them; scheduled polling remains as a reliability fallback."))
+                .accessibilityLabel(L10n.text("Live vehicle stream connected"))
+            } else if let retryAt = diagnostics?.liveStreamRetryAt {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .help(L10n.format("Live stream disconnected. Retrying %@. Scheduled polling is still active.", Format.relativeAge(since: retryAt)))
+                    .accessibilityLabel(L10n.text("Live vehicle stream reconnecting"))
+            }
             Spacer()
             if let updateVersion, preferences.features.contains(.updateChecks) {
                 Button {
@@ -452,6 +574,7 @@ struct VehicleTabView: View {
 
     @State private var moreExpanded = true
     @State private var chargingJustStarted = false
+    @State private var dismissedSoftwareEventIdentifier: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 
@@ -467,7 +590,17 @@ struct VehicleTabView: View {
 
 
     private var warningsSignature: String {
-        "\(error ?? "")|\(state.dataWarnings.joined())|\(state.stateSummary.message)"
+        "\(error ?? "")|\(state.dataWarnings.joined())|\(displayedStateSummary.message)"
+    }
+
+    private var displayedStateSummary: VehicleStateSummary {
+        if let software = state.softwareInfo,
+           software.hasActionableFailure(),
+           dismissedSoftwareEventIdentifier == software.eventIdentifier,
+           state.stateSummary.message == L10n.text("Software update failed") {
+            return VehicleStateSummary(message: L10n.text("Software event dismissed locally"), severity: .neutral)
+        }
+        return state.stateSummary
     }
 
 
@@ -495,6 +628,9 @@ struct VehicleTabView: View {
         }
         .animation(cardChangeAnimation, value: warningsSignature)
         .animation(cardChangeAnimation, value: pillSignature)
+        .onAppear {
+            dismissedSoftwareEventIdentifier = preferences.dismissedSoftwareEventIdentifier(for: state.vin)
+        }
     }
 
     private var multiCarChips: some View {
@@ -842,7 +978,7 @@ struct VehicleTabView: View {
                 }
 
 
-                let summary = state.stateSummary
+                let summary = displayedStateSummary
                 StateSummaryChip(message: summary.message, severity: summary.severity)
                     .id(summary.message)
                     .transition(.opacity.combined(with: .move(edge: .leading)))
@@ -883,11 +1019,14 @@ struct VehicleTabView: View {
                         }
                     }
 
-                    let fuelFraction = (state.fuelLevelPercent ?? 0) / 100.0
-                    FuelGauge(
-                        fraction: fuelFraction,
-                        color: HisingenTheme.fuelColor(percentage: state.fuelLevelPercent ?? 0)
-                    )
+                    if let fuelLevel = state.fuelLevelPercent {
+                        FuelGauge(
+                            fraction: fuelLevel / 100.0,
+                            color: HisingenTheme.fuelColor(percentage: fuelLevel)
+                        )
+                    } else {
+                        UnavailableEnergyGauge()
+                    }
                 } else if state.powertrain.isHybrid {
                     HStack(alignment: .lastTextBaseline) {
                         VStack(alignment: .leading, spacing: 1) {
@@ -925,10 +1064,10 @@ struct VehicleTabView: View {
                     }
 
                     DualEnergyGauge(
-                        batteryFraction: (state.batteryPercentage ?? 0) / 100.0,
-                        fuelFraction: (state.fuelLevelPercent ?? 0) / 100.0,
-                        batteryColor: HisingenTheme.batteryColor(percentage: state.batteryPercentage ?? 0, charging: state.isCharging),
-                        fuelColor: HisingenTheme.fuelColor(percentage: state.fuelLevelPercent ?? 0),
+                        batteryFraction: state.batteryPercentage.map { $0 / 100.0 },
+                        fuelFraction: state.fuelLevelPercent.map { $0 / 100.0 },
+                        batteryColor: state.batteryPercentage.map { HisingenTheme.batteryColor(percentage: $0, charging: state.isCharging) } ?? .secondary,
+                        fuelColor: state.fuelLevelPercent.map { HisingenTheme.fuelColor(percentage: $0) } ?? .secondary,
                         isCharging: state.isCharging
                     )
                 } else {
@@ -960,14 +1099,17 @@ struct VehicleTabView: View {
                         }
                     }
 
-                    let fraction = (state.batteryPercentage ?? 0) / 100
                     let target = state.chargeTargetPercentage.map { Double($0) / 100 }
-                    BatteryGauge(
-                        fraction: fraction,
-                        targetFraction: target,
-                        color: HisingenTheme.batteryColor(percentage: state.batteryPercentage ?? 0, charging: state.isCharging),
-                        isCharging: state.isCharging
-                    )
+                    if let batteryLevel = state.batteryPercentage {
+                        BatteryGauge(
+                            fraction: batteryLevel / 100,
+                            targetFraction: target,
+                            color: HisingenTheme.batteryColor(percentage: batteryLevel, charging: state.isCharging),
+                            isCharging: state.isCharging
+                        )
+                    } else {
+                        UnavailableEnergyGauge()
+                    }
                 }
 
 
@@ -1013,10 +1155,14 @@ struct VehicleTabView: View {
         guard state.isCharging else { return nil }
         var parts: [String] = []
         if let rate = state.formattedChargingRate(unit: preferences.distanceUnit) { parts.append(rate) }
-        if let battery = state.batteryPercentage, battery < 100 {
-            let targetPct = Double(state.chargeTargetPercentage ?? 100)
+        if let battery = state.batteryPercentage,
+           let chargeTargetPercentage = state.chargeTargetPercentage,
+           battery < Double(chargeTargetPercentage) {
+            let targetPct = Double(chargeTargetPercentage)
             let missingPct = max(0, targetPct - battery)
-            let missingKwh = (missingPct / 100.0) * state.model.nominalUsableCapacityKwh
+            let referenceCapacity = preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
+                ?? state.factoryUsableBatteryCapacityKwh
+            let missingKwh = (missingPct / 100.0) * referenceCapacity
             let estimatedCost = missingKwh * preferences.electricityPricePerKwh
             if estimatedCost > 0 {
                 parts.append("≈" + String(format: "%.2f %@", estimatedCost, preferences.currencySymbol) + " " + L10n.text("to target"))
@@ -1037,11 +1183,9 @@ struct VehicleTabView: View {
                 rows.append(KVRow(L10n.text("Charging Type"), state.chargingType.displayName, symbol: "bolt.circle"))
             }
             if let drawAmps = state.chargingCurrentAmps, drawAmps > 0 {
-                let label = (state.chargingCurrentLimitAmps != nil && state.chargingCurrentLimitAmps != drawAmps)
-                    ? L10n.text("Current Draw") : L10n.text("Current Limit")
-                rows.append(KVRow(label, "\(drawAmps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))
+                rows.append(KVRow(L10n.text("Current Draw"), "\(drawAmps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))
             }
-            if let limitAmps = state.chargingCurrentLimitAmps, limitAmps > 0, limitAmps != state.chargingCurrentAmps {
+            if let limitAmps = state.chargingCurrentLimitAmps, limitAmps > 0 {
                 rows.append(KVRow(L10n.text("Current Limit"), "\(limitAmps) A", symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings.")))
             }
             if let volts = state.chargingVoltageVolts, volts > 0 {
@@ -1062,17 +1206,11 @@ struct VehicleTabView: View {
             if let minM = diag.timeToMinimumSOCMinutes {
                 rows.append(KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minM), symbol: "battery.50percent", info: L10n.text("Vehicle Dynamic Calculation. Estimated time to reach minimum operating state of charge.")))
             }
-            if let minM = diag.timeToMinimumSOCMinutes {
-                rows.append(KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minM), symbol: "battery.50percent"))
-            }
             if let v = diag.averageConsumption {
-                rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f kWh/100km", v), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))
+                rows.append(KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: v, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))
             }
             if let avgSince = diag.averageConsumptionSinceCharge {
-                rows.append(KVRow(L10n.text("Avg Since Last Charge"), String(format: "%.1f kWh/100km", avgSince), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))
-            }
-            if let avgSince = diag.averageConsumptionSinceCharge {
-                rows.append(KVRow(L10n.text("Avg Since Last Charge"), String(format: "%.1f kWh/100km", avgSince), symbol: "chart.line.uptrend.xyaxis"))
+                rows.append(KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: avgSince, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))
             }
             if let wh = diag.energyUsedSinceChargeWh {
                 rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))
@@ -1282,7 +1420,10 @@ struct VehicleTabView: View {
                 rows.append(KVRow(w.displayName, L10n.text("Warning"), symbol: "exclamationmark.triangle.fill", warning: true))
             }
         }
-        if features.contains(.softwareUpdates), state.softwareInfo?.state == .failed {
+        if features.contains(.softwareUpdates),
+           let software = state.softwareInfo,
+           software.hasActionableFailure(),
+           dismissedSoftwareEventIdentifier != software.eventIdentifier {
             rows.append(KVRow(L10n.text("Vehicle Software"), L10n.text("Update Failed"), symbol: "arrow.triangle.2.circlepath", warning: true))
         }
         guard !rows.isEmpty else { return nil }
@@ -1327,7 +1468,7 @@ struct VehicleTabView: View {
                 rows.append(KVRow(L10n.text("Auto Trip Meter"), Format.distance(km: Int(km.rounded()), unit: preferences.distanceUnit), symbol: "a.circle"))
             }
             if let speed = state.averageSpeedKmH, speed > 0 {
-                rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle"))
+                rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle"))
             }
         }
         guard !rows.isEmpty else { return nil }
@@ -1356,11 +1497,11 @@ struct VehicleTabView: View {
                 rows.append(KVRow(L10n.text("Cabin Climate"), val, symbol: climateActive ? "fan.fill" : "fan"))
                 if let temperature = climate.interiorTemperatureCelsius {
                     rows.append(KVRow(L10n.text("Cabin Temperature"),
-                                      String(format: "%.1f °C", temperature), symbol: "thermometer.medium"))
+                                      Format.temperature(celsius: temperature, unit: preferences.temperatureUnit), symbol: "thermometer.medium"))
                 }
                 if let target = climate.requestedTemperatureCelsius {
                     rows.append(KVRow(L10n.text("Climate Target"),
-                                      String(format: "%.1f °C", target), symbol: "target"))
+                                      Format.temperature(celsius: target, unit: preferences.temperatureUnit), symbol: "target"))
                 }
                 if let driverHeating = climate.driverSeatHeatingLevel, driverHeating > 0 {
                     rows.append(KVRow(L10n.text("Driver Seat Heating"), L10n.format("Level %d", driverHeating), symbol: "carseat.left.and.heat.waves"))
@@ -1407,10 +1548,12 @@ struct VehicleTabView: View {
         }
         if features.contains(.vehicleWeather), let weather = state.weather {
             if let t = weather.temperatureCelsius {
-                var val = String(format: "%.0f °C", t)
+                var val = Format.temperature(celsius: t, unit: preferences.temperatureUnit, decimals: 0)
                 if let cond = weather.condition { val += " · \(L10n.text(cond))" }
                 if let hum = weather.relativeHumidity { val += " · \(hum)% " + L10n.text("humidity") }
-                if let feels = weather.apparentTemperatureCelsius { val += " (" + L10n.format("feels like %@", String(format: "%.0f °C", feels)) + ")" }
+                if let feels = weather.apparentTemperatureCelsius {
+                    val += " (" + L10n.format("feels like %@", Format.temperature(celsius: feels, unit: preferences.temperatureUnit, decimals: 0)) + ")"
+                }
                 rows.append(KVRow(L10n.text("Ambient Weather"), val, symbol: "cloud.sun.fill"))
             }
         }
@@ -1497,14 +1640,23 @@ struct VehicleTabView: View {
                 rows.append(KVRow(f, L10n.text("Low Level"), symbol: "drop.triangle", warning: true))
             }
         } else {
-            rows.append(KVRow(L10n.text("Fluid Levels"), L10n.text("Normal"), symbol: "drop.fill"))
+            let hasReportedFluidStatus = state.healthDetails?.reportedWarnings.contains(where: {
+                $0 == .brakeFluid || $0 == .engineCoolant || $0 == .oil || $0 == .washerFluid
+            }) == true
+            rows.append(KVRow(
+                L10n.text("Fluid Warning Status"),
+                hasReportedFluidStatus ? L10n.text("No warning reported") : L10n.text("Unavailable"),
+                symbol: "drop.fill",
+                info: L10n.text("The providers report warning flags, not measured fluid levels.")
+            ))
         }
 
         if let health = state.healthDetails {
             let battery12vWarning = health.warnings.contains(.lowVoltageBattery)
+            let battery12vReported = health.reportedWarnings.contains(.lowVoltageBattery)
             rows.append(KVRow(
                 L10n.text("12V Battery"),
-                battery12vWarning ? L10n.text("Low Voltage") : L10n.text("Normal"),
+                battery12vWarning ? L10n.text("Low Voltage") : (battery12vReported ? L10n.text("No warning reported") : L10n.text("Unavailable")),
                 symbol: "minus.plus.batteryblock.fill",
                 warning: battery12vWarning
             ))
@@ -1514,12 +1666,14 @@ struct VehicleTabView: View {
             for failure in lightFailures {
                 rows.append(KVRow(failure, L10n.text("Fault"), symbol: "lightbulb.slash.fill", warning: true))
             }
-        } else if let warnings = Optional(state.dataWarnings), !warnings.isEmpty {
-            for w in warnings {
-                rows.append(KVRow(L10n.text("Exterior Light"), w, symbol: "lightbulb.slash.fill", warning: true))
-            }
         } else {
-            rows.append(KVRow(L10n.text("Lighting Systems"), L10n.text("All Systems OK"), symbol: "lightbulb.fill"))
+            let lightsReported = state.healthDetails?.reportedWarnings.contains(.exteriorLight) == true
+            rows.append(KVRow(
+                L10n.text("Lighting Warning Status"),
+                lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable"),
+                symbol: "lightbulb.fill",
+                info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")
+            ))
         }
 
         guard !rows.isEmpty else { return nil }
@@ -1614,18 +1768,31 @@ struct VehicleTabView: View {
         // the pending update target, never both — so don't fall back to `version` for whichever
         // one is nil, that would just re-duplicate the other row's value.
         if let installed = software.installedVersion {
-            rows.append(KVRow(L10n.text("Installed Version"), installed, symbol: "checkmark.seal.fill"))
+            rows.append(KVRow(
+                L10n.text("Backend-Reported Version"),
+                installed,
+                symbol: "checkmark.seal.fill",
+                info: L10n.text("Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle.")
+            ))
         }
         if let latest = software.latestAvailableVersion {
-            rows.append(KVRow(L10n.text("Available Version"), latest, symbol: "shippingbox.fill"))
+            rows.append(KVRow(
+                software.rawState == .updateAvailable ? L10n.text("Announced Version") : L10n.text("Update Version"),
+                latest,
+                symbol: "shippingbox.fill"
+            ))
         }
         if let title = software.title {
             rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text"))
         }
+        let statusText = software.state == .failed && !software.hasActionableFailure()
+            ? L10n.text("Past event — no current action required")
+            : (software.rawState?.displayName ?? software.state.displayName)
         rows.append(KVRow(L10n.text("Update Status"),
-                          software.rawState?.displayName ?? software.state.displayName,
+                          statusText,
                           symbol: "arrow.triangle.2.circlepath",
-                          valueWarning: software.state == .failed))
+                          valueWarning: software.hasActionableFailure()
+                              && dismissedSoftwareEventIdentifier != software.eventIdentifier))
         if let scheduledAt = software.scheduledAt {
             rows.append(KVRow(L10n.text("Installation Scheduled"),
                               Format.dateTimeFormatter.string(from: scheduledAt), symbol: "calendar.badge.clock"))
@@ -1644,12 +1811,14 @@ struct VehicleTabView: View {
                                   L10n.format("%d min", minutes), symbol: "timer"))
             }
         }
-        let updateAvailable = software.state == .available || software.state == .downloaded
+        let updateInstallable = software.rawState?.isInstallable
+            ?? (software.state == .downloaded || software.state == .deferred || software.state == .scheduled)
+        let eventDismissed = dismissedSoftwareEventIdentifier == software.eventIdentifier
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: .blue)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-                if updateAvailable {
+                if updateInstallable {
                     Divider().opacity(0.4)
                     HStack {
                         Image(systemName: "arrow.down.circle.fill")
@@ -1659,6 +1828,30 @@ struct VehicleTabView: View {
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(HisingenTheme.ink)
                     }
+                }
+                if software.state == .failed {
+                    Divider().opacity(0.4)
+                    Button {
+                        if eventDismissed {
+                            preferences.setDismissedSoftwareEventIdentifier(nil, for: state.vin)
+                            dismissedSoftwareEventIdentifier = nil
+                        } else {
+                            preferences.setDismissedSoftwareEventIdentifier(software.eventIdentifier, for: state.vin)
+                            dismissedSoftwareEventIdentifier = software.eventIdentifier
+                        }
+                    } label: {
+                        Label(
+                            eventDismissed ? L10n.text("Restore software event") : L10n.text("Dismiss software event"),
+                            systemImage: eventDismissed ? "arrow.uturn.backward.circle" : "xmark.circle"
+                        )
+                        .font(.system(size: 10.5, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                    Text(eventDismissed
+                         ? L10n.text("This event is hidden from Needs Attention on this Mac.")
+                         : L10n.text("Dismissal is local and does not alter vehicle or Polestar backend data."))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
                 }
                 if software.rawState == .updateAvailable {
                     Divider().opacity(0.4)
@@ -1697,12 +1890,16 @@ struct VehicleTabView: View {
     private var diagnosticsCard: AnyView? {
         var rows: [KVRow] = []
         if state.powertrain.hasElectricRange && (features.contains(.batteryDiagnostics) || features.contains(.chargingDetails)) {
-            if let health = state.estimatedRangeHealth {
+            let specification = preferences.vehicleSpecificationOverride(for: state.vin)
+            if let comparison = state.currentRangeVsModelWltpPercent(specification: specification) {
+                let isUserReference = specification?.wltpRangeKm != nil
                 rows.append(KVRow(
-                    L10n.text("Range Efficiency (vs WLTP)"),
-                    String(format: "%.1f%% · %@", health.percentage, health.rating),
+                    L10n.text("Current Range vs Model WLTP"),
+                    String(format: "%.1f%%", comparison),
                     symbol: "gauge.with.dots.needle.67percent",
-                    info: L10n.text("Dynamic driving efficiency based on recent speed, weather, and climate heating compared to standard WLTP. For physical battery pack health (SoH), see the Info tab.")
+                    info: isUserReference
+                        ? L10n.text("Calculated from the vehicle-reported range and battery percentage against the VIN-specific WLTP reference entered in Settings. It is not battery health and does not directly measure speed, weather or climate use.")
+                        : L10n.text("Calculated from the vehicle-reported range and battery percentage against a static model-family WLTP benchmark. It is not battery health and does not directly measure speed, weather or climate use.")
                 ))
             }
         }
@@ -1721,7 +1918,7 @@ struct VehicleTabView: View {
             }
         }
         if let speed = state.averageSpeedKmH {
-            rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.1f km/h", speed), symbol: "speedometer"))
+            rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer"))
         }
         if let consumption = state.averageFuelConsumptionLPer100Km {
             rows.append(KVRow(L10n.text("Avg Fuel Consumption"), Format.fuelEconomy(lPer100Km: consumption, unit: preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis"))
@@ -1753,9 +1950,17 @@ struct VehicleTabView: View {
         let errors = state.vehicleErrors
         guard !errors.isEmpty else {
             if state.isVolvo { return nil }
-            return unavailableCard(.vehicleErrors, symbol: "exclamationmark.triangle",
-                                    title: L10n.text("Vehicle Errors"), color: .red,
-                                    badge: L10n.text("No errors reported"))
+            if state.unavailableFeatures.contains(.vehicleErrors) {
+                return unavailableCard(.vehicleErrors, symbol: "exclamationmark.triangle",
+                                       title: L10n.text("Vehicle Errors"), color: .red,
+                                       badge: L10n.text("Error reporting"))
+            }
+            return AnyView(Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    CardHeader(symbol: "exclamationmark.triangle", title: L10n.text("Vehicle Errors"), color: .red)
+                    KVRow(L10n.text("Backend error records"), L10n.text("None returned"), symbol: "checkmark.circle", info: L10n.text("The backend returned no error records. This is not a full diagnostic scan of the vehicle."))
+                }
+            })
         }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -1997,17 +2202,43 @@ struct TireStatusCardView: View {
 
     @State private var hoveredPosition: TyrePosition? = nil
 
+    /// Some vehicles only ever report a per-tyre warning level (OK/low/very low/high), never a
+    /// numeric kPa reading — indirect TPMS (iTPMS), inferred from wheel-speed-sensor imbalance,
+    /// as opposed to direct TPMS's physical per-wheel pressure sensor. This isn't brand-specific:
+    /// it's true of Volvo's whole lineup *and* Polestar 2 (see `VehicleCapabilityProfile`'s
+    /// `.tyrePressureValues` case for `.polestar2`, `.unavailable` for the same reason). Keyed on
+    /// the data actually reported rather than the brand, so it stays correct for both today and
+    /// doesn't need updating if a future model's sensor support changes.
+    private var reportsWarningLevelOnly: Bool {
+        !tyres.isEmpty && tyres.allSatisfy { $0.kilopascals == nil }
+    }
+
     var body: some View {
+        let reportedCount = tyres.filter { $0.kilopascals != nil || $0.warning != .unknown }.count
+        let allReported = reportedCount == 4
+        let summaryText = hasWarning
+            ? L10n.text("Check Pressure")
+            : (allReported ? L10n.text("No warnings reported") : L10n.text("Data unavailable"))
+        let summaryColor: Color = hasWarning
+            ? HisingenTheme.semanticWarning
+            : (allReported ? HisingenTheme.semanticGood : .secondary)
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: .blue)
                     Spacer()
                     Pill(
-                        text: hasWarning ? L10n.text("Check Pressure") : L10n.text("All Normal"),
-                        color: hasWarning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood,
-                        symbol: hasWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                        text: summaryText,
+                        color: summaryColor,
+                        symbol: hasWarning ? "exclamationmark.triangle.fill" : (allReported ? "checkmark.circle.fill" : "questionmark.circle")
                     )
+                }
+
+                if reportsWarningLevelOnly {
+                    Text(L10n.text("This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading."))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 VehicleSideProfileTiresView(tyres: tyres, hoveredPosition: hoveredPosition)
@@ -2043,10 +2274,16 @@ struct TirePillView: View {
     var onHoverChange: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
+    @Environment(\.preferencesStore) private var preferences
 
     var body: some View {
         let warning = tyre?.warning.needsAttention == true
-        let statusText = tyre?.kilopascals.map { String(format: "%.0f kPa", $0) } ?? (warning ? L10n.text("Check") : L10n.text("Normal"))
+        let explicitlyClear = tyre?.warning == TyrePressureWarning.none
+        let statusText = tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
+            ?? (warning ? L10n.text("Check") : (explicitlyClear ? L10n.text("No warning") : L10n.text("Unavailable")))
+        let statusColor: Color = warning
+            ? HisingenTheme.semanticWarning
+            : (explicitlyClear ? HisingenTheme.semanticGood : .secondary)
         let activeHover = isHovered || isHighlighted
 
         VStack(alignment: .leading, spacing: 3) {
@@ -2055,13 +2292,13 @@ struct TirePillView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 5) {
                 Circle()
-                    .fill(warning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+                    .fill(statusColor)
                     .frame(width: 6.5, height: 6.5)
-                    .shadow(color: (warning ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood).opacity(activeHover ? 0.5 : 0), radius: 2)
+                    .shadow(color: statusColor.opacity(activeHover ? 0.5 : 0), radius: 2)
                     .accessibilityHidden(true)
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : HisingenTheme.ink)
+                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : (explicitlyClear ? HisingenTheme.ink : HisingenTheme.inkMuted))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2107,6 +2344,7 @@ struct LocationCardView: View {
 
     @State private var streetAddress: String? = nil
     @State private var copiedCoordinates = false
+    @Environment(\.preferencesStore) private var preferences
 
     private var isMoving: Bool { (speed ?? 0) > 3 }
 
@@ -2199,7 +2437,7 @@ struct LocationCardView: View {
                                 Image(systemName: "cloud.sun.fill")
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(.orange)
-                                Text(String(format: "%.1f °C", temp))
+                                Text(Format.temperature(celsius: temp, unit: preferences.temperatureUnit))
                                     .font(.system(size: 9.5, weight: .semibold))
                                     .foregroundStyle(HisingenTheme.ink)
                                 if let cond = weather.condition {
@@ -2218,7 +2456,7 @@ struct LocationCardView: View {
 
                         if let speed, speed > 0 {
                             HStack(spacing: 6) {
-                                Text(String(format: "%@: %.0f km/h", L10n.text("Speed"), speed))
+                                Text("\(L10n.text("Speed")): \(Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit))")
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(.secondary)
                                 if let heading {
@@ -2892,7 +3130,7 @@ struct ChargingSessionRow: View {
                 }
                 VStack(spacing: 6) {
                     KVRow(L10n.text("Duration"), Format.shortDuration(minutes: session.durationMinutes), symbol: "timer")
-                    KVRow(L10n.text("Energy Delivered"), String(format: "%.1f kWh", session.kwhDelivered), symbol: "bolt.fill")
+                    KVRow(L10n.text("Estimated Energy Added"), String(format: "%.1f kWh", session.kwhDelivered), symbol: "bolt.fill", info: L10n.text("Estimated from the change in battery percentage and configured usable capacity; not measured by the charger or battery-management system."))
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
@@ -2910,7 +3148,7 @@ struct ChargingSessionRow: View {
                         .font(.system(size: 11, weight: .medium))
                     let preferences = PreferencesStore()
                     let costStr = session.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: " · %.2f %@", $0, preferences.currencySymbol) } ?? ""
-                    Text(String(format: "+%.0f%% · %.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
+                    Text(String(format: "+%.0f%% · ≈%.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }

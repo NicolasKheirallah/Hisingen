@@ -3,6 +3,11 @@ set -eu
 
 BUMP="${1:-patch}"
 
+if ! echo "$BUMP" | grep -Eq '^(patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$'; then
+    echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+    exit 1
+fi
+
 # Check working tree
 if [ -n "$(git status --porcelain=v1)" ]; then
     echo "❌ Working tree is not clean. Commit or stash your changes first."
@@ -31,11 +36,20 @@ else
             MINOR=$((MINOR + 1))
             PATCH=0
             ;;
-        patch|*)
+        patch)
             PATCH=$((PATCH + 1))
+            ;;
+        *)
+            echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+            exit 1
             ;;
     esac
     NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+fi
+
+if ! grep -Fq "## [$NEW_VERSION]" CHANGELOG.md; then
+    echo "CHANGELOG.md must contain a ## [$NEW_VERSION] release entry before bumping the version." >&2
+    exit 1
 fi
 
 echo "🚀 Preparing release v${NEW_VERSION}..."

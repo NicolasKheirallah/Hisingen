@@ -16,7 +16,13 @@ service (`io.kheirallah.hisingen`) with separate accounts per credential —
 `passwordAccount`/`sessionAccount` for Polestar, a Volvo secret bundle
 (client secret, API key, session token) for Volvo — rather than in
 `UserDefaults` or a plain file. Items are stored
-`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
+`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — chosen over the stricter
+`WhenUnlocked` variant so a background refresh can still read credentials
+after the Mac has been unlocked once since boot, without requiring the
+session to still be unlocked at read time. See
+[security/keychain.md](../security/keychain.md) for the full rationale; this
+ADR previously stated the stricter `WhenUnlockedThisDeviceOnly` value, which
+never matched the implementation.
 
 ## Alternatives considered
 

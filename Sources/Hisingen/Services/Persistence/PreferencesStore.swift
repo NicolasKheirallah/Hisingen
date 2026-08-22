@@ -6,8 +6,12 @@ import SwiftUI
 @MainActor
 final class PreferencesStore {
     nonisolated(unsafe) private let d: UserDefaults
+    private let keychain: KeychainStore
 
-    nonisolated init(defaults: UserDefaults = .standard) { d = defaults }
+    nonisolated init(defaults: UserDefaults = .standard, keychain: KeychainStore = .app) {
+        d = defaults
+        self.keychain = keychain
+    }
 
     struct AccountDraft {
         var polestarEmail = ""
@@ -23,7 +27,36 @@ final class PreferencesStore {
 
     var accountDraft = AccountDraft()
 
-    var email: String { get { d.string(forKey: "polestar_email") ?? "" } set { d.set(newValue, forKey: "polestar_email") } }
+    var email: String {
+        get {
+            if let secure = (try? keychain.readEmail()) ?? nil, !secure.isEmpty {
+                d.removeObject(forKey: "polestar_email")
+                return secure
+            }
+            guard let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty else { return "" }
+            do {
+                try keychain.saveEmail(legacy)
+                d.removeObject(forKey: "polestar_email")
+            } catch {
+                // Keep the legacy value until Keychain becomes available so an
+                // upgrade never silently loses the account identifier.
+            }
+            return legacy
+        }
+        set {
+            if newValue.isEmpty {
+                try? keychain.deleteEmail()
+                d.removeObject(forKey: "polestar_email")
+            } else {
+                do {
+                    try keychain.saveEmail(newValue)
+                    d.removeObject(forKey: "polestar_email")
+                } catch {
+                    // Never write a new account identifier to UserDefaults.
+                }
+            }
+        }
+    }
     var activeBrand: VehicleBrand {
         get { VehicleBrand(rawValue: d.string(forKey: "active_vehicle_brand") ?? "") ?? .polestar }
         set { d.set(newValue.rawValue, forKey: "active_vehicle_brand"); syncAppThemeStorageKey() }
@@ -31,6 +64,10 @@ final class PreferencesStore {
     var volvoClientID: String {
         get { d.string(forKey: "volvo_client_id").flatMap { $0.isEmpty ? nil : $0 } ?? BuiltinVolvoSecrets.clientID }
         set { d.set(newValue, forKey: "volvo_client_id") }
+    }
+    var volvoRestrictedScopesEnabled: Bool {
+        get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
+        set { d.set(newValue, forKey: "volvo_restricted_scopes_enabled") }
     }
     private func vinKey(for brand: VehicleBrand) -> String { brand == .volvo ? "volvo_vin" : "polestar_vin" }
     var vin: String { get { d.string(forKey: vinKey(for: activeBrand)) ?? "" } set { d.set(newValue, forKey: vinKey(for: activeBrand)); syncAppThemeStorageKey() } }
@@ -88,8 +125,18 @@ final class PreferencesStore {
     var registrationBadgePosition: RegistrationNumberBadgePosition { get { RegistrationNumberBadgePosition(rawValue: d.string(forKey: "registration_badge_position") ?? "") ?? .belowGreeting } set { d.set(newValue.rawValue, forKey: "registration_badge_position") } }
     var vehicleLabelFormat: VehicleLabelFormat { get { VehicleLabelFormat(rawValue: d.string(forKey: "vehicle_label_format") ?? "") ?? .modelAndYear } set { d.set(newValue.rawValue, forKey: "vehicle_label_format") } }
     var distanceUnit: DistanceUnit { get { let raw = d.string(forKey: "distance_unit") ?? ""; return DistanceUnit(rawValue: raw) ?? (raw == "Miles (mi)" ? .miles : .kilometers) } set { d.set(newValue.rawValue, forKey: "distance_unit") } }
+    var hasExplicitTemperatureUnit: Bool { d.object(forKey: "temperature_unit") != nil }
+    var hasExplicitPressureUnit: Bool { d.object(forKey: "pressure_unit") != nil }
+    var hasExplicitEnergyConsumptionUnit: Bool { d.object(forKey: "energy_consumption_unit") != nil }
+    var temperatureUnit: TemperatureUnit { get { d.string(forKey: "temperature_unit").flatMap(TemperatureUnit.init) ?? (distanceUnit == .miles ? .fahrenheit : .celsius) } set { d.set(newValue.rawValue, forKey: "temperature_unit") } }
+    var pressureUnit: PressureUnit { get { d.string(forKey: "pressure_unit").flatMap(PressureUnit.init) ?? (distanceUnit == .miles ? .psi : .kilopascals) } set { d.set(newValue.rawValue, forKey: "pressure_unit") } }
     var fuelVolumeUnit: FuelVolumeUnit { get { FuelVolumeUnit(rawValue: d.string(forKey: "fuel_volume_unit") ?? "") ?? .liters } set { d.set(newValue.rawValue, forKey: "fuel_volume_unit") } }
     var fuelEconomyUnit: FuelEconomyUnit { get { FuelEconomyUnit(rawValue: d.string(forKey: "fuel_economy_unit") ?? "") ?? .litersPer100Km } set { d.set(newValue.rawValue, forKey: "fuel_economy_unit") } }
+    var energyConsumptionUnit: EnergyConsumptionUnit {
+        get { d.string(forKey: "energy_consumption_unit").flatMap(EnergyConsumptionUnit.init) ?? (distanceUnit == .miles ? .milesPerKwh : .kwhPer100Km) }
+        set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
+    }
+    var persistLocationHistory: Bool { get { d.bool(forKey: "persist_location_history") } set { d.set(newValue, forKey: "persist_location_history") } }
     var interfaceLanguage: InterfaceLanguage { get { InterfaceLanguage(rawValue: d.string(forKey: "interface_language") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "interface_language") } }
     var tintMenuBarIcon: Bool { get { d.object(forKey: "tint_menu_bar_icon") == nil || d.bool(forKey: "tint_menu_bar_icon") } set { d.set(newValue, forKey: "tint_menu_bar_icon") } }
     var launchAtLogin: Bool { get { d.bool(forKey: "launch_at_login") } set { d.set(newValue, forKey: "launch_at_login") } }
@@ -102,10 +149,71 @@ final class PreferencesStore {
     var remoteSteeringWheelHeating: HeatingLevel { get { HeatingLevel(rawValue: d.integer(forKey: "remote_steering_heating")) ?? .unspecified } set { d.set(newValue.rawValue, forKey: "remote_steering_heating") } }
     var electricityPricePerKwh: Double { get { let value = d.double(forKey: "electricity_price_per_kwh"); return value > 0 ? value : 2.0 } set { d.set(newValue, forKey: "electricity_price_per_kwh") } }
     var currencySymbol: String { get { let value = d.string(forKey: "electricity_currency_symbol") ?? ""; return value.isEmpty ? (Locale.current.currencySymbol ?? "kr") : value } set { d.set(newValue, forKey: "electricity_currency_symbol") } }
+    /// Off-peak/night tariff, disabled by default so charging-cost estimates match
+    /// `electricityPricePerKwh` unchanged unless the user opts in to a two-rate schedule.
+    var nightTariffEnabled: Bool { get { d.bool(forKey: "night_tariff_enabled") } set { d.set(newValue, forKey: "night_tariff_enabled") } }
+    var nightElectricityPricePerKwh: Double { get { let value = d.double(forKey: "night_electricity_price_per_kwh"); return value > 0 ? value : electricityPricePerKwh } set { d.set(newValue, forKey: "night_electricity_price_per_kwh") } }
+    var nightTariffStartHour: Int { get { let value = d.object(forKey: "night_tariff_start_hour") as? Int; return min(max(value ?? 22, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_start_hour") } }
+    var nightTariffEndHour: Int { get { let value = d.object(forKey: "night_tariff_end_hour") as? Int; return min(max(value ?? 6, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_end_hour") } }
     var storeChargingHistory: Bool { get { d.bool(forKey: "store_charging_history") } set { d.set(newValue, forKey: "store_charging_history") } }
     var privateNotificationDetails: Bool { get { d.object(forKey: "private_notification_details") == nil || d.bool(forKey: "private_notification_details") } set { d.set(newValue, forKey: "private_notification_details") } }
     var requireBiometricsForRemoteControls: Bool { get { d.bool(forKey: "require_biometrics_for_remote_controls") } set { d.set(newValue, forKey: "require_biometrics_for_remote_controls") } }
     var lowBatteryThreshold: Int { get { let value = d.integer(forKey: "low_battery_threshold"); return value == 0 ? 20 : min(max(value, 5), 50) } set { d.set(min(max(newValue, 5), 50), forKey: "low_battery_threshold") } }
+
+    func warrantyInServiceDate(for vin: String) -> Date? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty,
+              let value = d.dictionary(forKey: "vehicle_in_service_dates_v1")?[key] else { return nil }
+        let interval: Double
+        if let number = value as? NSNumber { interval = number.doubleValue }
+        else if let double = value as? Double { interval = double }
+        else { return nil }
+        return Date(timeIntervalSince1970: interval)
+    }
+
+    func setWarrantyInServiceDate(_ date: Date?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var values = d.dictionary(forKey: "vehicle_in_service_dates_v1") ?? [:]
+        if let date { values[key] = date.timeIntervalSince1970 } else { values.removeValue(forKey: key) }
+        d.set(values, forKey: "vehicle_in_service_dates_v1")
+    }
+
+    func vehicleSpecificationOverride(for vin: String) -> VehicleSpecificationOverride? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data],
+              let data = all[key],
+              let value = try? JSONDecoder().decode(VehicleSpecificationOverride.self, from: data),
+              !value.isEmpty else { return nil }
+        return value
+    }
+
+    func setVehicleSpecificationOverride(_ value: VehicleSpecificationOverride?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data] ?? [:]
+        if let value, !value.isEmpty, let data = try? JSONEncoder().encode(value) {
+            all[key] = data
+        } else {
+            all.removeValue(forKey: key)
+        }
+        d.set(all, forKey: "vehicle_specification_overrides_v1")
+    }
+
+    func dismissedSoftwareEventIdentifier(for vin: String) -> String? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return nil }
+        return (d.dictionary(forKey: "dismissed_software_events_v1") as? [String: String])?[key]
+    }
+
+    func setDismissedSoftwareEventIdentifier(_ identifier: String?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var values = d.dictionary(forKey: "dismissed_software_events_v1") as? [String: String] ?? [:]
+        if let identifier { values[key] = identifier } else { values.removeValue(forKey: key) }
+        d.set(values, forKey: "dismissed_software_events_v1")
+    }
 
     private func boolDefaultTrue(_ key: String) -> Bool { d.object(forKey: key) == nil || d.bool(forKey: key) }
     var notifyChargingStarted: Bool { get { boolDefaultTrue("notify_charging_started") } set { d.set(newValue, forKey: "notify_charging_started") } }
@@ -115,6 +223,10 @@ final class PreferencesStore {
     var notifyPlugInReminder: Bool { get { boolDefaultTrue("notify_plugin_reminder") } set { d.set(newValue, forKey: "notify_plugin_reminder") } }
     var notifySoftwareUpdates: Bool { get { boolDefaultTrue("notify_software_updates") } set { d.set(newValue, forKey: "notify_software_updates") } }
     var notifyVehicleWarnings: Bool { get { boolDefaultTrue("notify_vehicle_warnings") } set { d.set(newValue, forKey: "notify_vehicle_warnings") } }
+    var notifyOpeningsLeftOpen: Bool { get { boolDefaultTrue("notify_openings_left_open") } set { d.set(newValue, forKey: "notify_openings_left_open") } }
+    var notifyServiceDue: Bool { get { boolDefaultTrue("notify_service_due") } set { d.set(newValue, forKey: "notify_service_due") } }
+    var notifyStaleTelemetry: Bool { get { boolDefaultTrue("notify_stale_telemetry") } set { d.set(newValue, forKey: "notify_stale_telemetry") } }
+    var notifySlowCharging: Bool { get { boolDefaultTrue("notify_slow_charging") } set { d.set(newValue, forKey: "notify_slow_charging") } }
     var notifyRainWithWindowsOpen: Bool { get { boolDefaultTrue("notify_rain_with_windows") } set { d.set(newValue, forKey: "notify_rain_with_windows") } }
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
 

@@ -227,6 +227,17 @@ struct FormattingTests {
     }
 
     @Test
+    func testMergedLastKnownCategoriesAreExplicitlyLabelled() {
+        var previous = vehicle(vin: "VIN-A", battery: 64)
+        previous.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: false)
+        let current = vehicle(vin: "VIN-A", battery: 65)
+        let merged = current.mergingLastKnown(from: previous, features: .default)
+        XCTAssertEqual(merged.exteriorStatus?.isLocked, true)
+        XCTAssertTrue(merged.retainedDataCategories.contains(.exteriorStatus))
+        XCTAssertNotNil(merged.retainedDataAt)
+    }
+
+    @Test
     func testDiskSnapshotExpiresAndOmitsPersonalDetails() throws {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -611,4 +622,3 @@ func vehicle(
         fetchedAt: fetchedAt, vehicleReportedAt: reportedAt, dataWarnings: []
     )
 }
-

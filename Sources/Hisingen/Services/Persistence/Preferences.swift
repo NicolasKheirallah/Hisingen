@@ -337,6 +337,40 @@ enum DistanceUnit: String, CaseIterable, Codable, Sendable {
     func convert(km: Int) -> Int {
         self == .kilometers ? km : Int((Double(km) * 0.621371).rounded())
     }
+
+    func convert(km: Double) -> Double {
+        self == .kilometers ? km : km * 0.621371
+    }
+}
+
+enum TemperatureUnit: String, CaseIterable, Codable, Sendable {
+    case celsius
+    case fahrenheit
+
+    var title: String {
+        self == .celsius ? L10n.text("Celsius (°C)") : L10n.text("Fahrenheit (°F)")
+    }
+
+    var suffix: String { self == .celsius ? "°C" : "°F" }
+
+    func convert(celsius: Double) -> Double {
+        self == .celsius ? celsius : (celsius * 9 / 5) + 32
+    }
+}
+
+enum PressureUnit: String, CaseIterable, Codable, Sendable {
+    case kilopascals
+    case psi
+
+    var title: String {
+        self == .kilopascals ? L10n.text("Kilopascals (kPa)") : L10n.text("PSI")
+    }
+
+    var suffix: String { self == .kilopascals ? "kPa" : "psi" }
+
+    func convert(kilopascals: Double) -> Double {
+        self == .kilopascals ? kilopascals : kilopascals * 0.145037738
+    }
 }
 
 enum FuelVolumeUnit: String, CaseIterable, Codable, Sendable {
@@ -411,13 +445,64 @@ enum FuelEconomyUnit: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum EnergyConsumptionUnit: String, CaseIterable, Codable, Sendable {
+    case kwhPer100Km = "kwh_per_100km"
+    case kwhPer100Miles = "kwh_per_100mi"
+    case milesPerKwh = "mi_per_kwh"
+
+    var title: String {
+        switch self {
+        case .kwhPer100Km: return L10n.text("kWh/100 km")
+        case .kwhPer100Miles: return L10n.text("kWh/100 mi")
+        case .milesPerKwh: return L10n.text("mi/kWh")
+        }
+    }
+
+    func format(kwhPer100Km value: Double) -> String {
+        guard value > 0 else { return "—" }
+        switch self {
+        case .kwhPer100Km:
+            return String(format: "%.1f kWh/100 km", value)
+        case .kwhPer100Miles:
+            return String(format: "%.1f kWh/100 mi", value * 1.609344)
+        case .milesPerKwh:
+            return String(format: "%.2f mi/kWh", 62.1371192 / value)
+        }
+    }
+}
+
 @MainActor
 enum Preferences {
     private static let d = UserDefaults.standard
 
     static var email: String {
-        get { d.string(forKey: "polestar_email") ?? "" }
-        set { d.set(newValue, forKey: "polestar_email") }
+        get {
+            if let secure = (try? Keychain.readEmail()) ?? nil, !secure.isEmpty {
+                d.removeObject(forKey: "polestar_email")
+                return secure
+            }
+            guard let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty else { return "" }
+            do {
+                try Keychain.saveEmail(legacy)
+                d.removeObject(forKey: "polestar_email")
+            } catch {
+                // Preserve the legacy value until Keychain is available.
+            }
+            return legacy
+        }
+        set {
+            if newValue.isEmpty {
+                try? Keychain.deleteEmail()
+                d.removeObject(forKey: "polestar_email")
+            } else {
+                do {
+                    try Keychain.saveEmail(newValue)
+                    d.removeObject(forKey: "polestar_email")
+                } catch {
+                    // Never write a new account identifier to UserDefaults.
+                }
+            }
+        }
     }
 
 
@@ -437,6 +522,24 @@ enum Preferences {
             return BuiltinVolvoSecrets.clientID
         }
         set { d.set(newValue, forKey: "volvo_client_id") }
+    }
+
+    static var volvoRestrictedScopesEnabled: Bool {
+        get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
+        set { d.set(newValue, forKey: "volvo_restricted_scopes_enabled") }
+    }
+
+    static var energyConsumptionUnit: EnergyConsumptionUnit {
+        get {
+            d.string(forKey: "energy_consumption_unit").flatMap(EnergyConsumptionUnit.init)
+                ?? (distanceUnit == .miles ? .milesPerKwh : .kwhPer100Km)
+        }
+        set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
+    }
+
+    static var persistLocationHistory: Bool {
+        get { d.bool(forKey: "persist_location_history") }
+        set { d.set(newValue, forKey: "persist_location_history") }
     }
 
 
@@ -630,6 +733,26 @@ enum Preferences {
         set { d.set(newValue.rawValue, forKey: "distance_unit") }
     }
 
+    static var temperatureUnit: TemperatureUnit {
+        get {
+            if let raw = d.string(forKey: "temperature_unit"), let unit = TemperatureUnit(rawValue: raw) {
+                return unit
+            }
+            return distanceUnit == .miles ? .fahrenheit : .celsius
+        }
+        set { d.set(newValue.rawValue, forKey: "temperature_unit") }
+    }
+
+    static var pressureUnit: PressureUnit {
+        get {
+            if let raw = d.string(forKey: "pressure_unit"), let unit = PressureUnit(rawValue: raw) {
+                return unit
+            }
+            return distanceUnit == .miles ? .psi : .kilopascals
+        }
+        set { d.set(newValue.rawValue, forKey: "pressure_unit") }
+    }
+
     static var fuelVolumeUnit: FuelVolumeUnit {
         get {
             let raw = d.string(forKey: "fuel_volume_unit") ?? ""
@@ -797,17 +920,23 @@ enum Preferences {
                     .intersection(AppFeature.permittedFeatures)
                 let coreDefaults: Set<AppFeature> = [.vehicleLocation, .vehicleWeather, .ownerGreeting]
                 enabled.formUnion(coreDefaults)
+                if d.object(forKey: "live_stream_default_v1") == nil {
+                    enabled.insert(.realTimeUpdates)
+                    d.set(true, forKey: "live_stream_default_v1")
+                    d.set(enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2")
+                }
                 return FeatureSelection(enabled: enabled)
             }
             if let legacy = d.array(forKey: "enabled_features_v1") as? [String] {
                 var enabled = Set(legacy.compactMap(AppFeature.init(rawValue:)))
                 let newlyImplemented: Set<AppFeature> = [
                     .exteriorStatus, .tyreAndWarnings, .softwareUpdates, .chargingSchedule,
-                    .climateStatus, .tripMeters
+                    .climateStatus, .tripMeters, .realTimeUpdates
                 ]
                 enabled.formUnion(newlyImplemented)
                 let migrated = FeatureSelection(enabled: enabled.intersection(AppFeature.permittedFeatures))
                 d.set(migrated.enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2")
+                d.set(true, forKey: "live_stream_default_v1")
                 return migrated
             }
             do {
@@ -815,6 +944,7 @@ enum Preferences {
                 if d.bool(forKey: "show_vehicle_image") {
                     selection.set(.vehicleImage, enabled: true)
                 }
+                d.set(true, forKey: "live_stream_default_v1")
                 return selection
             }
         }
@@ -864,6 +994,26 @@ enum Preferences {
     static var notifyVehicleWarnings: Bool {
         get { boolDefaultTrue("notify_vehicle_warnings") }
         set { d.set(newValue, forKey: "notify_vehicle_warnings") }
+    }
+
+    static var notifyOpeningsLeftOpen: Bool {
+        get { boolDefaultTrue("notify_openings_left_open") }
+        set { d.set(newValue, forKey: "notify_openings_left_open") }
+    }
+
+    static var notifyServiceDue: Bool {
+        get { boolDefaultTrue("notify_service_due") }
+        set { d.set(newValue, forKey: "notify_service_due") }
+    }
+
+    static var notifyStaleTelemetry: Bool {
+        get { boolDefaultTrue("notify_stale_telemetry") }
+        set { d.set(newValue, forKey: "notify_stale_telemetry") }
+    }
+
+    static var notifySlowCharging: Bool {
+        get { boolDefaultTrue("notify_slow_charging") }
+        set { d.set(newValue, forKey: "notify_slow_charging") }
     }
 
     static var lowBatteryThreshold: Int {
@@ -932,4 +1082,3 @@ enum Preferences {
         }
     }
 }
-

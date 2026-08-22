@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ScheduleEditorSheet: View {
     let state: VehicleState
     let onRemoteCommand: (RemoteCommand) -> Void
@@ -83,7 +84,8 @@ struct ScheduleEditorSheet: View {
     }
 
     private func scheduleRow(_ sched: VehicleSchedule) -> some View {
-        HStack(spacing: 8) {
+        let isEditable = sched.backendID != nil
+        return HStack(spacing: 8) {
             Image(systemName: sched.kind == .climate ? "fan.fill" : "bolt.fill")
                 .foregroundStyle(sched.kind == .climate ? Color.orange : Color.green)
                 .font(.system(size: 12))
@@ -99,9 +101,21 @@ struct ScheduleEditorSheet: View {
                 }
             }
             Spacer()
+            if isEditable {
+                Button {
+                    beginEditing(sched)
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.text("Edit this timer"))
+            }
             if let id = sched.backendID {
                 Button {
                     onRemoteCommand(.deleteClimateTimer(id: id))
+                    if editingScheduleID == id { resetToAddMode() }
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
@@ -111,14 +125,62 @@ struct ScheduleEditorSheet: View {
             }
         }
         .padding(8)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+        .background(
+            editingScheduleID == sched.backendID && isEditable
+                ? HisingenTheme.accent.opacity(0.12)
+                : Color.primary.opacity(0.04),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(editingScheduleID == sched.backendID && isEditable ? HisingenTheme.accent.opacity(0.4) : .clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { if isEditable { beginEditing(sched) } }
+    }
+
+    /// Loads an existing timer's values into the form and switches it into edit mode. Saving
+    /// afterward reuses `sched.backendID` so the backend updates this timer in place instead of
+    /// creating a new one — `saveSchedule()` already passes `editingScheduleID` through as
+    /// `backendID` for exactly this reason; only entering edit mode was previously missing.
+    private func beginEditing(_ sched: VehicleSchedule) {
+        editingScheduleID = sched.backendID
+        selectedKind = sched.kind
+        startHour = sched.startHour ?? 7
+        startMinute = sched.startMinute ?? 30
+        endHour = sched.endHour ?? 6
+        endMinute = sched.endMinute ?? 0
+        selectedWeekdays = Set(sched.weekdays)
+        isEnabled = sched.isActive
+    }
+
+    private func resetToAddMode() {
+        editingScheduleID = nil
+        selectedKind = .climate
+        startHour = 7
+        startMinute = 30
+        endHour = 6
+        endMinute = 0
+        selectedWeekdays = [.monday, .tuesday, .wednesday, .thursday, .friday]
+        isEnabled = true
     }
 
     private var scheduleConfigSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editingScheduleID != nil ? L10n.text("Edit Schedule") : L10n.text("Add Schedule"))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(editingScheduleID != nil ? L10n.text("Edit Schedule") : L10n.text("Add Schedule"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                if editingScheduleID != nil {
+                    Spacer()
+                    Button(L10n.text("Cancel Edit")) {
+                        resetToAddMode()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(HisingenTheme.accent)
+                }
+            }
 
             Picker("", selection: $selectedKind) {
                 Text(L10n.text("Cabin Preconditioning")).tag(ScheduleKind.climate)

@@ -21,7 +21,7 @@ actor PolestarAPI {
     private let appBackendURL = URL(string: "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!
 
 
-    private let publicApiKey = "REDACTED-ROTATE-THIS-KEY"
+    private var publicApiKey: String { BuiltinPolestarSecrets.imageApiKey }
     private let oidcProviderURL = URL(string: "https://polestarid.eu.polestar.com")!
 
     // The polestar.com web client. The mobile-app client (`lp8dyrd_10`,
@@ -47,6 +47,8 @@ actor PolestarAPI {
     var commandAccessToken: String?
     var commandRefreshToken: String?
     var commandTokenExpiry: Date?
+    var commandPendingVerifier: String?
+    var commandPendingState: String?
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
@@ -234,6 +236,65 @@ actor PolestarAPI {
         return Self.queryValue("code", from: url)
     }
 
+    /// Builds the command client's authorization URL for a real browser to open — the
+    /// `polestar-explore://` redirect is the command client's own registered custom scheme, so
+    /// unlike the web client (whose redirect lands on `polestar.com`, a domain Hisingen doesn't
+    /// control), the OS can route the final redirect straight back into the app. Used by
+    /// `PolestarCommandSignInPresenter` instead of the scripted PingFederate form-fill used for
+    /// the web client's own sign-in — Hisingen never sees the password for this flow.
+    func beginCommandAuthorization() async throws -> URL {
+        if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
+        guard let authorizationEndpoint else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        let verifier = try Self.randomURLSafeString()
+        let state = try Self.randomURLSafeString()
+        commandPendingVerifier = verifier
+        commandPendingState = state
+        guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+            throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
+        }
+        components.queryItems = Self.authorizationQueryItems(
+            clientID: commandClientID,
+            redirectURI: commandRedirectURL.absoluteString,
+            scope: oidcScope,
+            state: state,
+            challenge: Self.codeChallenge(for: verifier)
+        )
+        guard let url = components.url else {
+            throw PolestarError.incompatibleAPI(operation: "authorization request")
+        }
+        return url
+    }
+
+    /// Completes command-client authorization from the `polestar-explore://` callback the OS
+    /// handed back after the user signed in through their real browser.
+    func completeCommandAuthorization(callbackURL: URL) async throws {
+        guard let verifier = commandPendingVerifier, let expectedState = commandPendingState else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        commandPendingVerifier = nil
+        commandPendingState = nil
+        guard callbackURL.scheme == commandRedirectURL.scheme,
+              callbackURL.host == commandRedirectURL.host else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        if let error = Self.queryValue("error", from: callbackURL) {
+            throw PolestarError.permissionDenied(operation: error)
+        }
+        guard Self.queryValue("state", from: callbackURL) == expectedState,
+              let code = Self.queryValue("code", from: callbackURL) else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        let token = try await exchangeCode(code, verifier: verifier,
+                                           clientID: commandClientID, redirectURI: commandRedirectURL)
+        commandAccessToken = token.accessToken
+        commandRefreshToken = token.refreshToken
+        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
+        logger.info("Polestar command-client token acquired via browser sign-in")
+    }
+
     func exchangeCode(_ code: String, verifier: String,
                               clientID: String, redirectURI: URL) async throws -> TokenResponseDTO {
         guard let tokenEndpoint else {
@@ -322,7 +383,7 @@ actor PolestarAPI {
                                      invalidReason: AuthFailureReason) async throws -> TokenResponseDTO {
         do {
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "token response"
+                for: request, using: session, limit: 256_000, operation: "token response", provider: .polestar
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "token response")
@@ -565,7 +626,7 @@ actor PolestarAPI {
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 256_000, operation: "user information"),
+                  for: request, using: session, limit: 256_000, operation: "user information", provider: .polestar),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
         ownerFirstName = info.givenName ?? info.firstName
@@ -596,7 +657,7 @@ actor PolestarAPI {
         request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata"),
+                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata", provider: .polestar),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
@@ -611,7 +672,7 @@ actor PolestarAPI {
         if carImageData == nil, let string = pick?["url"] as? String, let url = URL(string: string),
            url.scheme == "https" {
             if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
-                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image"),
+                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image", provider: .polestar),
                   let http = imageResponse as? HTTPURLResponse,
                   http.statusCode == 200,
                   http.mimeType?.hasPrefix("image/") == true,
@@ -668,7 +729,7 @@ actor PolestarAPI {
         let task = Task { [weak self, session] in
             do {
                 let (data, response) = try await HTTPBodyReader.data(
-                    for: request, using: session, limit: 5_000_000, operation: operation
+                    for: request, using: session, limit: 5_000_000, operation: operation, provider: .polestar
                 )
                 if (response as? HTTPURLResponse)?.statusCode == 200,
                    data.count <= 5_000_000 {
@@ -897,6 +958,16 @@ actor PolestarAPI {
                 .replacingOccurrences(of: "_", with: " ").lowercased()
             return "\(label) \(detail)"
         }
+    }
+}
+
+extension PolestarAPI: VehicleLiveStreaming {
+    func liveVehicleUpdates(vin: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        try await refreshTokenIfNeeded()
+        guard let token = accessToken else {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        return try await grpc.liveUpdates(vin: vin, accessToken: token)
     }
 }
 

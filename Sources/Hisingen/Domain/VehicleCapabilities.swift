@@ -165,8 +165,21 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         }
     }
 
-    var hasVerifiedNominalSpecs: Bool { brand == .polestar }
+    /// Static model-family reference values are available. This does not mean the exact VIN,
+    /// battery, wheel, market or model-year variant has been verified — it means the capacity/
+    /// WLTP tables below have a non-zero entry for this model family. Volvo BEVs (XC40/EX40/C40/
+    /// EC40/EX30/EX90/ES90) do; Volvo ICE/PHEV/unrecognized models don't, so this is model-driven
+    /// rather than brand-driven — a Polestar-only check would hide those Volvo models' own
+    /// reference numbers even though the same table already carries them.
+    var hasModelReferenceSpecs: Bool { nominalWltpRangeKm > 0 && nominalUsableCapacityKwh > 0 }
 
+    /// Base per-model-family capacity table. This is the single source of truth for battery
+    /// capacity — `VehicleState.factoryNominalBatteryCapacityKwh`/`factoryUsableBatteryCapacityKwh`
+    /// read these values and layer year/powertrain-specific overrides on top (a 2024+ Polestar 2
+    /// or Volvo XC40-family pack revision, or a PHEV's year-dependent pack), rather than
+    /// maintaining a second independent table. `VehicleState.batteryPackDescription`'s prose
+    /// strings interpolate those same computed values instead of hardcoding their own numbers,
+    /// for the same reason: one place to update if a figure changes.
     var nominalBatteryCapacityKwh: Double {
         switch self {
         case .polestar1: return 34.0
@@ -227,7 +240,7 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     }
 
     var averageConsumptionWhPerKm: Double? {
-        guard hasVerifiedNominalSpecs, nominalWltpRangeKm > 0 else { return nil }
+        guard hasModelReferenceSpecs, nominalWltpRangeKm > 0 else { return nil }
         return (nominalUsableCapacityKwh * 1_000) / nominalWltpRangeKm
     }
 
@@ -360,7 +373,9 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case chargingCurrentLimit
     case chargingSchedule
     case chargingScheduleOverride
+    case chargeLocations
     case locks
+    case reducedGuardLock
     case trunk
     case windows
     case honkAndFlash
@@ -381,11 +396,13 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .steeringWheelHeating: return L10n.text("Steering-wheel heating selection")
         case .climateTimers: return L10n.text("Climate timers")
         case .preCleaning: return L10n.text("Cabin pre-cleaning")
+        case .chargeLocations: return L10n.text("Saved charge locations")
         case .chargeTarget: return L10n.text("Charge target")
         case .chargingCurrentLimit: return L10n.text("Charging current limit")
         case .chargingSchedule: return L10n.text("Charging schedule")
         case .chargingScheduleOverride: return L10n.text("Charge-schedule override")
         case .locks: return L10n.text("Lock and unlock")
+        case .reducedGuardLock: return L10n.text("Lock with reduced guard")
         case .trunk: return L10n.text("Trunk unlock")
         case .windows: return L10n.text("Window control")
         case .honkAndFlash: return L10n.text("Honk and flash")
@@ -405,7 +422,8 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
-        .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
+        .chargingSchedule, .chargingScheduleOverride, .chargeLocations,
+        .locks, .reducedGuardLock, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
         .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
@@ -477,9 +495,15 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .tyrePressureValues, .honkAndFlash:
+            case .honkAndFlash, .reducedGuardLock:
                 return .unavailable
             case .softwareInstallControl:
+                return .backendDependent
+            case .tyrePressureValues:
+                // The reference MY23 capture reported warning level only (no kPa), but this is
+                // a firmware/backend question, not a vehicle-hardware fact — EU-market cars
+                // carry TPMS hardware. Probe at runtime; the health parser also scans for
+                // pressures at alternate field positions before giving up.
                 return .backendDependent
             default:
                 return .supported
@@ -488,7 +512,10 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit:
+            case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit,
+                 .reducedGuardLock:
+                return .backendDependent
+            case .chargeLocations:
                 return .backendDependent
             default:
                 return .supported
@@ -497,9 +524,12 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl:
+            case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl,
+                 .reducedGuardLock:
                 return .unavailable
-            case .softwareStatus:
+            case .softwareStatus, .chargeLocations:
+                // Charge-location management is unverified on the SEA-platform Polestar 4;
+                // probe at runtime rather than promising a control that may 404.
                 return .backendDependent
             default:
                 return .supported
@@ -513,13 +543,23 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .unavailable
-            case .preCleaning, .softwareInstallControl, .windows, .trunk:
+            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations:
                 return .unavailable
             // Volvo's public APIs expose no software/OTA resource at all — not a backend
             // that might answer on some vehicles, but an endpoint that does not exist.
             case .softwareStatus:
                 return .unavailable
             case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
+                return .unavailable
+            // Volvo's `tyres` endpoint (indirect TPMS, inferred from wheel-speed imbalance,
+            // not a per-wheel pressure sensor) reports a warning-level enum only — there is no
+            // numeric kPa/PSI field to report, on any Volvo model, regardless of API product or
+            // vehicle configuration. This is a fixed API/hardware fact, not something a live
+            // probe could ever resolve differently, so it belongs in the static baseline (like
+            // Polestar 2's equivalent case above) rather than sitting at `.backendDependent`
+            // forever. Tyre *warning* status itself is still fully supported — see
+            // `healthDetails.tyres[].warning`; only the "direct value" capability is unavailable.
+            case .tyrePressureValues:
                 return .unavailable
             default:
                 return .backendDependent
@@ -531,6 +571,9 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
             case .softwareInstallControl, .softwareStatus:
+                return .unavailable
+            // See the comment on the same case above — applies to every Volvo model.
+            case .tyrePressureValues:
                 return .unavailable
             default:
                 return .backendDependent
@@ -582,8 +625,8 @@ private extension VehicleCapability {
             return .climateStatus
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
-             .chargingScheduleOverride: return .chargingSchedule
-        case .locks, .trunk: return .exteriorStatus
+             .chargingScheduleOverride, .chargeLocations: return .chargingSchedule
+        case .locks, .reducedGuardLock, .trunk: return .exteriorStatus
         case .windows: return .exteriorStatus
         case .honkAndFlash: return .exteriorStatus
         case .exteriorStatus: return .exteriorStatus
@@ -594,5 +637,3 @@ private extension VehicleCapability {
         }
     }
 }
-
-

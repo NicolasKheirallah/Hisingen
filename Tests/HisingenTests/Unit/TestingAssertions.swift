@@ -21,6 +21,23 @@ func XCTAssertEqual<T: Equatable>(
                   at: sourceLocation)
 }
 
+func XCTAssertEqual<T: FloatingPoint>(
+    _ left: @autoclosure () throws -> T,
+    _ right: @autoclosure () throws -> T,
+    accuracy: T,
+    _ message: @autoclosure () -> String = "",
+    sourceLocation: SourceLocation = #_sourceLocation
+) rethrows {
+    let leftValue = try left()
+    let rightValue = try right()
+    guard abs(leftValue - rightValue) <= accuracy else {
+        let detail = message()
+        recordFailure(detail.isEmpty ? "Expected \(leftValue) to equal \(rightValue) within \(accuracy)" : detail,
+                      at: sourceLocation)
+        return
+    }
+}
+
 func XCTAssertNotEqual<T: Equatable>(
     _ left: @autoclosure () throws -> T,
     _ right: @autoclosure () throws -> T,
@@ -88,6 +105,22 @@ func XCTUnwrap<T>(
     let detail = message()
     recordFailure(detail.isEmpty ? "Expected a non-nil value" : detail, at: sourceLocation)
     throw UnwrapFailure()
+}
+
+func XCTAssertLessThanOrEqual<T: Comparable>(
+    _ left: @autoclosure () throws -> T,
+    _ right: @autoclosure () throws -> T,
+    _ message: @autoclosure () -> String = "",
+    sourceLocation: SourceLocation = #_sourceLocation
+) rethrows {
+    let leftValue = try left()
+    let rightValue = try right()
+    guard leftValue <= rightValue else {
+        let detail = message()
+        recordFailure(detail.isEmpty ? "Expected \(leftValue) to be less than or equal to \(rightValue)" : detail,
+                      at: sourceLocation)
+        return
+    }
 }
 
 func XCTFail(

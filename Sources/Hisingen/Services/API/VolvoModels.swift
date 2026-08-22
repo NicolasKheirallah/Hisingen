@@ -4,13 +4,31 @@ import Foundation
 struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
     let updatedAt: Date?
+    /// Decoded but not currently used anywhere. Investigated 2026-08: every field in every real
+    /// captured response this project has (all `Tests/HisingenTests/Fixtures/volvo-*.json`
+    /// fixtures, sanitized from live captures) reports `"OK"`, and no Volvo documentation
+    /// referenced elsewhere in this repo enumerates other values. `unavailableReason` (below) is
+    /// the field this codebase already reads for "why is this unavailable" — that's likely where
+    /// any real signal lives. Wiring `status` into anything beyond this would mean inventing
+    /// semantics for values that have never actually been observed; needs a live capture of a
+    /// genuinely degraded/erroring field (a car with a real reported fault, or a field the active
+    /// API product doesn't cover) before it's safe to act on. See
+    /// `docs/research/api-investigation-backlog.md` #2.
     let status: String?
+    let unit: String?
+    let code: String?
+    let message: String?
+    let unavailableReason: String?
 
     private enum CodingKeys: String, CodingKey {
         case value
         case updatedAt
         case timestamp
         case status
+        case unit
+        case code
+        case message
+        case unavailableReason
     }
 
     init(from decoder: Decoder) throws {
@@ -21,12 +39,35 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
                 ?? (try? container.decodeIfPresent(Date.self, forKey: .timestamp))
                 ?? nil
             status = try? container.decodeIfPresent(String.self, forKey: .status)
+            unit = try? container.decodeIfPresent(String.self, forKey: .unit)
+            code = try? container.decodeIfPresent(String.self, forKey: .code)
+            message = try? container.decodeIfPresent(String.self, forKey: .message)
+            unavailableReason = try? container.decodeIfPresent(String.self, forKey: .unavailableReason)
             return
         }
         let single = try decoder.singleValueContainer()
         value = try? single.decode(Value.self)
         updatedAt = nil
         status = nil
+        unit = nil
+        code = nil
+        message = nil
+        unavailableReason = nil
+    }
+}
+
+private enum VolvoUnits {
+    static func kilometers(_ value: Double?, unit: String?) -> Double? {
+        guard let value else { return nil }
+        switch unit?.lowercased() {
+        case "mi", "mile", "miles": return value / 0.621371
+        case "m", "meter", "meters", "metre", "metres": return value / 1_000
+        default: return value
+        }
+    }
+
+    static func kilometers(_ value: Int?, unit: String?) -> Int? {
+        kilometers(value.map(Double.init), unit: unit).map { Int($0.rounded()) }
     }
 }
 
@@ -113,7 +154,10 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoField<Double>?
     let electricRange: VolvoField<Double>?
     let chargingStatus: VolvoField<String>?
+    let chargingSystemStatus: VolvoField<String>?
     let chargerConnectionStatus: VolvoField<String>?
+    let chargingType: VolvoField<String>?
+    let chargerPowerStatus: VolvoField<String>?
     let chargingPower: VolvoField<Double>?
     let chargingCurrent: VolvoField<Double>?
     let chargingVoltage: VolvoField<Double>?
@@ -124,7 +168,11 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     let targetBatteryChargeLevel: VolvoField<Double>?
 
     var rangeKm: Int? {
-        electricRange?.value.map { Int($0.rounded()) }
+        guard let value = electricRange?.value else { return nil }
+        switch electricRange?.unit?.lowercased() {
+        case "mi", "mile", "miles": return Int((value / 0.621371).rounded())
+        default: return Int(value.rounded())
+        }
     }
 
     var targetPercent: Int? {
@@ -134,14 +182,84 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     var estTimeToTargetMinutes: Int? {
         (estimatedChargingTimeToTargetBatteryChargeLevel?.value ?? estimatedChargingTimeToFull?.value).map { Int($0.rounded()) }
     }
+
+    var chargingStateValue: String? {
+        chargingSystemStatus?.value ?? chargingStatus?.value
+    }
+
+    var chargingPowerWatts: Int? {
+        guard let value = chargingPower?.value else { return nil }
+        switch chargingPower?.unit?.lowercased() {
+        case "kw", "kilowatt", "kilowatts": return Int((value * 1_000).rounded())
+        default: return Int(value.rounded())
+        }
+    }
 }
 
 struct VolvoEnergyCapabilitiesDTO: Decodable, Sendable {
     let batteryChargeLevel: VolvoCapabilityFlag?
     let electricRange: VolvoCapabilityFlag?
-    let chargingStatus: VolvoCapabilityFlag?
+    let chargerConnectionStatus: VolvoCapabilityFlag?
+    let chargingSystemStatus: VolvoCapabilityFlag?
+    let chargingType: VolvoCapabilityFlag?
+    let chargerPowerStatus: VolvoCapabilityFlag?
+    let estimatedChargingTimeToTargetBatteryChargeLevel: VolvoCapabilityFlag?
     let chargingPower: VolvoCapabilityFlag?
-    let targetBatteryLevel: VolvoCapabilityFlag?
+    let chargingCurrentLimit: VolvoCapabilityFlag?
+    let targetBatteryChargeLevel: VolvoCapabilityFlag?
+
+    var targetBatteryLevel: VolvoCapabilityFlag? { targetBatteryChargeLevel }
+
+    private struct EnergyStateCapabilities: Decodable {
+        let batteryChargeLevel: VolvoCapabilityFlag?
+        let electricRange: VolvoCapabilityFlag?
+        let chargerConnectionStatus: VolvoCapabilityFlag?
+        let chargingSystemStatus: VolvoCapabilityFlag?
+        let chargingStatus: VolvoCapabilityFlag?
+        let chargingType: VolvoCapabilityFlag?
+        let chargerPowerStatus: VolvoCapabilityFlag?
+        let estimatedChargingTimeToTargetBatteryChargeLevel: VolvoCapabilityFlag?
+        let chargingPower: VolvoCapabilityFlag?
+        let chargingCurrentLimit: VolvoCapabilityFlag?
+        let targetBatteryChargeLevel: VolvoCapabilityFlag?
+        let targetBatteryLevel: VolvoCapabilityFlag?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case getEnergyState
+        case batteryChargeLevel, electricRange, chargerConnectionStatus
+        case chargingSystemStatus, chargingStatus, chargingType, chargerPowerStatus
+        case estimatedChargingTimeToTargetBatteryChargeLevel, chargingPower, chargingCurrentLimit
+        case targetBatteryChargeLevel, targetBatteryLevel
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let nested = try container.decodeIfPresent(EnergyStateCapabilities.self, forKey: .getEnergyState)
+        let flatBattery = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .batteryChargeLevel)
+        let flatRange = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .electricRange)
+        let flatConnection = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargerConnectionStatus)
+        let flatSystemStatus = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargingSystemStatus)
+        let flatStatus = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargingStatus)
+        let flatType = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargingType)
+        let flatPowerStatus = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargerPowerStatus)
+        let flatEstimatedTime = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .estimatedChargingTimeToTargetBatteryChargeLevel)
+        let flatPower = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargingPower)
+        let flatCurrentLimit = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .chargingCurrentLimit)
+        let flatTarget = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .targetBatteryChargeLevel)
+        let legacyFlatTarget = try container.decodeIfPresent(VolvoCapabilityFlag.self, forKey: .targetBatteryLevel)
+
+        batteryChargeLevel = nested?.batteryChargeLevel ?? flatBattery
+        electricRange = nested?.electricRange ?? flatRange
+        chargerConnectionStatus = nested?.chargerConnectionStatus ?? flatConnection
+        chargingSystemStatus = nested?.chargingSystemStatus ?? nested?.chargingStatus ?? flatSystemStatus ?? flatStatus
+        chargingType = nested?.chargingType ?? flatType
+        chargerPowerStatus = nested?.chargerPowerStatus ?? flatPowerStatus
+        estimatedChargingTimeToTargetBatteryChargeLevel = nested?.estimatedChargingTimeToTargetBatteryChargeLevel ?? flatEstimatedTime
+        chargingPower = nested?.chargingPower ?? flatPower
+        chargingCurrentLimit = nested?.chargingCurrentLimit ?? flatCurrentLimit
+        targetBatteryChargeLevel = nested?.targetBatteryChargeLevel ?? nested?.targetBatteryLevel ?? flatTarget ?? legacyFlatTarget
+    }
 }
 
 struct VolvoCapabilityFlag: Decodable, Sendable {
@@ -174,6 +292,31 @@ extension ChargerConnection {
         case "CONNECTED", "PLUGGED_IN": self = .connected
         case "DISCONNECTED", "NOT_CONNECTED", "UNPLUGGED": self = .disconnected
         case "FAULT", "CONNECTION_ERROR": self = .fault
+        default: self = .unknown
+        }
+    }
+}
+
+extension ChargingType {
+    init(volvoChargingType raw: String?) {
+        switch raw?.uppercased() {
+        case "AC": self = .ac
+        case "DC": self = .dc
+        case "NONE": self = .none
+        case "WIRELESS": self = .wireless
+        default: self = .unknown
+        }
+    }
+}
+
+extension ChargerPowerState {
+    init(volvoPowerStatus raw: String?) {
+        switch raw?.uppercased() {
+        case "NO_POWER", "UNAVAILABLE": self = .noPower
+        case "INITIALIZING", "PREPARING": self = .initializing
+        case "AVAILABLE", "READY": self = .available
+        case "PROVIDING_POWER", "POWER_AVAILABLE", "CHARGING": self = .providingPower
+        case "FAULT", "ERROR": self = .fault
         default: self = .unknown
         }
     }
@@ -260,6 +403,30 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
     let workshopId: VolvoField<String>?
     let workshopName: VolvoField<String>?
 
+    private enum CodingKeys: String, CodingKey {
+        case serviceWarning, serviceTrigger, timeToService, distanceToService, distanceToServiceKm
+        case engineHoursToService, brakeFluidLevelWarning, engineCoolantLevelWarning
+        case oilLevelWarning, washerFluidLevelWarning, batteryChargeLevelWarning
+        case workshopId, workshopName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        serviceWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .serviceWarning)
+        serviceTrigger = try container.decodeIfPresent(VolvoField<String>.self, forKey: .serviceTrigger)
+        timeToService = try container.decodeIfPresent(VolvoField<Int>.self, forKey: .timeToService)
+        distanceToService = try container.decodeIfPresent(VolvoField<Int>.self, forKey: .distanceToServiceKm)
+            ?? container.decodeIfPresent(VolvoField<Int>.self, forKey: .distanceToService)
+        engineHoursToService = try container.decodeIfPresent(VolvoField<Int>.self, forKey: .engineHoursToService)
+        brakeFluidLevelWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .brakeFluidLevelWarning)
+        engineCoolantLevelWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .engineCoolantLevelWarning)
+        oilLevelWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .oilLevelWarning)
+        washerFluidLevelWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .washerFluidLevelWarning)
+        batteryChargeLevelWarning = try container.decodeIfPresent(VolvoField<String>.self, forKey: .batteryChargeLevelWarning)
+        workshopId = try container.decodeIfPresent(VolvoField<String>.self, forKey: .workshopId)
+        workshopName = try container.decodeIfPresent(VolvoField<String>.self, forKey: .workshopName)
+    }
+
     var hasServiceWarning: Bool {
         guard let raw = serviceWarning?.value?.uppercased() else { return false }
         return !raw.contains("NO_WARNING") && !raw.isEmpty
@@ -267,7 +434,16 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
 
 
     var daysToServiceApprox: Int? {
-        timeToService?.value.map { $0 * 30 }
+        guard let value = timeToService?.value else { return nil }
+        switch timeToService?.unit?.lowercased() {
+        case "day", "days": return value
+        case "month", "months": return value * 30
+        default: return value
+        }
+    }
+
+    var distanceToServiceKm: Int? {
+        VolvoUnits.kilometers(distanceToService?.value, unit: distanceToService?.unit)
     }
 
     var fluidWarnings: [String] {
@@ -301,6 +477,8 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
 
 struct VolvoOdometerDTO: Decodable, Sendable {
     let odometer: VolvoField<Int>?
+
+    var odometerKm: Int? { VolvoUnits.kilometers(odometer?.value, unit: odometer?.unit) }
 }
 
 
@@ -311,10 +489,52 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     let distanceToEmptyBattery: VolvoField<Int>?
     let averageFuelConsumption: VolvoField<Double>?
     let averageEnergyConsumption: VolvoField<Double>?
+    let averageEnergyConsumptionAutomatic: VolvoField<Double>?
+    let averageEnergyConsumptionSinceCharge: VolvoField<Double>?
     let averageSpeed: VolvoField<Double>?
+    let averageSpeedAutomatic: VolvoField<Double>?
     let electricDistance: VolvoField<Double>?
     let fuelDistance: VolvoField<Double>?
     let regeneratedEnergy: VolvoField<Double>?
+
+    var tripMeterManualKm: Double? { VolvoUnits.kilometers(tripMeterManual?.value, unit: tripMeterManual?.unit) }
+    var tripMeterAutomaticKm: Double? { VolvoUnits.kilometers(tripMeterAutomatic?.value, unit: tripMeterAutomatic?.unit) }
+    var distanceToEmptyTankKm: Int? { VolvoUnits.kilometers(distanceToEmptyTank?.value, unit: distanceToEmptyTank?.unit) }
+    var distanceToEmptyBatteryKm: Int? { VolvoUnits.kilometers(distanceToEmptyBattery?.value, unit: distanceToEmptyBattery?.unit) }
+    var electricDistanceKm: Double? { VolvoUnits.kilometers(electricDistance?.value, unit: electricDistance?.unit) }
+    var fuelDistanceKm: Double? { VolvoUnits.kilometers(fuelDistance?.value, unit: fuelDistance?.unit) }
+
+    func energyConsumptionKwhPer100Km(_ field: VolvoField<Double>?) -> Double? {
+        guard let value = field?.value else { return nil }
+        switch field?.unit?.lowercased().replacingOccurrences(of: " ", with: "") {
+        case "wh/km": return value / 10
+        case "kwh/km": return value * 100
+        case "kwh/100mi", "kwh/100miles": return value / 1.609344
+        default: return value
+        }
+    }
+
+    var averageEnergyConsumptionKwhPer100Km: Double? {
+        energyConsumptionKwhPer100Km(averageEnergyConsumption)
+    }
+
+    var averageEnergyConsumptionSinceChargeKwhPer100Km: Double? {
+        energyConsumptionKwhPer100Km(averageEnergyConsumptionSinceCharge)
+    }
+
+    var averageSpeedKmH: Double? {
+        let field = averageSpeedAutomatic ?? averageSpeed
+        guard let value = field?.value else { return nil }
+        return field?.unit?.lowercased() == "mph" ? value / 0.621371 : value
+    }
+
+    var regeneratedEnergyKwh: Double? {
+        guard let value = regeneratedEnergy?.value else { return nil }
+        switch regeneratedEnergy?.unit?.lowercased() {
+        case "wh", "watt-hour", "watt-hours": return value / 1_000
+        default: return value
+        }
+    }
 }
 
 
@@ -322,6 +542,7 @@ struct VolvoFuelDTO: Decodable, Sendable {
     let fuelAmount: VolvoField<Double>?
     let fuelAmountLiters: VolvoField<Double>?
     let fuelLevelPercent: VolvoField<Double>?
+    let batteryChargeLevel: VolvoField<Double>?
     let distanceToEmptyTank: VolvoField<Int>?
     let distanceToEmpty: VolvoField<Int>?
 
@@ -334,7 +555,10 @@ struct VolvoFuelDTO: Decodable, Sendable {
     }
 
     var rangeKm: Int? {
-        distanceToEmpty?.value ?? distanceToEmptyTank?.value
+        if let distanceToEmpty {
+            return VolvoUnits.kilometers(distanceToEmpty.value, unit: distanceToEmpty.unit)
+        }
+        return VolvoUnits.kilometers(distanceToEmptyTank?.value, unit: distanceToEmptyTank?.unit)
     }
 }
 
@@ -342,6 +566,15 @@ struct VolvoFuelDTO: Decodable, Sendable {
 struct VolvoCommandDTO: Decodable, Sendable {
     let command: String?
     let href: String?
+
+    var normalizedName: String? {
+        let source = command ?? href?.split(separator: "/").last.map(String.init)
+        guard let source else { return nil }
+        return source
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+    }
 }
 
 
@@ -355,13 +588,22 @@ struct VolvoLocationDTO: Decodable, Sendable {
     }
     let properties: Properties?
     let geometry: Geometry?
+
+    var altitudeMeters: Double? {
+        guard let coordinates = geometry?.coordinates, coordinates.count >= 3 else { return nil }
+        return coordinates[2]
+    }
 }
 
 struct VolvoEngineStatusDTO: Decodable, Sendable {
     let engineStatus: VolvoField<String>?
 
-    var isRunning: Bool {
-        engineStatus?.value?.uppercased() == "RUNNING"
+    var isRunning: Bool? {
+        switch engineStatus?.value?.uppercased() {
+        case "RUNNING": return true
+        case "STOPPED": return false
+        default: return nil
+        }
     }
 }
 
@@ -377,6 +619,17 @@ struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
 
     var isAvailable: Bool {
         availabilityStatus?.value?.uppercased() == "AVAILABLE"
+    }
+
+    var reason: String? {
+        guard let raw = availabilityStatus?.unavailableReason?.uppercased() else { return nil }
+        switch raw {
+        case "NO_INTERNET": return L10n.text("Vehicle has no internet connection")
+        case "POWER_SAVING_MODE": return L10n.text("Vehicle is in power-saving mode")
+        case "CAR_IN_USE": return L10n.text("Vehicle is currently in use")
+        case "UNSPECIFIED": return nil
+        default: return raw.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
 }
 
@@ -436,6 +689,25 @@ struct VolvoWarningsDTO: Decodable, Sendable {
             return "\(name): \(val)"
         }
     }
+
+    var hasReportedLightStatus: Bool {
+        let fields: [VolvoField<String>?] = [
+            brakeLightCenterWarning, brakeLightLeftWarning, brakeLightRightWarning,
+            fogLightFrontWarning, fogLightRearWarning,
+            positionLightFrontLeftWarning, positionLightFrontRightWarning,
+            positionLightRearLeftWarning, positionLightRearRightWarning,
+            highBeamLeftWarning, highBeamRightWarning, lowBeamLeftWarning, lowBeamRightWarning,
+            daytimeRunningLightLeftWarning, daytimeRunningLightRightWarning,
+            turnIndicationFrontLeftWarning, turnIndicationFrontRightWarning,
+            turnIndicationRearLeftWarning, turnIndicationRearRightWarning,
+            registrationPlateLightWarning, sideMarkLightsWarning, hazardLightsWarning,
+            reverseLightsWarning
+        ]
+        return fields.contains { field in
+            guard let value = field?.value?.uppercased() else { return false }
+            return !value.isEmpty && value != "UNSPECIFIED"
+        }
+    }
 }
 
 
@@ -465,6 +737,8 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     let invokeStatus: String?
     let message: String?
     let commandId: String?
+    let readyToUnlock: Bool?
+    let readyToUnlockUntil: Int?
 
     /// Blank-normalised accessors — the API returns `""` as often as it omits the key, and
     /// an empty string surfaced to the UI reads as a missing message rather than no message.
@@ -484,8 +758,9 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
 
     var isFailure: Bool {
         switch invokeStatus?.uppercased() {
-        case "FAILED", "REJECTED", "TIMEOUT", "CONNECTION_FAILURE",
-             "VEHICLE_IN_SLEEP", "UNLOCK_TIME_FRAME_PASSED", "NOT_ALLOWED":
+        case "FAILED", "REJECTED", "TIMEOUT", "CONNECTION_FAILURE", "CAR_ERROR",
+             "VEHICLE_IN_SLEEP", "UNLOCK_TIME_FRAME_PASSED", "UNABLE_TO_LOCK_DOOR_OPEN",
+             "NOT_ALLOWED", "NOT_ALLOWED_PRIVACY_ENABLED", "NOT_ALLOWED_WRONG_USAGE_MODE":
             return true
         default:
             return false

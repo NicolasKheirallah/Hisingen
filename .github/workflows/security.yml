@@ -3,6 +3,8 @@ name: Security
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     # 04:17 UTC every Monday — off-peak, avoids stacking with other scheduled jobs.
     - cron: "17 4 * * 1"
@@ -31,6 +33,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Select available Xcode toolchain
+        run: sh Scripts/select-xcode.sh
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
@@ -41,7 +46,7 @@ jobs:
         run: sh Scripts/inject-secrets.sh
 
       - name: Build (same command as CI)
-        run: swift build -Xswiftc -whole-module-optimization
+        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7

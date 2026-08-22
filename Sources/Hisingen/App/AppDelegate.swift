@@ -8,12 +8,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "application")
     private let preferences = PreferencesStore()
     private let vehicleDatabase = VehicleDatabase()
-    private lazy var stateStore = VehicleStateStore(database: vehicleDatabase)
+    private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
     private let reverseGeocoder = ReverseGeocoder()
     private let imageCache = CarImageCache()
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     private let volvoSignInPresenter = VolvoSignInPresenter()
+    private let polestarCommandSignInPresenter = PolestarCommandSignInPresenter()
     private let updateChecker = UpdateChecker()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
@@ -26,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastDiagnostics: DiagnosticsSnapshot?
     private var remoteCommandInProgress = false
     private var commandRefreshTask: Task<Void, Never>?
+    private var garageRefreshTask: Task<Void, Never>?
+    private var garageScanInProgress = false
 
 
     private var activeProvider: any VehicleProviding {
@@ -42,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         preferences.migrateLegacyPassword()
+        pruneDatabaseIfDue()
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.refreshCoordinator.refreshNow() },
             onSettings: { [weak self] in self?.toggleSettingsInPopover() },
@@ -57,6 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.signOut() }
+        statusController.onTestConnection = { [weak self] brand in
+            guard let self else { return (false, L10n.text("Hisingen is no longer running.")) }
+            return await self.testConnection(for: brand)
+        }
         notifier.onPermissionChanged = { [weak self] permission in
             self?.statusController.updateNotificationPermission(permission)
         }
@@ -80,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdatesIfEnabled()
         resumeStoredSession()
         cacheDormantBrandSnapshot()
+        startGarageRefreshLoop()
         setupURLEventHandling()
         if !initialAuthenticated {
             statusController.openPopover()
@@ -241,8 +250,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Authorizes the Polestar command client (remote commands) through a real browser window
+    /// instead of Hisingen scripting the login form itself — see `PolestarAPI.beginCommandAuthorization()`/
+    /// `completeCommandAuthorization(callbackURL:)` and `PolestarCommandSignInPresenter`. This is
+    /// a separate, explicit step from the base Polestar sign-in; remote commands stay unavailable
+    /// until the user completes it (and again whenever the resulting session eventually expires).
+    private func beginPolestarCommandAuthorization() {
+        guard preferences.activeBrand == .polestar, preferences.hasResumableSession(for: .polestar) else {
+            showRemoteResult(
+                title: L10n.text("Sign in to Polestar first"),
+                message: L10n.text("Connect your Polestar account before authorizing remote commands."),
+                success: false
+            )
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let authorizeURL = try await polestarAPI.beginCommandAuthorization()
+                let callbackURL = try await polestarCommandSignInPresenter.signIn(authorizeURL: authorizeURL)
+                try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
+                showRemoteResult(
+                    title: L10n.text("Remote commands authorized"),
+                    message: L10n.text("Polestar remote commands are now available."),
+                    success: true
+                )
+            } catch {
+                let mapped = error as? LocalizedError
+                showRemoteResult(
+                    title: L10n.text("Authorization failed"),
+                    message: mapped?.errorDescription ?? error.localizedDescription, success: false
+                )
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         commandRefreshTask?.cancel()
+        garageRefreshTask?.cancel()
         refreshCoordinator.stop()
     }
 
@@ -271,6 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let snapshot = stateStore.snapshot(for: car.vin) { snapshots[car.vin] = snapshot }
             }
             statusController.cachedSnapshots = snapshots
+            self.scheduleGarageScan(after: 8)
         }
         refreshCoordinator.onState = { [weak self] state in
             guard let self else { return }
@@ -322,7 +368,178 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render() {
         let isAuth = sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
         statusController.remoteCommandInProgress = remoteCommandInProgress
-        statusController.render(data: latest, error: lastError, authenticated: isAuth)
+        statusController.render(data: latest, error: lastError, authenticated: isAuth, diagnostics: lastDiagnostics)
+    }
+
+    private func startGarageRefreshLoop() {
+        garageRefreshTask?.cancel()
+        garageRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(45)) } catch { return }
+                guard let self else { return }
+                await self.refreshGarageVehicles()
+                do { try await Task.sleep(for: .seconds(5 * 60)) } catch { return }
+            }
+        }
+    }
+
+    private func scheduleGarageScan(after seconds: TimeInterval) {
+        Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
+            await self?.refreshGarageVehicles()
+        }
+    }
+
+    /// Runs `VehicleDatabase.pruneAgedHistory()` automatically, at most once every 7 days —
+    /// previously the only way to bound `charging_sessions`/`battery_health_history`/
+    /// `remote_commands_log` growth was the user manually clicking "Prune Old Samples" in
+    /// Settings, which doesn't even touch those three tables (see `pruneHistoricalSamples`).
+    /// Cheap enough to run synchronously on launch: these are low-row-count tables and the
+    /// existing "Prune Old Samples" Settings action already runs its own prune this same way.
+    private func pruneDatabaseIfDue() {
+        let key = "last_automatic_history_prune"
+        let interval: TimeInterval = 7 * 86400
+        if let last = UserDefaults.standard.object(forKey: key) as? Date,
+           Date().timeIntervalSince(last) < interval {
+            return
+        }
+        vehicleDatabase.pruneAgedHistory()
+        UserDefaults.standard.set(Date(), forKey: key)
+    }
+
+    /// Performs a real, cheap, read-only connectivity check for `brand` by re-running the same
+    /// session-restore path already used at launch and by the background garage scan (never a
+    /// fabricated result). Returns the elapsed time on success, or a human-readable failure
+    /// reason — including "no stored session", which is reported without making any network call.
+    private func testConnection(for brand: VehicleBrand) async -> (success: Bool, message: String) {
+        guard preferences.hasResumableSession(for: brand) else {
+            return (false, L10n.text("No active session found. Please sign in."))
+        }
+        let start = Date()
+        do {
+            let providerCars: [CarSummary]
+            switch brand {
+            case .polestar:
+                let token = (try? Keychain.readSessionToken()) ?? nil
+                let password = token?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
+                let preferredVIN = preferences.vin(for: brand)
+                if let token, !token.isEmpty {
+                    try await polestarAPI.restoreSession(
+                        token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                        features: preferences.features
+                    )
+                } else if let password, !preferences.email.isEmpty {
+                    try await polestarAPI.authenticate(
+                        email: preferences.email, password: password,
+                        preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                        features: preferences.features
+                    )
+                } else {
+                    return (false, L10n.text("No stored Polestar credentials found."))
+                }
+                providerCars = await polestarAPI.cars
+            case .volvo:
+                let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
+                    ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
+                let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
+                    ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
+                let token = (try? Keychain.readVolvoSessionToken()) ?? nil
+                guard let clientSecret, let apiKey, let token, !token.isEmpty else {
+                    return (false, L10n.text("No stored Volvo session found."))
+                }
+                await volvoAPI.configure(clientID: preferences.volvoClientID,
+                                          clientSecret: clientSecret, vccApiKey: apiKey)
+                let preferredVIN = preferences.vin(for: brand)
+                try await volvoAPI.restoreSession(
+                    token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                    features: preferences.features
+                )
+                providerCars = await volvoAPI.cars
+            }
+            guard !providerCars.isEmpty else {
+                return (false, L10n.text("Signed in, but no vehicles were returned."))
+            }
+            let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
+            return (true, L10n.format("Connection active & verified (%d ms)", elapsedMs))
+        } catch {
+            let mapped = VehicleServiceError.map(error, provider: brand)
+            return (false, mapped.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    private func refreshGarageVehicles() async {
+        guard !garageScanInProgress, !remoteCommandInProgress else { return }
+        garageScanInProgress = true
+        defer { garageScanInProgress = false }
+
+        let originalBrand = preferences.activeBrand
+        for brand in VehicleBrand.allCases where preferences.hasResumableSession(for: brand) {
+            guard !Task.isCancelled else { return }
+            do {
+                let provider: any VehicleProviding
+                switch brand {
+                case .polestar:
+                    provider = polestarAPI
+                    if brand != originalBrand {
+                        let token = (try? Keychain.readSessionToken()) ?? nil
+                        let password = token?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
+                        let preferredVIN = preferences.vin(for: brand)
+                        if let token, !token.isEmpty {
+                            try await polestarAPI.restoreSession(
+                                token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                                features: preferences.features
+                            )
+                        } else if let password, !preferences.email.isEmpty {
+                            try await polestarAPI.authenticate(
+                                email: preferences.email, password: password,
+                                preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                                features: preferences.features
+                            )
+                        }
+                    }
+                case .volvo:
+                    provider = volvoAPI
+                    if brand != originalBrand {
+                        let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
+                            ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
+                        let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
+                            ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
+                        let token = (try? Keychain.readVolvoSessionToken()) ?? nil
+                        guard let clientSecret, let apiKey, let token else { continue }
+                        await volvoAPI.configure(
+                            clientID: preferences.volvoClientID,
+                            clientSecret: clientSecret, vccApiKey: apiKey
+                        )
+                        let preferredVIN = preferences.vin(for: brand)
+                        try await volvoAPI.restoreSession(
+                            token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                            features: preferences.features
+                        )
+                    }
+                }
+
+                let selectedVIN = preferences.vin(for: brand)
+                let providerCars = await provider.cars
+                for car in providerCars {
+                    guard !Task.isCancelled, preferences.activeBrand == originalBrand,
+                          !remoteCommandInProgress else { return }
+                    if brand == originalBrand && car.vin == selectedVIN { continue }
+                    try await provider.selectCar(vin: car.vin, features: preferences.features)
+                    let state = try await provider.fetchVehicleState(vin: car.vin, features: preferences.features)
+                    guard preferences.activeBrand == originalBrand, !remoteCommandInProgress else { return }
+                    stateStore.save(state)
+                    statusController.cachedSnapshots[state.vin] = state
+                    notifier.vehicleStateDidUpdate(state)
+                }
+                if !selectedVIN.isEmpty {
+                    try? await provider.selectCar(vin: selectedVIN, features: preferences.features)
+                }
+            } catch {
+                logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        guard preferences.activeBrand == originalBrand else { return }
+        render()
     }
 
     private func toggleSettingsInPopover() {
@@ -368,12 +585,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !remoteCommandInProgress else { return }
             remoteCommandInProgress = true
             render()
+            let commandStartedAt = Date()
             defer {
                 remoteCommandInProgress = false
                 render()
             }
             do {
                 let result = try await activeProvider.executeRemoteCommand(command, vin: state.vin)
+                vehicleDatabase.recordCommandAudit(
+                    vin: state.vin,
+                    command: command.identifier,
+                    status: result.outcome.rawValue,
+                    durationMs: Int(Date().timeIntervalSince(commandStartedAt) * 1_000)
+                )
                 self.applyConfirmedStateChange(for: command, outcome: result.outcome)
                 let message: String
                 if let backendMessage = result.message, !backendMessage.isEmpty {
@@ -403,6 +627,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
             } catch {
                 let mapped = error as? LocalizedError
+                vehicleDatabase.recordCommandAudit(
+                    vin: state.vin,
+                    command: command.identifier,
+                    status: "failed",
+                    durationMs: Int(Date().timeIntervalSince(commandStartedAt) * 1_000),
+                    error: mapped?.errorDescription ?? error.localizedDescription
+                )
                 showRemoteResult(
                     title: L10n.text("Command failed"),
                     message: mapped?.errorDescription ?? error.localizedDescription,
@@ -451,9 +682,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
                 requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
             )
-        case .lock, .unlock, .unlockTrunk:
+        case .lock, .lockReducedGuard, .unlock, .unlockTrunk:
             guard var exterior = current.exteriorStatus else { return }
-            if command == .lock {
+            if command == .unlock, activeProvider.brand == .volvo {
+                return
+            }
+            if command == .lock || command == .lockReducedGuard {
                 exterior.isLocked = true
             } else {
                 exterior.isLocked = false
@@ -474,7 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .setChargeTarget(let target):
             current.chargeTargetPercentage = target
         case .setAmpLimit(let amps):
-            current.chargingCurrentAmps = amps
+            current.chargingCurrentLimitAmps = amps
         default:
             return
         }
@@ -553,6 +787,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
+        case .polestarCommandAuthorization:
+            beginPolestarCommandAuthorization()
         case .switchToBrand(let brand):
             switch brand {
             case .polestar:
@@ -693,6 +929,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        if url.scheme?.lowercased() == "polestar-explore" {
+            polestarCommandSignInPresenter.handleCallbackURL(url)
+            return
+        }
         guard url.scheme?.lowercased() == "hisingen" else { return }
 
         if url.host == "oauth" || url.path.contains("callback") || url.query?.contains("code=") == true {

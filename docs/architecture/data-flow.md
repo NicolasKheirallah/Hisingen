@@ -33,6 +33,19 @@ HisingenContentView / VehicleTabView (SwiftUI)
           Preferences.features and per-field presence
 ```
 
+When Polestar real-time updates are enabled, a second path stays open after the
+initial refresh: `PolestarGRPC.liveUpdates` consumes the battery and exterior
+server streams, `RefreshCoordinator` merges each frame into the current
+`VehicleState`, and the same persistence/render callbacks run. The stream uses
+exponential reconnect and does not replace scheduled full polling, because a
+stream frame is deliberately only a partial state update.
+
+Authenticated inactive providers are refreshed separately by the application’s
+garage loop. That loop selects and fetches each non-active VIN, persists its
+snapshot, restores the provider’s selected VIN, and never replaces the active
+dashboard state. The Garage therefore combines current snapshots from both
+providers without pretending the providers share an account or API.
+
 Unlike some codebases, Polestar and Volvo do **not** funnel through a separate "mapper" type — `PolestarAPI.fetchVehicleState` and `VolvoAPI.fetchVehicleState` each assemble the final `VehicleState(...)` inline, field by field, after a set of concurrent `async let` calls. This is documented honestly rather than papered over: the DTO→domain boundary is real (nothing outside `Services/API/` ever sees a `TelematicsDTO` or `VolvoEnergyStateDTO`), but there's no single named "mapper function" per field — see [api/polestar.md](../api/polestar.md) and [api/volvo.md](../api/volvo.md#supported-endpoints) for exactly where each field comes from.
 
 ## Freshness
@@ -63,6 +76,11 @@ So staleness is judged against `dataTimestamp` (the vehicle's own clock), not `f
 **Enum fields get a "unknown means keep old" rule instead:** `chargingState`, `availability`, `chargingType`, `chargerConnection` each have an `.unknown`/`.unavailable` case; if the new fetch produced that sentinel, the previous concrete value is kept rather than overwriting a known state with "unknown."
 
 **What is never carried forward:** `vin`, `fetchedAt`, `dataWarnings`, `unavailableFeatures` always come from the new fetch — merging never hides the fact that *this* fetch had warnings, even while it's filling in stale data for individual fields. `chargingSessions` (the persisted history) is explicitly carried over from `previous` unconditionally — it's accumulated state, not a per-fetch field.
+
+Every carried-forward category is recorded in `retainedDataCategories`, together with
+`retainedDataAt`. The popover renders a visible “Showing last-known values” notice listing those
+categories and their source age, so merged data cannot be mistaken for the newest provider
+sample.
 
 **Missing data never becomes a fabricated zero.** Every numeric field on `VehicleState` is `Optional`; a missing battery percentage renders as "—" in the UI, never as `0%`. This is a stated design principle (see [architecture/technical-debt.md](technical-debt.md) for the one place this is easy to get wrong) rather than an accident of `Codable` defaults.
 

@@ -13,6 +13,7 @@ struct APILogEntry: Codable, Equatable, Sendable {
     let operation: String
     let statusCode: Int?
     let responseBytes: Int?
+    let responsePayloadJSON: String?
     let durationMilliseconds: Int
     let errorType: String?
 }
@@ -25,7 +26,7 @@ actor APIDiagnosticLogStore {
     private var entries: [APILogEntry] = []
 
     func record(provider: APILogProvider, request: URLRequest?, operation: String,
-                statusCode: Int? = nil, responseBytes: Int? = nil,
+                statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
                 startedAt: Date, error: Error? = nil) {
         let duration = max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
         let entry = APILogEntry(
@@ -33,7 +34,9 @@ actor APIDiagnosticLogStore {
             method: (request?.httpMethod ?? "GET").uppercased(),
             endpoint: Self.redactURL(request?.url),
             operation: Self.redact(operation), statusCode: statusCode,
-            responseBytes: responseBytes, durationMilliseconds: duration,
+            responseBytes: responseBytes,
+            responsePayloadJSON: Self.redactJSON(responseData),
+            durationMilliseconds: duration,
             errorType: error.map { String(reflecting: type(of: $0)) }
         )
         entries.append(entry)
@@ -43,16 +46,15 @@ actor APIDiagnosticLogStore {
     }
 
     func exportData() throws -> Data {
-        struct Export: Codable {
-            let format: String
-            let generatedAt: Date
-            let entries: [APILogEntry]
+        let payloads = entries.compactMap { entry -> Any? in
+            guard let payload = entry.responsePayloadJSON,
+                  let data = payload.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data)
         }
-        let export = Export(format: "hisingen-api-diagnostics-v1", generatedAt: Date(), entries: entries)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(export)
+        guard JSONSerialization.isValidJSONObject(payloads) else {
+            throw NSError(domain: "APIDiagnosticLogStore", code: 1)
+        }
+        return try JSONSerialization.data(withJSONObject: payloads, options: [.prettyPrinted, .sortedKeys])
     }
 
     func clear() {
@@ -75,9 +77,74 @@ actor APIDiagnosticLogStore {
         return result
     }
 
+    private static func redactJSON(_ data: Data?) -> String? {
+        guard let data, data.count <= 2_000_000,
+              let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        let sanitized = redactJSONValue(object, key: nil)
+        guard JSONSerialization.isValidJSONObject(sanitized),
+              let output = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]) else {
+            return nil
+        }
+        let bounded = output.prefix(256_000)
+        return String(decoding: bounded, as: UTF8.self)
+    }
+
+    private static func redactJSONValue(_ value: Any, key: String?) -> Any {
+        if let key {
+            let normalizedKey = key.normalizedDiagnosticKey
+            if sensitiveKeys.contains(normalizedKey)
+                || normalizedKey.hasSuffix("_endpoint")
+                || normalizedKey.hasSuffix("_uri") {
+                return "<redacted>"
+            }
+        }
+        if let string = value as? String,
+           string.hasPrefix("http://") || string.hasPrefix("https://") {
+            return "<redacted>"
+        }
+        if let dictionary = value as? [String: Any] {
+            return dictionary.reduce(into: [String: Any]()) { result, item in
+                result[item.key] = redactJSONValue(item.value, key: item.key)
+            }
+        }
+        if let array = value as? [Any] {
+            return array.map { redactJSONValue($0, key: key) }
+        }
+        if let string = value as? String {
+            return redact(string)
+        }
+        return value
+    }
+
+    private static let sensitiveKeys: Set<String> = [
+        "access_token", "account_id", "address", "authorization", "authorization_endpoint", "base_url",
+        "client_id", "client_secret",
+        "email", "image_url", "internal_vehicle_identifier", "latitude", "license_plate",
+        "id", "identifier", "endpoint", "location", "longitude", "path", "phone", "pno34", "refresh_token", "registration",
+        "registration_no",
+        "registration_number", "revocation_endpoint", "token", "token_endpoint", "uri", "url",
+        "userinfo_endpoint", "vehicle_id", "vehicle_identifier", "vin", "vehicle_identification_number",
+        "vehicle_relation"
+    ]
+
     private static func replacingMatches(in value: String, pattern: String, replacement: String) -> String {
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return value }
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
         return expression.stringByReplacingMatches(in: value, range: range, withTemplate: replacement)
+    }
+}
+
+private extension String {
+    var normalizedDiagnosticKey: String {
+        let camelCase = unicodeScalars.reduce(into: "") { result, scalar in
+            if CharacterSet.uppercaseLetters.contains(scalar) {
+                result.append("_")
+            }
+            result.append(String(scalar))
+        }
+        return camelCase
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+            .lowercased()
     }
 }

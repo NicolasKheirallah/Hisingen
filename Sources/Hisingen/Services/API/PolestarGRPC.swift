@@ -33,6 +33,9 @@ actor PolestarGRPC {
     private var c3DiscoveryTask: Task<URL, Error>?
     var exteriorCache: [String: ExteriorSnapshot] = [:]
     var otaSoftwareIDs: [String: String] = [:]
+    /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
+    /// charge-target and amp-limit writes against what the vehicle actually supports.
+    var capabilityLimits: [String: VehicleOTACapabilities] = [:]
     /// Last observed OTA state per VIN. `InstallNow` is only meaningful for some of these, and
     /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
     /// checked here instead of being discovered as an unexplained refusal.
@@ -42,11 +45,130 @@ actor PolestarGRPC {
     /// When true, uses server-streaming gRPC methods (`GetBattery`, `GetExterior`) that the
     /// server keeps open and pushes updates over, instead of the one-shot `GetLatest*` methods.
     /// The streaming variants return the same first-frame data but may be fresher since the
-    /// server expects an ongoing connection. Recovered from the official Polestar APK v5.10.0
-    /// teardown — see `docs/api/ota-investigation.md` (E1).
+    /// server expects an ongoing connection.
     var useStreaming = false
 
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
+
+    #if DEBUG
+    /// Test hook: seeds vehicle-advertised charging bounds without a network round-trip.
+    func setCapabilityLimitsForTesting(vin: String, _ capabilities: VehicleOTACapabilities) {
+        capabilityLimits[vin] = capabilities
+    }
+    #endif
+
+    func liveUpdates(vin: String, accessToken: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        let base = try await resolvedHost(.c3, accessToken: accessToken)
+        let batteryRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        let exteriorRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        let batteryStreamPath = batteryStreamPath
+        let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
+
+        return AsyncThrowingStream { continuation in
+            let worker = Task {
+                do {
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        group.addTask {
+                            try await self.consumeLiveFrames(
+                                base: base, path: batteryStreamPath,
+                                message: batteryRequest, vin: vin, accessToken: accessToken
+                            ) { body in
+                                guard let payload = Protobuf.fields(body)
+                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data else { return }
+                                continuation.yield(.battery(Self.parseBattery(payload)))
+                            }
+                        }
+                        group.addTask {
+                            try await self.consumeLiveFrames(
+                                base: base,
+                                path: exteriorStreamPath,
+                                message: exteriorRequest, vin: vin, accessToken: accessToken
+                            ) { body in
+                                guard let payload = Protobuf.fields(body)
+                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
+                                      let exterior = Self.parseExterior(payload) else { return }
+                                continuation.yield(.exterior(exterior, reportedAt: nil))
+                            }
+                        }
+                        _ = try await group.next()
+                        group.cancelAll()
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in worker.cancel() }
+        }
+    }
+
+    private func consumeLiveFrames(
+        base: URL, path: String, message: Data, vin: String, accessToken: String,
+        onFrame: @escaping @Sendable (Data) -> Void
+    ) async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 90
+        configuration.timeoutIntervalForResource = 24 * 60 * 60
+        let liveSession = URLSession(configuration: configuration)
+        defer { liveSession.invalidateAndCancel() }
+
+        var request = URLRequest(url: base.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vin, forHTTPHeaderField: "vin")
+        request.setValue("trailers", forHTTPHeaderField: "TE")
+        request.httpBody = Protobuf.grpcFrame(message)
+
+        let (bytes, response) = try await liveSession.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw PolestarError.invalidResponse(operation: "live gRPC stream")
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
+        if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
+            throw PolestarError.invalidResponse(operation: "live gRPC status \(status)")
+        }
+
+        var header: [UInt8] = []
+        var body = Data()
+        var expected: Int?
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            if header.count < 5 {
+                header.append(byte)
+                guard header.count == 5 else { continue }
+                guard header[0] == 0 else {
+                    throw PolestarError.incompatibleAPI(operation: "compressed live gRPC frame")
+                }
+                let size = Int(header[1]) << 24 | Int(header[2]) << 16 | Int(header[3]) << 8 | Int(header[4])
+                guard size >= 0, size <= 2_000_000 else {
+                    throw PolestarError.invalidResponse(operation: "oversized live gRPC frame")
+                }
+                expected = size
+                if size == 0 {
+                    onFrame(Data())
+                    header.removeAll(keepingCapacity: true)
+                    expected = nil
+                }
+                continue
+            }
+            body.append(byte)
+            if let frameSize = expected, body.count == frameSize {
+                onFrame(body)
+                header.removeAll(keepingCapacity: true)
+                body.removeAll(keepingCapacity: true)
+                expected = nil
+            }
+        }
+        try Task.checkCancellation()
+        throw PolestarError.grpcUnavailable(service: path)
+    }
     /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
     var activeCommandToken: String?
     let session: URLSession
@@ -137,7 +259,7 @@ actor PolestarGRPC {
             request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "C3 discovery"
+                for: request, using: session, limit: 256_000, operation: "C3 discovery", provider: .polestar
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "C3 discovery")
@@ -165,6 +287,14 @@ actor PolestarGRPC {
         c3BaseURL = nil
         c3DiscoveryTask?.cancel()
         c3DiscoveryTask = nil
+        // Session-scoped caches must not survive a sign-out: a different account signing in
+        // on the same app instance must never inherit the previous account's OTA ids, states,
+        // or vehicle-advertised charging limits.
+        otaSoftwareIDs = [:]
+        otaSoftwareStates = [:]
+        otaRawSoftwareStates = [:]
+        capabilityLimits = [:]
+        exteriorCache = [:]
     }
 
 
@@ -391,9 +521,30 @@ actor PolestarGRPC {
                 default: break
                 }
             case 7:
-                let values = ["UNSPECIFIED", "CHARGING", "IDLE", "SCHEDULED", "DISCHARGING",
-                              "ERROR", "SMART_CHARGING", "DONE", "SMART_CHARGING_PAUSED"]
-                if Int(field.varint) < values.count { state = ChargingState(apiValue: values[Int(field.varint)]) }
+                // Each wire value is matched to its name explicitly — not read as an index into
+                // an array — so a future backend change that inserts or reorders a case can only
+                // ever leave an *existing* value's meaning intact or make a new value fall to
+                // `default` (state stays unset), never silently relabel a known value as the
+                // wrong state the way positional-array indexing would. Mirrors the `connection`/
+                // `type`/`powerState` switches in this same function, which never used indexing.
+                let name: String
+                switch field.varint {
+                case 0: name = "UNSPECIFIED"
+                case 1: name = "CHARGING"
+                case 2: name = "IDLE"
+                case 3: name = "SCHEDULED"
+                case 4: name = "DISCHARGING"
+                case 5: name = "ERROR"
+                case 6: name = "SMART_CHARGING"
+                case 7: name = "DONE"
+                case 8: name = "SMART_CHARGING_PAUSED"
+                // A value outside the known range is preserved as its raw number rather than
+                // silently leaving `state` unset — `ChargingState(apiValue:)` maps anything it
+                // doesn't recognize to `.unknown(rawValue)`, so a future backend addition shows
+                // up as a visibly-unrecognized state instead of vanishing.
+                default: name = String(field.varint)
+                }
+                state = ChargingState(apiValue: name)
             case 10: watts = Int(field.varint)
             case 11: amps = Int(field.varint)
             case 3 where field.wire == 1: averageConsumption = Protobuf.double(from: field.data)

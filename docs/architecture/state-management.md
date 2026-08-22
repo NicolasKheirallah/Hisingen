@@ -7,6 +7,7 @@
 | Application state (loading/error/authenticated flags) | `AppDelegate` | In-memory only | Process lifetime |
 | Refresh/polling state (timer, backoff, generation) | `RefreshCoordinator` | In-memory only | Process lifetime, reset on brand switch (a fresh `RefreshCoordinator` is constructed) |
 | Authentication tokens | `PolestarAPI` / `VolvoAPI` (actor-isolated) | Access token: in-memory only. Refresh token: Keychain. | Per brand |
+| Polestar account email | `Preferences` / `PreferencesStore` | Keychain | Per account |
 | Non-secret settings (VIN, nicknames, feature flags, theme, notification toggles, etc.) | `Preferences` | `UserDefaults` | Per brand where relevant (VIN, theme), global otherwise |
 | Vehicle telemetry cache | `VehicleStateStore` | `UserDefaults` (JSON-encoded, 7-day TTL) | Per VIN |
 | Charging state-machine baseline | `VehicleStateStore` (same store as above) | `UserDefaults`, 7-day TTL | Per VIN |
@@ -27,7 +28,9 @@
 
 - `AppDelegate.latest: VehicleState?` is the single source of truth for "what does the UI currently show." It's updated from `RefreshCoordinator.onState`, from cached-snapshot lookups on launch/vehicle-switch, and — unusually — directly by `performRemoteCommand` for four commands (`startClimate`, `stopClimate`, `lock`, `unlock`), which optimistically patch `latest` with the expected post-command state before the next real refresh confirms it. This is a deliberate "instant feedback" UX choice, not a bug, but it does mean `latest` can briefly disagree with what the backend would report if polled at that exact moment. See [domain/vehicle.md](../domain/vehicle.md#remote-command-optimistic-updates).
 - `StatusItemController.cachedSnapshots: [String: VehicleState]` is a second, UI-layer cache of per-VIN state (separate from `VehicleStateStore`), used to instantly show the other brand's or another vehicle's last-known data when switching without waiting on a `UserDefaults` round trip. It's populated from `VehicleStateStore` on demand and from every `onState`/`onCars` callback — effectively a hot in-memory mirror of the cold `UserDefaults`-backed store.
-- `InMemorySecretCache` (inside `Keychain.swift`) is process-global and shared across every `KeychainStore` instance, keyed only by Keychain *account* name, not by `service` — see [technical-debt.md](technical-debt.md) for the collision risk this creates when tests construct isolated `KeychainStore`s with unique service names but reuse the same static account constants.
+- `InMemorySecretCache` (inside `Keychain.swift`) is process-global and shared
+  across every `KeychainStore` instance. Its keys combine service and account,
+  preserving isolation between production and test stores.
 
 ## Diagram: state ownership by scope
 

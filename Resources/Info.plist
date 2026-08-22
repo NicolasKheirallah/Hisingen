@@ -36,6 +36,14 @@
 				<string>hisingen</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.kheirallah.hisingen.polestar-command-oauth-cc97f41c-af39-4eb1-a7e6-0014f6e1c80f</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>polestar-explore</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

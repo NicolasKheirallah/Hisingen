@@ -6,6 +6,7 @@
 
 | Item | Keychain account | Service |
 |---|---|---|
+| Polestar account email | `polestar-email` | `io.kheirallah.hisingen` |
 | Polestar password | `polestar-password` | `io.kheirallah.hisingen` |
 | Polestar refresh token | `polestar-refresh-token` | `io.kheirallah.hisingen` |
 | Volvo client secret, VCC API key, refresh token | `volvo-credentials-bundle` (one JSON blob: `{clientSecret, apiKey, sessionToken}`) | `io.kheirallah.hisingen` |
@@ -14,7 +15,12 @@ All items live under one `kSecAttrService` (`KeychainStore.app`). Isolation betw
 
 ## Legacy migration
 
-- **Polestar password:** `Preferences.migrateLegacyPassword()`, run once at every launch before anything else, reads an old plaintext `polestar_password` `UserDefaults` key; if present and Keychain doesn't already have a password, it's moved into Keychain. The `UserDefaults` key is deleted afterward regardless of whether the migration succeeded — so a Keychain write failure during migration silently loses the password (the user would need to re-enter it), rather than leaving a plaintext copy behind.
+- **Polestar password:** `Preferences.migrateLegacyPassword()`, run once at every launch before anything else, reads an old plaintext `polestar_password` `UserDefaults` key; if present and Keychain doesn't already have a password, it's moved into Keychain. The `UserDefaults` key is removed only after the Keychain read/write path succeeds; a Keychain failure retains the legacy value so migration can be retried.
+- **Polestar email:** the `Preferences.email` and `PreferencesStore.email`
+  getters migrate the legacy `polestar_email` `UserDefaults` value into the
+  `polestar-email` Keychain account. The cleartext value is removed only after a
+  successful Keychain write; new email values are never written to
+  `UserDefaults`.
 - **Volvo bundle:** `readVolvoBundle()` self-heals from three older single-purpose accounts (`volvo-client-secret`, `volvo-vcc-api-key`, `volvo-refresh-token`) into the current bundle format on first read, if the bundle account is empty but any legacy value exists.
 
 ## Accessibility level
@@ -25,11 +31,16 @@ Every write uses `kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDevi
 
 ## In-memory cache
 
-`InMemorySecretCache` — a process-global singleton guarded by an `NSLock`, caching every secret after first read, invalidated on save/delete. It exists purely to avoid repeated `SecItemCopyMatching` calls (which have real, if small, per-call overhead) on every actor method that needs a token. It's keyed only by Keychain *account* name, not by `service` — see [architecture/technical-debt.md](../architecture/technical-debt.md#inmemorysecretcache-keyed-by-account-only-not-serviceaccount) for the collision risk this creates across `KeychainStore` instances with different services but the same account constants (currently latent, not triggered by any live code path).
+`InMemorySecretCache` — a process-global singleton guarded by an `NSLock`,
+caching every secret after first read and invalidated on save/delete. Cache keys
+combine the Keychain service and account, so isolated test services cannot
+collide with production items.
 
 ## Draft credentials
 
-`savePasswordDraft`/`readPasswordDraft`/`deletePasswordDraft` (and Volvo equivalents) exist in the API surface and are exercised by tests, but are currently no-op stubs that never actually persist anything. See [architecture/technical-debt.md](../architecture/technical-debt.md#keychain-draft-methods-are-dead-code).
+`savePasswordDraft`/`readPasswordDraft`/`deletePasswordDraft` and the Volvo
+equivalents use separate Keychain accounts from committed credentials. Tests
+verify that deleting a draft cannot delete or replace its committed value.
 
 ## Error handling
 

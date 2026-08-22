@@ -47,6 +47,7 @@ struct VehicleEntranceFrame: Equatable {
 ///
 /// Everything around it — the card, the glow behind the car, the angle strip and
 /// every label — is drawn by the surrounding SwiftUI and holds still.
+@MainActor
 struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
     let imageData: Data?

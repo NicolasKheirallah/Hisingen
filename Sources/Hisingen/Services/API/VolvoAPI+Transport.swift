@@ -6,14 +6,15 @@ extension VolvoAPI {
         let startedAt = Date()
         do {
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: limit, operation: operation
+                for: request, using: session, limit: limit, operation: operation, provider: .volvo
             )
             guard let http = response as? HTTPURLResponse else {
                 throw VolvoError.invalidResponse(operation: operation)
             }
             await APIDiagnosticLogStore.shared.record(
                 provider: .volvo, request: request, operation: operation,
-                statusCode: http.statusCode, responseBytes: data.count, startedAt: startedAt
+                statusCode: http.statusCode, responseBytes: data.count,
+                responseData: data, startedAt: startedAt
             )
             return (data, http)
         } catch {

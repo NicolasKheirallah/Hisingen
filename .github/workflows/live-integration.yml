@@ -32,6 +32,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Select available Xcode toolchain
+        run: sh Scripts/select-xcode.sh
+
       - name: Verify Polestar credentials & toolchain
         env:
           HISINGEN_TEST_EMAIL: ${{ secrets.HISINGEN_TEST_EMAIL }}
@@ -41,6 +44,9 @@ jobs:
           test -n "$HISINGEN_TEST_EMAIL" || { echo "HISINGEN_TEST_EMAIL is required"; exit 1; }
           test -n "$HISINGEN_TEST_PASSWORD" || { echo "HISINGEN_TEST_PASSWORD is required"; exit 1; }
           swift --version
+
+      - name: Generate build configuration
+        run: sh Scripts/inject-secrets.sh
 
       - name: Run live Polestar read-only integration tests
         env:
@@ -64,6 +70,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Select available Xcode toolchain
+        run: sh Scripts/select-xcode.sh
+
       - name: Verify Volvo credentials & toolchain
         env:
           HISINGEN_TEST_VOLVO_CLIENT_ID: ${{ secrets.HISINGEN_TEST_VOLVO_CLIENT_ID }}
@@ -77,6 +86,9 @@ jobs:
           test -n "$HISINGEN_TEST_VOLVO_VCC_API_KEY" || { echo "HISINGEN_TEST_VOLVO_VCC_API_KEY is required"; exit 1; }
           test -n "$HISINGEN_TEST_VOLVO_REFRESH_TOKEN" || { echo "HISINGEN_TEST_VOLVO_REFRESH_TOKEN is required"; exit 1; }
           swift --version
+
+      - name: Generate build configuration
+        run: sh Scripts/inject-secrets.sh
 
       - name: Run live Volvo integration tests
         env:

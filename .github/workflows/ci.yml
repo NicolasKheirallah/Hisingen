@@ -78,18 +78,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.os }}-spm-
       - name: Select available Xcode toolchain
-        run: |
-          set -euo pipefail
-          selected=""
-          for xcode in /Applications/Xcode_16.4.app /Applications/Xcode_16.2.app /Applications/Xcode_16.1.app /Applications/Xcode_16.0.app /Applications/Xcode.app; do
-            if [ -d "$xcode/Contents/Developer" ]; then
-              selected="$xcode/Contents/Developer"
-              break
-            fi
-          done
-          test -n "$selected" || { echo "No supported Xcode installation was found" >&2; exit 1; }
-          echo "DEVELOPER_DIR=$selected" >> "$GITHUB_ENV"
-          echo "Selected $selected"
+        run: sh Scripts/select-xcode.sh
       - name: Report toolchain
         run: |
           set -euo pipefail

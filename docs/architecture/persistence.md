@@ -4,14 +4,31 @@ Hisingen uses several local persistence mechanisms with different security, life
 
 The current architecture consists of:
 
-1. macOS Keychain for sensitive authentication material.
-2. `UserDefaults` for preferences and lightweight application state.
-3. SQLite for structured vehicle history and historical telemetry.
-4. In-memory caches for short-lived runtime data.
+| Data | Storage | Scope | Lifetime | Sensitive | Migration |
+|---|---|---|---|---|---|
+| Polestar refresh token | Keychain, account `polestar-refresh-token` | Per brand | Until sign-out or revoked | Yes | — |
+| Polestar account email | Keychain, account `polestar-email` | Per brand | Until sign-out | Yes | Migrated from the legacy `polestar_email` UserDefaults key on first read; cleartext is removed after a successful Keychain write |
+| Polestar password | Keychain, account `polestar-password` | Per brand | Until sign-out | Yes | Migrated from a legacy plaintext `polestar_password` UserDefaults key at launch (`Preferences.migrateLegacyPassword()`); the legacy value is removed after the Keychain path succeeds and retained for retry on failure |
+| Volvo client secret, VCC API key, refresh token | Keychain, single JSON blob under account `volvo-credentials-bundle` | Per brand | Until sign-out or revoked | Yes | Self-healing: `readVolvoBundle()` falls back to three legacy single-purpose accounts (`volvo-client-secret`, `volvo-vcc-api-key`, `volvo-refresh-token`) and re-saves them into the bundle format on first read |
+| Volvo client ID | `UserDefaults` (`volvo_client_id`) | Per brand | Persistent | No (not a secret — public OAuth client identifier) | — |
+| Active brand, selected VIN, nicknames | `UserDefaults` | Per brand (VIN/nickname), global (active brand) | Persistent | No | Nicknames migrated from a legacy single-vehicle key; VIN keys are brand-specific (`polestar_vin`/`volvo_vin`) |
+| Feature selection | `UserDefaults` (`enabled_features_v2`) | Global | Persistent | No | Migrates from `enabled_features_v1` (auto-enabling several newer features) or an even older `show_vehicle_image` bool |
+| Notification toggles, low-battery threshold, electricity price | `UserDefaults` | Global | Persistent | No | — |
+| Theme, menu-bar style, distance unit, language | `UserDefaults` | Per VIN (theme) / global (rest) | Persistent | No | Menu-bar style migrates from legacy display-name strings |
+| Exact usable-capacity/WLTP references | `UserDefaults` (`vehicle_specification_overrides_v1`) | Per VIN | Until reset | No | User-entered reference data, never provider telemetry |
+| Vehicle telemetry snapshot | `UserDefaults` (`cached_vehicle_snapshots_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | Partially — see below | No versioned migration; a decode failure is treated as "no cache" |
+| Charging state-machine baseline | `UserDefaults` (`charging_baselines_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | No | Same as above |
+| Capability observations (`VehicleProbedCapabilities`) | Embedded inside the cached `VehicleState` | Per VIN | 6-hour staleness window, independent of the 7-day store TTL | No | Same as above |
+| Update-check result | `UserDefaults` | Global | Persistent, re-checked every 24h | No | — |
+| Reverse-geocode cache | In-memory only (`ReverseGeocoder` actor) | Global | Process lifetime | No (never written to disk) | N/A |
 
 For privacy-sensitive data flows, see [`../security/privacy.md`](../security/privacy.md).
 
-For retention and deletion behavior, see [`../data-retention.md`](../data-retention.md).
+- **Account email / refresh tokens / passwords** — so the user doesn't have to sign in on every launch. Kept in Keychain, never newly written to `UserDefaults` or on-disk caches.
+- **Feature selection, notification toggles, theme, etc.** — plain user preferences; no reason to protect them beyond normal `UserDefaults` behavior.
+- **Vehicle telemetry snapshot** — lets the app show *something* immediately at launch and during vehicle switching, without waiting on a network round trip, and lets it keep showing the last known state if the vehicle is asleep or the network is down.
+- **Charging baseline** — the charging state machine (`ChargingTransitionDetector`) needs to remember what state it last saw per VIN so a relaunch doesn't re-fire a "charging started" notification for a session that began before the app was last quit.
+- **Capability observations** — so a positively-observed capability (e.g., "this Polestar 3 does support the amp-limit endpoint") survives a relaunch instead of needing to be re-probed from the conservative static default every time.
 
 For Keychain-specific security properties, see [`../security/keychain.md`](../security/keychain.md).
 
@@ -146,6 +163,10 @@ A row can contain:
 - effective usable battery capacity; and
 - measurement classification.
 
+These are calculated estimates. New rows use `calculated-v2`; rows written by
+the older inferred implementation are migrated to `legacy-estimate`. Neither
+classification means that the provider or vehicle BMS reported SoH.
+
 ### `telemetry_logs`
 
 Stores historical drive/telemetry information.
@@ -162,6 +183,10 @@ A row can contain:
 - longitude.
 
 This table is an explicit location-persistence path.
+
+The History dashboard derives journeys from consecutive movement readings and
+groups adjacent intervals until a stationary reading or a long sample gap. The
+derived trip objects are not a separate persisted provider trip log.
 
 ### `remote_commands_log`
 
@@ -398,7 +423,10 @@ Battery-health history is not subject to the charging/telemetry 90-day pruning o
 
 ## Remote-Command Audit
 
-Remote command execution can create a local audit record.
+Every provider command attempt that reaches dispatch creates a local audit record containing
+the VIN, normalized command identifier, provider outcome or failure, execution time, and
+duration. Attempts cancelled at the local authentication prompt are not provider attempts and
+are not logged.
 
 The audit exists for diagnostics and operational history.
 

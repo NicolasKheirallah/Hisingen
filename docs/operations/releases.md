@@ -4,12 +4,10 @@ The real, current release process — traced from `make release` through to a pu
 
 ## Repository configuration (live)
 
-- **Branch ruleset `protect-main`** (Settings → Rules → Rulesets): PRs
-  required into `main`, required status checks `lint-workflows-and-scripts`,
-  `check-localization`, `check-docs`, `build-and-test (macos-14)`,
-  `build-and-test (macos-15)`; conversation resolution required; no
-  force-push or deletion. No bypass actor is configured — this applies to
-  the repo owner too, so even solo changes go through a PR now.
+- **Branch ruleset `protect-main`** (Settings → Rules → Rulesets): the ruleset
+  exists but is currently **disabled**. Until it is re-enabled, PRs and CI
+  status checks are not enforced before updates to `main`. Review its required
+  checks against the current workflow job names before enabling it.
 - **Tag ruleset `protect-release-tags`** (pattern `refs/tags/v*`): blocks
   deletion and re-pointing of existing release tags. Creating new `v*` tags
   (what `make release` does) is unaffected.
@@ -20,20 +18,20 @@ The real, current release process — traced from `make release` through to a pu
   Check **Settings → Code security** if you want it and it's offered there;
   secret scanning and push protection themselves are already enabled and
   unaffected either way.
-- **`production-release` / `live-integration` environments**: created
-  automatically by `release.yml`/`live-integration.yml` referencing them, but
-  have no protection rules or scoped secrets yet — see "Secrets checklist"
-  below for what to move into each.
+- **`production-release` environment**: exists without protection rules or a
+  deployment branch policy. **`live-integration` does not yet exist** and will
+  be created by GitHub when the workflow first references it. Configure scoped
+  secrets and protection rules before relying on either environment as a gate.
 
 ```mermaid
 flowchart TD
-    A["make release VERSION=x.y.z"] --> B["Validate: VERSION matches x.y.z,<br/>working tree clean (incl. untracked)"]
+    A["make release VERSION=x.y.z"] --> B["Validate: VERSION matches x.y.z,<br/>matching CHANGELOG entry exists,<br/>working tree clean (incl. untracked)"]
     B --> C["Bump CFBundleShortVersionString (PlistBuddy),<br/>increment CFBundleVersion by 1"]
     C --> D["git commit 'Release vX.Y.Z'"]
     D --> E["git tag vX.Y.Z"]
     E --> F["git push origin HEAD vX.Y.Z"]
     F -->|triggers| G["release.yml (tag push v*)"]
-    G --> H["Verify: tag matches vMAJOR.MINOR.PATCH,<br/>Info.plist version matches tag,<br/>tag commit is an ancestor of main"]
+    G --> H["Verify: tag matches vMAJOR.MINOR.PATCH,<br/>Info.plist and CHANGELOG match tag,<br/>tag commit is an ancestor of main"]
     H --> I["swift test --skip Live — full deterministic<br/>suite gates the release"]
     I --> J["Import Developer ID cert into ephemeral<br/>runner Keychain (security create-keychain/import)"]
     J --> K["make app-universal IDENTITY='Developer ID Application: ...'"]
@@ -46,7 +44,7 @@ flowchart TD
     Q --> Q2["Verify DMG/zip/SHA256SUMS exist and are<br/>non-empty, BEFORE publishing anything"]
     Q2 --> Q3["Attest build provenance for DMG + zip<br/>(actions/attest-build-provenance)"]
     Q3 --> R["softprops/action-gh-release — publish DMG, zip,<br/>SHA256SUMS with generate_release_notes: true"]
-    R --> R2["Verify all 3 assets are actually attached<br/>to the published release (gh release view --json assets)"]
+    R --> R2["Verify all 4 assets are actually attached<br/>to the published release (gh release view --json assets)"]
     R2 --> S["Always-run cleanup: delete temp .p12/zip<br/>and the ephemeral signing keychain"]
 ```
 
@@ -57,19 +55,35 @@ test suites even though it runs the rest of the deterministic suite in full.
 
 ## Starting a release
 
+First add the release notes under `## [x.y.z]` in the root
+[`CHANGELOG.md`](../../CHANGELOG.md). Then use either of the supported paths:
+
+1. Run the **Prepare Release** workflow with an exact version or semantic bump.
+   It validates monotonic versioning and the changelog entry, creates a
+   `release/vX.Y.Z` branch, updates `Info.plist`, and opens a pull request. After
+   opening the PR it explicitly dispatches CI and Security on the release branch
+   because GitHub suppresses ordinary workflow triggers from `GITHUB_TOKEN`.
+   After those checks pass and the PR is merged, create the protected
+   `vX.Y.Z` tag on the merge commit.
+2. From a clean local `main`, run:
+
 ```bash
 make release VERSION=2.6.0
 ```
 
-This is the **only** supported way to cut a release — it enforces version format, a clean working tree (including untracked files, not just staged changes), bumps both version fields in `Info.plist` correctly, and pushes the exact tag `release.yml` listens for. Manually tagging without going through `make release` risks a version mismatch that the release workflow's own verification step (`Info.plist` version vs. tag) will catch and fail on — which is the intended safety net, not a workaround to route around.
+Both paths enforce version format and a matching changelog entry. The local path
+also requires a clean worktree, bumps both version fields, commits, and pushes
+the exact tag `release.yml` listens for. Manually tagging without first updating
+`Info.plist` and `CHANGELOG.md` will fail the release workflow before signing.
 
 ## Gating checks (in order, all must pass)
 
 1. **Tag format** — must match `vMAJOR.MINOR.PATCH` exactly.
 2. **Version match** — `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
-3. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
-4. **`Info.plist` validity** — `plutil -lint`.
-5. **Full test suite** — `swift test --disable-xctest --enable-swift-testing -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed — the release workflow re-runs tests itself rather than trusting a separate workflow's result.
+3. **Changelog match** — `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`.
+4. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
+5. **`Info.plist` validity** — `plutil -lint`.
+6. **Full deterministic test suite** — `swift test --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
 
 If any of these fail, nothing is signed, notarized, or published.
 
@@ -91,8 +105,8 @@ Two independent checks exist specifically to prevent a run showing green in
 Actions while leaving an unusable or incomplete release behind:
 
 1. **Pre-publish**: before `softprops/action-gh-release` runs at all, a step
-   asserts `Hisingen.dmg`, `Hisingen.zip`, and `SHA256SUMS` exist, are
-   non-empty, and that `SHA256SUMS` actually references both filenames.
+   asserts `Hisingen.dmg`, `Hisingen.zip`, `Hisingen.app.zip`, and
+   `SHA256SUMS` exist, are non-empty, and verifies every checksum.
 2. **Post-publish**: after publishing, `gh release view "$GITHUB_REF_NAME"
    --json assets` is queried and the job fails if any of the three expected
    assets isn't actually attached — the specific gap that matters, since it's
@@ -102,7 +116,7 @@ Actions while leaving an unusable or incomplete release behind:
 ## Build provenance
 
 `actions/attest-build-provenance` generates a signed attestation for
-`Hisingen.dmg` and `Hisingen.zip`, linking the published binaries back to
+`Hisingen.dmg`, `Hisingen.zip`, and `Hisingen.app.zip`, linking the published binaries back to
 this exact workflow run, commit, and repository via Sigstore/GitHub's
 attestation API (`attestations: write` + `id-token: write` permissions on the
 release job). Anyone can verify a downloaded release asset was actually built
@@ -163,6 +177,7 @@ branch can never read them.
 | `NOTARY_APPLE_ID` | release.yml | `production-release` | Apple ID used for `notarytool submit`. |
 | `NOTARY_TEAM_ID` | release.yml | `production-release` | Apple Developer Team ID. |
 | `NOTARY_APP_PASSWORD` | release.yml | `production-release` | App-specific password for the Apple ID above (not the account password). |
+| `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` | release.yml | `production-release` | Volvo Developer API credentials embedded in the production build configuration. |
 | `HISINGEN_TEST_EMAIL` / `HISINGEN_TEST_PASSWORD` / `HISINGEN_TEST_VIN` | live-integration.yml (`live-polestar`) | `live-integration` | Dedicated Polestar test account — never a personal account. VIN is optional. |
 | `HISINGEN_TEST_VOLVO_CLIENT_ID` / `_CLIENT_SECRET` / `_VCC_API_KEY` / `_REFRESH_TOKEN` / `_VIN` | live-integration.yml (`live-volvo`) | `live-integration` | Dedicated Volvo Developer Portal test app registration + test account refresh token. VIN is optional. |
 
@@ -175,7 +190,10 @@ step with no advance warning otherwise.
 
 ## Release notes
 
-`generate_release_notes: true` on `softprops/action-gh-release` — GitHub auto-generates notes from merged PRs/commits since the last tag. There is no separate hand-written release-notes step; (a single consolidated entry, not a per-version log — see [testing/strategy.md](../testing/strategy.md)) is the project's own running summary, maintained separately from GitHub's auto-generated notes.
+Every release must have a hand-maintained entry in the root
+[`CHANGELOG.md`](../../CHANGELOG.md). GitHub also generates release-page notes
+from merged PRs and commits through `generate_release_notes: true`; those notes
+supplement the changelog rather than replacing it.
 
 ## Signing and notarization detail
 
@@ -191,4 +209,7 @@ step with no advance warning otherwise.
 
 ## What's real vs. what's aspirational
 
-Everything in this document describes the workflow as it exists in `.github/workflows/release.yml` and `Makefile` today — traced directly from those files, not from an idealized description. The one caveat: this documentation set has not itself executed a live release run; if you're the maintainer verifying this against a real run, cross-check the "Remaining external verification" checklist in `changelog.md`, which lists items like confirming a green CI matrix on hosted runners and exercising the production signing/notarization path with real secrets as still-open verification items as of the last update.
+Everything in this document describes the workflow as it exists in
+`.github/workflows/release.yml`, `.github/workflows/tag-release.yml`, and the
+local release scripts today. Production signing and notarization still require
+an actual protected release run with the configured environment secrets.

@@ -73,9 +73,20 @@ struct KeychainStore: Sendable {
     }
 
     private static let passwordAccount = "polestar-password"
+    private static let emailAccount = "polestar-email"
     private static let sessionAccount = "polestar-refresh-token"
     private static let volvoBundleAccount = "volvo-credentials-bundle"
     private static let commandSessionAccount = "polestar-command-refresh-token"
+
+    func saveEmail(_ email: String) throws {
+        try save(email, account: Self.emailAccount)
+    }
+    func readEmail() throws -> String? {
+        try read(account: Self.emailAccount)
+    }
+    func deleteEmail() throws {
+        try delete(account: Self.emailAccount)
+    }
 
     func savePassword(_ password: String) throws {
         UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
@@ -211,6 +222,7 @@ struct KeychainStore: Sendable {
 
     /// Wipes all stored credentials, tokens, session state, and presence flags.
     func wipeAll() {
+        attemptWipe("Polestar email") { try deleteEmail() }
         attemptWipe("Polestar password") { try deletePassword() }
         attemptWipe("Polestar session") { try deleteSessionToken() }
         attemptWipe("Polestar command session") { try deleteCommandSessionToken() }
@@ -376,6 +388,9 @@ struct KeychainStore: Sendable {
 }
 
 enum Keychain {
+    static func saveEmail(_ email: String) throws { try KeychainStore.app.saveEmail(email) }
+    static func readEmail() throws -> String? { try KeychainStore.app.readEmail() }
+    static func deleteEmail() throws { try KeychainStore.app.deleteEmail() }
     static func savePassword(_ password: String) throws { try KeychainStore.app.savePassword(password) }
     static func readPassword() throws -> String? { try KeychainStore.app.readPassword() }
     static func deletePassword() throws { try KeychainStore.app.deletePassword() }

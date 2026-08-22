@@ -244,11 +244,23 @@ enum VehicleRollCurve {
 
     /// Peak of the undamped settle shape, found by sampling so the normalisation
     /// stays correct if the damping is retuned.
-    private static let settlePeak: Double = {
-        stride(from: 0.0, through: 1.0, by: 0.001)
-            .map { abs(-sin(2 * .pi * $0) * exp(-settleDamping * $0)) }
-            .max() ?? 1
-    }()
+    private static let settlePeak = calculateSettlePeak()
+
+    /// Keep this deliberately scalar. CodeQL's Swift instrumentation makes the
+    /// equivalent `stride.map.max` expression too expensive for Xcode 16.4 to
+    /// type-check while emitting the module.
+    private static func calculateSettlePeak() -> Double {
+        var peak = 0.0
+        for sample in stride(from: 0.0, through: 1.0, by: 0.001) {
+            let phase = 2.0 * Double.pi * sample
+            let oscillation = sin(phase)
+            let decayExponent = -settleDamping * sample
+            let decay = exp(decayExponent)
+            let magnitude = abs(-oscillation * decay)
+            peak = max(peak, magnitude)
+        }
+        return peak > 0 ? peak : 1.0
+    }
 
     /// Ride-height sway while rolling: one gentle hump that is back to zero by
     /// the time the car stops.

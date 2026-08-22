@@ -132,6 +132,7 @@ enum VehicleAvailability: Codable, Equatable, Sendable {
 }
 
 enum VehicleStateSeverity: Equatable, Sendable {
+    case neutral
     case good
     case warning
     case critical
@@ -143,16 +144,16 @@ struct VehicleStateSummary: Equatable, Sendable {
 }
 
 struct VehicleState: Codable, Equatable, Sendable {
-    let batteryPercentage: Double?
-    let rangeKm: Int?
-    let chargingState: ChargingState
-    let estimatedChargingTimeToFullMinutes: Int?
+    var batteryPercentage: Double?
+    var rangeKm: Int?
+    var chargingState: ChargingState
+    var estimatedChargingTimeToFullMinutes: Int?
     var chargeTargetPercentage: Int?
-    let chargingPowerWatts: Int?
+    var chargingPowerWatts: Int?
     var chargingCurrentAmps: Int?
-    let chargingVoltageVolts: Int?
-    let chargingType: ChargingType
-    let chargerConnection: ChargerConnection
+    var chargingVoltageVolts: Int?
+    var chargingType: ChargingType
+    var chargerConnection: ChargerConnection
     let availability: VehicleAvailability
     let modelName: String?
     let modelYear: String?
@@ -238,6 +239,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     var serviceTrigger: String? = nil
     var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
+    /// Saved charging locations from Polestar's Chronos ChargeLocationService. Populated when
+    /// remote-charging features are enabled; empty for Volvo (no official equivalent).
+    var chargeLocations: [ChargeLocationSnapshot] = []
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
     var optimisticCommandLockUntil: Date? = nil
@@ -259,8 +263,33 @@ struct VehicleState: Codable, Equatable, Sendable {
     var isCachedSnapshot: Bool = false
     let imageData: Data?
     var fetchedAt: Date
-    let vehicleReportedAt: Date?
+    var vehicleReportedAt: Date?
     let dataWarnings: [String]
+    var retainedDataCategories: [AppFeature] = []
+    var retainedDataAt: Date? = nil
+
+    mutating func applyLiveUpdate(_ update: VehicleLiveUpdate, receivedAt: Date = Date()) {
+        switch update {
+        case .battery(let battery):
+            batteryPercentage = battery.batteryPercentage ?? batteryPercentage
+            rangeKm = battery.rangeKm ?? rangeKm
+            estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
+                ?? estimatedChargingTimeToFullMinutes
+            chargingState = battery.chargingState ?? chargingState
+            if battery.chargerConnection != .unknown { chargerConnection = battery.chargerConnection }
+            if battery.chargingType != .unknown { chargingType = battery.chargingType }
+            chargingPowerWatts = battery.chargingPowerWatts ?? chargingPowerWatts
+            chargingCurrentAmps = battery.chargingCurrentAmps ?? chargingCurrentAmps
+            chargingVoltageVolts = battery.chargingVoltageVolts ?? chargingVoltageVolts
+            batteryDiagnostics = battery.diagnostics
+            vehicleReportedAt = battery.reportedAt ?? vehicleReportedAt
+        case .exterior(let exterior, let reportedAt):
+            exteriorStatus = exterior.merging(previous: exteriorStatus)
+            vehicleReportedAt = reportedAt ?? vehicleReportedAt
+        }
+        fetchedAt = receivedAt
+        isCachedSnapshot = false
+    }
 
     init(
         batteryPercentage: Double?, rangeKm: Int?, chargingState: ChargingState,
@@ -352,8 +381,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
+        case chargeLocations
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
         case preferredWorkshopId, preferredWorkshopName
+        case retainedDataCategories, retainedDataAt
     }
 
     init(from decoder: Decoder) throws {
@@ -406,6 +437,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt),
             dataWarnings: try values.decode([String].self, forKey: .dataWarnings)
         )
+        self.chargeLocations = try values.decodeIfPresent([ChargeLocationSnapshot].self, forKey: .chargeLocations) ?? []
         self.externalColour = try values.decodeIfPresent(String.self, forKey: .externalColour)
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
         self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
@@ -434,6 +466,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
         self.preferredWorkshopId = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopId)
         self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
+        self.retainedDataCategories = try values.decodeIfPresent([AppFeature].self, forKey: .retainedDataCategories) ?? []
+        self.retainedDataAt = try values.decodeIfPresent(Date.self, forKey: .retainedDataAt)
     }
 
     var formattedBuildWeek: String? {
@@ -479,80 +513,35 @@ struct VehicleState: Codable, Equatable, Sendable {
         return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
     }
 
-    var effectiveWarrantyInfo: VehicleWarrantyInfo {
-        if let explicit = warrantyInfo {
-            return explicit
-        }
-        let calendar = Calendar.current
-        let isVolvo = (modelName?.lowercased().contains("volvo") == true) || (vin.uppercased().hasPrefix("YV"))
-
-        let baselineDeliveryDate: Date = {
-            if let rawWeek = structureWeek?.trimmingCharacters(in: .whitespacesAndNewlines),
-               rawWeek.count >= 6,
-               let year = Int(rawWeek.prefix(4)),
-               let week = Int(rawWeek.suffix(2)) {
-                var components = DateComponents()
-                components.yearForWeekOfYear = year
-                components.weekOfYear = week
-                components.weekday = 2
-                if let buildDate = calendar.date(from: components) {
-                    return calendar.date(byAdding: .weekOfYear, value: 4, to: buildDate) ?? buildDate
-                }
-            }
-
-            let yearInt = modelYear.flatMap { Int($0.filter(\.isNumber)) } ?? 2023
-            var components = DateComponents()
-            components.year = yearInt
-            components.month = 6
-            components.day = 1
-            return calendar.date(from: components) ?? Date()
-        }()
-
-        let factoryEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let batteryEnd = calendar.date(byAdding: .year, value: 8, to: baselineDeliveryDate)
-        let roadsideEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let digitalServicesEnd = calendar.date(byAdding: .year, value: 3, to: baselineDeliveryDate)
-        let corrosionEnd = calendar.date(byAdding: .year, value: 12, to: baselineDeliveryDate)
-
-        let plan = isVolvo ? "Care by Volvo" : "Polestar Care"
-        let assistanceName = isVolvo ? "Volvo Assistance" : "Polestar Assistance"
-
-        return VehicleWarrantyInfo(
-            planName: plan,
-            status: L10n.text("Active"),
-            factoryWarrantyValidUntil: factoryEnd,
-            batteryWarrantyValidUntil: powertrain.hasElectricRange ? batteryEnd : nil,
-            batteryWarrantyKm: powertrain.hasElectricRange ? 160_000 : nil,
-            roadsideAssistanceValidUntil: roadsideEnd,
-            includedMaintenance: true,
-            corrosionWarrantyValidUntil: corrosionEnd,
-            digitalServicesValidUntil: digitalServicesEnd,
-            assistanceContact: assistanceName
-        )
-    }
-
+    /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
+    /// (the base per-model table) — not an independent capacity table. Falls through to the base
+    /// table for anything without a known year-specific pack revision or a PHEV-specific figure.
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+        let yearInt = modelYear.flatMap(Int.init)
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
+           let yearInt, yearInt >= 2024 {
             return 82.0
         }
         if powertrain == .phev {
+            guard let yearInt else { return model.nominalBatteryCapacityKwh }
             return yearInt >= 2022 ? 18.8 : 11.6
         }
-        return model.nominalBatteryCapacityKwh > 0 ? model.nominalBatteryCapacityKwh : 78.0
+        return model.nominalBatteryCapacityKwh
     }
 
     var factoryUsableBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = Int(modelYear ?? "") ?? 2023
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40) && yearInt >= 2024 {
+        let yearInt = modelYear.flatMap(Int.init)
+        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
+           let yearInt, yearInt >= 2024 {
             return 79.0
         }
         if powertrain == .phev {
+            guard let yearInt else { return model.nominalUsableCapacityKwh }
             return yearInt >= 2022 ? 14.9 : 9.1
         }
-        return model.nominalUsableCapacityKwh > 0 ? model.nominalUsableCapacityKwh : 75.0
+        return model.nominalUsableCapacityKwh
     }
 
     var effectiveNominalBatteryCapacityKwh: Double {
@@ -560,8 +549,12 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var batteryDegradationPercent: Double? {
-        // Neither provider currently exposes a validated measured capacity or SoH value.
-        // Do not infer pack degradation from age, mileage, or a specification capacity.
+        // Neither provider exposes a validated *measured* capacity or SoH value — this property
+        // specifically represents that absence and must stay `nil` rather than infer one from
+        // age, mileage, or a specification capacity. A separate, clearly-labeled *calculated*
+        // estimate that does combine those signals exists at `BatteryHealthEstimator.estimate` —
+        // it returns a distinct `BatteryHealthEstimate` type precisely so a calculated figure can
+        // never be mistaken for what this property represents.
         return nil
     }
 
@@ -576,51 +569,74 @@ struct VehicleState: Codable, Equatable, Sendable {
         return factoryUsableBatteryCapacityKwh
     }
 
+    /// Every capacity figure below is interpolated from `factoryNominalBatteryCapacityKwh`/
+    /// `factoryUsableBatteryCapacityKwh` — the same computed values shown elsewhere in the UI —
+    /// rather than restated as separate hardcoded numbers, so this description can't silently
+    /// drift out of sync with them. Only the chemistry/module/voltage prose is hand-authored.
+    ///
+    /// Some branches below (Polestar 2 and Volvo XC40-family "Standard Range," Volvo EX30
+    /// "Standard Range") describe real-world pack variants that exist in the market but that
+    /// `VehicleModelFamily.nominalBatteryCapacityKwh` has no signal to distinguish from the
+    /// higher-capacity variant of the same model — the current capacity table only knows one
+    /// figure per model family (plus year), not per-trim. Those branches are therefore currently
+    /// unreachable; they're left in place, clearly labelled, rather than silently deleted, in
+    /// case a future capability signal makes the distinction possible.
     var batteryPackDescription: String {
         let nominal = factoryNominalBatteryCapacityKwh
+        let usable = factoryUsableBatteryCapacityKwh
+        // Formatted with the plain (locale-invariant) `String(format:)` overload — matching
+        // `Format.swift`'s convention for every other numeric readout in the app — rather than
+        // `L10n.format`, whose `locale:` argument follows the interface language/system region
+        // and would otherwise render these as "78,0 kWh" under a comma-decimal locale.
+        let nominalText = String(format: "%.1f", nominal)
+        let usableText = String(format: "%.1f", usable)
+        let nominalWhole = String(format: "%.0f", nominal)
         switch model {
         case .polestar2:
             if nominal >= 80.0 {
-                return L10n.text("82.0 kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)")
+                return L10n.format("%@ kWh Long Range (CATL · 27 Modules / 324 Cells · 400V)", nominalText)
             } else if nominal >= 75.0 {
-                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)")
+                return L10n.format("%@ kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)", nominalText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)")
             }
         case .polestar3:
-            return L10n.text("111.0 kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)")
+            return L10n.format("%@ kWh Extended Range (CATL · 17 Modules / 204 Cells · 400V)", nominalText)
         case .polestar4:
-            return L10n.text("100.0 kWh Long Range (CATL / VREMT · 102 kWh Nominal · 400V)")
+            return L10n.format("%@ kWh Long Range (CATL / VREMT · %@ kWh Nominal · 400V)", nominalWhole, nominalWhole)
         case .polestar1:
-            return L10n.text("34.0 kWh High-Output Hybrid (30.0 kWh Usable · Triple Pack)")
+            return L10n.format("%@ kWh High-Output Hybrid (%@ kWh Usable · Triple Pack)", nominalText, usableText)
         case .volvoEX30:
             if nominal >= 65.0 {
-                return L10n.text("69.0 kWh Extended Range (NMC · 64.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Extended Range (NMC · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)")
             }
         case .volvoEX90, .volvoES90:
-            return L10n.text("111.0 kWh Extended Range (CATL · 107.0 kWh Usable · 400V)")
+            return L10n.format("%@ kWh Extended Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
         case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
             if nominal >= 80.0 {
-                return L10n.text("82.0 kWh Long Range (CATL · 79.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Long Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else if nominal >= 75.0 {
-                return L10n.text("78.0 kWh Long Range (LG Energy / CATL · 75.0 kWh Usable · 400V)")
+                return L10n.format("%@ kWh Long Range (LG Energy / CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
+                // Unreachable with the current capacity table — see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)")
             }
         case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
             if powertrain == .phev {
                 if nominal >= 16.0 {
-                    return L10n.text("18.8 kWh T8 Recharge PHEV (96 Cells · 14.9 kWh Usable)")
+                    return L10n.format("%@ kWh T8 Recharge PHEV (96 Cells · %@ kWh Usable)", nominalText, usableText)
                 } else {
-                    return L10n.text("11.6 kWh T8 Twin Engine PHEV (9.1 kWh Usable)")
+                    return L10n.format("%@ kWh T8 Twin Engine PHEV (%@ kWh Usable)", nominalText, usableText)
                 }
             }
-            return L10n.format("%.1f kWh High-Voltage Pack", nominal)
+            return L10n.format("%@ kWh High-Voltage Pack", nominalText)
         default:
             if nominal > 0 {
-                return L10n.format("%.1f kWh Lithium-ion Pack", nominal)
+                return L10n.format("%@ kWh Lithium-ion Pack", nominalText)
             }
             return L10n.text("High-Voltage Traction Battery")
         }
@@ -668,7 +684,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         if healthDetails?.tyres.contains(where: { $0.warning.needsAttention }) == true {
             return VehicleStateSummary(message: L10n.text("Tyre pressure warning"), severity: .warning)
         }
-        if softwareInfo?.state == .failed {
+        if softwareInfo?.hasActionableFailure() == true {
             return VehicleStateSummary(message: L10n.text("Software update failed"), severity: .warning)
         }
         if case .unavailable = availability {
@@ -680,7 +696,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         if exteriorStatus?.isLocked == true {
             return VehicleStateSummary(message: L10n.text("Vehicle secured"), severity: .good)
         }
-        return VehicleStateSummary(message: L10n.text("No issues detected"), severity: .good)
+        return VehicleStateSummary(message: L10n.text("No active warnings reported"), severity: .neutral)
     }
 
     var capabilityProfile: VehicleCapabilityProfile {
@@ -710,21 +726,20 @@ struct VehicleState: Codable, Equatable, Sendable {
         vin.uppercased().hasPrefix("YV")
     }
 
-    var estimatedRangeHealth: (percentage: Double, rating: String)? {
-        guard model.hasVerifiedNominalSpecs,
-              let battery = batteryPercentage, battery > 10,
+    /// Current vehicle-reported range at the present SOC compared with a WLTP reference at the
+    /// same SOC — the model-family table, or a VIN-specific `specification` override entered in
+    /// Settings when one exists. This is a range comparison, not battery State of Health.
+    /// `battery >= 20` matches the same low-SOC cutoff `BatteryHealthEstimator`'s range signal
+    /// uses, since the vehicle's own range readout gets noisier as it approaches empty.
+    func currentRangeVsModelWltpPercent(specification: VehicleSpecificationOverride? = nil) -> Double? {
+        guard let battery = batteryPercentage, battery >= 20,
               let range = rangeKm, range > 0 else { return nil }
-        let nominalRange = model.nominalWltpRangeKm
-        let expectedRangeAtCurrentSoC = nominalRange * (battery / 100.0)
-        let ratio = Double(range) / expectedRangeAtCurrentSoC
-        let clampedRatio = min(max(ratio, 0.70), 1.05)
-        let soh = min(100.0, max(80.0, (clampedRatio >= 1.0 ? 99.5 : (85.0 + (clampedRatio - 0.70) / 0.30 * 14.5))))
-        let rating: String
-        if soh >= 95.0 { rating = L10n.text("Excellent") }
-        else if soh >= 90.0 { rating = L10n.text("Good") }
-        else if soh >= 80.0 { rating = L10n.text("Normal") }
-        else { rating = L10n.text("Degraded") }
-        return (percentage: (soh * 10).rounded() / 10, rating: rating)
+        let referenceRange = specification?.wltpRangeKm
+            ?? (model.hasModelReferenceSpecs ? model.nominalWltpRangeKm : nil)
+        guard let referenceRange, referenceRange > 0 else { return nil }
+        let expectedRangeAtCurrentSoC = referenceRange * (battery / 100.0)
+        guard expectedRangeAtCurrentSoC > 0 else { return nil }
+        return (Double(range) / expectedRangeAtCurrentSoC * 1000).rounded() / 10
     }
 
     var estimatedChargingCompletion: Date? {
@@ -838,6 +853,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         copy.tripComputerElectricRangeKm = tripComputerElectricRangeKm
         copy.chargingCurrentLimitAmps = chargingCurrentLimitAmps
         copy.warrantyInfo = warrantyInfo
+        copy.retainedDataCategories = retainedDataCategories
+        copy.retainedDataAt = retainedDataAt
         return copy
     }
 
@@ -982,6 +999,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
         merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
+        // Locations are only re-shown when this fetch actually returned them; an empty result
+        // after a backend hiccup should not wipe the list the controls tab is rendering.
+        merged.chargeLocations = chargeLocations.isEmpty ? previous.chargeLocations : chargeLocations
         merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil)
@@ -994,9 +1014,33 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId
         merged.preferredWorkshopName = preferredWorkshopName ?? previous.preferredWorkshopName
 
+        var retained = Set<AppFeature>()
+        func markRetained(_ feature: AppFeature, currentIsMissing: Bool, previousWasPresent: Bool) {
+            if features.contains(feature), currentIsMissing, previousWasPresent {
+                retained.insert(feature)
+            }
+        }
+        markRetained(.exteriorStatus, currentIsMissing: exteriorStatus == nil, previousWasPresent: previous.exteriorStatus != nil)
+        markRetained(.tyreAndWarnings, currentIsMissing: healthDetails == nil, previousWasPresent: previous.healthDetails != nil)
+        markRetained(.softwareUpdates, currentIsMissing: softwareInfo == nil, previousWasPresent: previous.softwareInfo != nil)
+        markRetained(.climateStatus, currentIsMissing: climateStatus == nil, previousWasPresent: previous.climateStatus != nil)
+        markRetained(.tripMeters, currentIsMissing: tripMeterManualKm == nil && tripMeterAutomaticKm == nil,
+                     previousWasPresent: previous.tripMeterManualKm != nil || previous.tripMeterAutomaticKm != nil)
+        markRetained(.connectivityDiagnostics, currentIsMissing: connectivity == nil, previousWasPresent: previous.connectivity != nil)
+        markRetained(.airQuality, currentIsMissing: airQuality == nil, previousWasPresent: previous.airQuality != nil)
+        markRetained(.batteryDiagnostics, currentIsMissing: batteryDiagnostics == nil, previousWasPresent: previous.batteryDiagnostics != nil)
+        markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)
+        markRetained(.vehicleLocation, currentIsMissing: location == nil, previousWasPresent: previous.location != nil)
+        retained.formUnion(failed.filter { features.contains($0) })
+        merged.retainedDataCategories = retained.sorted { $0.title < $1.title }
+        merged.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
+
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {
-            let sample = ChargingSample(timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts)
+            let sample = ChargingSample(
+                timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts,
+                chargingType: merged.chargingType
+            )
             if let last = samples.last {
                 if sample.timestamp.timeIntervalSince(last.timestamp) >= 20 || abs(sample.batteryPercentage - last.batteryPercentage) >= 0.2 {
                     samples.append(sample)

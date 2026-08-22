@@ -6,7 +6,7 @@ import Testing
 struct VolvoDecodingTests {
 
     #if SWIFT_PACKAGE
-    private func loadFixture<Payload: Decodable>(_ name: String, as: Payload.Type) throws -> Payload {
+    private func loadFixture<Payload: Decodable & Sendable>(_ name: String, as: Payload.Type) throws -> Payload {
         let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json"))
         let data = try Data(contentsOf: url)
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<Payload>.self, from: data)
@@ -68,9 +68,14 @@ struct VolvoDecodingTests {
         let state = try loadFixture("volvo-energy-state", as: VolvoEnergyStateDTO.self)
         XCTAssertEqual(state.batteryChargeLevel?.value, 68.0)
         XCTAssertEqual(state.electricRange?.value, 210)
-        XCTAssertEqual(ChargingState(volvoChargingStatus: state.chargingStatus?.value), .charging)
+        XCTAssertEqual(ChargingState(volvoChargingStatus: state.chargingStateValue), .charging)
         XCTAssertEqual(ChargerConnection(volvoConnectionStatus: state.chargerConnectionStatus?.value), .connected)
-        XCTAssertEqual(state.targetBatteryLevel?.value, 90)
+        XCTAssertEqual(state.targetBatteryChargeLevel?.value, 90)
+        XCTAssertEqual(state.targetPercent, 90)
+        XCTAssertEqual(state.chargingPowerWatts, 7_400)
+        XCTAssertEqual(state.chargingCurrentLimit?.value, 16)
+        XCTAssertEqual(ChargingType(volvoChargingType: state.chargingType?.value), .ac)
+        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: state.chargerPowerStatus?.value), .providingPower)
     }
 
     @Test
@@ -78,6 +83,8 @@ struct VolvoDecodingTests {
         let caps = try loadFixture("volvo-energy-capabilities", as: VolvoEnergyCapabilitiesDTO.self)
         XCTAssertEqual(caps.chargingPower?.isSupported, true)
         XCTAssertEqual(caps.targetBatteryLevel?.isSupported, false)
+        XCTAssertEqual(caps.chargingCurrentLimit?.isSupported, true)
+        XCTAssertEqual(caps.chargingType?.isSupported, true)
     }
 
     @Test
@@ -155,8 +162,9 @@ struct VolvoDecodingTests {
     @Test
     func testLocationFixtureDecodes() throws {
         let location = try loadFixture("volvo-location", as: VolvoLocationDTO.self)
-        XCTAssertEqual(location.geometry?.coordinates?.count, 2)
+        XCTAssertEqual(location.geometry?.coordinates?.count, 3)
         XCTAssertEqual(location.properties?.heading, "180")
+        XCTAssertEqual(location.altitudeMeters, 42.5)
     }
 
     @Test
@@ -186,6 +194,20 @@ struct VolvoDecodingTests {
         let field = try JSONDecoder.volvo.decode(VolvoField<Int>.self, from: Data(json.utf8))
         XCTAssertEqual(field.value, 42)
         XCTAssertNil(field.status)
+    }
+
+    @Test
+    func testVolvoDistanceAndConsumptionUnitsNormalizeToDomainUnits() throws {
+        let energyJSON = #"{"electricRange":{"value":100,"unit":"mi"},"chargingPower":{"value":7.4,"unit":"kW"}}"#
+        let energy = try JSONDecoder.volvo.decode(VolvoEnergyStateDTO.self, from: Data(energyJSON.utf8))
+        XCTAssertEqual(energy.rangeKm, 161)
+        XCTAssertEqual(energy.chargingPowerWatts, 7_400)
+
+        let statsJSON = #"{"tripMeterAutomatic":{"value":10,"unit":"mi"},"averageEnergyConsumption":{"value":200,"unit":"Wh/km"},"averageSpeed":{"value":50,"unit":"mph"}}"#
+        let stats = try JSONDecoder.volvo.decode(VolvoStatisticsDTO.self, from: Data(statsJSON.utf8))
+        XCTAssertEqual(stats.tripMeterAutomaticKm?.rounded(), 16)
+        XCTAssertEqual(stats.averageEnergyConsumptionKwhPer100Km, 20)
+        XCTAssertEqual(stats.averageSpeedKmH?.rounded(), 80)
     }
 
     @Test
@@ -262,6 +284,17 @@ struct VolvoDecodingTests {
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
         XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
+        XCTAssertTrue(warnings.hasReportedLightStatus)
+    }
+
+    @Test
+    func testEngineStatusPreservesUnknownInsteadOfAssumingStopped() throws {
+        let running = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"RUNNING"}}"#.utf8))
+        let stopped = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"STOPPED"}}"#.utf8))
+        let unspecified = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"UNSPECIFIED"}}"#.utf8))
+        XCTAssertEqual(running.isRunning, true)
+        XCTAssertEqual(stopped.isRunning, false)
+        XCTAssertNil(unspecified.isRunning)
     }
 
     @Test
@@ -289,7 +322,7 @@ struct VolvoDecodingTests {
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoEngineStatusDTO>.self, from: Data(json.utf8))
         let dto = try XCTUnwrap(envelope.data)
-        XCTAssertTrue(dto.isRunning)
+        XCTAssertEqual(dto.isRunning, true)
     }
 
     @Test
@@ -304,6 +337,32 @@ struct VolvoDecodingTests {
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
         let dto = try XCTUnwrap(envelope.data)
         XCTAssertTrue(dto.isAvailable)
+    }
+
+    @Test
+    func testCommandAccessibilityPreservesUnavailableReason() throws {
+        let json = #"{"data":{"availabilityStatus":{"value":"UNAVAILABLE","unavailableReason":"POWER_SAVING_MODE"}}}"#
+        let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
+        let dto = try XCTUnwrap(envelope.data)
+        XCTAssertFalse(dto.isAvailable)
+        XCTAssertEqual(dto.reason, L10n.text("Vehicle is in power-saving mode"))
+    }
+
+    @Test
+    func testDocumentedCommandFailuresAreRejected() throws {
+        for status in ["UNABLE_TO_LOCK_DOOR_OPEN", "NOT_ALLOWED_PRIVACY_ENABLED", "CAR_ERROR"] {
+            let json = "{\"invokeStatus\":\"\(status)\"}"
+            let response = try JSONDecoder.volvo.decode(VolvoCommandResponseDTO.self, from: Data(json.utf8))
+            XCTAssertTrue(response.isFailure)
+        }
+    }
+
+    @Test
+    func testStagedUnlockResponseDecodes() throws {
+        let json = #"{"invokeStatus":"DELIVERED","readyToUnlock":true,"readyToUnlockUntil":120}"#
+        let response = try JSONDecoder.volvo.decode(VolvoCommandResponseDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(response.outcome, .delivered)
+        XCTAssertEqual(response.readyToUnlockUntil, 120)
     }
 
     @Test
@@ -331,5 +390,3 @@ struct VolvoDecodingTests {
         XCTAssertEqual(state.chargingCurrentLimitAmps, 32)
     }
 }
-
-

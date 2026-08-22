@@ -502,6 +502,7 @@ struct StateSummaryChip: View {
 
     private var color: Color {
         switch severity {
+        case .neutral: return .secondary
         case .good: return HisingenTheme.semanticGood
         case .warning: return HisingenTheme.semanticWarning
         case .critical: return HisingenTheme.semanticCritical
@@ -510,6 +511,7 @@ struct StateSummaryChip: View {
 
     private var symbol: String {
         switch severity {
+        case .neutral: return "info.circle.fill"
         case .good: return "checkmark.circle.fill"
         case .warning: return "exclamationmark.triangle.fill"
         case .critical: return "exclamationmark.octagon.fill"
@@ -586,6 +588,35 @@ struct CapabilityBadge: View {
     }
 }
 
+struct InformationButton: View {
+    let message: String
+    @State private var isShowingDetails = false
+
+    var body: some View {
+        Button {
+            isShowingDetails.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(message)
+        .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(HisingenTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 260, alignment: .leading)
+                .padding(12)
+        }
+        .accessibilityLabel(L10n.text("Details"))
+        .accessibilityHint(message)
+    }
+}
+
 struct KVRow: View {
     let key: String
     let value: String
@@ -604,7 +635,7 @@ struct KVRow: View {
         self.info = info
     }
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 11, weight: .medium))
@@ -615,23 +646,19 @@ struct KVRow: View {
                 .foregroundStyle(warning ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
                 .font(.system(size: 12, weight: .regular))
             if let info {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 16, height: 16)
-                    .contentShape(Rectangle())
-                    .help(info)
-                    .accessibilityHidden(true)
+                InformationButton(message: info)
             }
             Spacer()
             Text(value)
                 .foregroundStyle(valueWarning ? HisingenTheme.semanticWarning : HisingenTheme.ink)
                 .font(.system(size: 12, weight: HisingenTheme.valueWeight))
                 .monospacedDigit()
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .help(value)
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: info == nil ? .ignore : .contain)
         .accessibilityLabel({
             var label = warning || valueWarning ? "\(L10n.text("Warning")): \(key), \(value)" : "\(key): \(value)"
             if let info { label += ". \(info)" }
@@ -841,8 +868,8 @@ struct FuelGauge: View {
 
 @MainActor
 struct DualEnergyGauge: View {
-    let batteryFraction: Double
-    let fuelFraction: Double
+    let batteryFraction: Double?
+    let fuelFraction: Double?
     let batteryColor: Color
     let fuelColor: Color
     var isCharging: Bool = false
@@ -858,17 +885,21 @@ struct DualEnergyGauge: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(HisingenTheme.inkMuted)
                     Spacer()
-                    Text(String(format: "%.0f%%", min(max(batteryFraction * 100, 0), 100)))
+                    Text(batteryFraction.map { String(format: "%.0f%%", min(max($0 * 100, 0), 100)) } ?? "—")
                         .font(.system(size: 10, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                 }
-                BatteryGauge(
-                    fraction: batteryFraction,
-                    targetFraction: nil,
-                    color: batteryColor,
-                    isCharging: isCharging
-                )
+                if let batteryFraction {
+                    BatteryGauge(
+                        fraction: batteryFraction,
+                        targetFraction: nil,
+                        color: batteryColor,
+                        isCharging: isCharging
+                    )
+                } else {
+                    UnavailableEnergyGauge()
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -880,17 +911,31 @@ struct DualEnergyGauge: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(HisingenTheme.inkMuted)
                     Spacer()
-                    Text(String(format: "%.0f%%", min(max(fuelFraction * 100, 0), 100)))
+                    Text(fuelFraction.map { String(format: "%.0f%%", min(max($0 * 100, 0), 100)) } ?? "—")
                         .font(.system(size: 10, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                 }
-                FuelGauge(
-                    fraction: fuelFraction,
-                    color: fuelColor
-                )
+                if let fuelFraction {
+                    FuelGauge(
+                        fraction: fuelFraction,
+                        color: fuelColor
+                    )
+                } else {
+                    UnavailableEnergyGauge()
+                }
             }
         }
+    }
+}
+
+@MainActor
+struct UnavailableEnergyGauge: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: PreferencesStore().appTheme == .polestar ? 0 : 5, style: .continuous)
+            .fill(HisingenTheme.ink.opacity(0.08))
+            .frame(height: 9)
+            .accessibilityLabel(L10n.text("Energy level unavailable"))
     }
 }
 

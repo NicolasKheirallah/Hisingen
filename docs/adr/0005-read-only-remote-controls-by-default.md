@@ -7,13 +7,19 @@ Status: Superseded by [ADR-0009](0009-remote-commands-compiled-into-all-builds.m
 > OIDC client, which only holds read scopes. The flag described here has been
 > removed; see ADR-0009 for what replaced it.
 
+## Status
+
+Superseded by [ADR-0009](0009-remote-commands-compiled-into-all-builds.md), which removed the
+`HISINGEN_EXPERIMENTAL_REMOTE` compile flag and moved gating to runtime feature flags plus
+per-command confirmation. The Context below describes the original compile-time approach.
+
 ## Context
 
 Remote commands (lock/unlock, climate, charging schedule changes) are real,
 physical, state-changing actions on someone's vehicle, dispatched from
 third-party (non-vendor-official) software. Polestar in particular currently
-requires official paired-mobile authorization for these commands — see the
-comment in `Package.swift` above `HISINGEN_EXPERIMENTAL_REMOTE`. Shipping
+requires official paired-mobile authorization for these commands — see
+ADR-0009 and the threat model for the current runtime-gating model. Shipping
 this capability by default, or even as a hidden settings toggle, means every
 distributed build carries code that can act on a real vehicle.
 

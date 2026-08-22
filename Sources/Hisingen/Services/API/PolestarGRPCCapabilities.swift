@@ -135,8 +135,44 @@ extension PolestarGRPC {
         otaSoftwareIDs[vin] = id
     }
 
-    func fetchChargingSchedules(vin: String, accessToken: String) async throws -> [VehicleSchedule] {
-        var schedules: [VehicleSchedule] = []
+    /// Reads saved charging locations from Chronos `ChargeLocationService`.
+    /// `ChargeLocation` wire: `2 location_id`, `3 alias`, `4 coordinate{1 lon, 2 lat}`,
+    /// `5 amp_limit`, `6 minimum_soc`, `7 optimised_charging`, `12 location_type`
+    /// (1 recent / 2 saved / 3 saved third-party). Field semantics cross-checked against
+    /// the independently built kildahldev/unofficial-polestar-api client.
+    func fetchChargeLocations(vin: String, accessToken: String) async throws -> [ChargeLocationSnapshot] {
+        let body = try await firstMessage(path: Self.chargeLocationsPath,
+                                          message: Self.chronosRequest(vin),
+                                          vin: vin, accessToken: accessToken, host: .pccs)
+        return Self.parseChargeLocations(body)
+    }
+
+    static func parseChargeLocations(_ data: Data) -> [ChargeLocationSnapshot] {
+        Protobuf.fields(data).filter { $0.number == 3 && $0.wire == 2 }.compactMap { field in
+            let f = Protobuf.fields(field.data)
+            let id = string(f, 2)
+            guard !id.isEmpty else { return nil }
+            var latitude: Double?
+            var longitude: Double?
+            if let coordinate = message(f, field: 4) {
+                let coords = Protobuf.fields(coordinate)
+                longitude = numeric(coords, 1)
+                latitude = numeric(coords, 2)
+            }
+            return ChargeLocationSnapshot(
+                id: id,
+                alias: string(f, 3),
+                latitude: latitude,
+                longitude: longitude,
+                ampLimit: Int(varint(f, 5) ?? 0),
+                minimumSoc: Int(varint(f, 6) ?? 0),
+                optimisedChargingEnabled: (varint(f, 7) ?? 0) == 1,
+                kind: Int(varint(f, 12) ?? 0)
+            )
+        }
+    }
+
+    func fetchChargingSchedules(vin: String, accessToken: String) async throws -> [VehicleSchedule] {        var schedules: [VehicleSchedule] = []
         var errors: [Error] = []
         do {
             let body = try await firstMessage(path: Self.globalChargeTimerPath,
@@ -173,7 +209,6 @@ extension PolestarGRPC {
 
     /// Fetches vehicle service errors from `chronos.services.v1.ErrorService/GetErrors` (C3).
     /// The response is a oneof-style message where exactly one per-service error
-    /// field (3-8) is populated. Recovered from the official Polestar APK v5.10.0 teardown.
     func fetchErrors(vin: String, accessToken: String) async throws -> [VehicleChronosError] {
         // ErrorService is server-streaming and may take longer than the default 10s request
         // timeout to return the first frame on PCCS — use a dedicated session with a longer
@@ -229,12 +264,15 @@ extension PolestarGRPC {
     /// Fetches vehicle information from `car_information.CarInformation/GetMyCars` (C3 gRPC).
     /// Returns backend-authoritative capability flags and the **actually installed** software
     /// version (`consumerSoftwareVersion`) — which `GetSoftwareInfo` does not provide during
-    /// a rollout. Recovered from the official Polestar APK v5.10.0 teardown — see
-    /// `docs/api/ota-investigation.md` (E10).
+    /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
         let body = try await firstMessage(path: Self.myCarsPath, message: Data(),
                                           vin: vin, accessToken: accessToken)
-        return Self.parseMyCars(body, vin: vin)
+        let capabilities = Self.parseMyCars(body, vin: vin)
+        // Cache the backend-reported charging bounds so command validation can use the same
+        // limits the vehicle itself advertises instead of hardcoded fallbacks.
+        if let capabilities { capabilityLimits[vin] = capabilities }
+        return capabilities
     }
 
     func fetchClimate(vin: String, accessToken: String) async throws -> VehicleClimateStatus? {
@@ -293,27 +331,80 @@ extension PolestarGRPC {
         )
     }
 
+    /// Read paths probed in order. `GetPreCleaning` is the verified production spelling; the
+    /// alternates follow the same `services.vehiclestates.<domain>` naming pattern every other
+    /// C3 state service uses (`GetLatest*` one-shot + streaming `Get*`), so if Polestar renames
+    /// or promotes the service the app degrades gracefully instead of losing the card.
+    static let airQualityPaths: [(String, GRPCHost)] = [
+        ("/services.vehiclestates.precleaning.PreCleaningService/GetPreCleaning", .c3),
+        ("/services.vehiclestates.precleaning.PreCleaningService/GetLatestPreCleaning", .c3),
+        ("/services.vehiclestates.airquality.AirQualityService/GetLatestAirQuality", .c3),
+        ("/services.vehiclestates.airquality.AirQualityService/GetAirQuality", .c3)
+    ]
+
     func fetchAirQuality(vin: String, accessToken: String) async throws -> VehicleAirQuality? {
-        let body = try await firstMessage(path: Self.preCleaningPath, message: Self.healthRequest(vin),
-                                          vin: vin, accessToken: accessToken)
-        guard let payload = Self.message(body, field: 3) else { return nil }
-        let fields = Protobuf.fields(payload)
+        var firstError: Error?
+        for (path, host) in Self.airQualityPaths {
+            do {
+                let body = try await firstMessage(path: path, message: Self.healthRequest(vin),
+                                                  vin: vin, accessToken: accessToken, host: host)
+                // The payload sits at field 3 on the verified response shape; probe the usual
+                // wrapper fields too so an alternate spelling still decodes.
+                let candidates = [
+                    Self.message(body, field: 3),
+                    Self.message(body, field: 1),
+                    body
+                ].compactMap { $0 }
+                for candidate in candidates {
+                    if let parsed = Self.parseAirQuality(candidate) { return parsed }
+                }
+            } catch {
+                if firstError == nil { firstError = error }
+            }
+        }
+        if let firstError { throw firstError }
+        return nil
+    }
+
+    /// Parses a C3 `PreCleaningInfo` payload:
+    /// `1 timestamp`, `4 started_at`, `5 ending_at`, `6 running_status`,
+    /// `7 start_reason`, `8 last_cycle_valid`, `9 measured_air_quality_index`,
+    /// `10 measured_particulate_matter_2_5`, `11 runtime_left_minutes`,
+    /// `13 error` (0 none / 1 generic / 2 interrupted), plus live-observed
+    /// `14 particulate_matter_10`, `15 external_particulate_matter_2_5`,
+    /// `16 filter_remaining_percent`.
+    ///
+    /// Field semantics for 1/4/5/6/7/8/13 cross-checked against the independently built
+    /// `kildahldev/unofficial-polestar-api` proto schema; 14–16 were observed live by Hisingen.
+    static func parseAirQuality(_ data: Data) -> VehicleAirQuality? {
+        let fields = Protobuf.fields(data)
         let state: AirCleaningState
-        switch Self.varint(fields, 6) {
+        switch varint(fields, 6) {
         case 1: state = .on
         case 2: state = .off
         case 3: state = .pending
         default: state = .unknown
         }
+        let errorRaw = Int(varint(fields, 13) ?? 0)
+        let errorKind = AirCleaningError(rawValue: errorRaw) ?? (errorRaw > 0 ? .generic : nil)
+        let hasAnyValue = [9, 10, 11, 14, 15, 16].contains { varint(fields, $0) != nil }
+            || varint(fields, 6) != nil
+        guard hasAnyValue else { return nil }
         return VehicleAirQuality(
             cleaningState: state,
-            airQualityIndex: Self.positiveInt(Self.varint(fields, 9)),
-            particulateMatter25: Self.positiveInt(Self.varint(fields, 10)),
-            particulateMatter10: Self.positiveInt(Self.varint(fields, 14)),
-            externalParticulateMatter25: Self.positiveInt(Self.varint(fields, 15)),
-            filterRemainingPercent: Self.positiveInt(Self.varint(fields, 16)),
-            runtimeRemainingMinutes: Self.positiveInt(Self.varint(fields, 11)),
-            hasError: (Self.varint(fields, 13) ?? 0) > 0
+            airQualityIndex: positiveInt(varint(fields, 9)),
+            particulateMatter25: positiveInt(varint(fields, 10)),
+            particulateMatter10: positiveInt(varint(fields, 14)),
+            externalParticulateMatter25: positiveInt(varint(fields, 15)),
+            filterRemainingPercent: positiveInt(varint(fields, 16)),
+            runtimeRemainingMinutes: positiveInt(varint(fields, 11)),
+            hasError: errorKind == .generic || errorKind == .interrupted,
+            reportedAt: timestamp(message(fields, field: 1)),
+            startedAt: timestamp(message(fields, field: 4)),
+            endingAt: timestamp(message(fields, field: 5)),
+            startReason: varint(fields, 7).flatMap { AirCleaningStartReason(rawValue: Int($0)) },
+            lastCycleValid: varint(fields, 8).map { $0 != 0 },
+            errorKind: errorKind
         )
     }
 
@@ -396,8 +487,7 @@ extension PolestarGRPC {
     }
 
     private func fetchOpenMeteoWeather(latitude: Double, longitude: Double) async -> VehicleWeather? {
-        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(latitude)&longitude=\(longitude)&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
-        guard let url = URL(string: urlString) else { return nil }
+        guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         guard let (data, response) = try? await session.data(for: request),
@@ -418,6 +508,19 @@ extension PolestarGRPC {
             relativeHumidity: humidity,
             timestamp: Date()
         )
+    }
+
+    static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "api.open-meteo.com"
+        components.path = "/v1/forecast"
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "current", value: "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature")
+        ]
+        return components.url
     }
 
     private static func wmoWeatherDescription(for code: Int) -> String {
@@ -501,22 +604,41 @@ extension PolestarGRPC {
     static func parseHealth(_ data: Data) -> GrpcHealthReport {
         let fields = Protobuf.fields(data)
         let warningFields = [9, 10, 11, 12]
-        let pressureFields = [39, 40, 41, 42]
+        var pressureFields = [39, 40, 41, 42]
+        // The documented positions are FL/FR/RL/RR at fields 39–42 (verified against
+        // Polestar 3-era captures). The reference Polestar 2 capture returned warning level
+        // only — but that is a backend/firmware fact for ONE car, not a platform law. Before
+        // giving up on numeric pressures, scan a bounded neighbouring window for a coherent
+        // quadruple: four CONSECUTIVE numeric fields whose values all sit in a plausible kPa
+        // band (150–400; cold-to-hot passenger-tyre range). Read-only and deterministic, so
+        // the worst case is identical to today's behaviour.
+        if !pressureFields.contains(where: { field in
+            numeric(fields, field).flatMap { $0 >= 150 && $0 <= 400 } ?? false
+        }) {
+            if let alternate = Self.discoverPressureQuadruple(fields, window: 36...52) {
+                pressureFields = alternate
+            }
+        }
         let positions = TyrePosition.allCases
         var tyres: [TyrePressure] = []
         for index in positions.indices {
             let warningRaw = varint(fields, warningFields[index])
             let warning = tyreWarning(warningRaw)
             let pressure = numeric(fields, pressureFields[index]).flatMap { $0 > 0 ? $0 : nil }
-            let effectiveWarning: TyrePressureWarning = (warning == .unknown && warningRaw == nil) ? .none : warning
-            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: effectiveWarning))
+            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
         }
         var warnings: [VehicleWarning] = []
+        var reportedWarnings: [VehicleWarning] = []
         if let value = varint(fields, 5), value > 1 { warnings.append(.service) }
-        if let value = varint(fields, 6), value > 1 { warnings.append(.brakeFluid) }
-        if let value = varint(fields, 7), value > 1 { warnings.append(.engineCoolant) }
-        if let value = varint(fields, 8), value > 1 { warnings.append(.oil) }
-        if let value = varint(fields, 13), value > 1 { warnings.append(.washerFluid) }
+        let warningFieldsByType: [(Int, VehicleWarning)] = [
+            (6, .brakeFluid), (7, .engineCoolant), (8, .oil), (13, .washerFluid)
+        ]
+        for (field, warning) in warningFieldsByType {
+            if let value = varint(fields, field) {
+                reportedWarnings.append(warning)
+                if value > 1 { warnings.append(warning) }
+            }
+        }
         var lightFailures: [String] = []
         let lightDescriptions: [Int: String] = [
             14: L10n.text("Left low beam"),
@@ -547,12 +669,31 @@ extension PolestarGRPC {
                 lightFailures.append(desc)
             }
         }
-        if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
-            warnings.append(.exteriorLight)
+        if (14...35).contains(where: { varint(fields, $0) != nil }) {
+            reportedWarnings.append(.exteriorLight)
+            if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
+                warnings.append(.exteriorLight)
+            }
         }
-        if varint(fields, 38) == 2 { warnings.append(.lowVoltageBattery) }
+        if let lowVoltage = varint(fields, 38) {
+            reportedWarnings.append(.lowVoltageBattery)
+            if lowVoltage == 2 { warnings.append(.lowVoltageBattery) }
+        }
+        // Tyre pressure warnings live on `tyres[].warning`, not a dedicated proto field, so they
+        // must be folded into `warnings` explicitly — otherwise `Notifier.warningLabels` (which
+        // only reads `healthDetails.warnings`) never sees a flagged tyre and no notification
+        // fires even though the UI already shows it under "Needs Attention."
+        if tyres.contains(where: { $0.warning != .unknown }) {
+            reportedWarnings.append(.tyrePressure)
+            if tyres.contains(where: { $0.warning.needsAttention }) { warnings.append(.tyrePressure) }
+        }
         return GrpcHealthReport(
-            details: VehicleHealthDetails(tyres: tyres, warnings: warnings, lightFailures: lightFailures),
+            details: VehicleHealthDetails(
+                tyres: tyres,
+                warnings: warnings,
+                reportedWarnings: reportedWarnings,
+                lightFailures: lightFailures
+            ),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),
             serviceWarning: warnings.contains(.service)
@@ -685,7 +826,6 @@ extension PolestarGRPC {
     ///  10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions, 9: amperageLimitSettings,
     ///  8: targetChargeLevelSettings, 15: supportsChargeNow, 29: supportsPlugAndCharge}`,
     /// `34: AirPurification{1: supportsRemoteStart}`, `16: honkFlashType (enum)`.
-    /// Recovered from the official Polestar APK v5.10.0 teardown.
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
         let outer = Protobuf.fields(data)
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
@@ -1022,6 +1162,35 @@ extension PolestarGRPC {
     private static func tyreWarning(_ value: UInt64?) -> TyrePressureWarning {
         switch value { case 1: return .none; case 2: return .veryLow; case 3: return .low; case 4: return .high; default: return .unknown }
     }
+
+    /// Finds four consecutive numeric fields inside `window` whose values all sit in the
+    /// plausible kPa band. Returns the field numbers in ascending order, or nil. A single
+    /// stray value can never qualify — all four neighbours must agree, which is what makes
+    /// this safe to run against an undocumented layout.
+    static func discoverPressureQuadruple(
+        _ fields: [Protobuf.Field], window: ClosedRange<Int>
+    ) -> [Int]? {
+        let numericFields: [Int: Double] = {
+            var map: [Int: Double] = [:]
+            for field in fields where window.contains(field.number)
+                && (field.wire == 0 || field.wire == 1 || field.wire == 5) {
+                // Last one wins on repeated field numbers; protobuf decoders commonly take
+                // the final occurrence for scalar fields.
+                if let value = numeric(fields, field.number) { map[field.number] = value }
+            }
+            return map
+        }()
+        var run: [Int] = []
+        for number in window.lowerBound...window.upperBound {
+            if let value = numericFields[number], value >= 150, value <= 400 {
+                run.append(number)
+                if run.count == 4 { return run }
+            } else {
+                run.removeAll()
+            }
+        }
+        return nil
+    }
     private static func dailyTime(_ data: Data?) -> (Int, Int)? {
         guard let data else { return nil }
         let fields = Protobuf.fields(data)
@@ -1054,5 +1223,3 @@ extension PolestarGRPC {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
-

@@ -1,4 +1,4 @@
-name: Cut & Tag Release
+name: Prepare Release
 
 on:
   workflow_dispatch:
@@ -7,20 +7,21 @@ on:
         description: 'Semver bump type or exact version (e.g. 1.0.0, patch, minor, major)'
         required: true
         default: 'patch'
-        type: choice
-        options:
-          - 'patch'
-          - 'minor'
-          - 'major'
-          - '1.0.0'
+        type: string
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
 
 jobs:
   tag-and-push:
     runs-on: macos-15
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,6 +40,11 @@ jobs:
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 || true)
           echo "Latest tag found: $LATEST_TAG"
 
+          if [[ ! "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "$BUMP" != patch && "$BUMP" != minor && "$BUMP" != major ]]; then
+            echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
           if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             NEW_VERSION="$BUMP"
           elif [ -z "$LATEST_TAG" ]; then
@@ -56,16 +62,37 @@ jobs:
                 MINOR=$((MINOR + 1))
                 PATCH=0
                 ;;
-              patch|*)
+              patch)
                 PATCH=$((PATCH + 1))
+                ;;
+              *)
+                echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
+                exit 1
                 ;;
             esac
             NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           fi
 
+          IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW_VERSION"
+          if [ -n "$LATEST_TAG" ]; then
+            RAW_LATEST="${LATEST_TAG#v}"
+            IFS='.' read -r LATEST_MAJOR LATEST_MINOR LATEST_PATCH <<< "$RAW_LATEST"
+            if [ "$NEW_MAJOR" -lt "$LATEST_MAJOR" ] || \
+               { [ "$NEW_MAJOR" -eq "$LATEST_MAJOR" ] && [ "$NEW_MINOR" -lt "$LATEST_MINOR" ]; } || \
+               { [ "$NEW_MAJOR" -eq "$LATEST_MAJOR" ] && [ "$NEW_MINOR" -eq "$LATEST_MINOR" ] && [ "$NEW_PATCH" -le "$LATEST_PATCH" ]; }; then
+              echo "New version $NEW_VERSION must be greater than $LATEST_TAG" >&2
+              exit 1
+            fi
+          fi
+
           echo "New Version: $NEW_VERSION"
           echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          grep -Fq "## [$NEW_VERSION]" CHANGELOG.md || {
+            echo "CHANGELOG.md must contain a ## [$NEW_VERSION] release entry before preparing the release." >&2
+            exit 1
+          }
 
           BRANCH="release/v${NEW_VERSION}"
           if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
@@ -86,8 +113,15 @@ jobs:
           git checkout -b "$BRANCH"
           gh auth setup-git
           git push --set-upstream origin "$BRANCH"
-          gh pr create \
+          PR_URL=$(gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "chore(release): bump version to v${NEW_VERSION}" \
-            --body "This pull request updates the app version to v${NEW_VERSION}. Merge it after required CI checks pass, then create and push tag v${NEW_VERSION} to start the protected release workflow."
+            --body "This pull request updates the app version to v${NEW_VERSION}. Merge it after required CI checks pass, then create and push tag v${NEW_VERSION} to start the protected release workflow.")
+          echo "Created $PR_URL"
+
+          # Pushes and pull requests created by GITHUB_TOKEN do not recursively
+          # trigger workflows. workflow_dispatch is the documented exception,
+          # so explicitly attach CI and Security runs to the release branch.
+          gh workflow run ci.yml --ref "$BRANCH"
+          gh workflow run security.yml --ref "$BRANCH"

@@ -64,8 +64,11 @@ final class UpdateChecker {
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.setValue("Hisingen/\(current)", forHTTPHeaderField: "User-Agent")
             do {
+                // This call isn't a vehicle provider, and the catch below never inspects the
+                // error type — `.polestar` is an arbitrary pick to satisfy `HTTPBodyReader`'s
+                // signature, not a meaningful choice.
                 let (data, response) = try await HTTPBodyReader.data(
-                    for: request, using: session, limit: 512_000, operation: "update check"
+                    for: request, using: session, limit: 512_000, operation: "update check", provider: .polestar
                 )
                 guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                     finish(with: result)

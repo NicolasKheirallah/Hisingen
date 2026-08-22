@@ -13,10 +13,12 @@
 | Charging-speed estimate (km/h or mph) | `Format.chargingRateFormatted` | **Calculated** — `chargingPowerWatts ÷ model's average Wh/km consumption constant` (Polestar: per-model nominal constant; generic fallback 180 Wh/km) |
 | Estimated completion time | `Format.completionTime` | **Calculated** — `vehicleReportedAt (or fetchedAt) + estimatedChargingTimeToFullMinutes`, suppressed if the state is stale |
 | Estimated completion cost | UI layer, from `Preferences.electricityPricePerKwh` | **Calculated**, user-configured rate — not a real cost from any API |
-| Range Health Estimate | `VehicleState.estimatedRangeHealth` | **Calculated**, range-based, explicitly not a real battery SOH — see [domain/vehicle.md](vehicle.md#range-health-estimate) |
+| Current Range vs Model WLTP | `VehicleState.currentRangeVsModelWltpPercent(specification:)` | **Calculated** from live range/SOC and a static model-family (or VIN-specific override) reference; explicitly not battery SOH — see [domain/vehicle.md](vehicle.md) |
 | `ChargingSession` history entries | `ChargingSession.completed(previous:current:pricePerKwh:)`, appended by `RefreshCoordinator.apply` | **Calculated** from consecutive polls, not a real session log from either backend |
 
-There is no vehicle-reported "State of Health" or measured usable-capacity figure available from either provider's APIs — Hisingen doesn't fabricate one. Volvo's `batteryCapacityKWH` is treated as a vehicle specification and is not used as a health measurement. Capacity-based SoH, age/mileage degradation estimates, and health-history milestones remain unavailable until a validated measured field becomes available. See [architecture/technical-debt.md](../architecture/technical-debt.md) if a real SoH figure becomes available and needs wiring in.
+There is no vehicle-reported "State of Health" or measured usable-capacity figure available from either provider's APIs, and Hisingen doesn't fabricate one — `VehicleState.batteryDegradationPercent` stays `nil` for exactly this reason and always will, until a validated measured field appears. Volvo's `batteryCapacityKWH` is treated as a vehicle specification, not a health measurement, though `BatteryHealthEstimator` does prefer it over the generic model-family table as a more accurate *reference* capacity when no user override exists.
+
+Separately, `BatteryHealthEstimator.estimate` (`Domain/BatteryHealthEstimator.swift`) *does* now combine charge-power integration, range-vs-WLTP, long-term consumption, and an age/mileage prior into a clearly-labeled **calculated** SoH estimate, persisted as milestones in `battery_health_history`. It is explicitly not presented as a BMS measurement anywhere it's shown — see [domain/vehicle.md](vehicle.md#battery-health--soh-calculated) for the full signal breakdown, weighting, and accuracy caveats.
 
 ## Charging state machine
 

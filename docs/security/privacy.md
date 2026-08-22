@@ -72,18 +72,11 @@ Sensitive authentication material that must survive application restarts belongs
 
 This includes provider session material and sensitive custom Volvo developer configuration where applicable.
 
-Authentication material must not be persisted in:
-
-- SQLite telemetry tables;
-- charging history;
-- vehicle snapshots;
-- exported vehicle CSV files;
-- ordinary diagnostic logs; or
-- documentation.
-
-See [`keychain.md`](keychain.md) for detailed Keychain behavior.
-
----
+- Fetched from the provider (Polestar's `DtlInternetService`/`GetLastKnownLocation`, Volvo's `/location/v1/vehicles/{vin}/location`) only when the "Vehicle Location" feature is enabled.
+- Sent to Apple's `CLGeocoder` (reverse geocoding) only when that same feature is on — this is an Apple system framework call, not a raw HTTP request Hisingen constructs, and Apple's own privacy handling for `CLGeocoder` applies.
+- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled — this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast`, no API key, coordinates as query parameters).
+- Never sent anywhere else. Precise coordinates for *saved charging locations* (as opposed to the vehicle's current position) are explicitly discarded before they ever reach the domain model — Hisingen keeps the schedule's time/weekday/active fields but drops the location and any alias/name attached to it.
+- Never written to the on-disk telemetry cache — `VehicleState.cacheableCopy` (`Domain/VehicleState.swift`) builds its persisted copy by calling `VehicleState`'s memberwise initializer with only a specific subset of fields passed explicitly; every field it *doesn't* pass — including `location` and `exteriorStatus` — falls back to that initializer's default value, which is `nil`/empty for all of them. So the current vehicle position never reaches disk, full stop, regardless of feature toggles.
 
 ## VIN
 
@@ -569,7 +562,11 @@ If any answer changes Hisingen's privacy model, update the relevant documentatio
 
 ---
 
-## Source-of-Truth Documents
+The Polestar account email is stored in the macOS Keychain under the
+`polestar-email` account. Existing `polestar_email` values are migrated from
+`UserDefaults` on first read and removed after a successful Keychain write.
+
+## What the local cache actually retains
 
 The privacy documentation has intentionally separate responsibilities:
 

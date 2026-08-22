@@ -6,6 +6,33 @@ import Testing
 struct KeychainDraftTests {
 
     @Test
+    @MainActor
+    func testEmailMigratesFromUserDefaultsIntoKeychain() throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? keychain.deleteEmail()
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        defaults.set("driver@example.invalid", forKey: "polestar_email")
+        let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
+
+        XCTAssertEqual(preferences.email, "driver@example.invalid")
+        XCTAssertNil(defaults.string(forKey: "polestar_email"))
+        try XCTAssertEqual(keychain.readEmail(), "driver@example.invalid")
+
+        preferences.email = "updated@example.invalid"
+        try XCTAssertEqual(keychain.readEmail(), "updated@example.invalid")
+        XCTAssertNil(defaults.string(forKey: "polestar_email"))
+
+        preferences.email = ""
+        try XCTAssertNil(keychain.readEmail())
+    }
+
+    @Test
     func testPasswordDraftNeverCollidesWithCommittedPassword() throws {
         let store = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         defer {
@@ -63,5 +90,4 @@ struct KeychainDraftTests {
         try XCTAssertNil(store.readVolvoApiKeyDraft())
     }
 }
-
 

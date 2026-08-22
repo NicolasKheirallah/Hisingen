@@ -14,17 +14,24 @@ struct APIDiagnosticLogTests {
         await store.record(
             provider: .volvo, request: request,
             operation: "vehicle YV1XZEHR2R2371256 request 123e4567-e89b-12d3-a456-426614174000",
-            statusCode: 200, responseBytes: 42, startedAt: Date()
+            statusCode: 200, responseBytes: 42,
+            responseData: Data(#"{"batteryPercentage":82,"vin":"YV1XZEHR2R2371256","latitude":59.4,"model":"V60","endpoint":"https://api.example.test/vehicles/secret"}"#.utf8),
+            startedAt: Date()
         )
 
         let data = try await store.exportData()
         let output = String(decoding: data, as: UTF8.self)
         #expect(!output.contains("YV1XZEHR2R2371256"))
         #expect(!output.contains("do-not-export"))
+        #expect(!output.contains("ZCJ06G"))
         #expect(!output.contains("123e4567-e89b-12d3-a456-426614174000"))
-        #expect(output.contains("<vehicle>"))
-        #expect(output.contains("<identifier>"))
-        #expect(output.contains("responseBytes"))
+        #expect(output.contains("batteryPercentage"))
+        #expect(output.contains("82"))
+        #expect(!output.contains("59.4"))
+        #expect(!output.contains("api.example.test"))
+        #expect(!output.contains("authorization_endpoint"))
+        #expect(!output.contains("vehicle discovery"))
+        #expect(!output.contains("entries"))
     }
 
     @Test
@@ -32,11 +39,16 @@ struct APIDiagnosticLogTests {
         let store = APIDiagnosticLogStore()
         await store.clear()
         for _ in 0..<600 {
-            await store.record(provider: .polestar, request: nil, operation: "poll", startedAt: Date())
+            await store.record(
+                provider: .polestar,
+                request: nil,
+                operation: "poll",
+                responseData: Data(#"{"battery":1}"#.utf8),
+                startedAt: Date()
+            )
         }
         let data = try await store.exportData()
-        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let entries = try #require(object["entries"] as? [[String: Any]])
-        #expect(entries.count == 500)
+        let payloads = try #require(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        #expect(payloads.count == 500)
     }
 }

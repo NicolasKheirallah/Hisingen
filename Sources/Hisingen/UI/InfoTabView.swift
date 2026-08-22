@@ -1,4 +1,5 @@
 import AppKit
+import Charts
 import SwiftUI
 
 @MainActor
@@ -10,6 +11,13 @@ struct InfoTabView: View {
     @State private var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
     @Environment(\.preferencesStore) private var preferences
     @State private var vinCopied = false
+
+    private var availableExteriorAngles: [CarRenderAngle] {
+        CarRenderAngle.allCases.filter { angle in
+            imageCache.image(for: state.vin, angle: angle.rawValue) != nil
+                || (angle == preferences.carRenderAngle && state.imageData != nil)
+        }
+    }
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
@@ -33,62 +41,118 @@ struct InfoTabView: View {
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
+            batteryHealthCard
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
             capabilityInspectorCard
+            activityHistoryCard
+        }
+        .onAppear {
+            let preferred = preferences.carRenderAngle
+            selectedAngleIndex = availableExteriorAngles.contains(preferred)
+                ? preferred.rawValue
+                : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
         }
     }
 
-    /// Backend-authoritative capability flags from `GetMyCars` — shows what the vehicle
-    /// actually supports according to the cloud, not heuristic model profiling.
+    private var activityHistoryCard: some View {
+        let telemetry = database.recentTelemetry(for: state.vin, limit: 30)
+        let commands = database.recentCommandAudits(for: state.vin, limit: 5)
+        guard !telemetry.isEmpty || !commands.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
+                if let newest = telemetry.first, let oldest = telemetry.last,
+                   let newOdometer = newest.odometerKm, let oldOdometer = oldest.odometerKm,
+                   newOdometer >= oldOdometer {
+                    KVRow(
+                        L10n.text("Distance Recorded"),
+                        Format.distance(km: newOdometer - oldOdometer, unit: preferences.distanceUnit),
+                        symbol: "road.lanes"
+                    )
+                }
+                if !commands.isEmpty {
+                    Divider().opacity(0.4)
+                    Text(L10n.text("Recent remote commands"))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(commands) { record in
+                        HStack(spacing: 7) {
+                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
+                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
+                                .font(.system(size: 10.5, weight: .medium))
+                            Spacer()
+                            Text(record.executedAt, style: .relative)
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        .help(record.errorMessage ?? record.status.capitalized)
+                    }
+                }
+                Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        })
+    }
+
+    /// Capability flags observed in the undocumented GetMyCars response. A true flag is a
+    /// positive observation; false can also mean the field was absent, so it is not proof that
+    /// the vehicle lacks the capability.
     private var capabilityInspectorCard: some View {
         guard let caps = state.otaCapabilities, state.isVolvo == false else { return AnyView(EmptyView()) }
         var rows: [KVRow] = []
         rows.append(KVRow(L10n.text("Full OTA Updates"),
-                          caps.supportsFullOtaUpdates ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsFullOtaUpdates ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "arrow.down.circle",
-                          valueWarning: !caps.supportsFullOtaUpdates))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Remote Install Scheduling"),
-                          caps.supportsRemoteOtaInstallSchedule ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsRemoteOtaInstallSchedule ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "calendar.badge.clock",
-                          valueWarning: !caps.supportsRemoteOtaInstallSchedule))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Cloud Download Consent"),
-                          caps.supportsCloudBasedOtaDownloadConsent ? L10n.text("Supported") : L10n.text("Vehicle-managed"),
+                          caps.supportsCloudBasedOtaDownloadConsent ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "icloud.and.arrow.down",
-                          valueWarning: !caps.supportsCloudBasedOtaDownloadConsent))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Tailgate Open/Close"),
-                          caps.supportsTrunkControl ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsTrunkControl ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "car.side.rear.open",
-                          valueWarning: !caps.supportsTrunkControl))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Trunk Unlock"),
-                          caps.supportsTrunkUnlock ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsTrunkUnlock ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "lock.open",
-                          valueWarning: !caps.supportsTrunkUnlock))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Honk & Flash"),
-                          caps.supportsHonkAndFlash ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsHonkAndFlash ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "light.beacon",
-                          valueWarning: !caps.supportsHonkAndFlash))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Windows Control"),
-                          caps.supportsWindowsControl ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsWindowsControl ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "rectangle.arrowtriangle.2.outward",
-                          valueWarning: !caps.supportsWindowsControl))
+                          valueWarning: false))
         rows.append(KVRow(L10n.text("Charging Functions"),
-                          caps.supportsChargingFunctions ? L10n.text("Supported") : L10n.text("Not supported"),
+                          caps.supportsChargingFunctions ? L10n.text("Reported supported") : L10n.text("Not reported"),
                           symbol: "bolt.fill",
-                          valueWarning: !caps.supportsChargingFunctions))
+                          valueWarning: false))
         if caps.supportsPlugAndCharge {
             rows.append(KVRow(L10n.text("Plug & Charge"),
                               L10n.text("Supported"),
                               symbol: "plug"))
         }
         if let installed = caps.installedSoftwareVersion {
-            rows.append(KVRow(L10n.text("Installed Software"),
-                              installed, symbol: "checkmark.seal"))
+            rows.append(KVRow(L10n.text("Backend-Reported Software"),
+                              installed, symbol: "checkmark.seal", info: L10n.text("Unverified value from an undocumented backend field.")))
         }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
+                Text(L10n.text("Positive flags were reported by the backend. “Not reported” does not prove that the vehicle lacks a capability."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 Text(L10n.text("Reported by the vehicle cloud backend — exact support per VIN."))
                     .font(.system(size: 9.5))
@@ -107,7 +171,8 @@ struct InfoTabView: View {
                  ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.imageData : nil)
         }()
 
-        let supportsMultipleAngles = preferences.activeBrand == .polestar
+        let exteriorAngles = availableExteriorAngles
+        let supportsMultipleAngles = exteriorAngles.count > 1
         let hasInterior = (state.interiorImageData != nil)
             || (imageCache.interiorImage(for: state.vin) != nil)
 
@@ -119,14 +184,12 @@ struct InfoTabView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 5) {
                                 if supportsMultipleAngles {
-                                    angleButton(title: L10n.text("3/4 Front"), angle: 1, icon: "car.side.front.open.fill", proxy: proxy)
-                                    angleButton(title: L10n.text("Front"), angle: 2, icon: "car.front.waves.up.fill", proxy: proxy)
-                                    angleButton(title: L10n.text("Side"), angle: 0, icon: "car.side.fill", proxy: proxy)
-                                    angleButton(title: L10n.text("3/4 Rear"), angle: 3, icon: "car.side.rear.open.fill", proxy: proxy)
-                                    angleButton(title: L10n.text("Rear"), angle: 4, icon: "car.rear.and.tire.marks", proxy: proxy)
-                                    angleButton(title: L10n.text("Top"), angle: 5, icon: "car.top.door.front.left.open.fill", proxy: proxy)
+                                    ForEach(exteriorAngles, id: \.self) { angle in
+                                        angleButton(title: angle.title, angle: angle.rawValue, icon: angle.symbol, proxy: proxy)
+                                    }
                                 } else {
-                                    angleButton(title: L10n.text("Exterior"), angle: 0, icon: "car.side.fill", proxy: proxy)
+                                    let exteriorAngle = exteriorAngles.first?.rawValue ?? preferences.carRenderAngle.rawValue
+                                    angleButton(title: L10n.text("Exterior"), angle: exteriorAngle, icon: "car.side.fill", proxy: proxy)
                                 }
                                 if hasInterior {
                                     angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill", proxy: proxy)
@@ -330,9 +393,28 @@ struct InfoTabView: View {
     private var airQualityCleanZoneCard: some View {
         guard let air = state.airQuality else { return AnyView(EmptyView()) }
 
-        let aqiVal = air.airQualityIndex ?? 15
-        let aqiColor: Color = aqiVal <= 50 ? .green : (aqiVal <= 100 ? .yellow : .orange)
-        let aqiLabel = aqiVal <= 50 ? L10n.text("Good") : (aqiVal <= 100 ? L10n.text("Moderate") : L10n.text("Unhealthy"))
+        let aqiVal = air.airQualityIndex
+        let cleaningText: String
+        let cleaningSymbol: String
+        let cleaningColor: Color
+        switch air.cleaningState {
+        case .on:
+            cleaningText = L10n.text("Purifying")
+            cleaningSymbol = "sparkles"
+            cleaningColor = .teal
+        case .off:
+            cleaningText = L10n.text("Off")
+            cleaningSymbol = "power"
+            cleaningColor = .secondary
+        case .pending:
+            cleaningText = L10n.text("Pending")
+            cleaningSymbol = "clock"
+            cleaningColor = .orange
+        case .unknown:
+            cleaningText = L10n.text("Unavailable")
+            cleaningSymbol = "questionmark.circle"
+            cleaningColor = .secondary
+        }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -340,21 +422,54 @@ struct InfoTabView: View {
                     CardHeader(symbol: "wind", title: L10n.text("CleanZone Air Quality & Filter"), color: .teal)
                     Spacer()
                     Pill(
-                        text: air.cleaningState == .on ? L10n.text("Purifying") : L10n.text("CleanZone Active"),
-                        color: air.cleaningState == .on ? .teal : aqiColor,
-                        symbol: air.cleaningState == .on ? "sparkles" : "checkmark.shield.fill"
+                        text: cleaningText,
+                        color: cleaningColor,
+                        symbol: cleaningSymbol
                     )
                 }
 
                 VStack(spacing: 6) {
-                    KVRow(L10n.text("Air Quality Index"), "\(aqiVal) AQI (\(aqiLabel))", symbol: "aqi.low", valueWarning: aqiVal > 100)
+                    if let aqiVal {
+                        let aqiLabel = aqiVal <= 50 ? L10n.text("Good") : (aqiVal <= 100 ? L10n.text("Moderate") : L10n.text("Unhealthy"))
+                        KVRow(L10n.text("Air Quality Index"), "\(aqiVal) AQI (\(aqiLabel))", symbol: "aqi.low", valueWarning: aqiVal > 100)
+                    } else {
+                        KVRow(L10n.text("Air Quality Index"), L10n.text("Unavailable"), symbol: "aqi.low", info: L10n.text("The vehicle did not report an air-quality index."))
+                    }
 
                     if let cabinPM = air.particulateMatter25 {
                         let formattedCabin = cabinPM == 0 ? "< 1 µg/m³" : "\(cabinPM) µg/m³"
                         KVRow(L10n.text("Cabin PM2.5"), formattedCabin, symbol: "aqi.medium")
                     }
+                    if let cabinPM10 = air.particulateMatter10 {
+                        let formattedPM10 = cabinPM10 == 0 ? "< 1 µg/m³" : "\(cabinPM10) µg/m³"
+                        KVRow(L10n.text("Cabin PM10"), formattedPM10, symbol: "aqi.high")
+                    }
                     if let outdoorPM = air.externalParticulateMatter25 {
                         KVRow(L10n.text("Outdoor PM2.5"), "\(outdoorPM) µg/m³", symbol: "sun.haze.fill")
+                    }
+                    if let runtimeLeft = air.runtimeRemainingMinutes, air.cleaningState == .on || air.cleaningState == .pending {
+                        KVRow(L10n.text("Purification Time Left"),
+                              Format.shortDuration(minutes: runtimeLeft), symbol: "timer")
+                    }
+                    if let endingAt = air.endingAt, air.cleaningState == .on,
+                       endingAt.timeIntervalSinceNow > 0 {
+                        KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endingAt),
+                              symbol: "clock.badge.checkmark")
+                    }
+                    if let reason = air.startReason, reason != .unspecified,
+                       air.cleaningState == .on || air.cleaningState == .pending {
+                        KVRow(L10n.text("Started By"), reason.displayName, symbol: "person.wave.2")
+                    }
+                    if let lastValid = air.lastCycleValid {
+                        KVRow(L10n.text("Last Cycle"),
+                              lastValid ? L10n.text("Completed normally") : L10n.text("Did not complete"),
+                              symbol: lastValid ? "checkmark.seal" : "exclamationmark.triangle",
+                              valueWarning: !lastValid)
+                    }
+                    if let errorKind = air.errorKind, errorKind != .none {
+                        KVRow(L10n.text("Purifier Status"), errorKind.displayName,
+                              symbol: errorKind == .interrupted ? "pause.circle" : "xmark.octagon",
+                              warning: errorKind == .generic)
                     }
                     if let filterLife = air.filterRemainingPercent {
                         HStack {
@@ -380,9 +495,44 @@ struct InfoTabView: View {
                         }
                         .padding(.vertical, 2)
                     }
+
+                    airQualityTrendChart
                 }
             }
         })
+    }
+
+    /// Local trend view over `air_quality_history` — the vehicle/provider APIs don't expose any
+    /// history of their own, so this is entirely reconstructed from samples Hisingen has already
+    /// recorded during normal refreshes (see `VehicleStateStore.save(_:)` /
+    /// `VehicleDatabase.recordAirQuality`).
+    @ViewBuilder
+    private var airQualityTrendChart: some View {
+        let history = database.recentAirQuality(for: state.vin, limit: 200)
+            .filter { $0.airQualityIndex != nil }
+            .sorted { $0.timestamp < $1.timestamp }
+        if history.count >= 2 {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Air Quality Trend"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                Chart(history) { record in
+                    LineMark(
+                        x: .value(L10n.text("Date"), record.timestamp),
+                        y: .value(L10n.text("Air Quality Index"), record.airQualityIndex ?? 0)
+                    )
+                    .foregroundStyle(.teal)
+                    .interpolationMethod(.monotone)
+                    RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
+                        .foregroundStyle(.orange.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+                .chartYAxisLabel(L10n.text("AQI"))
+                .frame(height: 90)
+                .accessibilityLabel(L10n.text("Air quality index history chart"))
+            }
+        }
     }
 
     private var tripComputerCard: some View {
@@ -392,19 +542,19 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle.fill"))
         }
         if let autoKm = state.tripMeterAutomaticKm {
-            rows.append(KVRow(L10n.text("Auto Trip (TA)"), String(format: "%.1f km", autoKm), symbol: "a.circle.fill"))
+            rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
         }
         if let electricKm = state.electricDistanceKm, electricKm > 0 {
-            rows.append(KVRow(L10n.text("Electric Driving"), String(format: "%.1f km", electricKm), symbol: "bolt.car.fill"))
+            rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
         }
         if let fuelKm = state.fuelDistanceKm, fuelKm > 0 {
-            rows.append(KVRow(L10n.text("Combustion Driving"), String(format: "%.1f km", fuelKm), symbol: "fuelpump.fill"))
+            rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump.fill"))
         }
         if let regen = state.regeneratedEnergyKwh, regen > 0 {
             rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
         }
         if let speed = state.averageSpeedKmH, speed > 0 {
-            rows.append(KVRow(L10n.text("Average Speed"), String(format: "%.0f km/h", speed), symbol: "gauge.with.needle.fill"))
+            rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
         }
         if let odo = state.odometerKm {
             rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
@@ -425,7 +575,14 @@ struct InfoTabView: View {
 
         if let health = state.healthDetails {
             let hasBrake = health.warnings.contains(.brakeFluid)
-            rows.append(KVRow(L10n.text("Brake Fluid"), hasBrake ? L10n.text("Low / Check Required") : L10n.text("Normal"), symbol: "circle.circle", valueWarning: hasBrake))
+            let brakeReported = health.reportedWarnings.contains(.brakeFluid)
+            rows.append(KVRow(
+                L10n.text("Brake Fluid"),
+                hasBrake ? L10n.text("Low / Check Required") : (brakeReported ? L10n.text("No warning reported") : L10n.text("Unavailable")),
+                symbol: "circle.circle",
+                valueWarning: hasBrake,
+                info: L10n.text("Warning status only. The provider does not report a measured brake-fluid level.")
+            ))
 
             if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
                 let warn = frontPads.uppercased() != "NORMAL" && !frontPads.uppercased().contains("NO_WARNING")
@@ -437,29 +594,36 @@ struct InfoTabView: View {
             }
 
             let hasWasher = health.warnings.contains(.washerFluid)
-            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : L10n.text("Adequate"), symbol: "drop.triangle.fill", valueWarning: hasWasher))
+            let washerReported = health.reportedWarnings.contains(.washerFluid)
+            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : (washerReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "drop.triangle.fill", valueWarning: hasWasher, info: L10n.text("Warning status only. The provider does not report a measured washer-fluid level.")))
 
             let hasCoolant = health.warnings.contains(.engineCoolant)
-            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : L10n.text("Optimal"), symbol: "thermometer.sun.fill", valueWarning: hasCoolant))
+            let coolantReported = health.reportedWarnings.contains(.engineCoolant)
+            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : (coolantReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "thermometer.sun.fill", valueWarning: hasCoolant, info: L10n.text("Warning status only. The provider does not report a measured coolant level.")))
 
             let hasLight = health.warnings.contains(.exteriorLight) || !health.lightFailures.isEmpty
-            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill", valueWarning: hasLight))
+            let lightsReported = health.reportedWarnings.contains(.exteriorLight)
+            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb.fill", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
 
             if !health.tyres.isEmpty {
-                let tyresOK = health.tyres.allSatisfy { !$0.warning.needsAttention }
-                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyresOK ? L10n.text("All 4 Tyres OK") : L10n.text("Pressure Warning"), symbol: "circle.dashed", valueWarning: !tyresOK))
+                let hasTyreWarning = health.tyres.contains { $0.warning.needsAttention }
+                let allReported = health.tyres.count == 4 && health.tyres.allSatisfy { $0.warning != .unknown || $0.kilopascals != nil }
+                let tyreStatus = hasTyreWarning
+                    ? L10n.text("Pressure Warning")
+                    : (allReported ? L10n.text("No warning reported") : L10n.text("Unavailable"))
+                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyreStatus, symbol: "circle.dashed", valueWarning: hasTyreWarning, info: L10n.text("Some providers expose warning status without a numeric tyre-pressure measurement.")))
             }
         } else {
-            rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Normal"), symbol: "circle.circle"))
+            rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Unavailable"), symbol: "circle.circle"))
             if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
                 rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle"))
             }
             if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
                 rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
             }
-            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Adequate"), symbol: "drop.triangle.fill"))
-            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Optimal"), symbol: "thermometer.sun.fill"))
-            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("All Bulbs Functional"), symbol: "lightbulb.fill"))
+            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Unavailable"), symbol: "drop.triangle.fill"))
+            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Unavailable"), symbol: "thermometer.sun.fill"))
+            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("Unavailable"), symbol: "lightbulb.fill"))
         }
 
         return Card {
@@ -479,8 +643,8 @@ struct InfoTabView: View {
         if let wheels = state.wheels, !wheels.isEmpty {
             rows.append(KVRow(L10n.text("Wheels & Rims"), wheels, symbol: "circle.circle.fill"))
         }
-        if let doors = state.exteriorStatus?.openings {
-            rows.append(KVRow(L10n.text("Body Style"), L10n.format("%d Doors", max(4, doors.count)), symbol: "car.side.fill"))
+        if let doorCount = state.exteriorStatus?.physicalDoorCount, doorCount > 0 {
+            rows.append(KVRow(L10n.text("Door Sensors Reported"), L10n.format("%d Doors", doorCount), symbol: "car.side.fill", info: L10n.text("Count of physical door records returned by the vehicle API; this is not a decoded body-style specification.")))
         }
 
         guard !rows.isEmpty || !state.packages.isEmpty else { return AnyView(EmptyView()) }
@@ -546,14 +710,35 @@ struct InfoTabView: View {
         var rows: [KVRow] = []
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
+        let specification = preferences.vehicleSpecificationOverride(for: state.vin)
         let configuredCapacity = state.powertrain.hasElectricRange
-            ? state.factoryUsableBatteryCapacityKwh
+            ? (specification?.usableBatteryCapacityKwh
+                ?? state.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
             : nil
         if let capacity = configuredCapacity, capacity > 0 {
-            rows.append(KVRow(L10n.text("Battery Capacity"), String(format: "%.1f kWh", capacity), symbol: "battery.100.bolt", info: L10n.text("Manufacturer Specification. Usable high-voltage pack capacity configured for this vehicle variant.")))
+            let isUserReference = specification?.usableBatteryCapacityKwh != nil
+            let isProviderReported = !isUserReference && state.reportedBatteryCapacityKwh != nil
+            rows.append(KVRow(
+                isUserReference ? L10n.text("User-Entered Usable Capacity")
+                    : (isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity")),
+                String(format: "%.1f kWh", capacity),
+                symbol: "battery.100.bolt",
+                info: isUserReference
+                    ? L10n.text("VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry.")
+                    : isProviderReported
+                    ? L10n.text("Vehicle specification returned by the provider. This is not measured battery health or current usable capacity.")
+                    : L10n.text("Static model-family reference used because the provider did not report the exact vehicle variant capacity.")
+            ))
         }
-        if state.powertrain.hasElectricRange && state.model.nominalWltpRangeKm > 0 {
-            rows.append(KVRow(L10n.text("WLTP Range (Est.)"), String(format: "%.0f km", state.model.nominalWltpRangeKm), symbol: "road.lanes", info: L10n.text("Official Rating (Not Live Estimate). Standardized laboratory Worldwide Harmonised Light Vehicles Test Procedure benchmark for this model at 100% charge.")))
+        let wltp = specification?.wltpRangeKm ?? state.model.nominalWltpRangeKm
+        if state.powertrain.hasElectricRange && wltp > 0 {
+            rows.append(KVRow(
+                specification?.wltpRangeKm != nil ? L10n.text("User-Entered WLTP Range") : L10n.text("Model-Reference WLTP Range"),
+                Format.distance(km: wltp, decimals: 0, unit: preferences.distanceUnit), symbol: "road.lanes",
+                info: specification?.wltpRangeKm != nil
+                    ? L10n.text("VIN-specific reference entered in Settings. It is not a live range value.")
+                    : L10n.text("Static model-family benchmark, not a VIN-specific rating or live vehicle estimate. Exact range varies by variant, wheels, market and model year.")
+            ))
         }
         if let gearbox = state.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
@@ -577,14 +762,26 @@ struct InfoTabView: View {
     }
 
     private var batteryHealthCard: some View {
-        guard state.powertrain.hasElectricRange, let soh = state.batteryStateOfHealthPercent else {
+        let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
+            .map { $0.toDomainSession(database: database) }
+        // Reads the same last-stored estimate `VehicleStateStore.save` smoothed toward, so this
+        // card's number matches whatever gets persisted rather than showing an independently
+        // unsmoothed figure.
+        let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
+            .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
+        guard let estimate = BatteryHealthEstimator.estimate(
+            state: state, chargingSessions: sessions,
+            specification: preferences.vehicleSpecificationOverride(for: state.vin),
+            previous: previousHealth
+        ) else {
             return AnyView(EmptyView())
         }
 
-        let deg = state.batteryDegradationPercent ?? 0.0
-        let status = state.batteryHealthStatus
-        let usable = state.configuredUsableBatteryCapacityKwh
-        let factoryUsable = state.factoryUsableBatteryCapacityKwh
+        let soh = estimate.stateOfHealthPercent
+        let deg = estimate.degradationPercent
+        let status = L10n.text("Calculated") + " · " + estimate.confidence.displayName
+        let usable = estimate.estimatedUsableCapacityKwh
+        let factoryUsable = estimate.referenceUsableCapacityKwh
         let nominal = state.effectiveNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
         let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
@@ -597,7 +794,7 @@ struct InfoTabView: View {
                     Pill(
                         text: status,
                         color: statusColor,
-                        symbol: "checkmark.shield.fill"
+                        symbol: "function"
                     )
                 }
 
@@ -610,15 +807,10 @@ struct InfoTabView: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
-                            Text(L10n.text("State of Health (SoH)"))
+                            Text(L10n.text("Calculated State of Health (SoH)"))
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 16, height: 16)
-                                .contentShape(Rectangle())
-                                .help(L10n.text("Unavailable. Neither provider currently exposes a validated measured battery State of Health value. Pack capacity shown elsewhere is a manufacturer specification, not a health measurement."))
+                            InformationButton(message: estimate.methodologySummary)
                         }
                         Spacer()
                         HStack(spacing: 6) {
@@ -633,9 +825,32 @@ struct InfoTabView: View {
                     }
                     .padding(.vertical, 2)
 
-                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
-                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
-                    KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
+                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
+                    KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
+                    KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
+
+                    DisclosureGroup(L10n.text("Calculation Signals")) {
+                        VStack(spacing: 7) {
+                            ForEach(estimate.signals) { signal in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(signal.title.capitalized)
+                                            .font(.system(size: 10.5, weight: .semibold))
+                                        Spacer()
+                                        Text(String(format: "%.1f%% · %.0f%% weight", signal.estimatedSOHPercent, signal.weight * 100))
+                                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(signal.explanation)
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
+                    .font(.system(size: 11, weight: .medium))
 
                     let history = database.batteryHealthHistory(for: state.vin)
                     if !history.isEmpty {
@@ -658,6 +873,9 @@ struct InfoTabView: View {
                                             .foregroundStyle(HisingenTheme.semanticGood)
                                     }
                                     .padding(.vertical, 1)
+                                    .help(r.measurementSource == "calculated-v2"
+                                        ? L10n.text("Calculated estimate using Hisingen's current multi-signal method; not a BMS measurement.")
+                                        : L10n.text("Legacy calculated estimate retained for trend continuity; not a BMS measurement."))
                                 }
                                 HStack {
                                     Spacer()
@@ -687,7 +905,7 @@ struct InfoTabView: View {
                             .padding(.top, 4)
                         } label: {
                             HStack {
-                                Text(L10n.text("Recorded Degradation Milestones"))
+                                Text(L10n.text("Calculated SoH Milestones"))
                                 Spacer()
                                 Text(L10n.format("%d logs", history.count))
                                     .font(.system(size: 10))
@@ -791,21 +1009,22 @@ struct InfoTabView: View {
                         KVRow(L10n.text("Cloud Connectivity"), state.availability.displayName, symbol: "antenna.radiowaves.left.and.right")
                     }
                     if let sw = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version, !sw.isEmpty {
-                        KVRow(L10n.text("Software Release"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard")
+                        KVRow(L10n.text("Backend-Reported Software"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard", info: L10n.text("Unverified value from an undocumented Polestar backend field; compare it with the version shown in the vehicle."))
                     }
                 }
             }
         }
     }
 
-    private var warrantyAndProtectionCard: some View {
-        let warranty = state.effectiveWarrantyInfo
+    private var warrantyAndProtectionCard: AnyView {
+        let warranty = state.warrantyInfo
+        let userInServiceDate = preferences.warrantyInServiceDate(for: state.vin)
         let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
-        let planTitle = warranty.planName ?? (isVolvo ? "Care by Volvo" : "Polestar Care")
+        let planTitle = warranty?.planName
         let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
         let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
 
-        return Card {
+        return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     CardHeader(
@@ -814,15 +1033,36 @@ struct InfoTabView: View {
                         color: brandColor
                     )
                     Spacer()
-                    Pill(
-                        text: planTitle,
-                        color: brandColor,
-                        symbol: brandIcon
-                    )
+                    if let planTitle {
+                        Pill(text: planTitle, color: brandColor, symbol: brandIcon)
+                    }
                 }
 
                 VStack(spacing: 6) {
-                    if let factoryDate = warranty.factoryWarrantyValidUntil {
+                    if warranty == nil, userInServiceDate == nil {
+                        HStack(alignment: .top, spacing: 7) {
+                            Image(systemName: "calendar.badge.exclamationmark")
+                                .foregroundStyle(.secondary)
+                            Text(L10n.text("Warranty dates are not supplied by the vehicle API. Add the verified in-service date in Settings → Vehicle Data if you want it recorded here."))
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(8)
+                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
+
+                    if let userInServiceDate {
+                        KVRow(
+                            L10n.text("In-Service Date"),
+                            Format.dateFormatter.string(from: userInServiceDate),
+                            symbol: "calendar.badge.checkmark",
+                            info: L10n.text("User-entered from warranty or delivery documents. The vehicle API does not provide this date.")
+                        )
+                    }
+
+                    if let factoryDate = warranty?.factoryWarrantyValidUntil {
                         let isExpired = factoryDate < Date()
                         KVRow(
                             L10n.text("Manufacturer Warranty"),
@@ -832,7 +1072,7 @@ struct InfoTabView: View {
                         )
                     }
 
-                    if let batteryDate = warranty.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
+                    if let batteryDate = warranty?.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
                         let isExpired = batteryDate < Date()
                         KVRow(
                             L10n.text("EV Battery (8 yr / 160k km)"),
@@ -843,7 +1083,7 @@ struct InfoTabView: View {
                     }
 
                     if state.powertrain.hasElectricRange,
-                       let maxKm = warranty.batteryWarrantyKm ?? (state.powertrain.hasElectricRange ? 160_000 : nil),
+                       let maxKm = warranty?.batteryWarrantyKm,
                        let odo = state.odometerKm {
                         let remainingKm = max(0, maxKm - odo)
                         let isMileageExpired = odo >= maxKm
@@ -855,9 +1095,9 @@ struct InfoTabView: View {
                         )
                     }
 
-                    if let roadsideDate = warranty.roadsideAssistanceValidUntil {
+                    if let roadsideDate = warranty?.roadsideAssistanceValidUntil {
                         let isExpired = roadsideDate < Date()
-                        let label = warranty.assistanceContact ?? L10n.text("Roadside Assistance")
+                        let label = warranty?.assistanceContact ?? L10n.text("Roadside Assistance")
                         KVRow(
                             label,
                             Format.dateFormatter.string(from: roadsideDate),
@@ -866,7 +1106,7 @@ struct InfoTabView: View {
                         )
                     }
 
-                    if warranty.includedMaintenance == true {
+                    if warranty?.includedMaintenance == true {
                         KVRow(
                             L10n.text("Scheduled Maintenance"),
                             L10n.text("Included (3 Years / 50,000 km)"),
@@ -874,7 +1114,7 @@ struct InfoTabView: View {
                         )
                     }
 
-                    if let digitalDate = warranty.digitalServicesValidUntil {
+                    if let digitalDate = warranty?.digitalServicesValidUntil {
                         let isExpired = digitalDate < Date()
                         KVRow(
                             L10n.text("Digital Services & Data"),
@@ -884,7 +1124,7 @@ struct InfoTabView: View {
                         )
                     }
 
-                    if let corrosionDate = warranty.corrosionWarrantyValidUntil {
+                    if let corrosionDate = warranty?.corrosionWarrantyValidUntil {
                         let isExpired = corrosionDate < Date()
                         KVRow(
                             L10n.text("Corrosion Protection (12 yr)"),
@@ -895,7 +1135,7 @@ struct InfoTabView: View {
                     }
                 }
             }
-        }
+        })
     }
 
     private func headingToCardinal(_ heading: Double) -> String {
