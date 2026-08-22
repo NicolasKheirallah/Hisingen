@@ -15,6 +15,7 @@ The current architecture consists of:
 | Feature selection | `UserDefaults` (`enabled_features_v2`) | Global | Persistent | No | Migrates from `enabled_features_v1` (auto-enabling several newer features) or an even older `show_vehicle_image` bool |
 | Notification toggles, low-battery threshold, electricity price | `UserDefaults` | Global | Persistent | No | — |
 | Theme, menu-bar style, distance unit, language | `UserDefaults` | Per VIN (theme) / global (rest) | Persistent | No | Menu-bar style migrates from legacy display-name strings |
+| Exact usable-capacity/WLTP references | `UserDefaults` (`vehicle_specification_overrides_v1`) | Per VIN | Until reset | No | User-entered reference data, never provider telemetry |
 | Vehicle telemetry snapshot | `UserDefaults` (`cached_vehicle_snapshots_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | Partially — see below | No versioned migration; a decode failure is treated as "no cache" |
 | Charging state-machine baseline | `UserDefaults` (`charging_baselines_v1`, JSON) | Per VIN | 7 days (self-cleaning on read) | No | Same as above |
 | Capability observations (`VehicleProbedCapabilities`) | Embedded inside the cached `VehicleState` | Per VIN | 6-hour staleness window, independent of the 7-day store TTL | No | Same as above |
@@ -162,6 +163,10 @@ A row can contain:
 - effective usable battery capacity; and
 - measurement classification.
 
+These are calculated estimates. New rows use `calculated-v2`; rows written by
+the older inferred implementation are migrated to `legacy-estimate`. Neither
+classification means that the provider or vehicle BMS reported SoH.
+
 ### `telemetry_logs`
 
 Stores historical drive/telemetry information.
@@ -178,6 +183,10 @@ A row can contain:
 - longitude.
 
 This table is an explicit location-persistence path.
+
+The History dashboard derives journeys from consecutive movement readings and
+groups adjacent intervals until a stationary reading or a long sample gap. The
+derived trip objects are not a separate persisted provider trip log.
 
 ### `remote_commands_log`
 
@@ -414,7 +423,10 @@ Battery-health history is not subject to the charging/telemetry 90-day pruning o
 
 ## Remote-Command Audit
 
-Remote command execution can create a local audit record.
+Every provider command attempt that reaches dispatch creates a local audit record containing
+the VIN, normalized command identifier, provider outcome or failure, execution time, and
+duration. Attempts cancelled at the local authentication prompt are not provider attempts and
+are not logged.
 
 The audit exists for diagnostics and operational history.
 

@@ -47,6 +47,123 @@ actor PolestarGRPC {
     var useStreaming = false
 
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
+
+    func liveUpdates(vin: String, accessToken: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        let base = try await resolvedHost(.c3, accessToken: accessToken)
+        var batteryRequest = Data()
+        batteryRequest.append(Protobuf.stringField(1, UUID().uuidString))
+        batteryRequest.append(Protobuf.stringField(2, vin))
+        var exteriorRequest = Data()
+        exteriorRequest.append(Protobuf.stringField(1, UUID().uuidString))
+        exteriorRequest.append(Protobuf.stringField(2, vin))
+        let batteryStreamPath = batteryStreamPath
+        let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
+
+        return AsyncThrowingStream { continuation in
+            let worker = Task {
+                do {
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        group.addTask {
+                            try await self.consumeLiveFrames(
+                                base: base, path: batteryStreamPath,
+                                message: batteryRequest, vin: vin, accessToken: accessToken
+                            ) { body in
+                                guard let payload = Protobuf.fields(body)
+                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data else { return }
+                                continuation.yield(.battery(Self.parseBattery(payload)))
+                            }
+                        }
+                        group.addTask {
+                            try await self.consumeLiveFrames(
+                                base: base,
+                                path: exteriorStreamPath,
+                                message: exteriorRequest, vin: vin, accessToken: accessToken
+                            ) { body in
+                                guard let payload = Protobuf.fields(body)
+                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
+                                      let exterior = Self.parseExterior(payload) else { return }
+                                continuation.yield(.exterior(exterior, reportedAt: nil))
+                            }
+                        }
+                        _ = try await group.next()
+                        group.cancelAll()
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in worker.cancel() }
+        }
+    }
+
+    private func consumeLiveFrames(
+        base: URL, path: String, message: Data, vin: String, accessToken: String,
+        onFrame: @escaping @Sendable (Data) -> Void
+    ) async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 90
+        configuration.timeoutIntervalForResource = 24 * 60 * 60
+        let liveSession = URLSession(configuration: configuration)
+        defer { liveSession.invalidateAndCancel() }
+
+        var request = URLRequest(url: base.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vin, forHTTPHeaderField: "vin")
+        request.setValue("trailers", forHTTPHeaderField: "TE")
+        request.httpBody = Protobuf.grpcFrame(message)
+
+        let (bytes, response) = try await liveSession.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw PolestarError.invalidResponse(operation: "live gRPC stream")
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
+        if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
+            throw PolestarError.invalidResponse(operation: "live gRPC status \(status)")
+        }
+
+        var header: [UInt8] = []
+        var body = Data()
+        var expected: Int?
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            if header.count < 5 {
+                header.append(byte)
+                guard header.count == 5 else { continue }
+                guard header[0] == 0 else {
+                    throw PolestarError.incompatibleAPI(operation: "compressed live gRPC frame")
+                }
+                let size = Int(header[1]) << 24 | Int(header[2]) << 16 | Int(header[3]) << 8 | Int(header[4])
+                guard size >= 0, size <= 2_000_000 else {
+                    throw PolestarError.invalidResponse(operation: "oversized live gRPC frame")
+                }
+                expected = size
+                if size == 0 {
+                    onFrame(Data())
+                    header.removeAll(keepingCapacity: true)
+                    expected = nil
+                }
+                continue
+            }
+            body.append(byte)
+            if let frameSize = expected, body.count == frameSize {
+                onFrame(body)
+                header.removeAll(keepingCapacity: true)
+                body.removeAll(keepingCapacity: true)
+                expected = nil
+            }
+        }
+        try Task.checkCancellation()
+        throw PolestarError.grpcUnavailable(service: path)
+    }
     /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
     var activeCommandToken: String?
     let session: URLSession

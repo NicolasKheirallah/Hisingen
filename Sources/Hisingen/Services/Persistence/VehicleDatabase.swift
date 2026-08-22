@@ -61,6 +61,59 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     let stateOfHealthPct: Double
     let degradationPct: Double
     let effectiveUsableKwh: Double
+    let measurementSource: String
+
+    init(id: Int64, vin: String, timestamp: Date, odometerKm: Double,
+         stateOfHealthPct: Double, degradationPct: Double, effectiveUsableKwh: Double,
+         measurementSource: String = "calculated-v2") {
+        self.id = id
+        self.vin = vin
+        self.timestamp = timestamp
+        self.odometerKm = odometerKm
+        self.stateOfHealthPct = stateOfHealthPct
+        self.degradationPct = degradationPct
+        self.effectiveUsableKwh = effectiveUsableKwh
+        self.measurementSource = measurementSource
+    }
+}
+
+struct HistoricalTelemetryRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: Int64
+    let vin: String
+    let timestamp: Date
+    let odometerKm: Double?
+    let tripManualKm: Double?
+    let tripAutomaticKm: Double?
+    let averageConsumption: Double?
+    let ambientTemperatureCelsius: Double?
+    let latitude: Double?
+    let longitude: Double?
+}
+
+struct TripHistoryEntry: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let vin: String
+    let startedAt: Date
+    let endedAt: Date
+    let distanceKm: Double
+    let averageConsumption: Double?
+    let ambientTemperatureCelsius: Double?
+    let startLatitude: Double?
+    let startLongitude: Double?
+    let endLatitude: Double?
+    let endLongitude: Double?
+
+    var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
+}
+
+struct RemoteCommandAuditRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let vin: String
+    let command: String
+    let status: String
+    let executedAt: Date
+    let durationMs: Int?
+    let errorMessage: String?
 }
 
 /// High-level vehicle database repository coordinating SQLite tables and schema migrations.
@@ -188,6 +241,7 @@ final class VehicleDatabase: @unchecked Sendable {
             // Existing installations contain rows produced by the old inferred/Volvo-capacity
             // implementation. Keep them quarantined rather than presenting them as measurements.
             try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
+            try? db.execute(sql: "UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';")
         } catch {
             logger.error("Could not initialize database schema: \(error, privacy: .public)")
         }
@@ -440,14 +494,15 @@ final class VehicleDatabase: @unchecked Sendable {
     /// Returns whether a row was actually written.
     @discardableResult
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
-                                      sohPct: Double, degPct: Double, usableKwh: Double) -> Bool {
+                                      sohPct: Double, degPct: Double, usableKwh: Double,
+                                      measurementSource: String = "calculated-v2") -> Bool {
         let previous = batteryHealthHistory(for: vin, limit: 1).first
         guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
             return false
         }
         let sql = """
         INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source)
-        VALUES (?, ?, ?, ?, ?, ?, 'measured');
+        VALUES (?, ?, ?, ?, ?, ?, ?);
         """
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -456,6 +511,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(sohPct, at: 4)
             try stmt.bindDouble(degPct, at: 5)
             try stmt.bindDouble(usableKwh, at: 6)
+            try stmt.bindText(measurementSource, at: 7)
             try stmt.executeUpdate()
         } process: { _ in }
         return true
@@ -463,8 +519,8 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
         let sql = """
-        SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh
-        FROM battery_health_history WHERE vin = ? AND measurement_source = 'measured' ORDER BY timestamp DESC LIMIT ?;
+        SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
+        FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -478,10 +534,12 @@ final class VehicleDatabase: @unchecked Sendable {
                       let odo = stmt.columnDouble(at: 3),
                       let soh = stmt.columnDouble(at: 4),
                       let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6) else { continue }
+                      let usable = stmt.columnDouble(at: 6),
+                      let source = stmt.columnText(at: 7) else { continue }
                 records.append(BatteryHealthRecord(
                     id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable
+                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
+                    measurementSource: source
                 ))
             }
             return records
@@ -512,6 +570,8 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     /// Records drive telemetry, skipping refreshes where the vehicle hasn't moved.
+    /// One duplicate immediately after movement is retained as a parked boundary so
+    /// short journeys can be split without storing every stationary poll.
     /// Returns whether a row was actually written.
     @discardableResult
     func recordTelemetry(vin: String, odometerKm: Double?, tripManualKm: Double?,
@@ -522,7 +582,13 @@ final class VehicleDatabase: @unchecked Sendable {
            last.odometerKm == odometerKm,
            last.tripManualKm == tripManualKm,
            last.tripAutoKm == tripAutoKm {
-            return false
+            let previous = recentTelemetry(for: vin, limit: 2).dropFirst().first
+            let lastRowFollowedMovement = previous.map {
+                $0.odometerKm != last.odometerKm
+                    || $0.tripManualKm != last.tripManualKm
+                    || $0.tripAutomaticKm != last.tripAutoKm
+            } ?? false
+            if !lastRowFollowedMovement { return false }
         }
         let sql = """
         INSERT INTO telemetry_logs (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude)
@@ -543,6 +609,126 @@ final class VehicleDatabase: @unchecked Sendable {
         return true
     }
 
+    func recentTelemetry(for vin: String, limit: Int = 50) -> [HistoricalTelemetryRecord] {
+        let sql = """
+        SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude
+        FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
+        """
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindInt64(Int64(max(1, limit)), at: 2)
+        } process: { stmt -> [HistoricalTelemetryRecord] in
+            var records: [HistoricalTelemetryRecord] = []
+            while stmt.step() {
+                guard let id = stmt.columnInt64(at: 0),
+                      let rowVIN = stmt.columnText(at: 1),
+                      let timestamp = stmt.columnDate(at: 2) else { continue }
+                records.append(HistoricalTelemetryRecord(
+                    id: id, vin: rowVIN, timestamp: timestamp,
+                    odometerKm: stmt.columnDouble(at: 3),
+                    tripManualKm: stmt.columnDouble(at: 4),
+                    tripAutomaticKm: stmt.columnDouble(at: 5),
+                    averageConsumption: stmt.columnDouble(at: 6),
+                    ambientTemperatureCelsius: stmt.columnDouble(at: 7),
+                    latitude: stmt.columnDouble(at: 8),
+                    longitude: stmt.columnDouble(at: 9)
+                ))
+            }
+            return records
+        }) ?? []
+    }
+
+    func derivedTrips(for vin: String, limit: Int = 100) -> [TripHistoryEntry] {
+        let records = Array(recentTelemetry(for: vin, limit: max(2_000, limit * 20)).reversed())
+        var trips: [TripHistoryEntry] = []
+        var segmentStart: HistoricalTelemetryRecord?
+        var segmentEnd: HistoricalTelemetryRecord?
+        var segmentDistance = 0.0
+        var consumptionTotal = 0.0
+        var consumptionCount = 0
+        var temperatureTotal = 0.0
+        var temperatureCount = 0
+
+        func appendSegment() {
+            guard let start = segmentStart, let end = segmentEnd, segmentDistance >= 0.05 else { return }
+            trips.append(TripHistoryEntry(
+                id: "\(start.id)-\(end.id)", vin: vin,
+                startedAt: start.timestamp, endedAt: end.timestamp,
+                distanceKm: segmentDistance,
+                averageConsumption: consumptionCount > 0 ? consumptionTotal / Double(consumptionCount) : nil,
+                ambientTemperatureCelsius: temperatureCount > 0 ? temperatureTotal / Double(temperatureCount) : nil,
+                startLatitude: start.latitude, startLongitude: start.longitude,
+                endLatitude: end.latitude, endLongitude: end.longitude
+            ))
+        }
+
+        func clearSegment() {
+            segmentStart = nil
+            segmentEnd = nil
+            segmentDistance = 0
+            consumptionTotal = 0
+            consumptionCount = 0
+            temperatureTotal = 0
+            temperatureCount = 0
+        }
+
+        for pair in zip(records, records.dropFirst()) {
+            let start = pair.0
+            let end = pair.1
+            let odometerDelta: Double? = {
+                guard let current = start.odometerKm, let next = end.odometerKm else { return nil }
+                return next - current
+            }()
+            let automaticDelta: Double? = {
+                guard let current = start.tripAutomaticKm, let next = end.tripAutomaticKm else { return nil }
+                return next >= current ? next - current : next
+            }()
+            let manualDelta: Double? = {
+                guard let current = start.tripManualKm, let next = end.tripManualKm else { return nil }
+                return next >= current ? next - current : next
+            }()
+            let distance = [odometerDelta, automaticDelta, manualDelta]
+                .compactMap { $0 }.first(where: { $0 >= 0.05 && $0 < 2_000 })
+            let gap = end.timestamp.timeIntervalSince(start.timestamp)
+            guard let distance, gap > 0, gap <= 45 * 60 else {
+                appendSegment()
+                clearSegment()
+                continue
+            }
+            if segmentStart == nil { segmentStart = start }
+            segmentEnd = end
+            segmentDistance += distance
+            if let value = end.averageConsumption ?? start.averageConsumption {
+                consumptionTotal += value
+                consumptionCount += 1
+            }
+            if let value = end.ambientTemperatureCelsius ?? start.ambientTemperatureCelsius {
+                temperatureTotal += value
+                temperatureCount += 1
+            }
+        }
+        appendSegment()
+        return Array(trips.suffix(limit).reversed())
+    }
+
+    func exportTripsCSV(for vin: String, limit: Int = 5_000) -> String {
+        let trips = derivedTrips(for: vin, limit: limit)
+        let formatter = ISO8601DateFormatter()
+        var csv = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude\n"
+        for trip in trips {
+            let values = [
+                trip.id, trip.vin, formatter.string(from: trip.startedAt), formatter.string(from: trip.endedAt),
+                String(format: "%.1f", trip.duration / 60), String(format: "%.2f", trip.distanceKm),
+                trip.averageConsumption.map { String(format: "%.2f", $0) } ?? "",
+                trip.ambientTemperatureCelsius.map { String(format: "%.1f", $0) } ?? "",
+                trip.startLatitude.map { String($0) } ?? "", trip.startLongitude.map { String($0) } ?? "",
+                trip.endLatitude.map { String($0) } ?? "", trip.endLongitude.map { String($0) } ?? ""
+            ]
+            csv += values.joined(separator: ",") + "\n"
+        }
+        return csv
+    }
+
     // MARK: - Remote Commands Audit
 
     func recordCommandAudit(id: String = UUID().uuidString, vin: String,
@@ -561,6 +747,33 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindText(error, at: 7)
             try stmt.executeUpdate()
         } process: { _ in }
+    }
+
+    func recentCommandAudits(for vin: String, limit: Int = 20) -> [RemoteCommandAuditRecord] {
+        let sql = """
+        SELECT id, vin, command_name, status, executed_at, duration_ms, error_message
+        FROM remote_commands_log WHERE vin = ? ORDER BY executed_at DESC LIMIT ?;
+        """
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindInt64(Int64(max(1, limit)), at: 2)
+        } process: { stmt -> [RemoteCommandAuditRecord] in
+            var records: [RemoteCommandAuditRecord] = []
+            while stmt.step() {
+                guard let id = stmt.columnText(at: 0),
+                      let rowVIN = stmt.columnText(at: 1),
+                      let command = stmt.columnText(at: 2),
+                      let status = stmt.columnText(at: 3),
+                      let executedAt = stmt.columnDate(at: 4) else { continue }
+                records.append(RemoteCommandAuditRecord(
+                    id: id, vin: rowVIN, command: command, status: status,
+                    executedAt: executedAt,
+                    durationMs: stmt.columnInt64(at: 5).map(Int.init),
+                    errorMessage: stmt.columnText(at: 6)
+                ))
+            }
+            return records
+        }) ?? []
     }
 
     // MARK: - Database Diagnostics & Maintenance
@@ -592,7 +805,7 @@ final class VehicleDatabase: @unchecked Sendable {
             snapshots: count(table: "vehicle_snapshots"),
             chargingSessions: count(table: "charging_sessions"),
             chargingSamples: count(table: "charging_samples"),
-            batteryHealth: count(table: "battery_health_history WHERE measurement_source = 'measured'"),
+            batteryHealth: count(table: "battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate')"),
             telemetry: count(table: "telemetry_logs"),
             commands: count(table: "remote_commands_log")
         )
@@ -614,6 +827,22 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.executeUpdate()
         } process: { _ in }
         vacuum()
+    }
+
+    func clearStoredLocations(for vin: String? = nil) {
+        if let vin {
+            try? db.query(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+            try? db.query(sql: "UPDATE charging_sessions SET location_name = NULL WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        } else {
+            try? db.execute(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL;")
+            try? db.execute(sql: "UPDATE charging_sessions SET location_name = NULL;")
+        }
     }
 
     // MARK: - CSV Exporters
@@ -665,8 +894,8 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func exportBatteryHealthCSV(for vin: String? = nil) -> String {
         let sql = vin != nil
-            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE vin = ? AND measurement_source = 'measured' ORDER BY timestamp DESC;"
-            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh FROM battery_health_history WHERE measurement_source = 'measured' ORDER BY timestamp DESC;"
+            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
+            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
 
         let records = (try? db.query(sql: sql) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }
@@ -679,20 +908,46 @@ final class VehicleDatabase: @unchecked Sendable {
                       let odo = stmt.columnDouble(at: 3),
                       let soh = stmt.columnDouble(at: 4),
                       let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6) else { continue }
+                      let usable = stmt.columnDouble(at: 6),
+                      let source = stmt.columnText(at: 7) else { continue }
                 list.append(BatteryHealthRecord(
                     id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable
+                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
+                    measurementSource: source
                 ))
             }
             return list
         }) ?? []
 
-        var csv = "Record ID,VIN,Date,Odometer (km),State of Health (%),Degradation (%),Effective Usable (kWh)\n"
+        var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"
         let df = ISO8601DateFormatter()
         for r in records {
             let date = df.string(from: r.timestamp)
-            csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh))\n"
+            csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh)),\(r.measurementSource)\n"
+        }
+        return csv
+    }
+
+    func exportTelemetryCSV(for vin: String) -> String {
+        let records = recentTelemetry(for: vin, limit: 10_000)
+        let formatter = ISO8601DateFormatter()
+        var csv = "Record ID,VIN,Date,Odometer (km),Trip Manual (km),Trip Automatic (km),Average Consumption,Ambient Temperature (C)\n"
+        for record in records {
+            func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
+            csv += "\(record.id),\(record.vin),\(formatter.string(from: record.timestamp)),\(number(record.odometerKm)),\(number(record.tripManualKm)),\(number(record.tripAutomaticKm)),\(number(record.averageConsumption)),\(number(record.ambientTemperatureCelsius))\n"
+        }
+        return csv
+    }
+
+    func exportCommandAuditsCSV(for vin: String) -> String {
+        let records = recentCommandAudits(for: vin, limit: 10_000)
+        let formatter = ISO8601DateFormatter()
+        func cell(_ value: String) -> String {
+            "\"\(value.replacingOccurrences(of: "\"", with: "\"\"").replacingOccurrences(of: "\n", with: " "))\""
+        }
+        var csv = "Command ID,VIN,Command,Status,Executed At,Duration (ms),Error\n"
+        for record in records {
+            csv += "\(cell(record.id)),\(record.vin),\(record.command),\(record.status),\(formatter.string(from: record.executedAt)),\(record.durationMs.map(String.init) ?? ""),\(cell(record.errorMessage ?? ""))\n"
         }
         return csv
     }

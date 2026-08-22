@@ -52,6 +52,7 @@ These files should all be treated as parts of the same local database.
 | Charging-session header | SQLite | Retained until local history is cleared/sign-out removes database history |
 | Charging samples | SQLite | Can be pruned with a 90-day cutoff through maintenance |
 | Historical telemetry | SQLite | Can be pruned with a 90-day cutoff through maintenance |
+| Precise coordinates in historical telemetry/charging sessions | SQLite | Disabled by default; only written after explicit user opt-in, then follows the parent history retention |
 | Battery-health milestones | SQLite | Long-term; retained until local history is cleared |
 | Remote-command audit records | SQLite | Retained until local history is cleared |
 | Reverse-geocode cache | Memory | Process lifetime |
@@ -78,6 +79,12 @@ Expiration is enforced when the snapshot is read.
 Hisingen does not need a background deletion timer for snapshot expiration: when an expired snapshot is encountered, it is removed and not returned to the application.
 
 The cached snapshot excludes the live vehicle-location object, owner first name, registration number, and vehicle image data.
+
+Live parking location can therefore be displayed without persisting it. The separate “Store
+precise location history” preference is off by default and controls only coordinate fields in
+historical telemetry and charging-session location labels.
+Turning the preference off also clears previously stored coordinate columns and charging-session
+location labels for the selected vehicle.
 
 It can still contain other vehicle information such as VIN, odometer, charging information, diagnostics, exterior state, software state, climate information, weather, and vehicle configuration.
 
@@ -117,7 +124,9 @@ They remain until vehicle history is explicitly cleared or sign-out invokes the 
 
 ### Charging location retention
 
-When location data is available when a session starts, Hisingen may store the coordinates rounded to four decimal places as the charging-session location.
+When location history is explicitly enabled and location data is available when
+a session starts, Hisingen may store coordinates rounded to four decimal places
+as the charging-session location.
 
 This value should be treated as sensitive location information.
 
@@ -179,11 +188,21 @@ A row may contain:
 
 Hisingen does not intentionally write a new telemetry row on every stationary refresh.
 
-The telemetry recorder skips repeated stationary readings during its heartbeat window and records when meaningful movement or the configured heartbeat condition warrants another row.
+The telemetry recorder skips repeated stationary readings during its heartbeat
+window and records when meaningful movement or the configured heartbeat
+condition warrants another row. It retains one unchanged reading immediately
+after movement as a parked boundary, allowing short adjacent journeys to be
+separated without retaining every parked poll.
+
+The History dashboard derives grouped journeys from these rows at read time;
+those derived trips do not add another database table or retention category.
 
 ### Location
 
-When `VehicleState.location` contains coordinates, those coordinates may be written to historical telemetry.
+Only when “Store precise location history” is explicitly enabled may coordinates
+from `VehicleState.location` be written to historical telemetry. It is off by
+default, and disabling it clears stored telemetry coordinates and charging
+location labels for the selected VIN.
 
 This means precise vehicle coordinates can exist in the local SQLite database even though the cached `VehicleState` snapshot itself strips the location field.
 
@@ -210,6 +229,11 @@ A milestone can contain:
 - degradation;
 - effective usable capacity; and
 - measurement classification.
+
+State of Health is calculated locally from the available charging, range,
+consumption, age, mileage, and configured vehicle-reference signals. It is not a
+provider value or a BMS measurement. New rows are classified `calculated-v2`;
+older inferred rows are retained as `legacy-estimate` for trend continuity.
 
 Hisingen avoids writing a duplicate row for every vehicle refresh.
 

@@ -167,6 +167,7 @@ struct SQLiteDatabaseTests {
         #expect(history.count == 2)
         #expect(history.first?.odometerKm == 50000)
         #expect(history.first?.stateOfHealthPct == 95.0)
+        #expect(history.first?.measurementSource == "calculated-v2")
         #expect(history.last?.odometerKm == 10000)
     }
 
@@ -251,6 +252,49 @@ struct SQLiteDatabaseTests {
             vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
             avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
         ))
+
+        // The first unchanged reading after movement marks the parked boundary;
+        // subsequent parked polls are still deduplicated.
+        #expect(vdb.recordTelemetry(
+            vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
+            avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
+        ))
+        #expect(vdb.recordTelemetry(
+            vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
+            avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
+        ) == false)
+    }
+
+    @Test("Derived trip history groups adjacent movement and separates parked periods")
+    func testDerivedTripGrouping() throws {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "TRIP_GROUPING_VIN"
+        let start = Date(timeIntervalSince1970: 2_000_000_000)
+
+        func insert(_ minute: Int, odometer: Double) throws {
+            try vdb.db.query(sql: """
+                INSERT INTO telemetry_logs
+                (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c)
+                VALUES (?, ?, ?, NULL, NULL, 18.0, 12.0);
+                """) { statement in
+                try statement.bindText(vin, at: 1)
+                try statement.bindDate(start.addingTimeInterval(Double(minute * 60)), at: 2)
+                try statement.bindDouble(odometer, at: 3)
+                try statement.executeUpdate()
+            } process: { _ in }
+        }
+
+        try insert(0, odometer: 100)
+        try insert(5, odometer: 110)
+        try insert(10, odometer: 120)
+        try insert(15, odometer: 120)
+        try insert(25, odometer: 125)
+
+        let trips = vdb.derivedTrips(for: vin)
+        #expect(trips.count == 2)
+        #expect(trips[0].distanceKm == 5)
+        #expect(trips[1].distanceKm == 20)
+        #expect(vdb.exportTripsCSV(for: vin).contains("Duration (min)"))
     }
 
     @Test("VehicleDatabase audit logs remote commands")
@@ -269,6 +313,11 @@ struct SQLiteDatabaseTests {
             stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(count == 1)
+        let audit = try #require(vdb.recentCommandAudits(for: vin).first)
+        #expect(audit.command == "lock")
+        #expect(audit.status == "success")
+        #expect(audit.durationMs == 1420)
+        #expect(vdb.exportCommandAuditsCSV(for: vin).contains("lock"))
     }
 
     @Test("VehicleDatabase computes record counts and diagnostic metrics")
@@ -290,6 +339,40 @@ struct SQLiteDatabaseTests {
         #expect(counts.commands == 1)
 
         vdb.vacuum()
+    }
+
+    @Test("VehicleDatabase exposes typed telemetry history without requiring coordinates")
+    func testTypedTelemetryHistory() throws {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "TELEMETRY_TYPED_HISTORY"
+        #expect(vdb.recordTelemetry(
+            vin: vin, odometerKm: 42_000, tripManualKm: 120.5, tripAutoKm: 18.2,
+            avgConsumption: 17.4, ambientTempC: 9.0, latitude: nil, longitude: nil
+        ))
+        let record = try #require(vdb.recentTelemetry(for: vin).first)
+        #expect(record.odometerKm == 42_000)
+        #expect(record.tripAutomaticKm == 18.2)
+        #expect(record.averageConsumption == 17.4)
+        #expect(vdb.exportTelemetryCSV(for: vin).contains("42000.00"))
+    }
+
+    @Test("Disabling location history removes stored coordinates and charging labels")
+    func testClearingStoredLocationHistory() throws {
+        let vdb = VehicleDatabase.inMemory()
+        let vin = "PRIVATE_LOCATION_HISTORY"
+        #expect(vdb.recordTelemetry(vin: vin, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
+                                    avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
+        _ = vdb.startChargingSession(vin: vin, startSoc: 20, location: "57.7000°, 11.9000°")
+        vdb.clearStoredLocations(for: vin)
+        let remaining = try vdb.db.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> (Double?, Double?) in
+            guard stmt.step() else { return (nil, nil) }
+            return (stmt.columnDouble(at: 0), stmt.columnDouble(at: 1))
+        }
+        #expect(remaining.0 == nil)
+        #expect(remaining.1 == nil)
+        #expect(vdb.activeChargingSession(for: vin)?.locationName == nil)
     }
 
     @Test("VehicleDatabase retrieves active charging session and samples")

@@ -35,6 +35,7 @@ With Hisingen you can:
 * see whether doors, windows and the car itself are locked
 * keep an eye on vehicle health and service information
 * view trips, odometer and consumption data
+* explore grouped trip, charging and command history with charts and CSV export
 * check climate and cabin information
 * see your car's latest reported location
 * keep a local history of charging sessions
@@ -42,6 +43,7 @@ With Hisingen you can:
 * manage multiple vehicles
 * use supported remote controls without picking up your phone
 * bring vehicle information into Apple Shortcuts
+* monitor a real multi-provider garage in one place
 
 What appears in Hisingen depends on what your individual car actually supports.
 
@@ -171,6 +173,12 @@ For electric and plug-in hybrid vehicles, Hisingen can show information such as:
 * energy consumption
 
 The interface only shows values that make sense for the selected vehicle.
+
+Hisingen can also calculate an experimental battery State of Health estimate
+from the telemetry it has observed. This is always labelled as a calculated
+estimate, includes its input signals and confidence, and must not be confused
+with a battery-management-system measurement or a warranty diagnosis. Exact
+usable capacity and WLTP references can be entered per VIN in Settings.
 
 ---
 
@@ -852,15 +860,24 @@ Global shortcuts can require macOS Accessibility permission.
 
 ## Apple Shortcuts
 
-Hisingen exposes cached vehicle information to Apple Shortcuts using App Intents.
+Hisingen exposes cached vehicle information and verified Volvo command handoffs to Apple
+Shortcuts using App Intents.
 
 That makes it possible to use information such as:
 
 * battery percentage
 * range
 * charging state
+* lock vehicle
+* authenticated unlock
+* start or stop cabin climate
 
 inside your own macOS automations.
+
+Command intents never announce that the car changed state merely because the shortcut ran.
+They hand the request to Hisingen, apply the same capability and authentication gates as the
+normal controls, and let the app report the provider result. Volvo lock/location permissions
+must first be approved for the developer application and enabled in Hisingen Settings.
 
 ## URL scheme
 

@@ -125,7 +125,7 @@ struct FeatureSelection: Codable, Equatable, Sendable {
             .vehicleAvailability, .exteriorStatus,
             .tyreAndWarnings, .softwareUpdates, .climateStatus,
             .tripMeters, .vehicleLocation, .vehicleWeather, .batteryDiagnostics,
-            .multipleVehicles, .notifications, .updateChecks
+            .multipleVehicles, .notifications, .updateChecks, .realTimeUpdates
         ])
     }
 
@@ -136,5 +136,4 @@ struct FeatureSelection: Codable, Equatable, Sendable {
         else { enabled.remove(feature) }
     }
 }
-
 

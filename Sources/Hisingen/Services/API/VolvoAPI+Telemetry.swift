@@ -62,6 +62,10 @@ extension VolvoAPI {
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: true, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
+        let needsCommandCapabilities = !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
+        async let commandsTask: [VolvoCommandDTO]? = optional(
+            enabled: needsCommandCapabilities, key: "commands", vin: vin
+        ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands") }
 
         let fuel = try await fuelTask
         let energy = try await energyTask
@@ -77,6 +81,7 @@ extension VolvoAPI {
         let warnings = try await warningsTask
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
+        let commands = try await commandsTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -90,15 +95,28 @@ extension VolvoAPI {
                 longitude: coords[0],
                 heading: loc.properties?.heading.flatMap(Double.init),
                 speed: nil,
-                timestamp: loc.properties?.timestamp
+                timestamp: loc.properties?.timestamp,
+                altitudeMeters: loc.altitudeMeters,
+                parkingBrakeEngaged: Self.volvoParkingBrake(brakes?.parkingBrakeStatus?.value)
             )
         }
 
         let reportedAt: Date? = [
             energy?.batteryChargeLevel?.updatedAt,
+            energy?.electricRange?.updatedAt,
+            energy?.chargingSystemStatus?.updatedAt,
+            energy?.chargingStatus?.updatedAt,
+            energy?.chargerConnectionStatus?.updatedAt,
+            energy?.chargingPower?.updatedAt,
             diagnostics?.serviceWarning?.updatedAt,
             engineDiagnostics?.engineCoolantLevelWarning?.updatedAt,
-            engineDiagnostics?.oilLevelWarning?.updatedAt
+            engineDiagnostics?.oilLevelWarning?.updatedAt,
+            doors?.centralLock?.updatedAt,
+            windows?.frontLeftWindow?.updatedAt,
+            odometer?.odometer?.updatedAt,
+            statistics?.tripMeterAutomatic?.updatedAt,
+            location?.properties?.timestamp,
+            commandAccessibility?.availabilityStatus?.updatedAt
         ]
             .compactMap { $0 }.max()
 
@@ -151,38 +169,47 @@ extension VolvoAPI {
         if tyres?.readings.contains(where: { $0.kilopascals != nil }) == true {
             probes.record(.tyrePressureValues, as: .supported)
         }
-        if commandAccessibility?.isAvailable == true {
-            probes.record(.climateStartStop, as: .supported)
-            probes.record(.locks, as: .supported)
-            probes.record(.honkAndFlash, as: .supported)
+        if let commands {
+            let names = Set(commands.compactMap(\.normalizedName))
+            let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
+            let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
+            let supportsLocate = names.contains("honk") || names.contains("flash") || names.contains("honk-flash")
+            let supportsEngine = names.contains("engine-start") || names.contains("engine-stop")
+            probes.record(.climateStartStop, as: supportsClimate ? .supported : .unavailable)
+            probes.record(.locks, as: supportsLocks ? .supported : .unavailable)
+            probes.record(.reducedGuardLock, as: names.contains("lock-reduced-guard") ? .supported : .unavailable)
+            probes.record(.honkAndFlash, as: supportsLocate ? .supported : .unavailable)
+            probes.record(.engineStart, as: supportsEngine ? .supported : .unavailable)
         }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
         }
 
-        if let supported = energyCaps?.targetBatteryLevel?.isSupported {
+        if let supported = energyCaps?.targetBatteryChargeLevel?.isSupported {
             probes.record(.chargeTarget, as: supported ? .supported : .unavailable)
         }
-        if let supported = energyCaps?.chargingPower?.isSupported {
+        if let supported = energyCaps?.chargingCurrentLimit?.isSupported {
             probes.record(.chargingCurrentLimit, as: supported ? .supported : .unavailable)
         }
 
-        let batteryPct: Double? = energy?.batteryChargeLevel?.value
-        let rangeKm: Int? = energy?.rangeKm
+        let batteryPct: Double? = energy?.batteryChargeLevel?.value ?? fuel?.batteryChargeLevel?.value
+        let rangeKm: Int? = energy?.rangeKm ?? statistics?.distanceToEmptyBatteryKm
         let estMinutes: Int? = energy?.estTimeToTargetMinutes
         let targetPct: Int? = energy?.targetPercent
-        let chargingWatts: Int? = energy?.chargingPower?.value.map { Int(($0 * 1_000).rounded()) }
+        let chargingWatts: Int? = energy?.chargingPowerWatts
         let currentDrawAmps: Int? = energy?.chargingCurrent?.value.map { Int($0.rounded()) }
         let currentLimitAmps: Int? = energy?.chargingCurrentLimit?.value.map { Int($0.rounded()) }
         let chargingAmps: Int? = currentDrawAmps ?? currentLimitAmps
         let chargingVolts: Int? = energy?.chargingVoltage?.value.map { Int($0.rounded()) }
-        let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStatus?.value)
+        let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStateValue)
         let chargerConn: ChargerConnection = ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value)
+        let chargingType = ChargingType(volvoChargingType: energy?.chargingType?.value)
+        let chargerPowerState = ChargerPowerState(volvoPowerStatus: energy?.chargerPowerStatus?.value)
         let modelName: String? = details.descriptions?.model
         let modelYear: String? = details.modelYear.map(String.init)
-        let odometerKm: Int? = odometer?.odometer?.value
+        let odometerKm: Int? = odometer?.odometerKm
         let daysToService: Int? = diagnostics?.daysToServiceApprox
-        let distToService: Int? = diagnostics?.distanceToService?.value
+        let distToService: Int? = diagnostics?.distanceToServiceKm
         let serviceWarn: Bool = diagnostics?.hasServiceWarning ?? false
         var fluidWarns: [String] = diagnostics?.fluidWarnings ?? []
         for warning in engineDiagnostics?.fluidWarnings ?? [] where !fluidWarns.contains(warning) {
@@ -231,17 +258,17 @@ extension VolvoAPI {
             ? BatteryDiagnostics(
                 timeToTargetMinutes: estMinutes,
                 timeToMinimumSOCMinutes: nil,
-                chargerPowerState: .unknown,
-                averageConsumption: statistics?.averageEnergyConsumption?.value,
-                averageConsumptionSinceCharge: nil,
+                chargerPowerState: chargerPowerState,
+                averageConsumption: statistics?.averageEnergyConsumptionKwhPer100Km,
+                averageConsumptionSinceCharge: statistics?.averageEnergyConsumptionSinceChargeKwhPer100Km,
                 energyUsedSinceChargeWh: nil
             )
             : nil
-        let tripManual: Double? = statistics?.tripMeterManual?.value
-        let tripAuto: Double? = statistics?.tripMeterAutomatic?.value
+        let tripManual: Double? = statistics?.tripMeterManualKm
+        let tripAuto: Double? = statistics?.tripMeterAutomaticKm
         let probesResult: VehicleProbedCapabilities? = probes.count > 0 ? probes : nil
         let fuelPct: Double? = fuel?.percentage
-        let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTank?.value
+        let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTankKm
         let fuelLiters: Double? = fuel?.liters
         let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value
         let isEngineRunning: Bool? = engineStatus?.isRunning
@@ -250,7 +277,12 @@ extension VolvoAPI {
         let carImg: Data? = features.contains(.vehicleImage) ? (carImageData[vin] ?? imageCache.image(for: vin)) : nil
         let interiorImg: Data? = features.contains(.vehicleImage)
             ? (interiorImageData[vin] ?? imageCache.interiorImage(for: vin)) : nil
-        let availability: VehicleAvailability = (commandAccessibility?.isAvailable == true) ? .available : .unknown
+        let availability: VehicleAvailability = {
+            guard let commandAccessibility else { return .unknown }
+            return commandAccessibility.isAvailable
+                ? .available
+                : .unavailable(reason: commandAccessibility.reason)
+        }()
 
         var state = VehicleState(
             batteryPercentage: batteryPct,
@@ -261,7 +293,7 @@ extension VolvoAPI {
             chargingPowerWatts: chargingWatts,
             chargingCurrentAmps: currentDrawAmps ?? chargingAmps,
             chargingVoltageVolts: chargingVolts,
-            chargingType: .unknown,
+            chargingType: chargingType,
             chargerConnection: chargerConn,
             availability: availability,
             modelName: modelName,
@@ -296,7 +328,7 @@ extension VolvoAPI {
         state.externalColour = details.externalColour
         state.gearbox = details.gearbox
         state.engineHoursToService = diagnostics?.engineHoursToService?.value
-        state.averageSpeedKmH = statistics?.averageSpeed?.value
+        state.averageSpeedKmH = statistics?.averageSpeedKmH
         state.fuelAmountLiters = fuelLiters
         state.averageFuelConsumptionLPer100Km = avgFuelConsumption
         state.isEngineRunning = isEngineRunning
@@ -304,17 +336,25 @@ extension VolvoAPI {
         state.upholstery = details.descriptions?.upholstery
         state.steeringOrientation = details.descriptions?.steering
         state.serviceTrigger = diagnostics?.serviceTrigger?.value
-        state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBattery?.value
+        state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBatteryKm
         state.chargingCurrentLimitAmps = currentLimitAmps
         state.interiorImageData = interiorImg
-        state.electricDistanceKm = statistics?.electricDistance?.value.map { $0 / 1000.0 }
-        state.fuelDistanceKm = statistics?.fuelDistance?.value.map { $0 / 1000.0 }
-        state.regeneratedEnergyKwh = statistics?.regeneratedEnergy?.value
+        state.electricDistanceKm = statistics?.electricDistanceKm
+        state.fuelDistanceKm = statistics?.fuelDistanceKm
+        state.regeneratedEnergyKwh = statistics?.regeneratedEnergyKwh
         state.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
         state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
         state.preferredWorkshopId = diagnostics?.workshopId?.value
         state.preferredWorkshopName = diagnostics?.workshopName?.value
         return state
+    }
+
+    private static func volvoParkingBrake(_ raw: String?) -> Bool? {
+        switch raw?.uppercased() {
+        case "ENGAGED", "APPLIED", "ON": return true
+        case "DISENGAGED", "RELEASED", "OFF": return false
+        default: return nil
+        }
     }
 
     private func fetchCarImage(vin: String, imageUrlString: String?) async {

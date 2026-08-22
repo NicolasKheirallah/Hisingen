@@ -34,6 +34,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case startPreCleaning
     case stopPreCleaning
     case lock
+    case lockReducedGuard
     case unlock
     case unlockTrunk
     case openTailgate
@@ -68,7 +69,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .polestar:
             // PolestarGRPC.executeRemoteCommand switches exhaustively over every case (except engine commands, which are Volvo ICE/PHEV specific).
             switch self {
-            case .startEngine, .stopEngine:
+            case .startEngine, .stopEngine, .lockReducedGuard:
                 return false
             default:
                 return true
@@ -76,7 +77,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .volvo:
             // Volvo's Connected Vehicle API v2 exposes only these as command endpoints.
             switch self {
-            case .lock, .unlock, .startClimate, .stopClimate,
+            case .lock, .lockReducedGuard, .unlock, .startClimate, .stopClimate,
                  .honkAndFlash, .flashLights, .honkHorn,
                  .startEngine, .stopEngine:
                 return true
@@ -90,7 +91,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .startClimate, .stopClimate, .startEngine, .stopEngine: return .remoteClimate
         case .startPreCleaning, .stopPreCleaning: return .remotePreCleaning
-        case .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate: return .remoteLocks
+        case .lock, .lockReducedGuard, .unlock, .unlockTrunk, .openTailgate, .closeTailgate: return .remoteLocks
         case .openWindows, .closeWindows: return .remoteWindows
         case .flashLights, .honkAndFlash, .honkHorn: return .remoteHonkFlash
         case .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride:
@@ -107,6 +108,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startEngine, .stopEngine: return .engineStart
         case .startPreCleaning, .stopPreCleaning: return .preCleaning
         case .lock, .unlock: return .locks
+        case .lockReducedGuard: return .reducedGuardLock
         case .unlockTrunk, .openTailgate, .closeTailgate: return .trunk
         case .openWindows, .closeWindows: return .windows
         case .flashLights, .honkAndFlash, .honkHorn: return .honkAndFlash
@@ -155,6 +157,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startPreCleaning: return "start-precleaning"
         case .stopPreCleaning: return "stop-precleaning"
         case .lock: return "lock"
+        case .lockReducedGuard: return "lock-reduced-guard"
         case .unlock: return "unlock"
         case .unlockTrunk: return "unlock-trunk"
         case .openTailgate: return "open-tailgate"
@@ -192,6 +195,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startPreCleaning: return L10n.text("Start cabin cleaning")
         case .stopPreCleaning: return L10n.text("Stop cabin cleaning")
         case .lock: return L10n.text("Lock vehicle")
+        case .lockReducedGuard: return L10n.text("Lock with reduced guard")
         case .unlock: return L10n.text("Unlock vehicle")
         case .unlockTrunk: return L10n.text("Unlock trunk")
         case .openTailgate: return L10n.text("Open tailgate")
@@ -243,5 +247,4 @@ enum RemoteCommandError: Error, LocalizedError, Equatable, Sendable {
         }
     }
 }
-
 

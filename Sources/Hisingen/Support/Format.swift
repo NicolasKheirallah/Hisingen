@@ -115,6 +115,10 @@ enum Format {
         unit.format(lPer100Km: lPer100Km)
     }
 
+    static func energyConsumption(kwhPer100Km: Double, unit: EnergyConsumptionUnit) -> String {
+        unit.format(kwhPer100Km: kwhPer100Km)
+    }
+
     static func greeting(_ name: String) -> String {
         L10n.format("%@, %@", L10n.text("Hi"), name)
     }

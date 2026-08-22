@@ -65,6 +65,10 @@ final class PreferencesStore {
         get { d.string(forKey: "volvo_client_id").flatMap { $0.isEmpty ? nil : $0 } ?? BuiltinVolvoSecrets.clientID }
         set { d.set(newValue, forKey: "volvo_client_id") }
     }
+    var volvoRestrictedScopesEnabled: Bool {
+        get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
+        set { d.set(newValue, forKey: "volvo_restricted_scopes_enabled") }
+    }
     private func vinKey(for brand: VehicleBrand) -> String { brand == .volvo ? "volvo_vin" : "polestar_vin" }
     var vin: String { get { d.string(forKey: vinKey(for: activeBrand)) ?? "" } set { d.set(newValue, forKey: vinKey(for: activeBrand)); syncAppThemeStorageKey() } }
     func vin(for brand: VehicleBrand) -> String { d.string(forKey: vinKey(for: brand)) ?? "" }
@@ -123,10 +127,16 @@ final class PreferencesStore {
     var distanceUnit: DistanceUnit { get { let raw = d.string(forKey: "distance_unit") ?? ""; return DistanceUnit(rawValue: raw) ?? (raw == "Miles (mi)" ? .miles : .kilometers) } set { d.set(newValue.rawValue, forKey: "distance_unit") } }
     var hasExplicitTemperatureUnit: Bool { d.object(forKey: "temperature_unit") != nil }
     var hasExplicitPressureUnit: Bool { d.object(forKey: "pressure_unit") != nil }
+    var hasExplicitEnergyConsumptionUnit: Bool { d.object(forKey: "energy_consumption_unit") != nil }
     var temperatureUnit: TemperatureUnit { get { d.string(forKey: "temperature_unit").flatMap(TemperatureUnit.init) ?? (distanceUnit == .miles ? .fahrenheit : .celsius) } set { d.set(newValue.rawValue, forKey: "temperature_unit") } }
     var pressureUnit: PressureUnit { get { d.string(forKey: "pressure_unit").flatMap(PressureUnit.init) ?? (distanceUnit == .miles ? .psi : .kilopascals) } set { d.set(newValue.rawValue, forKey: "pressure_unit") } }
     var fuelVolumeUnit: FuelVolumeUnit { get { FuelVolumeUnit(rawValue: d.string(forKey: "fuel_volume_unit") ?? "") ?? .liters } set { d.set(newValue.rawValue, forKey: "fuel_volume_unit") } }
     var fuelEconomyUnit: FuelEconomyUnit { get { FuelEconomyUnit(rawValue: d.string(forKey: "fuel_economy_unit") ?? "") ?? .litersPer100Km } set { d.set(newValue.rawValue, forKey: "fuel_economy_unit") } }
+    var energyConsumptionUnit: EnergyConsumptionUnit {
+        get { d.string(forKey: "energy_consumption_unit").flatMap(EnergyConsumptionUnit.init) ?? (distanceUnit == .miles ? .milesPerKwh : .kwhPer100Km) }
+        set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
+    }
+    var persistLocationHistory: Bool { get { d.bool(forKey: "persist_location_history") } set { d.set(newValue, forKey: "persist_location_history") } }
     var interfaceLanguage: InterfaceLanguage { get { InterfaceLanguage(rawValue: d.string(forKey: "interface_language") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "interface_language") } }
     var tintMenuBarIcon: Bool { get { d.object(forKey: "tint_menu_bar_icon") == nil || d.bool(forKey: "tint_menu_bar_icon") } set { d.set(newValue, forKey: "tint_menu_bar_icon") } }
     var launchAtLogin: Bool { get { d.bool(forKey: "launch_at_login") } set { d.set(newValue, forKey: "launch_at_login") } }
@@ -163,6 +173,28 @@ final class PreferencesStore {
         d.set(values, forKey: "vehicle_in_service_dates_v1")
     }
 
+    func vehicleSpecificationOverride(for vin: String) -> VehicleSpecificationOverride? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data],
+              let data = all[key],
+              let value = try? JSONDecoder().decode(VehicleSpecificationOverride.self, from: data),
+              !value.isEmpty else { return nil }
+        return value
+    }
+
+    func setVehicleSpecificationOverride(_ value: VehicleSpecificationOverride?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data] ?? [:]
+        if let value, !value.isEmpty, let data = try? JSONEncoder().encode(value) {
+            all[key] = data
+        } else {
+            all.removeValue(forKey: key)
+        }
+        d.set(all, forKey: "vehicle_specification_overrides_v1")
+    }
+
     func dismissedSoftwareEventIdentifier(for vin: String) -> String? {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !key.isEmpty else { return nil }
@@ -185,6 +217,10 @@ final class PreferencesStore {
     var notifyPlugInReminder: Bool { get { boolDefaultTrue("notify_plugin_reminder") } set { d.set(newValue, forKey: "notify_plugin_reminder") } }
     var notifySoftwareUpdates: Bool { get { boolDefaultTrue("notify_software_updates") } set { d.set(newValue, forKey: "notify_software_updates") } }
     var notifyVehicleWarnings: Bool { get { boolDefaultTrue("notify_vehicle_warnings") } set { d.set(newValue, forKey: "notify_vehicle_warnings") } }
+    var notifyOpeningsLeftOpen: Bool { get { boolDefaultTrue("notify_openings_left_open") } set { d.set(newValue, forKey: "notify_openings_left_open") } }
+    var notifyServiceDue: Bool { get { boolDefaultTrue("notify_service_due") } set { d.set(newValue, forKey: "notify_service_due") } }
+    var notifyStaleTelemetry: Bool { get { boolDefaultTrue("notify_stale_telemetry") } set { d.set(newValue, forKey: "notify_stale_telemetry") } }
+    var notifySlowCharging: Bool { get { boolDefaultTrue("notify_slow_charging") } set { d.set(newValue, forKey: "notify_slow_charging") } }
     var notifyRainWithWindowsOpen: Bool { get { boolDefaultTrue("notify_rain_with_windows") } set { d.set(newValue, forKey: "notify_rain_with_windows") } }
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
 

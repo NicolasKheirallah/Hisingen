@@ -52,6 +52,8 @@ extension PolestarGRPC {
         case .lock:
             return try await invocation(method: "Lock", request: Self.lockRequest(vin),
                                         vin: vin, token: accessToken)
+        case .lockReducedGuard:
+            throw RemoteCommandError.unsupported
         case .unlock:
             return try await invocation(method: "Unlock", request: Self.unlockRequest(vin, trunkOnly: false),
                                         vin: vin, token: accessToken)
@@ -450,5 +452,4 @@ extension PolestarGRPC {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
 

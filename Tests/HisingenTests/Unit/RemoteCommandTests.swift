@@ -209,6 +209,17 @@ struct RemoteCommandTests {
     }
 
     @Test
+    func testVolvoReducedGuardCommandAttributes() {
+        let command = RemoteCommand.lockReducedGuard
+        XCTAssertTrue(command.isImplemented(by: .volvo))
+        XCTAssertFalse(command.isImplemented(by: .polestar))
+        XCTAssertEqual(command.feature, .remoteLocks)
+        XCTAssertEqual(command.requiredCapability, .reducedGuardLock)
+        XCTAssertEqual(command.identifier, "lock-reduced-guard")
+        XCTAssertEqual(command.risk, .routine)
+    }
+
+    @Test
     func testWarrantyDatesAreNeverDerivedFromBuildMetadata() {
         let state = VehicleState(
             batteryPercentage: 80.0,
@@ -492,4 +503,3 @@ struct RemoteCommandTests {
         return Float(bitPattern: bits)
     }
 }
-

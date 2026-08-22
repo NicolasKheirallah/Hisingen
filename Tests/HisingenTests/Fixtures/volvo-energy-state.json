@@ -1,13 +1,14 @@
 {
   "data": {
-    "batteryChargeLevel": { "value": 68.0, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "electricRange": { "value": 210, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "batteryChargeLevel": { "value": 68.0, "unit": "percentage", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "electricRange": { "value": 210, "unit": "km", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
     "chargingStatus": { "value": "CHARGING", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "chargingType": { "value": "AC", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
     "chargerConnectionStatus": { "value": "CONNECTED", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "chargingPower": { "value": 7.4, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "chargingCurrent": { "value": 16.0, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "chargingVoltage": { "value": 230.0, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "estimatedChargingTimeToFull": { "value": 95, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
-    "targetBatteryLevel": { "value": 90, "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" }
+    "chargerPowerStatus": { "value": "PROVIDING_POWER", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "chargingPower": { "value": 7400, "unit": "watts", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "chargingCurrentLimit": { "value": 16.0, "unit": "ampere", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "estimatedChargingTimeToTargetBatteryChargeLevel": { "value": 95, "unit": "minutes", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" },
+    "targetBatteryChargeLevel": { "value": 90, "unit": "percentage", "status": "OK", "updatedAt": "2026-08-15T09:30:00Z" }
   }
 }

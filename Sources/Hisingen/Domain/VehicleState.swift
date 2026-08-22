@@ -144,16 +144,16 @@ struct VehicleStateSummary: Equatable, Sendable {
 }
 
 struct VehicleState: Codable, Equatable, Sendable {
-    let batteryPercentage: Double?
-    let rangeKm: Int?
-    let chargingState: ChargingState
-    let estimatedChargingTimeToFullMinutes: Int?
+    var batteryPercentage: Double?
+    var rangeKm: Int?
+    var chargingState: ChargingState
+    var estimatedChargingTimeToFullMinutes: Int?
     var chargeTargetPercentage: Int?
-    let chargingPowerWatts: Int?
+    var chargingPowerWatts: Int?
     var chargingCurrentAmps: Int?
-    let chargingVoltageVolts: Int?
-    let chargingType: ChargingType
-    let chargerConnection: ChargerConnection
+    var chargingVoltageVolts: Int?
+    var chargingType: ChargingType
+    var chargerConnection: ChargerConnection
     let availability: VehicleAvailability
     let modelName: String?
     let modelYear: String?
@@ -260,8 +260,33 @@ struct VehicleState: Codable, Equatable, Sendable {
     var isCachedSnapshot: Bool = false
     let imageData: Data?
     var fetchedAt: Date
-    let vehicleReportedAt: Date?
+    var vehicleReportedAt: Date?
     let dataWarnings: [String]
+    var retainedDataCategories: [AppFeature] = []
+    var retainedDataAt: Date? = nil
+
+    mutating func applyLiveUpdate(_ update: VehicleLiveUpdate, receivedAt: Date = Date()) {
+        switch update {
+        case .battery(let battery):
+            batteryPercentage = battery.batteryPercentage ?? batteryPercentage
+            rangeKm = battery.rangeKm ?? rangeKm
+            estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
+                ?? estimatedChargingTimeToFullMinutes
+            chargingState = battery.chargingState ?? chargingState
+            if battery.chargerConnection != .unknown { chargerConnection = battery.chargerConnection }
+            if battery.chargingType != .unknown { chargingType = battery.chargingType }
+            chargingPowerWatts = battery.chargingPowerWatts ?? chargingPowerWatts
+            chargingCurrentAmps = battery.chargingCurrentAmps ?? chargingCurrentAmps
+            chargingVoltageVolts = battery.chargingVoltageVolts ?? chargingVoltageVolts
+            batteryDiagnostics = battery.diagnostics
+            vehicleReportedAt = battery.reportedAt ?? vehicleReportedAt
+        case .exterior(let exterior, let reportedAt):
+            exteriorStatus = exterior.merging(previous: exteriorStatus)
+            vehicleReportedAt = reportedAt ?? vehicleReportedAt
+        }
+        fetchedAt = receivedAt
+        isCachedSnapshot = false
+    }
 
     init(
         batteryPercentage: Double?, rangeKm: Int?, chargingState: ChargingState,
@@ -355,6 +380,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case interiorImageData, warrantyInfo
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
         case preferredWorkshopId, preferredWorkshopName
+        case retainedDataCategories, retainedDataAt
     }
 
     init(from decoder: Decoder) throws {
@@ -435,6 +461,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
         self.preferredWorkshopId = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopId)
         self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
+        self.retainedDataCategories = try values.decodeIfPresent([AppFeature].self, forKey: .retainedDataCategories) ?? []
+        self.retainedDataAt = try values.decodeIfPresent(Date.self, forKey: .retainedDataAt)
     }
 
     var formattedBuildWeek: String? {
@@ -786,6 +814,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         copy.tripComputerElectricRangeKm = tripComputerElectricRangeKm
         copy.chargingCurrentLimitAmps = chargingCurrentLimitAmps
         copy.warrantyInfo = warrantyInfo
+        copy.retainedDataCategories = retainedDataCategories
+        copy.retainedDataAt = retainedDataAt
         return copy
     }
 
@@ -941,6 +971,27 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.rearBrakePadStatus = rearBrakePadStatus ?? previous.rearBrakePadStatus
         merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId
         merged.preferredWorkshopName = preferredWorkshopName ?? previous.preferredWorkshopName
+
+        var retained = Set<AppFeature>()
+        func markRetained(_ feature: AppFeature, currentIsMissing: Bool, previousWasPresent: Bool) {
+            if features.contains(feature), currentIsMissing, previousWasPresent {
+                retained.insert(feature)
+            }
+        }
+        markRetained(.exteriorStatus, currentIsMissing: exteriorStatus == nil, previousWasPresent: previous.exteriorStatus != nil)
+        markRetained(.tyreAndWarnings, currentIsMissing: healthDetails == nil, previousWasPresent: previous.healthDetails != nil)
+        markRetained(.softwareUpdates, currentIsMissing: softwareInfo == nil, previousWasPresent: previous.softwareInfo != nil)
+        markRetained(.climateStatus, currentIsMissing: climateStatus == nil, previousWasPresent: previous.climateStatus != nil)
+        markRetained(.tripMeters, currentIsMissing: tripMeterManualKm == nil && tripMeterAutomaticKm == nil,
+                     previousWasPresent: previous.tripMeterManualKm != nil || previous.tripMeterAutomaticKm != nil)
+        markRetained(.connectivityDiagnostics, currentIsMissing: connectivity == nil, previousWasPresent: previous.connectivity != nil)
+        markRetained(.airQuality, currentIsMissing: airQuality == nil, previousWasPresent: previous.airQuality != nil)
+        markRetained(.batteryDiagnostics, currentIsMissing: batteryDiagnostics == nil, previousWasPresent: previous.batteryDiagnostics != nil)
+        markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)
+        markRetained(.vehicleLocation, currentIsMissing: location == nil, previousWasPresent: previous.location != nil)
+        retained.formUnion(failed.filter { features.contains($0) })
+        merged.retainedDataCategories = retained.sorted { $0.title < $1.title }
+        merged.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {

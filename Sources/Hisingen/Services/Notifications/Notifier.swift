@@ -20,6 +20,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private var authorized: Bool { permission == .authorized }
     private var authenticationNoticePosted = false
     private var previousStateByVIN: [String: VehicleState] = [:]
+    private var sustainedConditionStartedAt: [String: Date] = [:]
+    private var sustainedNotificationsDelivered = Set<String>()
 
 
     var onPermissionChanged: ((NotificationPermission) -> Void)?
@@ -93,6 +95,72 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         checkLowBatteryPlugIn(previous: previousState, current: state)
         checkSoftwareUpdate(previous: previousState, current: state)
         checkVehicleWarnings(previous: previousState, current: state)
+        checkOpeningsLeftOpen(current: state)
+        checkServiceDue(previous: previousState, current: state)
+        checkStaleTelemetry(current: state)
+        checkSlowCharging(current: state)
+    }
+
+    private func checkOpeningsLeftOpen(current: VehicleState) {
+        let openings = current.exteriorStatus?.itemsNeedingAttention.map(\.displayName) ?? []
+        let condition = current.isEngineRunning != true && !openings.isEmpty
+        trackSustained(condition: condition, key: "\(current.vin).openings", duration: 15 * 60) {
+            guard self.preferences.notifyOpeningsLeftOpen else { return }
+            self.postNotice(identifier: "hisingen.\(current.vin).openings-left-open",
+                            thread: "hisingen.security.\(current.vin)",
+                            title: L10n.text("Vehicle left open"),
+                            body: self.privateBody(openings.joined(separator: " · ")))
+        }
+    }
+
+    private func checkServiceDue(previous: VehicleState?, current: VehicleState) {
+        guard preferences.notifyServiceDue else { return }
+        let due = current.serviceWarning || (current.daysToService.map { $0 <= 30 } ?? false)
+            || (current.distanceToServiceKm.map { $0 <= 1_000 } ?? false)
+        let wasDue = previous?.serviceWarning == true || (previous?.daysToService.map { $0 <= 30 } ?? false)
+            || (previous?.distanceToServiceKm.map { $0 <= 1_000 } ?? false)
+        guard due, !wasDue else { return }
+        var details: [String] = []
+        if let days = current.daysToService { details.append(L10n.format("%d days", days)) }
+        if let km = current.distanceToServiceKm { details.append(Format.distance(km: km, unit: preferences.distanceUnit)) }
+        postNotice(identifier: "hisingen.\(current.vin).service-due", thread: "hisingen.service.\(current.vin)",
+                   title: L10n.text("Vehicle service due soon"),
+                   body: privateBody(details.isEmpty ? L10n.text("Open Hisingen for details.") : details.joined(separator: " · ")))
+    }
+
+    private func checkStaleTelemetry(current: VehicleState) {
+        let condition = current.isStale()
+        trackSustained(condition: condition, key: "\(current.vin).stale", duration: 1) {
+            guard self.preferences.notifyStaleTelemetry else { return }
+            self.postNotice(identifier: "hisingen.\(current.vin).stale-telemetry", thread: "hisingen.telemetry.\(current.vin)",
+                            title: L10n.text("Vehicle data is stale"),
+                            body: self.privateBody(current.freshnessDescription))
+        }
+    }
+
+    private func checkSlowCharging(current: VehicleState) {
+        let condition = current.isCharging && (current.chargingPowerWatts.map { $0 > 0 && $0 < 2_000 } ?? false)
+        trackSustained(condition: condition, key: "\(current.vin).slow-charging", duration: 15 * 60) {
+            guard self.preferences.notifySlowCharging else { return }
+            let power = current.chargingPowerWatts.map(Format.kilowatts) ?? L10n.text("Unavailable")
+            self.postNotice(identifier: "hisingen.\(current.vin).slow-charging", thread: "hisingen.charging.\(current.vin)",
+                            title: L10n.text("Charging power is unusually low"), body: self.privateBody(power))
+        }
+    }
+
+    private func trackSustained(condition: Bool, key: String, duration: TimeInterval,
+                                action: () -> Void) {
+        guard condition else {
+            sustainedConditionStartedAt.removeValue(forKey: key)
+            sustainedNotificationsDelivered.remove(key)
+            return
+        }
+        let started = sustainedConditionStartedAt[key] ?? Date()
+        sustainedConditionStartedAt[key] = started
+        guard !sustainedNotificationsDelivered.contains(key),
+              Date().timeIntervalSince(started) >= duration else { return }
+        sustainedNotificationsDelivered.insert(key)
+        action()
     }
 
     private func checkSoftwareUpdate(previous: VehicleState?, current: VehicleState) {

@@ -14,7 +14,15 @@ protocol VehicleProviding: Sendable {
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
 }
 
+enum VehicleLiveUpdate: Sendable {
+    case battery(GrpcBatteryExtras)
+    case exterior(ExteriorSnapshot, reportedAt: Date?)
+}
+
+protocol VehicleLiveStreaming: Sendable {
+    func liveVehicleUpdates(vin: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error>
+}
+
 extension PolestarAPI: VehicleProviding {}
 extension VolvoAPI: VehicleProviding {}
-
 

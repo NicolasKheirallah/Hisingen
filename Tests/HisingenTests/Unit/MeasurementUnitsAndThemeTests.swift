@@ -46,6 +46,13 @@ struct MeasurementUnitsAndThemeTests {
     }
 
     @Test
+    func testElectricConsumptionFormatting() {
+        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km), "20.0 kWh/100 km")
+        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles), "32.2 kWh/100 mi")
+        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh), "3.11 mi/kWh")
+    }
+
+    @Test
     func testExteriorDoorCountExcludesOtherOpenings() {
         let snapshot = ExteriorSnapshot(
             openings: [

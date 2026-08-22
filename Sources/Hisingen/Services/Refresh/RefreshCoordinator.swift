@@ -17,6 +17,8 @@ struct DiagnosticsSnapshot: Sendable {
     /// app instead of only in the unified log.
     var unavailableFeatures: [AppFeature] = []
     var servingCachedSnapshot: Bool = false
+    var liveStreamConnected: Bool = false
+    var liveStreamRetryAt: Date? = nil
 }
 
 enum RefreshPolicy {
@@ -49,12 +51,15 @@ final class RefreshCoordinator {
 
     private var timer: Timer?
     private var task: Task<Void, Never>?
+    private var streamTask: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var failureCount = 0
     private var rateLimitedUntil: Date?
     private var lastManualRefresh: Date?
     private var sleeping = false
     private var networkAvailable = true
+    private var liveStreamConnected = false
+    private var liveStreamRetryAt: Date?
     private var sessionReady = false
     private var pendingEmail = ""
     private var pendingPassword: String?
@@ -154,6 +159,12 @@ final class RefreshCoordinator {
     }
 
     func reloadVehicleMetadata() {
+        if !preferences.features.contains(.realTimeUpdates) {
+            streamTask?.cancel()
+            streamTask = nil
+            liveStreamConnected = false
+            liveStreamRetryAt = nil
+        }
         guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else { return }
         guard sessionReady, task == nil, !preferences.vin.isEmpty else {
             refreshNow()
@@ -190,6 +201,9 @@ final class RefreshCoordinator {
         failureCount = 0
         task?.cancel()
         task = nil
+        streamTask?.cancel()
+        streamTask = nil
+        liveStreamConnected = false
         timer?.invalidate()
         preferences.vin = vin
         latest = stateStore.snapshot(for: vin)
@@ -360,6 +374,7 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(state)
         onState?(state)
+        startLiveStreamingIfNeeded(vin: state.vin)
         schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging, isClimateActive: state.isClimateActive), retrySession: false)
         publishDiagnostics()
     }
@@ -454,6 +469,10 @@ final class RefreshCoordinator {
         generation &+= 1
         task?.cancel()
         task = nil
+        streamTask?.cancel()
+        streamTask = nil
+        liveStreamConnected = false
+        liveStreamRetryAt = nil
         timer?.invalidate()
         timer = nil
         nextRefresh = nil
@@ -469,8 +488,52 @@ final class RefreshCoordinator {
             networkAvailable: networkAvailable,
             refreshInProgress: task != nil,
             unavailableFeatures: latest?.unavailableFeatures ?? [],
-            servingCachedSnapshot: latest?.isCachedSnapshot ?? false
+            servingCachedSnapshot: latest?.isCachedSnapshot ?? false,
+            liveStreamConnected: liveStreamConnected,
+            liveStreamRetryAt: liveStreamRetryAt
         ))
+    }
+
+    private func startLiveStreamingIfNeeded(vin: String) {
+        guard preferences.features.contains(.realTimeUpdates), streamTask == nil,
+              let streaming = api as? any VehicleLiveStreaming else { return }
+        let requestGeneration = generation
+        streamTask = Task { [weak self] in
+            var failure = 0
+            while !Task.isCancelled {
+                guard let self, requestGeneration == self.generation,
+                      self.latest?.vin == vin else { return }
+                do {
+                    let stream = try await streaming.liveVehicleUpdates(vin: vin)
+                    self.liveStreamConnected = true
+                    self.liveStreamRetryAt = nil
+                    self.publishDiagnostics()
+                    failure = 0
+                    for try await update in stream {
+                        try Task.checkCancellation()
+                        guard requestGeneration == self.generation,
+                              var current = self.latest, current.vin == vin else { return }
+                        current.applyLiveUpdate(update)
+                        self.latest = current
+                        self.stateStore.save(current)
+                        self.onState?(current)
+                    }
+                    throw VehicleServiceError.temporarilyUnavailable(
+                        provider: self.api.brand, service: "live vehicle stream"
+                    )
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self.liveStreamConnected = false
+                    failure += 1
+                    let delay = min(5 * pow(2, Double(min(failure - 1, 4))), 60)
+                    self.liveStreamRetryAt = Date().addingTimeInterval(delay)
+                    self.publishDiagnostics()
+                    do { try await Task.sleep(for: .seconds(delay)) }
+                    catch { return }
+                }
+            }
+        }
     }
 }
 

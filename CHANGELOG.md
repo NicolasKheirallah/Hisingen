@@ -3,10 +3,29 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-08-21
+## [1.2.0] - 2026-08-22
 
 ### Added
 
+- Added a dedicated History dashboard with 7-day, 30-day, and all-time views,
+  locally inferred and grouped journeys, distance charts, charging trends,
+  command outcomes, summary metrics, optional map endpoints, and trip CSV export.
+- Added persistent Polestar server-streaming gRPC connections for battery and
+  exterior changes, with visible connection state, exponential reconnect, and
+  scheduled polling retained as a reliability fallback.
+- Added background refresh for every authenticated Polestar and Volvo account
+  so the unified Garage contains current multi-provider vehicle snapshots rather
+  than only a cached vehicle from the inactive provider.
+- Added a transparent calculated battery State of Health estimate using observed
+  charging-power integration, current range, long-term consumption, age, and
+  mileage signals. Every SoH surface and export identifies it as calculated—not
+  a BMS measurement—and reports signal weights and confidence.
+- Added VIN-specific usable-capacity and WLTP references in Settings for exact
+  vehicle variants; user-entered references are visibly distinguished from
+  provider telemetry and static model-family data.
+- Added Shortcuts for vehicle status, charging status, recent trip summaries,
+  flashing lights, and honk-and-flash, plus provider-result waiting for command
+  shortcuts and links to locally audited outcomes.
 - Added complete information tooltips throughout the vehicle, diagnostics,
   charging, software, warranty, settings, and capability views.
 - Added user-selectable pressure units, including PSI and kPa, alongside the
@@ -22,12 +41,43 @@ All notable changes to Hisingen are documented in this file. The project follows
   investigating provider compatibility without exposing credentials or vehicle
   identifiers.
 - Added neutral unavailable gauges and widget states for missing energy data.
+- Added official Volvo Energy API v2 field/unit decoding, nested capability parsing,
+  charging type and charger-power state, mileage normalization, altitude, and
+  command-accessibility reasons.
+- Added exact Volvo per-VIN remote-command capability probing and reduced-guard
+  locking, engine start/stop, standalone honk, staged-unlock handling, and
+  opt-in approval-gated OAuth scopes.
+- Added real Apple Shortcuts handoffs for supported Volvo lock, authenticated
+  unlock, and climate commands; shortcuts no longer claim success before a
+  provider command is sent.
+- Added local remote-command auditing with provider outcome, failure detail,
+  duration, and recent activity display.
+- Added typed drive-history retrieval and an activity summary in Vehicle Info.
+- Added per-vehicle CSV exports for drive telemetry and remote-command audits.
+- Added electric-consumption units for kWh/100 km, kWh/100 mi, and mi/kWh.
+- Added configurable notifications for doors/windows left open, upcoming
+  service, stale telemetry, and unusually slow charging.
+- Added explicit last-known-data category and source-age labels when a partial
+  provider refresh retains older values.
+- Added an opt-in precise-location history preference; historical coordinates
+  and charging-location labels are excluded by default.
+- Added a unified Garage summary for cached vehicles across both provider
+  accounts, with one-click same-brand selection and cross-brand switching.
 - Added regression coverage for provider warning provenance, software-event
   dismissal, unit formatting, Volvo engine decoding, and model-reference range
   comparisons.
 
 ### Changed
 
+- Trip persistence now supports combustion, hybrid, and electric vehicles and
+  groups adjacent movement samples into journeys separated by parked periods.
+- Calculated SoH milestones now use explicit `calculated-v2` provenance; older
+  inferred rows are migrated to `legacy-estimate` instead of being mislabeled
+  as measured data.
+- Charging-energy estimates now honor the same VIN-specific usable-capacity
+  reference used by the SoH calculation.
+- Condensed the five-tab navigation and added a live-stream status indicator to
+  keep the expanded dashboard readable within the menu-bar popover.
 - Reworked the Polestar 2 and Polestar 4 vehicle presentation, perspective
   selection, door/opening highlighting, and menu-bar status presentation.
 - Replaced the ambiguous unlocked padlock with a clearly differentiated open
@@ -37,6 +87,10 @@ All notable changes to Hisingen are documented in this file. The project follows
   text where appropriate.
 - Vehicle distance, trip, range, pressure, and temperature formatting now use
   the selected application units consistently.
+- Volvo remote controls now derive support from the official command-list
+  endpoint instead of model-wide assumptions.
+- Volvo charging power now honors the API's watts unit rather than treating
+  every value as kilowatts, while legacy kW payloads remain compatible.
 - Renamed the misleading `Body Style` door count to `Door Sensors Reported`.
 - Charging current draw and the configured charging-current limit are now
   represented separately.

@@ -363,6 +363,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case chargingSchedule
     case chargingScheduleOverride
     case locks
+    case reducedGuardLock
     case trunk
     case windows
     case honkAndFlash
@@ -388,6 +389,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .chargingSchedule: return L10n.text("Charging schedule")
         case .chargingScheduleOverride: return L10n.text("Charge-schedule override")
         case .locks: return L10n.text("Lock and unlock")
+        case .reducedGuardLock: return L10n.text("Lock with reduced guard")
         case .trunk: return L10n.text("Trunk unlock")
         case .windows: return L10n.text("Window control")
         case .honkAndFlash: return L10n.text("Honk and flash")
@@ -407,7 +409,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
-        .chargingSchedule, .chargingScheduleOverride, .locks, .trunk, .windows,
+        .chargingSchedule, .chargingScheduleOverride, .locks, .reducedGuardLock, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
         .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
@@ -479,7 +481,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .tyrePressureValues, .honkAndFlash:
+            case .tyrePressureValues, .honkAndFlash, .reducedGuardLock:
                 return .unavailable
             case .softwareInstallControl:
                 return .backendDependent
@@ -490,7 +492,8 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit:
+            case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit,
+                 .reducedGuardLock:
                 return .backendDependent
             default:
                 return .supported
@@ -499,7 +502,8 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
-            case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl:
+            case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl,
+                 .reducedGuardLock:
                 return .unavailable
             case .softwareStatus:
                 return .backendDependent
@@ -585,7 +589,7 @@ private extension VehicleCapability {
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
              .chargingScheduleOverride: return .chargingSchedule
-        case .locks, .trunk: return .exteriorStatus
+        case .locks, .reducedGuardLock, .trunk: return .exteriorStatus
         case .windows: return .exteriorStatus
         case .honkAndFlash: return .exteriorStatus
         case .exteriorStatus: return .exteriorStatus
@@ -596,4 +600,3 @@ private extension VehicleCapability {
         }
     }
 }
-

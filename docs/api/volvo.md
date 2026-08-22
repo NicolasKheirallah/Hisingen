@@ -14,7 +14,7 @@ Everything goes through one host, `api.volvocars.com`, behind Volvo's API gatewa
 
 ## Authentication
 
-See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge) for the full flow, including why a GitHub Pages bridge page is involved. Scopes requested: `openid` + 18 `conve:*`/`energy:*` read scopes. Note the unused `restrictedScopes` gap — see 
+See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge) for the full flow, including why a GitHub Pages bridge page is involved. The normal sign-in requests `openid` plus the Connected Vehicle and Energy read scopes. Volvo's approval-gated `conve:lock`, `conve:unlock`, `conve:engine_start_stop`, `conve:honk_flash`, and `location:read` scopes are requested only after the user enables **Approved Volvo permissions** in Settings and signs in again.
 
 ## Vehicle discovery
 
@@ -25,7 +25,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 | Category | Endpoint | Data | Hisingen field(s) |
 |---|---|---|---|
 | Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour, gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
-| Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status, current, power, target SOC | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingPowerWatts`, etc. |
+| Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status/type, charger connection/power state, current limit, power in watts, target SOC, time to target | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingType`, `chargingPowerWatts`, etc. |
 | Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes — see [architecture/capabilities.md](../architecture/capabilities.md) |
 | Doors | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock, door/hood/tailgate/charge-lid state | `exteriorStatus` |
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
@@ -36,13 +36,16 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 | Bulb/light warnings | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16+ individual light sensors | Synthesized into a single `.exteriorLight` warning if any are active |
 | Odometer | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total mileage | `odometerKm` |
 | Statistics | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Trip meters, avg consumption/speed, distance-to-empty | `tripMeterManualKm`, `tripMeterAutomaticKm`, `averageSpeedKmH`, `fuelRangeKm` |
-| Location | `GET /location/v1/vehicles/{vin}/location` | GeoJSON coordinates + heading | `location` (requires subscribing to the Location API product separately) |
+| Location | `GET /location/v1/vehicles/{vin}/location` | GeoJSON coordinates, optional altitude, and heading | `location` (requires subscribing to the Location API product and enabling approved permissions) |
 | Engine status | `GET /connected-vehicle/v2/vehicles/{vin}/engine-status` | Running state | Minor |
-| Command accessibility | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Whether commands are currently deliverable | `availability` — the **only** source of Volvo's online/offline state; there's no `.unavailable` mapping, only `.available`/`.unknown` |
+| Command accessibility | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Whether commands are currently deliverable and why not (`NO_INTERNET`, `POWER_SAVING_MODE`, `CAR_IN_USE`) | `availability`, including the provider reason |
+| Command list | `GET /connected-vehicle/v2/vehicles/{vin}/commands` | Exact commands exposed for this VIN | Runtime probes for locks, reduced guard, climate, honk/flash, and engine start |
 | Climate commands | `POST .../commands/climatization-start|stop` | Command result only; no live activity, cabin temperature or setpoint resource | Remote commands only; `climateStatus` remains unavailable |
 | Remote commands | `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` | — | See below |
 
-**Fetched by no code path despite having a fixture/DTO:** `VolvoFuelDTO` (dead — only exercised by a decode test) and `VolvoCommandDTO`/`VolvoCommandsListDTO`.
+The fuel endpoint is fetched for combustion and hybrid vehicles. The command list is fetched
+when any remote feature is enabled so controls are based on exact VIN support rather than a
+model-wide guess.
 
 ## Model identification and powertrain
 
@@ -60,24 +63,37 @@ Both fields live inside the single vehicle-details response (`GET /connected-veh
 
 ## Capabilities
 
-The one explicit backend-provided capability signal in either provider: `GET /energy/v2/vehicles/{vin}/capabilities`, cached 1 hour, feeding `.chargeTarget` and `.chargingCurrentLimit` with a definite `.supported`/`.unavailable` (Volvo's static default table is otherwise conservative — `.backendDependent` for most capabilities beyond locks/honk-flash/exterior/climate-start-stop/service-warnings). See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
+`GET /energy/v2/vehicles/{vin}/capabilities` returns a nested `getEnergyState` capability whose
+children describe individual energy fields. Hisingen decodes that documented nested shape (and
+the older flat shape defensively), caches it for one hour, and feeds charge-target and
+charging-current-limit probes. The Connected Vehicle command list supplies the equivalent
+per-VIN probes for remote controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
 
 ## Remote commands
 
-`VolvoAPI.dispatchCommand` implements **6 of `RemoteCommand`'s ~20 cases**:
+`VolvoAPI.dispatchCommand` implements the public Connected Vehicle v2 command cases below:
 
 | `RemoteCommand` case | Volvo command name |
 |---|---|
 | `.lock` | `lock` |
+| `.lockReducedGuard` | `lock-reduced-guard` |
 | `.unlock` | `unlock` |
 | `.startClimate` | `climatization-start` |
 | `.stopClimate` | `climatization-stop` |
 | `.honkAndFlash` | `honk-flash` |
 | `.flashLights` | `flash` |
+| `.honkHorn` | `honk` |
+| `.startEngine(runtimeMinutes:)` | `engine-start` (body contains a clamped 1–15 minute runtime) |
+| `.stopEngine` | `engine-stop` |
 
-Everything else (`unlockTrunk`, window control, charge-target/amp-limit, schedules, pre-cleaning, OTA) throws `RemoteCommandError.unsupported` — there's no Volvo implementation yet regardless of what the capability profile reports. `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}` is sent with an empty JSON body (`"{}"`) — parameters like requested climate temperature or seat heating from a `RemoteCommand.startClimate` payload are **not sent**, since Volvo's command endpoint here doesn't take a body.
+Everything else (`unlockTrunk`, window control, charge-target/amp-limit, schedules, pre-cleaning, OTA) throws `RemoteCommandError.unsupported`. Commands without documented parameters send an empty JSON body; engine start sends only `runtimeMinutes`. Climate temperature and seat-heating values are not sent because Volvo's public climatization endpoint accepts no such body.
 
-Response parsing reads `invokeStatus` (`"COMPLETED"`/`"DELIVERED"` → `.completed`, else `.accepted`) from a raw, untyped JSON dictionary rather than a `Decodable` DTO — see 
+Response parsing uses `VolvoCommandResponseDTO`, rejects documented failure statuses, preserves
+accepted/delivered/completed outcomes, and handles Volvo's staged unlock response
+(`readyToUnlock` plus `readyToUnlockUntil`) without falsely changing the visible lock state.
+Successful and failed provider attempts are written to the local command audit with duration.
+Connected Vehicle API v2 commands are synchronous; Hisingen does not call the removed legacy
+sent-command status endpoints.
 
 Concurrency: single-in-flight-per-VIN via `remoteCommandsInFlight`, same pattern as the refresh path.
 

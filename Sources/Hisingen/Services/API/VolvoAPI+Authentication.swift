@@ -1,18 +1,20 @@
 import Foundation
 
 extension VolvoAPI {
-    func beginSignIn() throws -> URL {
+    func beginSignIn() async throws -> URL {
         guard isConfigured, let clientID else { throw VolvoError.appNotConfigured }
         let verifier = try PKCE.randomURLSafeString()
         let state = try PKCE.randomURLSafeString()
         pendingVerifier = verifier
         pendingState = state
         var components = URLComponents(url: identityURL(path: authorizationPath), resolvingAgainstBaseURL: false)!
+        let includeRestrictedScopes = await MainActor.run { preferences.volvoRestrictedScopesEnabled }
+        let scopes = Self.readScopes + (includeRestrictedScopes ? Self.restrictedScopes : [])
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: Self.readScopes.joined(separator: " ")),
+            URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: PKCE.codeChallenge(for: verifier)),
             URLQueryItem(name: "code_challenge_method", value: "S256"),

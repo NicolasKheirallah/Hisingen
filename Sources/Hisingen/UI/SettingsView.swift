@@ -40,6 +40,7 @@ struct SettingsView: View {
     @State private var pressureUnit = PressureUnit.kilopascals
     @State private var fuelVolumeUnit = FuelVolumeUnit.liters
     @State private var fuelEconomyUnit = FuelEconomyUnit.litersPer100Km
+    @State private var energyConsumptionUnit = EnergyConsumptionUnit.kwhPer100Km
     @State private var selectedThemeCategory: ThemeCategory = .all
     @State private var interfaceLanguage = InterfaceLanguage.system
     @State private var tintMenuBarIcon = true
@@ -51,6 +52,10 @@ struct SettingsView: View {
     @State private var notifyLowBattery = true
     @State private var notifySoftwareUpdates = true
     @State private var notifyVehicleWarnings = true
+    @State private var notifyOpeningsLeftOpen = true
+    @State private var notifyServiceDue = true
+    @State private var notifyStaleTelemetry = true
+    @State private var notifySlowCharging = true
     @State private var lowBatteryThreshold = 20
     @State private var notifyRainWithWindows = true
     @State private var notifyEveningUnlocked = true
@@ -59,8 +64,11 @@ struct SettingsView: View {
     @State private var currencySymbol = "kr"
     @State private var storeChargingHistory = false
     @State private var requireBiometrics = false
+    @State private var persistLocationHistory = false
     @State private var hasWarrantyInServiceDate = false
     @State private var warrantyInServiceDate = Date()
+    @State private var usableBatteryCapacityOverride = ""
+    @State private var wltpRangeOverride = ""
     @Environment(\.preferencesStore) private var preferences
     @State private var databaseVacuumed = false
     @State private var databasePruned = false
@@ -114,6 +122,7 @@ struct SettingsView: View {
             pressureUnit = preferences.pressureUnit
             fuelVolumeUnit = preferences.fuelVolumeUnit
             fuelEconomyUnit = preferences.fuelEconomyUnit
+            energyConsumptionUnit = preferences.energyConsumptionUnit
             interfaceLanguage = preferences.interfaceLanguage
             tintMenuBarIcon = preferences.tintMenuBarIcon
             launchAtLogin = preferences.launchAtLogin
@@ -124,6 +133,10 @@ struct SettingsView: View {
             notifyLowBattery = preferences.notifyLowBattery
             notifySoftwareUpdates = preferences.notifySoftwareUpdates
             notifyVehicleWarnings = preferences.notifyVehicleWarnings
+            notifyOpeningsLeftOpen = preferences.notifyOpeningsLeftOpen
+            notifyServiceDue = preferences.notifyServiceDue
+            notifyStaleTelemetry = preferences.notifyStaleTelemetry
+            notifySlowCharging = preferences.notifySlowCharging
             lowBatteryThreshold = preferences.lowBatteryThreshold
             notifyRainWithWindows = preferences.notifyRainWithWindowsOpen
             notifyEveningUnlocked = preferences.notifyEveningUnlocked
@@ -132,10 +145,17 @@ struct SettingsView: View {
             currencySymbol = preferences.currencySymbol
             storeChargingHistory = preferences.storeChargingHistory
             requireBiometrics = preferences.requireBiometricsForRemoteControls
+            persistLocationHistory = preferences.persistLocationHistory
             let warrantyVIN = state?.vin ?? preferences.vin
             if let savedDate = preferences.warrantyInServiceDate(for: warrantyVIN) {
                 hasWarrantyInServiceDate = true
                 warrantyInServiceDate = savedDate
+            }
+            if let specification = preferences.vehicleSpecificationOverride(for: warrantyVIN) {
+                usableBatteryCapacityOverride = specification.usableBatteryCapacityKwh
+                    .map { String(format: "%.1f", $0) } ?? ""
+                wltpRangeOverride = specification.wltpRangeKm
+                    .map { String(format: "%.0f", $0) } ?? ""
             }
         }
         .task {
@@ -705,6 +725,9 @@ struct SettingsView: View {
                             if !preferences.hasExplicitPressureUnit {
                                 pressureUnit = distanceUnit == .miles ? .psi : .kilopascals
                             }
+                            if !preferences.hasExplicitEnergyConsumptionUnit {
+                                energyConsumptionUnit = distanceUnit == .miles ? .milesPerKwh : .kwhPer100Km
+                            }
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -785,6 +808,26 @@ struct SettingsView: View {
                         .frame(maxWidth: 160)
                         .onChange(of: fuelEconomyUnit) { _, _ in
                             preferences.fuelEconomyUnit = fuelEconomyUnit
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text(L10n.text("Electric consumption unit"))
+                            .font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $energyConsumptionUnit) {
+                            ForEach(EnergyConsumptionUnit.allCases, id: \.self) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 160)
+                        .onChange(of: energyConsumptionUnit) { _, value in
+                            preferences.energyConsumptionUnit = value
                             onSettingsChanged(.presentation)
                         }
                     }
@@ -915,18 +958,42 @@ struct SettingsView: View {
                 CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
 
                 Text(isVolvo
-                     ? L10n.text("Remote cabin climate preconditioning is active. Commands requiring elevated developer permissions or not provided in the public API are disabled.")
+                     ? L10n.text("Climate is available with the standard API subscription. Lock, locate, engine-start, and location permissions require approval for your Volvo developer application and a new sign-in.")
                      : L10n.text("Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
+                    if isVolvo {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L10n.text("Approved Volvo permissions"))
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(L10n.text("Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in."))
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { preferences.volvoRestrictedScopesEnabled },
+                                set: { enabled in
+                                    preferences.volvoRestrictedScopesEnabled = enabled
+                                    onSettingsChanged(.features)
+                                }
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        }
+                        .padding(8)
+                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    }
                     featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning")
-                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock, unlock, and trunk release", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock and unlock", isSupported: !isVolvo || preferences.volvoRestrictedScopesEnabled, badgeText: isVolvo ? "Requires Approval" : nil)
                     featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo, badgeText: isVolvo ? "Read-Only in API" : nil)
                     featureToggleRow(.remoteSchedules, symbol: "calendar.badge.clock", title: "Charging & Climate Timers", detail: "Create and edit charge windows and departure timers", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                     featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
-                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo, badgeText: isVolvo ? "Elevated Permission" : nil)
+                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: !isVolvo || preferences.volvoRestrictedScopesEnabled, badgeText: isVolvo ? "Requires Approval" : nil)
                     featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
                     featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install or cancel a pending software update", isSupported: !isVolvo, badgeText: isVolvo ? "Not in API" : nil)
                 }
@@ -984,6 +1051,62 @@ struct SettingsView: View {
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
 
+                if !warrantyVIN.isEmpty, state?.powertrain.hasElectricRange == true {
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.text("Exact vehicle references"))
+                                    .font(.system(size: 11, weight: .medium))
+                                Text(L10n.text("Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates."))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            InformationButton(message: L10n.text("User-entered reference data is always labelled as such. It does not become provider telemetry or a measured battery value."))
+                        }
+                        HStack {
+                            Text(L10n.text("Usable battery capacity"))
+                                .font(.system(size: 10.5))
+                            Spacer()
+                            TextField(L10n.text("Automatic"), text: $usableBatteryCapacityOverride)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 70)
+                                .multilineTextAlignment(.trailing)
+                                .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
+                            Text("kWh").font(.system(size: 9)).foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Text(L10n.text("WLTP reference range"))
+                                .font(.system(size: 10.5))
+                            Spacer()
+                            TextField(L10n.text("Automatic"), text: $wltpRangeOverride)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 70)
+                                .multilineTextAlignment(.trailing)
+                                .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
+                            Text("km").font(.system(size: 9)).foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Spacer()
+                            Button(L10n.text("Apply References")) {
+                                saveSpecificationOverride(vin: warrantyVIN)
+                            }
+                            .controlSize(.small)
+                            if !usableBatteryCapacityOverride.isEmpty || !wltpRangeOverride.isEmpty {
+                                Button(L10n.text("Reset")) {
+                                    usableBatteryCapacityOverride = ""
+                                    wltpRangeOverride = ""
+                                    saveSpecificationOverride(vin: warrantyVIN)
+                                }
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+
                 subsectionHeader("Vehicle & Identity")
                 VStack(spacing: 4) {
                     featureToggleRow(.vehicleIdentity, symbol: "car.side", title: "Vehicle Identity", detail: "Model, year, license plate & VIN")
@@ -1026,6 +1149,20 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func saveSpecificationOverride(vin: String) {
+        func parsed(_ text: String, range: ClosedRange<Double>) -> Double? {
+            guard let value = Double(text.replacingOccurrences(of: ",", with: ".")),
+                  range.contains(value) else { return nil }
+            return value
+        }
+        let value = VehicleSpecificationOverride(
+            usableBatteryCapacityKwh: parsed(usableBatteryCapacityOverride, range: 5...200),
+            wltpRangeKm: parsed(wltpRangeOverride, range: 50...1_200)
+        )
+        preferences.setVehicleSpecificationOverride(value.isEmpty ? nil : value, for: vin)
+        onSettingsChanged(.presentation)
     }
 
     private func subsectionHeader(_ title: String) -> some View {
@@ -1239,6 +1376,38 @@ struct SettingsView: View {
                         persist: { preferences.notifyVehicleWarnings = $0 }
                     )
 
+                    notificationRow(
+                        symbol: "door.left.hand.open",
+                        title: "Open Door or Window",
+                        detail: "Alert after an opening has been left open for 15 minutes",
+                        isOn: $notifyOpeningsLeftOpen,
+                        persist: { preferences.notifyOpeningsLeftOpen = $0 }
+                    )
+
+                    notificationRow(
+                        symbol: "wrench.and.screwdriver.fill",
+                        title: "Service Due Soon",
+                        detail: "Alert at 30 days, 1,000 km, or a provider service warning",
+                        isOn: $notifyServiceDue,
+                        persist: { preferences.notifyServiceDue = $0 }
+                    )
+
+                    notificationRow(
+                        symbol: "clock.badge.exclamationmark",
+                        title: "Stale Vehicle Data",
+                        detail: "Alert when provider telemetry remains older than its freshness limit",
+                        isOn: $notifyStaleTelemetry,
+                        persist: { preferences.notifyStaleTelemetry = $0 }
+                    )
+
+                    notificationRow(
+                        symbol: "bolt.trianglebadge.exclamationmark.fill",
+                        title: "Unusually Slow Charging",
+                        detail: "Alert below 2 kW for 15 minutes while actively charging",
+                        isOn: $notifySlowCharging,
+                        persist: { preferences.notifySlowCharging = $0 }
+                    )
+
                     if notifyLowBattery {
                         HStack(spacing: 8) {
                             Image(systemName: "slider.horizontal.below.rectangle")
@@ -1348,6 +1517,32 @@ struct SettingsView: View {
                     KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
                     KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
                     KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
+                    KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
+                }
+
+                Divider().opacity(0.4)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "location.slash.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.text("Store precise location history"))
+                            .font(.system(size: 11, weight: .medium))
+                        Text(L10n.text("Off by default. Live parking location still works, but coordinates are not written to history."))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $persistLocationHistory)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .onChange(of: persistLocationHistory) { _, value in
+                            preferences.persistLocationHistory = value
+                            if !value { database.clearStoredLocations(for: state?.vin) }
+                        }
                 }
 
                 Divider().opacity(0.4)
@@ -1428,6 +1623,38 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button {
+                            guard let vin = state?.vin else { return }
+                            saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv",
+                                             csvContent: database.exportTelemetryCSV(for: vin))
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Trips (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(state == nil)
+
+                        Button {
+                            guard let vin = state?.vin else { return }
+                            saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv",
+                                             csvContent: database.exportCommandAuditsCSV(for: vin))
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                Text(L10n.text("Export Commands (CSV)"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(state == nil)
                     }
 
                     Button {

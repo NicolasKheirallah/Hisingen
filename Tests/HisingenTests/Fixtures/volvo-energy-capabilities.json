@@ -1,9 +1,17 @@
 {
   "data": {
-    "batteryChargeLevel": { "isSupported": true },
-    "electricRange": { "isSupported": true },
-    "chargingStatus": { "isSupported": true },
-    "chargingPower": { "isSupported": true },
-    "targetBatteryLevel": { "isSupported": false }
+    "getEnergyState": {
+      "isSupported": true,
+      "batteryChargeLevel": { "isSupported": true },
+      "electricRange": { "isSupported": true },
+      "chargerConnectionStatus": { "isSupported": true },
+      "chargingStatus": { "isSupported": true },
+      "chargingType": { "isSupported": true },
+      "chargerPowerStatus": { "isSupported": true },
+      "chargingPower": { "isSupported": true },
+      "chargingCurrentLimit": { "isSupported": true },
+      "estimatedChargingTimeToTargetBatteryChargeLevel": { "isSupported": true },
+      "targetBatteryChargeLevel": { "isSupported": false }
+    }
   }
 }

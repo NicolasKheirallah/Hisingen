@@ -610,6 +610,26 @@ struct ControlsTabView: View {
                         .disabled(isDisabled(isLocked ? .unlock : .lock))
                     }
 
+                    if state.model.brand == .volvo,
+                       !isLocked,
+                       profile.permits(.reducedGuardLock),
+                       features.contains(.remoteLocks) {
+                        Button {
+                            onRemoteCommand(.lockReducedGuard)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 16))
+                                Text(L10n.text("Reduced Guard"))
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDisabled(.lockReducedGuard))
+                        .help(L10n.text("Locks the vehicle with reduced alarm guard sensitivity, when supported."))
+                    }
+
                     if features.contains(.remoteLocks) {
                         let caps = state.otaCapabilities
                         let showTrunkUnlock = profile.permits(.trunk) && (caps?.supportsTrunkUnlock ?? profile.permits(.trunk))

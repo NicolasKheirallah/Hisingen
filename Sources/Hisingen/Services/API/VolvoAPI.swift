@@ -26,17 +26,15 @@ actor VolvoAPI {
         "conve:warnings", "conve:windows_status", "energy:capability:read", "energy:state:read"
     ]
 
+    static let restrictedScopes = [
+        "conve:lock", "conve:unlock", "conve:engine_start_stop", "conve:honk_flash",
+        "location:read"
+    ]
 
-    // Volvo gates these behind a per-application approval on developer.volvocars.com and
-    // rejects them in an authorize request from an unapproved client, so they are deliberately
-    // not in `readScopes`:
-    //
-    //     conve:lock, conve:unlock, conve:engine_start_stop, conve:honk_flash, location:read
-    //
-    // Until this client is approved for them, `/location/v1/.../location` and the lock,
-    // unlock, engine and honk-flash commands answer 403. `optional(...)` swallows the
-    // location failure and the feature reports itself unavailable rather than breaking
-    // the refresh. Add the approved scopes to `readScopes` once Volvo grants them.
+
+    // Volvo gates these scopes behind per-application approval. Settings exposes an explicit
+    // opt-in; only then does the next OAuth sign-in request them. This keeps an unapproved app
+    // from breaking an otherwise valid read-only authorization request.
 
 
     var clientID: String?
@@ -102,6 +100,7 @@ actor VolvoAPI {
         var bodyData = "{}".data(using: .utf8)
         switch command {
         case .lock: commandName = "lock"
+        case .lockReducedGuard: commandName = "lock-reduced-guard"
         case .unlock: commandName = "unlock"
         case .startClimate: commandName = "climatization-start"
         case .stopClimate: commandName = "climatization-stop"
@@ -142,57 +141,21 @@ actor VolvoAPI {
             throw RemoteCommandError.rejected(payload.text
                 ?? L10n.text("Vehicle reported command failed"))
         }
-        if let outcome = payload.outcome, outcome != .accepted {
+        if payload.readyToUnlock == true {
+            let message = payload.readyToUnlockUntil.map {
+                L10n.format("Vehicle is ready to unlock for %d seconds. Open a door or the trunk to complete unlocking.", $0)
+            } ?? L10n.text("Vehicle is ready to unlock. Open a door or the trunk to complete unlocking.")
+            return RemoteCommandResult(
+                outcome: .delivered,
+                message: message
+            )
+        }
+        if let outcome = payload.outcome {
             return RemoteCommandResult(outcome: outcome, message: payload.text)
         }
-        // Volvo answers asynchronously for slower commands: the POST returns a commandId and
-        // the real result only shows up on the status endpoint.
-        if let commandId = payload.pendingCommandId {
-            return try await pollCommandStatus(vin: vin, commandId: commandId,
-                                               commandName: commandName, accessToken: accessToken)
-        }
+        // Connected Vehicle API v2 commands are synchronous and Volvo removed the old sent-
+        // command status endpoints. Never poll /commands/{id}; it is not part of v2.
         return RemoteCommandResult(outcome: .accepted, message: payload.text)
-    }
-
-    func pollCommandStatus(
-        vin: String,
-        commandId: String,
-        commandName: String,
-        accessToken: String,
-        maxAttempts: Int = 6,
-        intervalSeconds: UInt64 = 2
-    ) async throws -> RemoteCommandResult {
-        guard let vccApiKey else { return RemoteCommandResult(outcome: .accepted, message: nil) }
-        var request = URLRequest(url: apiURL(
-            path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandId)"
-        ))
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
-
-        for _ in 0..<maxAttempts {
-            try await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
-            guard let (data, response) = try? await perform(request, operation: "poll command: \(commandName)"),
-                  response.statusCode == 200,
-                  let envelope = try? JSONDecoder.volvo.decode(
-                      VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
-                  ),
-                  let payload = envelope.data else {
-                continue
-            }
-            // A vehicle that refuses the command is a failure, not a success with a sad
-            // message attached — reporting `.accepted` here previously showed "Command sent"
-            // over text saying the command had failed.
-            if payload.isFailure {
-                throw RemoteCommandError.rejected(payload.text
-                    ?? L10n.text("Vehicle reported command failed"))
-            }
-            if let outcome = payload.outcome, outcome != .accepted {
-                return RemoteCommandResult(outcome: outcome, message: payload.text)
-            }
-        }
-        // Still pending after the polling window: delivered, outcome genuinely unknown.
-        return RemoteCommandResult(outcome: .accepted, message: nil)
     }
 
     private func apiURL(path: String) -> URL {
@@ -378,7 +341,7 @@ actor VolvoAPI {
         return direct
     }
 
-    private func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
+    func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
         let (data, response) = try await authenticatedGET(path)
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {

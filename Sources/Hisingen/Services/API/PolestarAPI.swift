@@ -900,6 +900,16 @@ actor PolestarAPI {
     }
 }
 
+extension PolestarAPI: VehicleLiveStreaming {
+    func liveVehicleUpdates(vin: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        try await refreshTokenIfNeeded()
+        guard let token = accessToken else {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        return try await grpc.liveUpdates(vin: vin, accessToken: token)
+    }
+}
+
 final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     /// Both OAuth clients redirect through this one session, and the command client's callback
     /// is a custom scheme `URLSession` cannot load — so every callback the app might see has to

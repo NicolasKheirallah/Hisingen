@@ -40,10 +40,12 @@ struct InfoTabView: View {
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
+            batteryHealthCard
             serviceAndHealthCard
             warrantyAndProtectionCard
             factoryBuildCard
             capabilityInspectorCard
+            activityHistoryCard
         }
         .onAppear {
             let preferred = preferences.carRenderAngle
@@ -51,6 +53,50 @@ struct InfoTabView: View {
                 ? preferred.rawValue
                 : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
         }
+    }
+
+    private var activityHistoryCard: some View {
+        let telemetry = database.recentTelemetry(for: state.vin, limit: 30)
+        let commands = database.recentCommandAudits(for: state.vin, limit: 5)
+        guard !telemetry.isEmpty || !commands.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
+                if let newest = telemetry.first, let oldest = telemetry.last,
+                   let newOdometer = newest.odometerKm, let oldOdometer = oldest.odometerKm,
+                   newOdometer >= oldOdometer {
+                    KVRow(
+                        L10n.text("Distance Recorded"),
+                        Format.distance(km: newOdometer - oldOdometer, unit: preferences.distanceUnit),
+                        symbol: "road.lanes"
+                    )
+                }
+                if !commands.isEmpty {
+                    Divider().opacity(0.4)
+                    Text(L10n.text("Recent remote commands"))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(commands) { record in
+                        HStack(spacing: 7) {
+                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
+                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
+                                .font(.system(size: 10.5, weight: .medium))
+                            Spacer()
+                            Text(record.executedAt, style: .relative)
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        .help(record.errorMessage ?? record.status.capitalized)
+                    }
+                }
+                Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        })
     }
 
     /// Capability flags observed in the undocumented GetMyCars response. A true flag is a
@@ -600,22 +646,35 @@ struct InfoTabView: View {
         var rows: [KVRow] = []
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
+        let specification = preferences.vehicleSpecificationOverride(for: state.vin)
         let configuredCapacity = state.powertrain.hasElectricRange
-            ? (state.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
+            ? (specification?.usableBatteryCapacityKwh
+                ?? state.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
             : nil
         if let capacity = configuredCapacity, capacity > 0 {
-            let isProviderReported = state.reportedBatteryCapacityKwh != nil
+            let isUserReference = specification?.usableBatteryCapacityKwh != nil
+            let isProviderReported = !isUserReference && state.reportedBatteryCapacityKwh != nil
             rows.append(KVRow(
-                isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity"),
+                isUserReference ? L10n.text("User-Entered Usable Capacity")
+                    : (isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity")),
                 String(format: "%.1f kWh", capacity),
                 symbol: "battery.100.bolt",
-                info: isProviderReported
+                info: isUserReference
+                    ? L10n.text("VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry.")
+                    : isProviderReported
                     ? L10n.text("Vehicle specification returned by the provider. This is not measured battery health or current usable capacity.")
                     : L10n.text("Static model-family reference used because the provider did not report the exact vehicle variant capacity.")
             ))
         }
-        if state.powertrain.hasElectricRange && state.model.nominalWltpRangeKm > 0 {
-            rows.append(KVRow(L10n.text("Model-Reference WLTP Range"), Format.distance(km: state.model.nominalWltpRangeKm, decimals: 0, unit: preferences.distanceUnit), symbol: "road.lanes", info: L10n.text("Static model-family benchmark, not a VIN-specific rating or live vehicle estimate. Exact range varies by variant, wheels, market and model year.")))
+        let wltp = specification?.wltpRangeKm ?? state.model.nominalWltpRangeKm
+        if state.powertrain.hasElectricRange && wltp > 0 {
+            rows.append(KVRow(
+                specification?.wltpRangeKm != nil ? L10n.text("User-Entered WLTP Range") : L10n.text("Model-Reference WLTP Range"),
+                Format.distance(km: wltp, decimals: 0, unit: preferences.distanceUnit), symbol: "road.lanes",
+                info: specification?.wltpRangeKm != nil
+                    ? L10n.text("VIN-specific reference entered in Settings. It is not a live range value.")
+                    : L10n.text("Static model-family benchmark, not a VIN-specific rating or live vehicle estimate. Exact range varies by variant, wheels, market and model year.")
+            ))
         }
         if let gearbox = state.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
@@ -639,15 +698,20 @@ struct InfoTabView: View {
     }
 
     private var batteryHealthCard: some View {
-        guard state.powertrain.hasElectricRange,
-              let soh = state.batteryStateOfHealthPercent,
-              let deg = state.batteryDegradationPercent else {
+        let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
+            .map { $0.toDomainSession(database: database) }
+        guard let estimate = BatteryHealthEstimator.estimate(
+            state: state, chargingSessions: sessions,
+            specification: preferences.vehicleSpecificationOverride(for: state.vin)
+        ) else {
             return AnyView(EmptyView())
         }
 
-        let status = state.batteryHealthStatus
-        let usable = state.configuredUsableBatteryCapacityKwh
-        let factoryUsable = state.factoryUsableBatteryCapacityKwh
+        let soh = estimate.stateOfHealthPercent
+        let deg = estimate.degradationPercent
+        let status = L10n.text("Calculated") + " · " + estimate.confidence.displayName
+        let usable = estimate.estimatedUsableCapacityKwh
+        let factoryUsable = estimate.referenceUsableCapacityKwh
         let nominal = state.effectiveNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
         let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
@@ -660,7 +724,7 @@ struct InfoTabView: View {
                     Pill(
                         text: status,
                         color: statusColor,
-                        symbol: "checkmark.shield.fill"
+                        symbol: "function"
                     )
                 }
 
@@ -673,10 +737,10 @@ struct InfoTabView: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
-                            Text(L10n.text("State of Health (SoH)"))
+                            Text(L10n.text("Calculated State of Health (SoH)"))
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
-                            InformationButton(message: L10n.text("Unavailable. Neither provider currently exposes a validated measured battery State of Health value. Pack capacity shown elsewhere is a manufacturer specification, not a health measurement."))
+                            InformationButton(message: estimate.methodologySummary)
                         }
                         Spacer()
                         HStack(spacing: 6) {
@@ -691,9 +755,32 @@ struct InfoTabView: View {
                     }
                     .padding(.vertical, 2)
 
-                    KVRow(L10n.text("Estimated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: L10n.text("Estimated. Net lost battery capacity since factory build, calculated as 100% minus State of Health (SoH)."))
-                    KVRow(L10n.text("Usable Pack Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Estimated / Nominal. Estimated available driving buffer vs. original factory usable capacity (and gross nominal pack size)."))
-                    KVRow(L10n.text("Warranty Threshold"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("Manufacturer Specification. Factory high-voltage battery warranty threshold (minimum 70% retention for 8 years or 160,000 km / 100,000 miles)."))
+                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
+                    KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
+                    KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
+
+                    DisclosureGroup(L10n.text("Calculation Signals")) {
+                        VStack(spacing: 7) {
+                            ForEach(estimate.signals) { signal in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(signal.title.capitalized)
+                                            .font(.system(size: 10.5, weight: .semibold))
+                                        Spacer()
+                                        Text(String(format: "%.1f%% · %.0f%% weight", signal.estimatedSOHPercent, signal.weight * 100))
+                                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(signal.explanation)
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
+                    .font(.system(size: 11, weight: .medium))
 
                     let history = database.batteryHealthHistory(for: state.vin)
                     if !history.isEmpty {
@@ -716,6 +803,9 @@ struct InfoTabView: View {
                                             .foregroundStyle(HisingenTheme.semanticGood)
                                     }
                                     .padding(.vertical, 1)
+                                    .help(r.measurementSource == "calculated-v2"
+                                        ? L10n.text("Calculated estimate using Hisingen's current multi-signal method; not a BMS measurement.")
+                                        : L10n.text("Legacy calculated estimate retained for trend continuity; not a BMS measurement."))
                                 }
                                 HStack {
                                     Spacer()
@@ -745,7 +835,7 @@ struct InfoTabView: View {
                             .padding(.top, 4)
                         } label: {
                             HStack {
-                                Text(L10n.text("Recorded Degradation Milestones"))
+                                Text(L10n.text("Calculated SoH Milestones"))
                                 Spacer()
                                 Text(L10n.format("%d logs", history.count))
                                     .font(.system(size: 10))
