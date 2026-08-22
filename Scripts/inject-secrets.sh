@@ -92,7 +92,8 @@ EOF
     echo "ℹ️ No Volvo developer secrets found in environment or .env.secrets — using empty default template."
 fi
 
-POLESTAR_IMAGE_API_KEY="${POLESTAR_IMAGE_API_KEY:-}"
+DEFAULT_POLESTAR_IMAGE_API_KEY="da2-js63uvc7c5hwpdudt657d5lyou"
+POLESTAR_IMAGE_API_KEY="${POLESTAR_IMAGE_API_KEY:-$DEFAULT_POLESTAR_IMAGE_API_KEY}"
 
 if [ -n "$POLESTAR_IMAGE_API_KEY" ]; then
     echo "🔒 Injecting obfuscated Polestar public render-CDN key..."
