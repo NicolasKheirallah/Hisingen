@@ -1196,7 +1196,7 @@ Hisingen is released under the [MIT License](LICENSE).
 
 Hisingen is independent open-source software.
 
-It is **not affiliated with, endorsed by, sponsored by or maintained by Polestar Performance AB or Volvo Car Corporation**.
+It is **not affiliated with, endorsed by, sponsored by or maintained by Polestar or Volvo Car Corporation**.
 
 Polestar and Volvo are trademarks of their respective owners and are referenced only to describe vehicle compatibility.
 
