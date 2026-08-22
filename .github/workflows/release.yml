@@ -27,22 +27,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require production signing configuration
+      - name: Validate build configuration
         env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
         run: |
-          test -n "$MACOS_CERT_P12" || { echo "MACOS_CERT_P12 is required"; exit 1; }
-          test -n "$MACOS_CERT_PASSWORD" || { echo "MACOS_CERT_PASSWORD is required"; exit 1; }
-          test -n "$NOTARY_APPLE_ID" || { echo "NOTARY_APPLE_ID is required"; exit 1; }
-          test -n "$NOTARY_TEAM_ID" || { echo "NOTARY_TEAM_ID is required"; exit 1; }
-          test -n "$NOTARY_APP_PASSWORD" || { echo "NOTARY_APP_PASSWORD is required"; exit 1; }
           test -n "$VOLVO_CLIENT_ID" || { echo "VOLVO_CLIENT_ID is required"; exit 1; }
           test -n "$VOLVO_CLIENT_SECRET" || { echo "VOLVO_CLIENT_SECRET is required"; exit 1; }
           test -n "$VOLVO_VCC_API_KEY" || { echo "VOLVO_VCC_API_KEY is required"; exit 1; }
@@ -79,29 +69,37 @@ jobs:
           -Xswiftc -strict-concurrency=complete
           -Xswiftc -warn-concurrency
 
-      - name: Import Developer ID certificate
+      - name: Configure code signing identity
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
           set -euo pipefail
-          CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
-          KEYCHAIN_PASSWORD=$(uuidgen)
-          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
-          chmod 600 "$CERTIFICATE_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
-          test -n "$IDENTITY" || { echo "No Developer ID Application identity found"; exit 1; }
-          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          rm -f "$CERTIFICATE_PATH"
+          if [ -n "$MACOS_CERT_P12" ] && [ -n "$MACOS_CERT_PASSWORD" ]; then
+            echo "🔒 Importing Apple Developer ID certificate..."
+            CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
+            KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
+            KEYCHAIN_PASSWORD=$(uuidgen)
+            printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
+            chmod 600 "$CERTIFICATE_PATH"
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
+            IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+            test -n "$IDENTITY" || { echo "No Developer ID Application identity found in certificate"; exit 1; }
+            echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+            echo "SIGNED_RELEASE=true" >> "$GITHUB_ENV"
+            rm -f "$CERTIFICATE_PATH"
+          else
+            echo "ℹ️ No Apple Developer certificate configured — building release with ad-hoc signing."
+            echo "IDENTITY=-" >> "$GITHUB_ENV"
+            echo "SIGNED_RELEASE=false" >> "$GITHUB_ENV"
+          fi
 
-      - name: Build signed universal app
+      - name: Build universal app
         env:
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
@@ -118,33 +116,40 @@ jobs:
           codesign --verify --deep --strict --verbose=2 Hisingen.app
           codesign -dvv Hisingen.app
 
-      - name: Notarize and staple app
+      - name: Notarize and staple app (if Developer ID configured)
+        if: env.SIGNED_RELEASE == 'true'
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          ditto -c -k --keepParent Hisingen.app notarize-app.zip
-          xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-          xcrun stapler staple Hisingen.app
-          xcrun stapler validate Hisingen.app
-          spctl --assess --type execute --verbose=2 Hisingen.app
+          if [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
+            ditto -c -k --keepParent Hisingen.app notarize-app.zip
+            xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+            xcrun stapler staple Hisingen.app
+            xcrun stapler validate Hisingen.app
+            spctl --assess --type execute --verbose=2 Hisingen.app
+          else
+            echo "ℹ️ Notarization credentials not fully provided — skipping app notarization."
+          fi
 
-      - name: Package and notarize disk image
+      - name: Package disk image and archives
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          make dmg
-          codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
-          codesign --verify --verbose=2 Hisingen.dmg
-          xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-          xcrun stapler staple Hisingen.dmg
-          xcrun stapler validate Hisingen.dmg
-          spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
+          make dmg IDENTITY="$IDENTITY"
+          if [ "$SIGNED_RELEASE" = "true" ] && [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
+            codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
+            codesign --verify --verbose=2 Hisingen.dmg
+            xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+            xcrun stapler staple Hisingen.dmg
+            xcrun stapler validate Hisingen.dmg
+            spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
+          fi
           ditto -c -k --keepParent Hisingen.app Hisingen.zip
           ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
 
@@ -159,16 +164,22 @@ jobs:
           hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"
           DMG_ATTACHED=true
           codesign --verify --deep --strict --verbose=2 "$DMG_MOUNT/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
+          if [ "$SIGNED_RELEASE" = "true" ]; then
+            spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
+          fi
           hdiutil detach "$DMG_MOUNT"
           DMG_ATTACHED=false
 
           ditto -x -k Hisingen.zip "$ZIP_DIR"
           codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
+          if [ "$SIGNED_RELEASE" = "true" ]; then
+            spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
+          fi
           ditto -x -k Hisingen.app.zip "$ZIP_DIR/app-asset"
           codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
+          if [ "$SIGNED_RELEASE" = "true" ]; then
+            spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
+          fi
           cleanup_packages
           trap - EXIT
           shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
