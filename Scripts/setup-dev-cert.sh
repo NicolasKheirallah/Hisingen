@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 CERT_NAME="Hisingen Development"
 KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db"

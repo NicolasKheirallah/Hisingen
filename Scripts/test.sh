@@ -4,7 +4,7 @@ set -eu
 command_line_tools=/Library/Developer/CommandLineTools
 selected_tools=${DEVELOPER_DIR:-}
 if [ -z "$selected_tools" ]; then
-    selected_tools=$(/usr/bin/xcode-select -p)
+    selected_tools=$(/usr/bin/xcode-select -p 2>/dev/null || true)
 fi
 
 if [ "$selected_tools" = "$command_line_tools" ]; then

@@ -9,6 +9,11 @@ if git ls-files --error-unmatch Sources/Hisingen/Services/API/GeneratedVolvoSecr
     exit 1
 fi
 
+if git ls-files --error-unmatch Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift >/dev/null 2>&1; then
+    echo "GeneratedPolestarSecrets.swift must remain ignored and untracked" >&2
+    exit 1
+fi
+
 if git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.p12|.*\.key)$' >/dev/null 2>&1; then
     echo "Tracked secret-like file detected" >&2
     exit 1

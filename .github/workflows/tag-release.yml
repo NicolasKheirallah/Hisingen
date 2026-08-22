@@ -37,6 +37,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          gh auth setup-git
+
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 || true)
           echo "Latest tag found: $LATEST_TAG"
 
@@ -111,7 +113,6 @@ jobs:
           git add Resources/Info.plist
           git commit -m "chore(release): bump version to v${NEW_VERSION} (build ${NEXT_BUILD})"
           git checkout -b "$BRANCH"
-          gh auth setup-git
           git push --set-upstream origin "$BRANCH"
           PR_URL=$(gh pr create \
             --base main \
