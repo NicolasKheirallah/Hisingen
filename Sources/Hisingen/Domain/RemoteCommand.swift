@@ -54,6 +54,12 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     case scheduleOTA(delayMinutes: Int)
     case installOTANow
     case cancelOTA
+    case createChargeLocationAtCar(alias: String, ampLimit: Int, minimumSoc: Int, optimisedCharging: Bool)
+    case updateChargeLocationAlias(id: String, alias: String)
+    case updateChargeLocationAmpLimit(id: String, amps: Int)
+    case updateChargeLocationMinimumSoc(id: String, soc: Int)
+    case setChargeLocationOptimisedCharging(id: String, enabled: Bool)
+    case deleteChargeLocation(id: String)
     case startEngine(runtimeMinutes: Int)
     case stopEngine
 
@@ -86,7 +92,6 @@ enum RemoteCommand: Codable, Equatable, Sendable {
             }
         }
     }
-
     var feature: AppFeature {
         switch self {
         case .startClimate, .stopClimate, .startEngine, .stopEngine: return .remoteClimate
@@ -99,6 +104,10 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer:
             return .remoteSchedules
         case .scheduleOTA, .installOTANow, .cancelOTA: return .remoteOTA
+        case .createChargeLocationAtCar, .updateChargeLocationAlias,
+             .updateChargeLocationAmpLimit, .updateChargeLocationMinimumSoc,
+             .setChargeLocationOptimisedCharging, .deleteChargeLocation:
+            return .remoteCharging
         }
     }
 
@@ -118,6 +127,10 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .setGlobalChargeTimer: return .chargingSchedule
         case .setClimateTimer, .deleteClimateTimer: return .climateTimers
         case .scheduleOTA, .installOTANow, .cancelOTA: return .softwareInstallControl
+        case .createChargeLocationAtCar, .updateChargeLocationAlias,
+             .updateChargeLocationAmpLimit, .updateChargeLocationMinimumSoc,
+             .setChargeLocationOptimisedCharging, .deleteChargeLocation:
+            return .chargeLocations
         }
     }
 
@@ -141,7 +154,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .unlock, .unlockTrunk, .openTailgate, .openWindows, .startEngine:
             return .securitySensitive
-        case .installOTANow, .deleteClimateTimer:
+        case .installOTANow, .deleteClimateTimer, .deleteChargeLocation:
             return .destructive
         default:
             return .routine
@@ -177,6 +190,12 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .scheduleOTA: return "schedule-ota"
         case .installOTANow: return "install-ota"
         case .cancelOTA: return "cancel-ota"
+        case .createChargeLocationAtCar: return "create-charge-location"
+        case .updateChargeLocationAlias: return "rename-charge-location"
+        case .updateChargeLocationAmpLimit: return "set-location-amp-limit"
+        case .updateChargeLocationMinimumSoc: return "set-location-min-soc"
+        case .setChargeLocationOptimisedCharging: return "set-location-optimised-charging"
+        case .deleteChargeLocation: return "delete-charge-location"
         }
     }
 
@@ -215,6 +234,19 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .scheduleOTA(let minutes): return L10n.format("Schedule software installation in %d minutes", minutes)
         case .installOTANow: return L10n.text("Install vehicle software now")
         case .cancelOTA: return L10n.text("Cancel software installation")
+        case .createChargeLocationAtCar(let alias, _, _, _):
+            return L10n.format("Save charge location \"%@\" at the car's position", alias)
+        case .updateChargeLocationAlias(_, let alias):
+            return L10n.format("Rename charge location to \"%@\"", alias)
+        case .updateChargeLocationAmpLimit(_, let amps):
+            return L10n.format("Set location charging current to %d A", amps)
+        case .updateChargeLocationMinimumSoc(_, let soc):
+            return L10n.format("Set location minimum charge level to %d%%", soc)
+        case .setChargeLocationOptimisedCharging(_, let enabled):
+            return enabled ? L10n.text("Enable optimised charging at location")
+                           : L10n.text("Disable optimised charging at location")
+        case .deleteChargeLocation:
+            return L10n.text("Delete saved charge location")
         }
     }
 }

@@ -67,9 +67,12 @@ final class VehicleStateStore {
         if let batteryPct = state.batteryPercentage {
             let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
                 .map { $0.toDomainSession(database: database) }
+            let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
+                .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
             if let odo = state.odometerKm, let estimate = BatteryHealthEstimator.estimate(
                 state: state, chargingSessions: sessions,
-                specification: preferences.vehicleSpecificationOverride(for: state.vin)
+                specification: preferences.vehicleSpecificationOverride(for: state.vin),
+                previous: previousHealth
             ) {
                 database.recordBatteryHealthMilestone(
                     vin: state.vin, odometerKm: Double(odo),
@@ -97,7 +100,8 @@ final class VehicleStateStore {
                 }
                 database.recordChargingSample(
                     sessionId: sessionId, vin: state.vin, soc: batteryPct,
-                    powerKw: powerKw, voltage: voltage, current: current
+                    powerKw: powerKw, voltage: voltage, current: current,
+                    chargingType: state.chargingType.rawValue
                 )
             } else if let active = database.activeChargingSession(for: state.vin) {
                 let samples = database.chargingSamples(for: active.id)

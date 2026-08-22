@@ -567,3 +567,49 @@ struct VehicleCapabilityParsingTests {
     }
 }
 
+
+@Test
+func testHealthDiscoversPressuresAtAlternateFieldPositions() {
+    // Simulates a backend that reports the kPa quadruple outside the documented 39–42
+    // window: nothing plausible there, but four consecutive in-band fields at 43–46.
+    var payload = Data()
+    payload.append(Protobuf.intField(9, 1))
+    payload.append(Protobuf.doubleField(39, 0))
+    payload.append(Protobuf.doubleField(40, 0))
+    payload.append(Protobuf.doubleField(43, 231.0))
+    payload.append(Protobuf.doubleField(44, 229.5))
+    payload.append(Protobuf.doubleField(45, 236.0))
+    payload.append(Protobuf.doubleField(46, 234.0))
+    let report = PolestarGRPC.parseHealth(payload)
+    XCTAssertEqual(report.details.tyres.map { $0.kilopascals ?? 0 }, [231, 229.5, 236, 234])
+    XCTAssertEqual(report.details.tyres.map(\.position), TyrePosition.allCases)
+}
+
+@Test
+func testHealthDoesNotMisreadScatteredValuesAsPressures() {
+    // A single in-band value with no three consecutive neighbours must not be promoted
+    // into a pressure quadruple.
+    var payload = Data()
+    payload.append(Protobuf.intField(9, 1))
+    payload.append(Protobuf.doubleField(41, 250))
+    payload.append(Protobuf.intField(44, 3))   // out of band breaks any run
+    let report = PolestarGRPC.parseHealth(payload)
+    XCTAssertTrue(report.details.tyres.allSatisfy { $0.kilopascals == nil })
+}
+
+@Test
+func testDiscoverPressureQuadrupleRequiresConsecutiveInBandFields() {
+    func fields(_ pairs: [(Int, Double)]) -> [Protobuf.Field] {
+        pairs.map { number, value in
+            var data = Data()
+            data.append(Protobuf.doubleField(number, value))
+            return Protobuf.fields(data)[0]
+        }
+    }
+    XCTAssertNotNil(PolestarGRPC.discoverPressureQuadruple(
+        fields([(39, 220), (40, 221), (41, 222), (42, 223)]), window: 36...52))
+    XCTAssertNil(PolestarGRPC.discoverPressureQuadruple(
+        fields([(38, 230), (39, 221), (41, 222), (42, 223)]), window: 36...52))
+    XCTAssertNil(PolestarGRPC.discoverPressureQuadruple(
+        fields([(39, 90), (40, 91), (41, 92), (42, 93)]), window: 36...52))
+}

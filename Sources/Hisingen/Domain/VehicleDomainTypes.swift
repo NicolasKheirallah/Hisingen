@@ -574,6 +574,38 @@ enum AirCleaningState: String, Codable, Sendable {
     }
 }
 
+/// Who asked for the current/last pre-cleaning cycle — `PreCleaningStartReason` (field 7).
+enum AirCleaningStartReason: Int, Codable, Sendable {
+    case unspecified = 0
+    case remote = 1
+    case manuallyFromCar = 2
+
+    var displayName: String {
+        switch self {
+        case .unspecified: return L10n.text("Unknown")
+        case .remote: return L10n.text("Remote request")
+        case .manuallyFromCar: return L10n.text("Started in car")
+        }
+    }
+}
+
+/// `PreCleaningErrorType` (field 13): the backend distinguishes a generic purifier fault from
+/// a cycle that was merely interrupted (door opened, climate overridden), which should not
+/// read as a hardware error.
+enum AirCleaningError: Int, Codable, Sendable {
+    case none = 0
+    case generic = 1
+    case interrupted = 2
+
+    var displayName: String {
+        switch self {
+        case .none: return L10n.text("No error")
+        case .generic: return L10n.text("Purifier error")
+        case .interrupted: return L10n.text("Cycle interrupted")
+        }
+    }
+}
+
 struct VehicleAirQuality: Codable, Equatable, Sendable {
     let cleaningState: AirCleaningState
     let airQualityIndex: Int?
@@ -583,6 +615,18 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     let filterRemainingPercent: Int?
     let runtimeRemainingMinutes: Int?
     let hasError: Bool
+    /// When the vehicle reported this reading (`PreCleaningInfo.timestamp`, field 1).
+    let reportedAt: Date?
+    /// When the current or last cleaning cycle started (field 4).
+    let startedAt: Date?
+    /// When the running cycle is expected to finish (field 5).
+    let endingAt: Date?
+    /// Who started the cycle (field 7).
+    let startReason: AirCleaningStartReason?
+    /// Whether the last completed cycle finished normally (field 8).
+    let lastCycleValid: Bool?
+    /// Precise backend error classification (field 13). `nil` when the field is absent.
+    let errorKind: AirCleaningError?
 
     init(
         cleaningState: AirCleaningState,
@@ -592,7 +636,13 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         externalParticulateMatter25: Int? = nil,
         filterRemainingPercent: Int? = nil,
         runtimeRemainingMinutes: Int? = nil,
-        hasError: Bool = false
+        hasError: Bool = false,
+        reportedAt: Date? = nil,
+        startedAt: Date? = nil,
+        endingAt: Date? = nil,
+        startReason: AirCleaningStartReason? = nil,
+        lastCycleValid: Bool? = nil,
+        errorKind: AirCleaningError? = nil
     ) {
         self.cleaningState = cleaningState
         self.airQualityIndex = airQualityIndex
@@ -601,7 +651,37 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         self.externalParticulateMatter25 = externalParticulateMatter25
         self.filterRemainingPercent = filterRemainingPercent
         self.runtimeRemainingMinutes = runtimeRemainingMinutes
-        self.hasError = hasError
+        self.hasError = hasError || errorKind == .generic
+        self.reportedAt = reportedAt
+        self.startedAt = startedAt
+        self.endingAt = endingAt
+        self.startReason = startReason
+        self.lastCycleValid = lastCycleValid
+        self.errorKind = errorKind
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cleaningState, airQualityIndex, particulateMatter25, particulateMatter10
+        case externalParticulateMatter25, filterRemainingPercent, runtimeRemainingMinutes
+        case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cleaningState = try c.decode(AirCleaningState.self, forKey: .cleaningState)
+        airQualityIndex = try c.decodeIfPresent(Int.self, forKey: .airQualityIndex)
+        particulateMatter25 = try c.decodeIfPresent(Int.self, forKey: .particulateMatter25)
+        particulateMatter10 = try c.decodeIfPresent(Int.self, forKey: .particulateMatter10)
+        externalParticulateMatter25 = try c.decodeIfPresent(Int.self, forKey: .externalParticulateMatter25)
+        filterRemainingPercent = try c.decodeIfPresent(Int.self, forKey: .filterRemainingPercent)
+        runtimeRemainingMinutes = try c.decodeIfPresent(Int.self, forKey: .runtimeRemainingMinutes)
+        hasError = try c.decodeIfPresent(Bool.self, forKey: .hasError) ?? false
+        reportedAt = try c.decodeIfPresent(Date.self, forKey: .reportedAt)
+        startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
+        endingAt = try c.decodeIfPresent(Date.self, forKey: .endingAt)
+        startReason = try c.decodeIfPresent(AirCleaningStartReason.self, forKey: .startReason)
+        lastCycleValid = try c.decodeIfPresent(Bool.self, forKey: .lastCycleValid)
+        errorKind = try c.decodeIfPresent(AirCleaningError.self, forKey: .errorKind)
     }
 }
 
@@ -805,7 +885,8 @@ struct ChargingSession: Codable, Equatable, Sendable {
     static func completed(
         previous: VehicleState?,
         current: VehicleState,
-        pricePerKwh: Double
+        pricePerKwh: Double,
+        usableCapacityKwh: Double? = nil
     ) -> ChargingSession? {
         guard let previous, previous.vin == current.vin,
               previous.isCharging, !current.isCharging,
@@ -813,7 +894,10 @@ struct ChargingSession: Codable, Equatable, Sendable {
               let endBattery = current.batteryPercentage,
               endBattery > first.batteryPercentage else { return nil }
         let percentageAdded = endBattery - first.batteryPercentage
-        let estimatedKwh = percentageAdded / 100 * current.configuredUsableBatteryCapacityKwh
+        // Prefer an explicitly supplied (user-calibrated) usable capacity; the model-table
+        // fallback is only a nominal estimate.
+        let capacity = usableCapacityKwh ?? current.configuredUsableBatteryCapacityKwh
+        let estimatedKwh = percentageAdded / 100 * capacity
         guard estimatedKwh > 0 else { return nil }
         return ChargingSession(
             id: UUID(),
@@ -836,12 +920,55 @@ struct ChargingSample: Codable, Equatable, Sendable {
     let timestamp: Date
     let batteryPercentage: Double
     let powerWatts: Int?
+    /// AC/DC/wireless, when the provider reported it for this reading — both providers expose
+    /// this per-reading, but it wasn't previously threaded into session history. Lets
+    /// `BatteryHealthEstimator.chargeIntegratedCapacity` apply a charging-type-specific loss
+    /// correction instead of one blended constant for every session. Defaults to `.unknown` for
+    /// samples recorded before this field existed (the default makes that transparent to
+    /// `Codable`, so old cached snapshots still decode) or when the provider didn't report a type.
+    let chargingType: ChargingType
 
-    init(timestamp: Date = Date(), batteryPercentage: Double, powerWatts: Int? = nil) {
+    init(timestamp: Date = Date(), batteryPercentage: Double, powerWatts: Int? = nil,
+         chargingType: ChargingType = .unknown) {
         self.timestamp = timestamp
         self.batteryPercentage = batteryPercentage
         self.powerWatts = powerWatts
+        self.chargingType = chargingType
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp, batteryPercentage, powerWatts, chargingType
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = try c.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        batteryPercentage = try c.decode(Double.self, forKey: .batteryPercentage)
+        powerWatts = try c.decodeIfPresent(Int.self, forKey: .powerWatts)
+        // Absent key = sample recorded before this field existed.
+        chargingType = try c.decodeIfPresent(ChargingType.self, forKey: .chargingType) ?? .unknown
+    }
+}
+
+/// A saved charging location from Polestar's Chronos `ChargeLocationService`.
+/// Wire shape cross-checked against the independently built
+/// `kildahldev/unofficial-polestar-api` proto schema (`GetChargeLocations`).
+struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
+    /// Backend identifier used by every per-location write RPC.
+    let id: String
+    let alias: String
+    let latitude: Double?
+    let longitude: Double?
+    /// Per-location amperage limit (0 = not set / vehicle default).
+    let ampLimit: Int
+    /// Minimum state of charge the car maintains at this location (0 = unset).
+    let minimumSoc: Int
+    /// Smart/price-optimised charging enabled for this location.
+    let optimisedChargingEnabled: Bool
+    /// 1 = recent, 2 = saved, 3 = saved third-party.
+    let kind: Int
+
+    var isSavedLocation: Bool { kind == 2 || kind == 3 }
 }
 
 struct VehicleChronosError: Codable, Equatable, Sendable {

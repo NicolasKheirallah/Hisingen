@@ -29,7 +29,7 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(profile.support(for: .steeringWheelHeating), .vehicleManaged)
         XCTAssertEqual(profile.support(for: .chargingCurrentLimit), .supported)
         XCTAssertEqual(profile.support(for: .preCleaning), .supported)
-        XCTAssertEqual(profile.support(for: .tyrePressureValues), .unavailable)
+        XCTAssertEqual(profile.support(for: .tyrePressureValues), .backendDependent)
         XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
         XCTAssertEqual(profile.support(for: .locks), .supported)
         XCTAssertEqual(profile.support(for: .windows), .supported)

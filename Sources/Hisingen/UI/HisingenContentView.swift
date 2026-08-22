@@ -1890,12 +1890,16 @@ struct VehicleTabView: View {
     private var diagnosticsCard: AnyView? {
         var rows: [KVRow] = []
         if state.powertrain.hasElectricRange && (features.contains(.batteryDiagnostics) || features.contains(.chargingDetails)) {
-            if let comparison = state.currentRangeVsModelWltpPercent {
+            let specification = preferences.vehicleSpecificationOverride(for: state.vin)
+            if let comparison = state.currentRangeVsModelWltpPercent(specification: specification) {
+                let isUserReference = specification?.wltpRangeKm != nil
                 rows.append(KVRow(
                     L10n.text("Current Range vs Model WLTP"),
                     String(format: "%.1f%%", comparison),
                     symbol: "gauge.with.dots.needle.67percent",
-                    info: L10n.text("Calculated from the vehicle-reported range and battery percentage against a static model-family WLTP benchmark. It is not battery health and does not directly measure speed, weather or climate use.")
+                    info: isUserReference
+                        ? L10n.text("Calculated from the vehicle-reported range and battery percentage against the VIN-specific WLTP reference entered in Settings. It is not battery health and does not directly measure speed, weather or climate use.")
+                        : L10n.text("Calculated from the vehicle-reported range and battery percentage against a static model-family WLTP benchmark. It is not battery health and does not directly measure speed, weather or climate use.")
                 ))
             }
         }

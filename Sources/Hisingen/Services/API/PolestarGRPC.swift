@@ -33,6 +33,9 @@ actor PolestarGRPC {
     private var c3DiscoveryTask: Task<URL, Error>?
     var exteriorCache: [String: ExteriorSnapshot] = [:]
     var otaSoftwareIDs: [String: String] = [:]
+    /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
+    /// charge-target and amp-limit writes against what the vehicle actually supports.
+    var capabilityLimits: [String: VehicleOTACapabilities] = [:]
     /// Last observed OTA state per VIN. `InstallNow` is only meaningful for some of these, and
     /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
     /// checked here instead of being discovered as an unexplained refusal.
@@ -46,6 +49,13 @@ actor PolestarGRPC {
     var useStreaming = false
 
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
+
+    #if DEBUG
+    /// Test hook: seeds vehicle-advertised charging bounds without a network round-trip.
+    func setCapabilityLimitsForTesting(vin: String, _ capabilities: VehicleOTACapabilities) {
+        capabilityLimits[vin] = capabilities
+    }
+    #endif
 
     func liveUpdates(vin: String, accessToken: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
         let base = try await resolvedHost(.c3, accessToken: accessToken)
@@ -277,6 +287,14 @@ actor PolestarGRPC {
         c3BaseURL = nil
         c3DiscoveryTask?.cancel()
         c3DiscoveryTask = nil
+        // Session-scoped caches must not survive a sign-out: a different account signing in
+        // on the same app instance must never inherit the previous account's OTA ids, states,
+        // or vehicle-advertised charging limits.
+        otaSoftwareIDs = [:]
+        otaSoftwareStates = [:]
+        otaRawSoftwareStates = [:]
+        capabilityLimits = [:]
+        exteriorCache = [:]
     }
 
 

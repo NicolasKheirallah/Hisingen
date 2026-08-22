@@ -239,6 +239,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     var serviceTrigger: String? = nil
     var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
+    /// Saved charging locations from Polestar's Chronos ChargeLocationService. Populated when
+    /// remote-charging features are enabled; empty for Volvo (no official equivalent).
+    var chargeLocations: [ChargeLocationSnapshot] = []
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
     var optimisticCommandLockUntil: Date? = nil
@@ -378,6 +381,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
+        case chargeLocations
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
         case preferredWorkshopId, preferredWorkshopName
         case retainedDataCategories, retainedDataAt
@@ -433,6 +437,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt),
             dataWarnings: try values.decode([String].self, forKey: .dataWarnings)
         )
+        self.chargeLocations = try values.decodeIfPresent([ChargeLocationSnapshot].self, forKey: .chargeLocations) ?? []
         self.externalColour = try values.decodeIfPresent(String.self, forKey: .externalColour)
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
         self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
@@ -544,8 +549,12 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var batteryDegradationPercent: Double? {
-        // Neither provider currently exposes a validated measured capacity or SoH value.
-        // Do not infer pack degradation from age, mileage, or a specification capacity.
+        // Neither provider exposes a validated *measured* capacity or SoH value — this property
+        // specifically represents that absence and must stay `nil` rather than infer one from
+        // age, mileage, or a specification capacity. A separate, clearly-labeled *calculated*
+        // estimate that does combine those signals exists at `BatteryHealthEstimator.estimate` —
+        // it returns a distinct `BatteryHealthEstimate` type precisely so a calculated figure can
+        // never be mistaken for what this property represents.
         return nil
     }
 
@@ -717,14 +726,18 @@ struct VehicleState: Codable, Equatable, Sendable {
         vin.uppercased().hasPrefix("YV")
     }
 
-    /// Current vehicle-reported range at the present SOC compared with the model-reference
-    /// WLTP range at the same SOC. This is a range comparison, not battery State of Health.
-    var currentRangeVsModelWltpPercent: Double? {
-        guard model.hasModelReferenceSpecs,
-              let battery = batteryPercentage, battery > 10,
-              let range = rangeKm, range > 0,
-              model.nominalWltpRangeKm > 0 else { return nil }
-        let expectedRangeAtCurrentSoC = model.nominalWltpRangeKm * (battery / 100.0)
+    /// Current vehicle-reported range at the present SOC compared with a WLTP reference at the
+    /// same SOC — the model-family table, or a VIN-specific `specification` override entered in
+    /// Settings when one exists. This is a range comparison, not battery State of Health.
+    /// `battery >= 20` matches the same low-SOC cutoff `BatteryHealthEstimator`'s range signal
+    /// uses, since the vehicle's own range readout gets noisier as it approaches empty.
+    func currentRangeVsModelWltpPercent(specification: VehicleSpecificationOverride? = nil) -> Double? {
+        guard let battery = batteryPercentage, battery >= 20,
+              let range = rangeKm, range > 0 else { return nil }
+        let referenceRange = specification?.wltpRangeKm
+            ?? (model.hasModelReferenceSpecs ? model.nominalWltpRangeKm : nil)
+        guard let referenceRange, referenceRange > 0 else { return nil }
+        let expectedRangeAtCurrentSoC = referenceRange * (battery / 100.0)
         guard expectedRangeAtCurrentSoC > 0 else { return nil }
         return (Double(range) / expectedRangeAtCurrentSoC * 1000).rounded() / 10
     }
@@ -986,6 +999,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm
         merged.chargingCurrentLimitAmps = chargingCurrentLimitAmps ?? previous.chargingCurrentLimitAmps
+        // Locations are only re-shown when this fetch actually returned them; an empty result
+        // after a backend hiccup should not wipe the list the controls tab is rendering.
+        merged.chargeLocations = chargeLocations.isEmpty ? previous.chargeLocations : chargeLocations
         merged.warrantyInfo = warrantyInfo ?? previous.warrantyInfo
         merged.interiorImageData = interiorImageData
             ?? (features.contains(.vehicleImage) ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil)
@@ -1021,7 +1037,10 @@ struct VehicleState: Codable, Equatable, Sendable {
 
         var samples = previous.chargingSamples
         if merged.isCharging, let pct = merged.batteryPercentage {
-            let sample = ChargingSample(timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts)
+            let sample = ChargingSample(
+                timestamp: fetchedAt, batteryPercentage: pct, powerWatts: merged.chargingPowerWatts,
+                chargingType: merged.chargingType
+            )
             if let last = samples.last {
                 if sample.timestamp.timeIntervalSince(last.timestamp) >= 20 || abs(sample.batteryPercentage - last.batteryPercentage) >= 0.2 {
                     samples.append(sample)

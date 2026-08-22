@@ -149,6 +149,12 @@ final class PreferencesStore {
     var remoteSteeringWheelHeating: HeatingLevel { get { HeatingLevel(rawValue: d.integer(forKey: "remote_steering_heating")) ?? .unspecified } set { d.set(newValue.rawValue, forKey: "remote_steering_heating") } }
     var electricityPricePerKwh: Double { get { let value = d.double(forKey: "electricity_price_per_kwh"); return value > 0 ? value : 2.0 } set { d.set(newValue, forKey: "electricity_price_per_kwh") } }
     var currencySymbol: String { get { let value = d.string(forKey: "electricity_currency_symbol") ?? ""; return value.isEmpty ? (Locale.current.currencySymbol ?? "kr") : value } set { d.set(newValue, forKey: "electricity_currency_symbol") } }
+    /// Off-peak/night tariff, disabled by default so charging-cost estimates match
+    /// `electricityPricePerKwh` unchanged unless the user opts in to a two-rate schedule.
+    var nightTariffEnabled: Bool { get { d.bool(forKey: "night_tariff_enabled") } set { d.set(newValue, forKey: "night_tariff_enabled") } }
+    var nightElectricityPricePerKwh: Double { get { let value = d.double(forKey: "night_electricity_price_per_kwh"); return value > 0 ? value : electricityPricePerKwh } set { d.set(newValue, forKey: "night_electricity_price_per_kwh") } }
+    var nightTariffStartHour: Int { get { let value = d.object(forKey: "night_tariff_start_hour") as? Int; return min(max(value ?? 22, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_start_hour") } }
+    var nightTariffEndHour: Int { get { let value = d.object(forKey: "night_tariff_end_hour") as? Int; return min(max(value ?? 6, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_end_hour") } }
     var storeChargingHistory: Bool { get { d.bool(forKey: "store_charging_history") } set { d.set(newValue, forKey: "store_charging_history") } }
     var privateNotificationDetails: Bool { get { d.object(forKey: "private_notification_details") == nil || d.bool(forKey: "private_notification_details") } set { d.set(newValue, forKey: "private_notification_details") } }
     var requireBiometricsForRemoteControls: Bool { get { d.bool(forKey: "require_biometrics_for_remote_controls") } set { d.set(newValue, forKey: "require_biometrics_for_remote_controls") } }

@@ -554,9 +554,11 @@ struct ControlsTabView: View {
                     }
                 }
 
+                chargeLocationsSection
+
+
                 if features.contains(.remoteSchedules) || features.contains(.remoteCharging) {
                     Divider().opacity(0.5)
-
                     Button {
                         showScheduleEditor = true
                     } label: {
@@ -572,6 +574,84 @@ struct ControlsTabView: View {
             }
         }
         .opacity(cardOpacity(.setChargeTarget(80)))
+    }
+
+    /// Per-location charging settings from Polestar's ChargeLocationService. Only rendered
+    /// once a fetch has actually returned locations — an unprobed vehicle shows nothing rather
+    /// than controls that may not exist for its platform.
+    private var chargeLocationsSection: some View {
+        let locations = state.chargeLocations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
+        guard profile.permits(.chargeLocations), features.contains(.remoteCharging),
+              !locations.isEmpty else {
+            return AnyView(EmptyView())
+        }
+        return AnyView(VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.text("Saved Charge Locations"))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            ForEach(locations) { location in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(HisingenTheme.accent)
+                        Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer()
+                        if location.minimumSoc > 0 {
+                            Text(L10n.format("Min %d%%", location.minimumSoc))
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if location.ampLimit > 0 {
+                        HStack {
+                            Text(L10n.text("Current limit"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(location.ampLimit) A")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                        }
+                        Slider(value: Binding(
+                            get: { Double(location.ampLimit) },
+                            set: { newValue in
+                                let rounded = Int(newValue.rounded())
+                                guard rounded != location.ampLimit else { return }
+                                onRemoteCommand(.updateChargeLocationAmpLimit(id: location.id, amps: rounded))
+                            }
+                        ), in: 6...32, step: 1)
+                        .tint(.orange)
+                        .disabled(remoteCommandInProgress)
+                    }
+                    Toggle(isOn: Binding(
+                        get: { location.optimisedChargingEnabled },
+                        set: { enabled in
+                            onRemoteCommand(.setChargeLocationOptimisedCharging(id: location.id, enabled: enabled))
+                        }
+                    )) {
+                        Text(L10n.text("Optimised charging"))
+                            .font(.system(size: 10.5))
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .disabled(remoteCommandInProgress)
+
+                    Button(role: .destructive) {
+                        onRemoteCommand(.deleteChargeLocation(id: location.id))
+                    } label: {
+                        Label(L10n.text("Delete Location"), systemImage: "trash")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(remoteCommandInProgress)
+                }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+            }
+        })
     }
 
     private var accessControlCard: some View {

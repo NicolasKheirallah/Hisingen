@@ -9,7 +9,23 @@ extension PolestarGRPC {
     private static let chargeNowService = "/pccs.chronos.services.v1.ChargeNowService"
     private static let chargeTimerService = "/pccs.chronos.services.v2.GlobalChargeTimerService"
     private static let climateTimerService = "/pccs.chronos.services.v1.ParkingClimateTimerService"
+    private static let chargeLocationService = "/pccs.chronos.services.v1.ChargeLocationService"
     private static let otaSchedulerService = "/ota_mobcache.SchedulerService"
+
+    /// Per-location Chronos writes share one shape: `{1: request, 2: location_id, 3: value}`
+    /// answered by `{1: status}`. The `value` closure supplies field 3 per method.
+    private func chargeLocationUpdate(vin: String, accessToken: String, method: String,
+                                      payload: @escaping () -> Data, id: String) async throws -> RemoteCommandResult {
+        var request = Data()
+        request.append(Protobuf.stringField(2, id))
+        request.append(payload())
+        let body = try await lastMessage(
+            path: Self.chargeLocationService + "/\(method)",
+            message: Self.chronosRequest(vin, payload: request),
+            vin: vin, accessToken: accessToken, host: .pccs
+        )
+        return try Self.chronosResult(body, statusField: 1)
+    }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String,
                               accessToken: String,
@@ -84,7 +100,19 @@ extension PolestarGRPC {
             return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 1),
                                         vin: vin, token: accessToken)
         case .setChargeTarget(let target):
-            guard (40...100).contains(target) else { throw RemoteCommandError.rejected(nil) }
+            // Validate against the bounds the vehicle itself advertises via GetMyCars when
+            // they are known; the hardcoded ranges are only a fallback for vehicles whose
+            // capabilities have not been fetched yet. Some models reject targets below 50
+            // or above 90 — previously every such request failed server-side with an
+            // opaque rejection instead of being caught here with a clear message.
+            let limits = capabilityLimits[vin]
+            let minimumTarget = max(40, limits?.targetChargeLevelPercentageMinLimit ?? 0)
+            guard (minimumTarget...100).contains(target) else {
+                throw RemoteCommandError.rejected(
+                    L10n.format("The charge target must be between %d%% and 100%% on this vehicle.",
+                                minimumTarget)
+                )
+            }
             var payload = Data()
             payload.append(Protobuf.intField(2, target))
             //  uses ChargeTargetLevelSettingType.CUSTOM (3), not DAILY (1).
@@ -97,7 +125,18 @@ extension PolestarGRPC {
                                               vin: vin, accessToken: accessToken, host: .pccs)
             return try Self.chronosResult(body, statusField: 3)
         case .setAmpLimit(let amps):
-            guard (1...64).contains(amps) else { throw RemoteCommandError.rejected(nil) }
+            // Same capability-aware bounds as the charge target: prefer the vehicle's own
+            // advertised amperage range (e.g. Polestar 3 exposes 6–32 A via GetMyCars) and
+            // keep 1–64 A only as the pre-discovery fallback.
+            let limits = capabilityLimits[vin]
+            let minimumAmps = max(1, limits?.chargeAmperageMinLimit ?? 1)
+            let maximumAmps = min(64, max(minimumAmps, limits?.chargeAmperageMaxLimit ?? 64))
+            guard (minimumAmps...maximumAmps).contains(amps) else {
+                throw RemoteCommandError.rejected(
+                    L10n.format("The charging current must be between %d A and %d A on this vehicle.",
+                                minimumAmps, maximumAmps)
+                )
+            }
             let payload = Protobuf.intField(2, amps)
             let body = try await lastMessage(path: Self.ampLimitService + "/SetAmpLimit",
                                              message: Self.chronosRequest(vin, payload: payload),
@@ -171,6 +210,59 @@ extension PolestarGRPC {
             request.append(Protobuf.stringField(1, vin))
             request.append(Protobuf.stringField(2, softwareID))
             return try await ota(method: "CancelSchedule", request: request, vin: vin, token: accessToken)
+        case .createChargeLocationAtCar(let alias, let ampLimit, let minimumSoc, let optimised):
+            // ChargeLocationService write shapes cross-checked against the independently built
+            // kildahldev/unofficial-polestar-api client. Create pins the location to the car's
+            // current GPS position; the backend derives coordinates itself.
+            guard !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  (0...64).contains(ampLimit), (0...100).contains(minimumSoc) else {
+                throw RemoteCommandError.rejected(nil)
+            }
+            var payload = Data()
+            payload.append(Protobuf.stringField(2, alias))
+            if ampLimit > 0 { payload.append(Protobuf.intField(3, ampLimit)) }
+            if minimumSoc > 0 { payload.append(Protobuf.intField(4, minimumSoc)) }
+            if optimised { payload.append(Protobuf.intField(5, 1)) }
+            let body = try await lastMessage(
+                path: Self.chargeLocationService + "/CreateAtTheCarLocation",
+                message: Self.chronosRequest(vin, payload: payload),
+                vin: vin, accessToken: accessToken, host: .pccs
+            )
+            return try Self.chronosResult(body, statusField: 1)
+        case .updateChargeLocationAlias(let id, let alias):
+            guard !id.isEmpty, !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw RemoteCommandError.missingContext
+            }
+            return try await chargeLocationUpdate(
+                vin: vin, accessToken: accessToken, method: "UpdateAlias",
+                payload: { Protobuf.stringField(3, alias) }, id: id
+            )
+        case .updateChargeLocationAmpLimit(let id, let amps):
+            guard !id.isEmpty, (0...64).contains(amps) else { throw RemoteCommandError.rejected(nil) }
+            return try await chargeLocationUpdate(
+                vin: vin, accessToken: accessToken, method: "UpdateAmpLimit",
+                payload: { Protobuf.intField(3, amps) }, id: id
+            )
+        case .updateChargeLocationMinimumSoc(let id, let soc):
+            guard !id.isEmpty, (0...100).contains(soc) else { throw RemoteCommandError.rejected(nil) }
+            return try await chargeLocationUpdate(
+                vin: vin, accessToken: accessToken, method: "UpdateMinimumSoc",
+                payload: { Protobuf.intField(3, soc) }, id: id
+            )
+        case .setChargeLocationOptimisedCharging(let id, let enabled):
+            guard !id.isEmpty else { throw RemoteCommandError.missingContext }
+            return try await chargeLocationUpdate(
+                vin: vin, accessToken: accessToken, method: "UpdateOptimizedSetting",
+                payload: { Protobuf.intField(3, enabled ? 1 : 0) }, id: id
+            )
+        case .deleteChargeLocation(let id):
+            guard !id.isEmpty else { throw RemoteCommandError.missingContext }
+            let body = try await lastMessage(
+                path: Self.chargeLocationService + "/DeleteLocation",
+                message: Self.chronosRequest(vin, payload: Protobuf.stringField(2, id)),
+                vin: vin, accessToken: accessToken, host: .pccs
+            )
+            return try Self.chronosResult(body, statusField: 1)
         case .startEngine, .stopEngine:
             // Remote engine start is a Volvo ICE/PHEV command; Polestar's line-up is electric
             // and its backend exposes no equivalent RPC. Mirrors `isImplemented(by: .polestar)`.

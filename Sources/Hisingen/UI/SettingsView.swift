@@ -68,6 +68,10 @@ struct SettingsView: View {
     @State private var electricityPrice = "2.00"
     @State private var currencySymbol = "kr"
     @State private var storeChargingHistory = false
+    @State private var nightTariffEnabled = false
+    @State private var nightElectricityPrice = "2.00"
+    @State private var nightTariffStartHour = 22
+    @State private var nightTariffEndHour = 6
     @State private var requireBiometrics = false
     @State private var persistLocationHistory = false
     @State private var hasWarrantyInServiceDate = false
@@ -150,6 +154,10 @@ struct SettingsView: View {
             electricityPrice = String(format: "%.2f", preferences.electricityPricePerKwh)
             currencySymbol = preferences.currencySymbol
             storeChargingHistory = preferences.storeChargingHistory
+            nightTariffEnabled = preferences.nightTariffEnabled
+            nightElectricityPrice = String(format: "%.2f", preferences.nightElectricityPricePerKwh)
+            nightTariffStartHour = preferences.nightTariffStartHour
+            nightTariffEndHour = preferences.nightTariffEndHour
             requireBiometrics = preferences.requireBiometricsForRemoteControls
             persistLocationHistory = preferences.persistLocationHistory
             let warrantyVIN = state?.vin ?? preferences.vin
@@ -895,6 +903,59 @@ struct SettingsView: View {
                         }
                     }
 
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.text("Night Tariff"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("Splits session cost by when energy actually flowed"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $nightTariffEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: nightTariffEnabled) { _, _ in
+                                preferences.nightTariffEnabled = nightTariffEnabled
+                            }
+                    }
+                    if nightTariffEnabled {
+                        HStack(spacing: 4) {
+                            TextField("2.00", text: $nightElectricityPrice)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 55)
+                                .multilineTextAlignment(.trailing)
+                                .controlSize(.small)
+                                .onChange(of: nightElectricityPrice) { _, _ in
+                                    if let price = Double(nightElectricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
+                                        preferences.nightElectricityPricePerKwh = price
+                                    }
+                                }
+                            Text(L10n.text("/kWh from"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Stepper(value: $nightTariffStartHour, in: 0...23) {
+                                Text(String(format: "%02d:00", nightTariffStartHour))
+                                    .font(.system(size: 11, design: .monospaced))
+                            }
+                            .controlSize(.small)
+                            .onChange(of: nightTariffStartHour) { _, _ in
+                                preferences.nightTariffStartHour = nightTariffStartHour
+                            }
+                            Text(L10n.text("to"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Stepper(value: $nightTariffEndHour, in: 0...23) {
+                                Text(String(format: "%02d:00", nightTariffEndHour))
+                                    .font(.system(size: 11, design: .monospaced))
+                            }
+                            .controlSize(.small)
+                            .onChange(of: nightTariffEndHour) { _, _ in
+                                preferences.nightTariffEndHour = nightTariffEndHour
+                            }
+                        }
+                    }
+
                     Divider().opacity(0.4)
 
                     HStack {
@@ -1319,6 +1380,11 @@ struct SettingsView: View {
                         .padding(.vertical, 2)
                     }
                 }
+
+                Text(L10n.text("\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         })
     }

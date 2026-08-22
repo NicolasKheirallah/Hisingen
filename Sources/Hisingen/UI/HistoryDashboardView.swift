@@ -11,6 +11,7 @@ struct HistoryDashboardView: View {
     @Environment(\.preferencesStore) private var preferences
     @State private var period: HistoryPeriod = .month
     @State private var selectedSessionID: String?
+    @State private var sessionSearchText: String = ""
 
     private enum HistoryPeriod: String, CaseIterable, Identifiable {
         case week = "7 Days"
@@ -48,6 +49,12 @@ struct HistoryDashboardView: View {
         database.batteryHealthHistory(for: state.vin, limit: 200)
     }
 
+    private var airQualityRecords: [AirQualityRecord] {
+        database.recentAirQuality(for: state.vin, limit: 500).filter { record in
+            cutoff.map { record.timestamp >= $0 } ?? true
+        }
+    }
+
     private var telemetryRecords: [HistoricalTelemetryRecord] {
         database.recentTelemetry(for: state.vin, limit: 2_000).filter { record in
             cutoff.map { record.timestamp >= $0 } ?? true
@@ -74,10 +81,73 @@ struct HistoryDashboardView: View {
         return HistoryInsights.chargingCurve(from: database.chargingSamples(for: session.id))
     }
 
+    private var selectedSessionSamples: [HistoricalChargingSample] {
+        guard let session = selectedSession else { return [] }
+        return database.chargingSamples(for: session.id)
+    }
+
+    private var filteredSessionsForPicker: [HistoricalChargingSession] {
+        let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return Array(chargingSessions.prefix(500)) }
+        return chargingSessions.filter { sessionLabel($0).localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    /// Odometer/telemetry history ignoring the period picker — mirrors `batteryHealthRecords`:
+    /// monthly mileage and the km/day rate are only meaningful over a long span, so a "7 days"
+    /// window would usually collapse them to noise or nothing at all.
+    private var allTimeTelemetryRecords: [HistoricalTelemetryRecord] {
+        database.recentTelemetry(for: state.vin, limit: 2_000)
+    }
+
+    private var allTimeOdometerPoints: [HistoryInsights.OdometerPoint] {
+        HistoryInsights.odometerTrend(from: allTimeTelemetryRecords)
+    }
+
+    private var commandStatistics: HistoryInsights.CommandStatistics {
+        HistoryInsights.commandStatistics(from: commands)
+    }
+
+    private struct MonthComparison {
+        let distanceKm: Double
+        let energyKwh: Double
+        let averageConsumption: Double?
+    }
+
+    private struct SmoothedPoint: Identifiable {
+        let id: Int64
+        let timestamp: Date
+        let value: Double
+    }
+
+    /// Current-vs-previous calendar month, independent of the period picker (which the user
+    /// might have set to "7 Days") so this comparison always has something to compare.
+    private func monthComparison(monthsAgo: Int, calendar: Calendar = .current) -> MonthComparison {
+        guard let monthStart = calendar.date(byAdding: .month, value: -monthsAgo, to: HistoryInsights.monthBucket(Date(), calendar: calendar)),
+              let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+            return MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
+        }
+        let monthTrips = database.derivedTrips(for: state.vin, limit: 2_000).filter {
+            $0.endedAt >= monthStart && $0.endedAt < monthEnd
+        }
+        let monthSessions = database.recentChargingSessions(for: state.vin, limit: 2_000).filter {
+            $0.startedAt >= monthStart && $0.startedAt < monthEnd
+        }
+        let consumptionValues = monthTrips.compactMap { trip -> Double? in
+            guard let value = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(value) else { return nil }
+            return value
+        }
+        return MonthComparison(
+            distanceKm: monthTrips.reduce(0) { $0 + $1.distanceKm },
+            energyKwh: monthSessions.reduce(0) { $0 + $1.energyDeliveredKwh },
+            averageConsumption: consumptionValues.isEmpty ? nil : consumptionValues.reduce(0, +) / Double(consumptionValues.count)
+        )
+    }
+
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             periodPicker
             overviewCard
+            monthComparisonCard
             if selectedSession != nil && !selectedSessionCurve.isEmpty { chargingCurveCard }
             if !trips.isEmpty {
                 distanceChartCard
@@ -87,9 +157,10 @@ struct HistoryDashboardView: View {
             if efficiencyPoints.count >= 3 { efficiencyChartCard }
             if odometerPoints.count >= 3 { odometerChartCard }
             if !batteryHealthRecords.isEmpty { batteryHealthCard }
+            if airQualityRecords.count >= 2 { airQualityCard }
             if !commands.isEmpty { automationHistoryCard }
             if trips.isEmpty && chargingSessions.isEmpty && commands.isEmpty
-                && batteryHealthRecords.isEmpty { emptyCard }
+                && batteryHealthRecords.isEmpty && airQualityRecords.count < 2 { emptyCard }
         }
     }
 
@@ -143,6 +214,10 @@ struct HistoryDashboardView: View {
                 exportCSV(database.exportBatteryHealthCSV(for: state.vin), name: "Battery-Health")
             }
             .disabled(batteryHealthRecords.isEmpty)
+            Button(L10n.text("Air Quality")) {
+                exportCSV(database.exportAirQualityCSV(for: state.vin), name: "Air-Quality")
+            }
+            .disabled(airQualityRecords.isEmpty)
             Button(L10n.text("Telemetry")) {
                 exportCSV(database.exportTelemetryCSV(for: state.vin), name: "Telemetry")
             }
@@ -167,29 +242,115 @@ struct HistoryDashboardView: View {
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
     }
 
+    private var monthComparisonCard: some View {
+        let thisMonth = monthComparison(monthsAgo: 0)
+        let lastMonth = monthComparison(monthsAgo: 1)
+        guard thisMonth.distanceKm > 0 || thisMonth.energyKwh > 0 || lastMonth.distanceKm > 0 || lastMonth.energyKwh > 0 else {
+            return AnyView(EmptyView())
+        }
+        func delta(_ current: Double, _ previous: Double) -> String? {
+            guard previous > 0 else { return nil }
+            let pct = (current - previous) / previous * 100
+            return String(format: "%@%.0f%%", pct >= 0 ? "+" : "", pct)
+        }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "calendar", title: L10n.text("This Month vs Last"), color: .cyan)
+                HStack(spacing: 8) {
+                    comparisonMetric(L10n.text("Distance"),
+                                     Format.distance(km: thisMonth.distanceKm, decimals: 0, unit: preferences.distanceUnit),
+                                     delta(thisMonth.distanceKm, lastMonth.distanceKm))
+                    comparisonMetric(L10n.text("Energy"),
+                                     String(format: "%.1f kWh", thisMonth.energyKwh),
+                                     delta(thisMonth.energyKwh, lastMonth.energyKwh))
+                    if let thisConsumption = thisMonth.averageConsumption {
+                        comparisonMetric(L10n.text("Consumption"),
+                                         preferences.energyConsumptionUnit.format(kwhPer100Km: thisConsumption),
+                                         lastMonth.averageConsumption.flatMap { delta(thisConsumption, $0) })
+                    }
+                }
+            }
+        })
+    }
+
+    private func comparisonMetric(_ title: String, _ value: String, _ delta: String?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+            HStack(spacing: 4) {
+                Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
+                if let delta {
+                    Text(delta).font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(delta.hasPrefix("+") ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+    }
+
     // MARK: - Charging Curve
 
     private var chargingCurveCard: some View {
         let session = selectedSession
         let curve = selectedSessionCurve
+        let samples = selectedSessionSamples
         let peak = curve.compactMap(\.powerKw).max()
         let socGain = (curve.last?.soc ?? 0) - (curve.first?.soc ?? 0)
         let durationMinutes = session.map { max(0, Int(($0.endedAt ?? Date()).timeIntervalSince($0.startedAt) / 60)) }
+        let chargingType = HistoryInsights.chargingType(from: samples, peakPowerKw: peak)
+        let tenToEighty = HistoryInsights.tenToEightyDuration(from: curve)
+        let idleTail = HistoryInsights.idleTailDuration(from: curve)
+        let lossPct: Double? = state.powertrain.hasElectricRange
+            ? HistoryInsights.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
+            : nil
+        let tariffCost: HistoryInsights.TariffCost? = preferences.nightTariffEnabled
+            ? HistoryInsights.tariffAwareCost(from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
+                                              nightRatePerKwh: preferences.nightElectricityPricePerKwh,
+                                              nightStartHour: preferences.nightTariffStartHour,
+                                              nightEndHour: preferences.nightTariffEndHour)
+            : nil
+        // A shorter gap threshold than the daily-cadence charts: a session spans hours, so a
+        // hole of a couple of hours mid-session (app closed, car briefly unplugged) is exactly
+        // the kind of gap that shouldn't be smoothed over with an interpolated line.
+        let curveSegmentByID = gapSegmentIndex(of: curve, maxGap: HistoryInsights.chargingCurveGapThreshold, timestamp: \.timestamp)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: .green)
+                    if let badgeColor = chargingTypeBadgeColor(chargingType) {
+                        Text(chargingType.displayName)
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(badgeColor.opacity(0.18), in: Capsule())
+                            .foregroundStyle(badgeColor)
+                    }
                     Spacer()
                     Picker(L10n.text("Session"), selection: Binding(
                         get: { selectedSession?.id },
                         set: { selectedSessionID = $0 }
                     )) {
-                        ForEach(chargingSessions.prefix(50)) { item in
+                        ForEach(filteredSessionsForPicker) { item in
                             Text(sessionLabel(item)).tag(item.id as String?)
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 200)
+                }
+                if chargingSessions.count > 8 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 9)).foregroundStyle(.tertiary)
+                        TextField(L10n.text("Search sessions by date or energy"), text: $sessionSearchText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 9.5))
+                        if !sessionSearchText.isEmpty {
+                            Text("\(filteredSessionsForPicker.count)/\(chargingSessions.count)")
+                                .font(.system(size: 8.5))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(5)
+                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 5))
                 }
                 Chart(curve) { point in
                     AreaMark(
@@ -201,7 +362,8 @@ struct HistoryDashboardView: View {
                     .interpolationMethod(.catmullRom)
                     LineMark(
                         x: .value(L10n.text("Time"), point.timestamp),
-                        y: .value(L10n.text("Charge level"), point.soc)
+                        y: .value(L10n.text("Charge level"), point.soc),
+                        series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
                     )
                     .foregroundStyle(Color.green)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
@@ -222,7 +384,8 @@ struct HistoryDashboardView: View {
                         .interpolationMethod(.catmullRom)
                         LineMark(
                             x: .value(L10n.text("Time"), point.timestamp),
-                            y: .value(L10n.text("Power"), point.powerKw ?? 0)
+                            y: .value(L10n.text("Power"), point.powerKw ?? 0),
+                            series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
                         )
                         .foregroundStyle(Color.orange)
                         .lineStyle(StrokeStyle(lineWidth: 1.4))
@@ -231,6 +394,36 @@ struct HistoryDashboardView: View {
                     .chartYAxisLabel("kW")
                     .frame(height: 80)
                     .accessibilityLabel(L10n.text("Charging curve power chart"))
+                }
+                if curve.contains(where: { $0.voltageVolts != nil || $0.currentAmps != nil }) {
+                    Chart(curve) { point in
+                        if let voltage = point.voltageVolts {
+                            LineMark(
+                                x: .value(L10n.text("Time"), point.timestamp),
+                                y: .value(L10n.text("Voltage"), voltage),
+                                series: .value(L10n.text("Segment"), "voltage-\(curveSegmentByID[point.id] ?? 0)")
+                            )
+                            .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Voltage (V)")))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .interpolationMethod(.catmullRom)
+                        }
+                        if let current = point.currentAmps {
+                            LineMark(
+                                x: .value(L10n.text("Time"), point.timestamp),
+                                y: .value(L10n.text("Current"), current),
+                                series: .value(L10n.text("Segment"), "current-\(curveSegmentByID[point.id] ?? 0)")
+                            )
+                            .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Current (A)")))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .interpolationMethod(.catmullRom)
+                        }
+                    }
+                    .chartForegroundStyleScale([
+                        L10n.text("Voltage (V)"): Color.purple,
+                        L10n.text("Current (A)"): Color.yellow
+                    ])
+                    .frame(height: 70)
+                    .accessibilityLabel(L10n.text("Charging curve voltage and current chart"))
                 }
                 HStack(spacing: 12) {
                     if let session, session.energyDeliveredKwh > 0 {
@@ -246,10 +439,27 @@ struct HistoryDashboardView: View {
                         curveStat(L10n.text("Peak"), String(format: "%.1f kW", peak))
                     }
                 }
+                if tenToEighty != nil || idleTail != nil || lossPct != nil || tariffCost != nil {
+                    HStack(spacing: 12) {
+                        if let tenToEighty {
+                            curveStat("10→80%", Format.shortDuration(minutes: max(1, Int(tenToEighty / 60))))
+                        }
+                        if let idleTail, idleTail >= 60 {
+                            curveStat(L10n.text("Idle Tail"), Format.shortDuration(minutes: max(1, Int(idleTail / 60))))
+                        }
+                        if let lossPct, lossPct >= 1 {
+                            curveStat(L10n.text("Estimated Loss"), String(format: "%.0f%%", lossPct))
+                        }
+                        if let tariffCost {
+                            curveStat(L10n.text("Tariff Cost"), String(format: "%.2f %@", tariffCost.cost, preferences.currencySymbol))
+                        }
+                    }
+                }
                 Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: curve.map(\.timestamp))
             }
         }
     }
@@ -265,6 +475,17 @@ struct HistoryDashboardView: View {
         return label
     }
 
+    /// `nil` suppresses the badge entirely — an `.unknown` type has nothing useful to show.
+    private func chargingTypeBadgeColor(_ type: ChargingType) -> Color? {
+        switch type {
+        case .ac: return .blue
+        case .dc: return .orange
+        case .wireless: return .purple
+        case .none: return .gray
+        case .unknown: return nil
+        }
+    }
+
     private func curveStat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value).font(.system(size: 11, weight: .bold, design: .rounded)).lineLimit(1)
@@ -275,7 +496,11 @@ struct HistoryDashboardView: View {
     // MARK: - Trips
 
     private var distanceChartCard: some View {
-        Card {
+        let longest = HistoryInsights.longestTrip(from: trips)
+        let correlation = HistoryInsights.temperatureConsumptionCorrelation(from: trips)
+        let weekly = HistoryInsights.weeklyDistance(from: trips)
+        let bestDay = HistoryInsights.dailyDistance(from: trips).max { $0.distanceKm < $1.distanceKm }
+        return Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: .blue)
                 Chart(trips) { trip in
@@ -289,6 +514,39 @@ struct HistoryDashboardView: View {
                 .chartYAxisLabel(preferences.distanceUnit.suffix)
                 .frame(height: 125)
                 .accessibilityLabel(L10n.text("Trip distance history chart"))
+                // Only once there's enough span for a weekly view to say something a daily bar
+                // chart doesn't already show — under 3 weeks it would just repeat the same bars.
+                if weekly.count >= 3 {
+                    Chart(weekly) { bucket in
+                        BarMark(
+                            x: .value(L10n.text("Week"), bucket.week, unit: .weekOfYear),
+                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
+                        )
+                        .foregroundStyle(HisingenTheme.accent.opacity(0.55).gradient)
+                        .cornerRadius(2)
+                    }
+                    .chartYAxisLabel(preferences.distanceUnit.suffix)
+                    .frame(height: 70)
+                    .accessibilityLabel(L10n.text("Weekly distance chart"))
+                }
+                if let longest {
+                    HStack(spacing: 12) {
+                        curveStat(L10n.text("Longest Trip"), Format.distance(km: longest.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                        if let speed = HistoryInsights.averageSpeedKmh(longest) {
+                            curveStat(L10n.text("Longest Trip Avg Speed"), String(format: "%.0f km/h", speed))
+                        }
+                        if let bestDay {
+                            curveStat(L10n.text("Best Day"), Format.distance(km: bestDay.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                        }
+                    }
+                }
+                if let correlation, correlation < -0.2 {
+                    Text(L10n.text("Colder trips consume more: consumption rises as ambient temperature drops."))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                dataConfidenceNote(for: trips.map(\.endedAt))
             }
         }
     }
@@ -304,10 +562,17 @@ struct HistoryDashboardView: View {
                                 .font(.system(size: 10.5, weight: .semibold))
                             HStack(spacing: 5) {
                                 Text(Format.shortDuration(minutes: max(1, Int(trip.duration / 60))))
+                                if let speed = HistoryInsights.averageSpeedKmh(trip) {
+                                    Text("· " + String(format: "%.0f km/h", speed))
+                                }
                                 if let temperature = trip.ambientTemperatureCelsius {
                                     Text("· " + Format.temperature(celsius: temperature, unit: preferences.temperatureUnit))
                                 }
+                                // Only an electric powertrain's stored figure is
+                                // kWh/100 km; a combustion vehicle's telemetry row carries
+                                // L/100 km, which must not be formatted as energy.
                                 if let consumption = trip.averageConsumption,
+                                   state.powertrain.hasElectricRange,
                                    HistoryInsights.efficiencyBounds.contains(consumption) {
                                     Text("· " + Format.energyConsumption(
                                         kwhPer100Km: consumption,
@@ -340,18 +605,59 @@ struct HistoryDashboardView: View {
 
     // MARK: - Charging Summary
 
+    /// Sums each session's tariff-aware (day/night-split) cost when a night tariff is
+    /// configured, falling back per-session to the flat rate for any session whose samples
+    /// can't support the split (too few samples, or recorded before per-sample power existed) —
+    /// so the aggregate is never silently short of a session's contribution.
+    private func aggregateChargingCost() -> Double {
+        guard preferences.nightTariffEnabled else {
+            return chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh * preferences.electricityPricePerKwh }
+        }
+        return chargingSessions.reduce(0.0) { total, session in
+            let samples = database.chargingSamples(for: session.id)
+            if let tariff = HistoryInsights.tariffAwareCost(
+                from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
+                nightRatePerKwh: preferences.nightElectricityPricePerKwh,
+                nightStartHour: preferences.nightTariffStartHour, nightEndHour: preferences.nightTariffEndHour) {
+                return total + tariff.cost
+            }
+            return total + session.energyDeliveredKwh * preferences.electricityPricePerKwh
+        }
+    }
+
     private var chargingHistoryCard: some View {
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
         let averagePeak = chargingSessions.isEmpty ? 0 : chargingSessions.reduce(0) { $0 + $1.peakPowerKw } / Double(chargingSessions.count)
+        // The 90th-percentile peak is a more honest "typical fast peak" than the plain average:
+        // one outlier DC session in an otherwise all-AC history would drag the average up
+        // without actually being representative of what a normal session looks like.
+        let p90Peak = Statistics.percentile(chargingSessions.map(\.peakPowerKw).filter { $0 > 0 }, 90)
+        let perWeek = HistoryInsights.sessionsPerWeek(from: chargingSessions)
+        let byTimeOfDay = HistoryInsights.energyByTimeOfDay(from: chargingSessions)
+        let dominantTimeOfDay = byTimeOfDay.max { $0.value < $1.value }
+        let cost = aggregateChargingCost()
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "bolt.badge.clock.fill", title: L10n.text("Charging Trends"), color: .green)
                 KVRow(L10n.text("Sessions"), "\(chargingSessions.count)", symbol: "number")
+                if let perWeek {
+                    KVRow(L10n.text("Sessions Per Week"), String(format: "%.1f", perWeek), symbol: "calendar.badge.clock")
+                }
                 KVRow(L10n.text("Estimated Energy Added"), String(format: "%.1f kWh", energy), symbol: "bolt.fill", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
                 if averagePeak > 0 {
                     KVRow(L10n.text("Average Observed Peak"), String(format: "%.1f kW", averagePeak), symbol: "waveform.path.ecg")
                 }
-                KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", energy * preferences.electricityPricePerKwh, preferences.currencySymbol), symbol: "creditcard")
+                if let p90Peak, p90Peak > 0 {
+                    KVRow(L10n.text("Typical Fast Peak (p90)"), String(format: "%.1f kW", p90Peak), symbol: "chart.bar.xaxis",
+                          info: L10n.text("90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average."))
+                }
+                if let dominantTimeOfDay, dominantTimeOfDay.value > 0 {
+                    KVRow(L10n.text("Mostly Charges"), L10n.text(dominantTimeOfDay.key.rawValue), symbol: "clock.badge")
+                }
+                KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, preferences.currencySymbol), symbol: "creditcard",
+                      info: preferences.nightTariffEnabled
+                        ? L10n.text("Day/night tariff applied per session from its actual charging times, not a flat multiply.")
+                        : nil)
             }
         }
     }
@@ -360,6 +666,17 @@ struct HistoryDashboardView: View {
 
     private var efficiencyChartCard: some View {
         let average = HistoryInsights.averageEfficiency(of: efficiencyPoints)
+        let median = Statistics.median(efficiencyPoints.map(\.kwhPer100Km))
+        let segmentByID = gapSegmentIndex(of: efficiencyPoints, timestamp: \.timestamp)
+        let seasonal = HistoryInsights.seasonalEfficiency(from: telemetryRecords)
+        let slopePerDay = HistoryInsights.efficiencyTrendSlopePerDay(from: efficiencyPoints)
+        // A 5-point trailing average smooths out the point-to-point noise a raw consumption
+        // series always has (one short cold drive, one motorway cruise) so the underlying trend
+        // reads clearly without needing to squint at the raw line.
+        let smoothed: [SmoothedPoint] = efficiencyPoints.count >= 8
+            ? zip(efficiencyPoints, Statistics.movingAverage(efficiencyPoints.map(\.kwhPer100Km), windowSize: 5))
+                .map { point, value in SmoothedPoint(id: point.id, timestamp: point.timestamp, value: value) }
+            : []
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -371,33 +688,106 @@ struct HistoryDashboardView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Chart(efficiencyPoints) { point in
-                    LineMark(
-                        x: .value(L10n.text("Date"), point.timestamp),
-                        y: .value(L10n.text("Consumption"), point.kwhPer100Km)
-                    )
-                    .foregroundStyle(Color.mint)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                    .interpolationMethod(.catmullRom)
-                    PointMark(
-                        x: .value(L10n.text("Date"), point.timestamp),
-                        y: .value(L10n.text("Consumption"), point.kwhPer100Km)
-                    )
-                    .symbolSize(14)
-                    .foregroundStyle(Color.mint.opacity(0.85))
+                Chart {
+                    ForEach(efficiencyPoints) { point in
+                        LineMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), point.kwhPer100Km),
+                            series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
+                        )
+                        .foregroundStyle(Color.mint)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                        PointMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), point.kwhPer100Km)
+                        )
+                        .symbolSize(14)
+                        .foregroundStyle(Color.mint.opacity(0.85))
+                    }
+                    ForEach(smoothed) { point in
+                        LineMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Smoothed"), point.value)
+                        )
+                        .foregroundStyle(Color.mint.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                        .interpolationMethod(.catmullRom)
+                    }
                 }
                 .frame(height: 110)
                 .accessibilityLabel(L10n.text("Energy consumption trend chart"))
+                if let median, let average, abs(median - average) > 0.5 {
+                    Text(L10n.format("Typical drive: %@ (average is pulled by outlier trips)",
+                                     preferences.energyConsumptionUnit.format(kwhPer100Km: median)))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                if seasonal.coldAverage != nil || seasonal.warmAverage != nil {
+                    HStack(spacing: 12) {
+                        if let cold = seasonal.coldAverage {
+                            curveStat(L10n.text("Cold (<5°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: cold))
+                        }
+                        if let mild = seasonal.mildAverage {
+                            curveStat(L10n.text("Mild (5–15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: mild))
+                        }
+                        if let warm = seasonal.warmAverage {
+                            curveStat(L10n.text("Warm (>15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: warm))
+                        }
+                    }
+                }
+                if let slopePerDay {
+                    let monthlySlope = slopePerDay * 30
+                    // Number pre-formatted with the plain (locale-invariant) `String(format:)`
+                    // overload and passed as a `%@` string, not a numeric argument to
+                    // `L10n.format` — matching `Format.swift`'s convention — so a comma-decimal
+                    // system locale can't turn this into "Trending +0,42 kWh/100km per month".
+                    let sign = monthlySlope >= 0 ? "+" : ""
+                    let numberText = String(format: "%.2f", monthlySlope)
+                    Text(L10n.format("Trending %@%@ kWh/100km per month", sign, numberText))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(monthlySlope > 0.5 ? HisingenTheme.semanticWarning : .secondary)
+                }
                 Text(L10n.text("Vehicle-reported consumption between charges. Short drives and climate use raise it; motorway cruising lowers it."))
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: efficiencyPoints.map(\.timestamp))
             }
         }
     }
 
+    /// Only surfaced when confidence is low, so a well-populated chart doesn't carry a
+    /// permanent "trust me" caption nobody needs to read.
+    private func dataConfidenceNote(for timestamps: [Date]) -> some View {
+        let coverage = HistoryInsights.dataCoverage(timestamps: timestamps)
+        return Group {
+            if coverage.confidence == .low || coverage.confidence == .insufficient {
+                Text(L10n.format("Limited data (%@ points) — treat this trend as indicative, not conclusive.", "\(coverage.sampleCount)"))
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.85))
+            }
+        }
+    }
+
+    /// Maps each point's id to a segment index so a chart can pass it as a `series:` value —
+    /// Swift Charts only breaks a `LineMark` at a gap when consecutive points belong to
+    /// different series, not automatically from a large timestamp delta.
+    private func gapSegmentIndex<T: Identifiable>(of points: [T], maxGap: TimeInterval = HistoryInsights.defaultChartGapThreshold,
+                                                   timestamp: (T) -> Date) -> [T.ID: Int] {
+        let runs = HistoryInsights.segments(of: points, maxGap: maxGap, timestamp: timestamp)
+        var result: [T.ID: Int] = [:]
+        for (index, run) in runs.enumerated() {
+            for point in run { result[point.id] = index }
+        }
+        return result
+    }
+
     private var odometerChartCard: some View {
         let covered = HistoryInsights.distanceCovered(from: odometerPoints)
+        let segmentByID = gapSegmentIndex(of: odometerPoints, timestamp: \.timestamp)
+        let kmPerDay = HistoryInsights.averageKmPerDay(from: allTimeOdometerPoints)
+        let monthly = HistoryInsights.monthlyMileage(from: allTimeOdometerPoints)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -412,7 +802,8 @@ struct HistoryDashboardView: View {
                 Chart(odometerPoints) { point in
                     LineMark(
                         x: .value(L10n.text("Date"), point.timestamp),
-                        y: .value(L10n.text("Odometer"), convertDistance(point.odometerKm))
+                        y: .value(L10n.text("Odometer"), convertDistance(point.odometerKm)),
+                        series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
                     )
                     .foregroundStyle(Color.indigo)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
@@ -421,6 +812,27 @@ struct HistoryDashboardView: View {
                 .chartYAxisLabel(preferences.distanceUnit.suffix)
                 .frame(height: 110)
                 .accessibilityLabel(L10n.text("Odometer history chart"))
+                if monthly.count >= 2 {
+                    Chart(monthly) { bucket in
+                        BarMark(
+                            x: .value(L10n.text("Month"), bucket.month, unit: .month),
+                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
+                        )
+                        .foregroundStyle(Color.indigo.opacity(0.6))
+                        .cornerRadius(2)
+                    }
+                    .chartYAxisLabel(preferences.distanceUnit.suffix)
+                    .frame(height: 80)
+                    .accessibilityLabel(L10n.text("Monthly mileage chart"))
+                }
+                if let kmPerDay {
+                    curveStat(L10n.text("Average Daily Distance"), Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit) + "/" + L10n.text("day"))
+                }
+                Text(L10n.text("Monthly totals and the daily average use all recorded odometer history, independent of the period selector above."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: allTimeOdometerPoints.map(\.timestamp))
             }
         }
     }
@@ -470,6 +882,15 @@ struct HistoryDashboardView: View {
                     KVRow(L10n.text("Recorded At Odometer"),
                           Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit),
                           symbol: "road.lanes")
+                    if let slope = HistoryInsights.batteryHealthTrend(from: batteryHealthRecords).stateOfHealthPctPer10kKm,
+                       batteryHealthRecords.count >= 3 {
+                        KVRow(L10n.text("Trend"), String(format: "%.2f%% / 10,000 km", slope), symbol: "chart.line.downtrend.xyaxis",
+                              info: L10n.text("Slope of a straight-line fit through the recorded milestones. A small sample or a recent measurement-method change can swing this significantly."))
+                        if let projected = HistoryInsights.projectedStateOfHealth(from: batteryHealthRecords, atOdometerKm: latest.odometerKm + 10_000) {
+                            KVRow(L10n.text("Projected in +10,000 km"), String(format: "%.1f%%", projected), symbol: "arrow.turn.right.up",
+                                  info: L10n.text("A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear."))
+                        }
+                    }
                     KVRow(latest.measurementSource == "calculated-v2"
                           ? L10n.text("Calculated estimate")
                           : L10n.text("Legacy estimate"),
@@ -477,6 +898,11 @@ struct HistoryDashboardView: View {
                           symbol: "questionmark.circle",
                           info: L10n.text("This is a calculated trend from observed telemetry, not a battery-management-system measurement. Rows are only recorded when the estimate moves meaningfully."))
                 }
+                Text(L10n.text("Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: batteryHealthRecords.map(\.timestamp))
             }
         }
     }
@@ -487,12 +913,102 @@ struct HistoryDashboardView: View {
         return max(50, minimum)...100
     }
 
+    // MARK: - Cabin Air Quality
+
+    /// Trend view over locally recorded CleanZone samples. The provider APIs expose no
+    /// air-quality history of their own; this is reconstructed from what Hisingen stored
+    /// during normal refreshes (see `VehicleDatabase.recordAirQuality`).
+    private var airQualityCard: some View {
+        let chronological = airQualityRecords.sorted { $0.timestamp < $1.timestamp }
+        let aqiPoints = chronological.compactMap { record -> (record: AirQualityRecord, aqi: Double)? in
+            record.airQualityIndex.map { (record, $0) }
+        }
+        let pm25Points = chronological.compactMap { record -> (record: AirQualityRecord, pm25: Double)? in
+            record.particulateMatter25.map { (record, $0) }
+        }
+        let latest = chronological.last
+        let aqiSegmentByID = Dictionary(uniqueKeysWithValues:
+            HistoryInsights.segments(of: aqiPoints, maxGap: HistoryInsights.defaultChartGapThreshold, timestamp: { $0.record.timestamp })
+                .enumerated().flatMap { index, run in run.map { ($0.record.id, index) } })
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: .teal)
+                    Spacer()
+                    if let latestAqi = latest?.airQualityIndex {
+                        Text("\(latestAqi) AQI")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !aqiPoints.isEmpty {
+                    Chart(aqiPoints, id: \.record.id) { item in
+                        LineMark(
+                            x: .value(L10n.text("Date"), item.record.timestamp),
+                            y: .value(L10n.text("Air Quality Index"), item.aqi),
+                            series: .value(L10n.text("Segment"), aqiSegmentByID[item.record.id] ?? 0)
+                        )
+                        .foregroundStyle(Color.teal)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.catmullRom)
+                        RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
+                            .foregroundStyle(.orange.opacity(0.35))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    }
+                    .chartYAxisLabel(L10n.text("AQI"))
+                    .frame(height: 105)
+                    .accessibilityLabel(L10n.text("Air quality index trend chart"))
+                }
+                if pm25Points.count >= 2 {
+                    Chart(pm25Points, id: \.record.id) { item in
+                        AreaMark(
+                            x: .value(L10n.text("Date"), item.record.timestamp),
+                            y: .value(L10n.text("PM2.5"), item.pm25)
+                        )
+                        .foregroundStyle(.linearGradient(colors: [Color.teal.opacity(0.25), Color.teal.opacity(0.02)],
+                                                         startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.catmullRom)
+                    }
+                    .chartYAxisLabel("µg/m³")
+                    .frame(height: 80)
+                    .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
+                }
+                if let filter = latest?.filterRemainingPercent {
+                    KVRow(L10n.text("HEPA Filter Life"), "\(filter)%", symbol: "allergens",
+                          valueWarning: filter <= 20)
+                }
+                Text(L10n.text("Recorded from vehicle-reported CleanZone readings during normal refreshes. The provider keeps no history of its own, so coverage depends on how often Hisingen was running."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                dataConfidenceNote(for: chronological.map(\.timestamp))
+            }
+        }
+    }
+
     // MARK: - Automation
 
     private var automationHistoryCard: some View {
-        Card {
+        let stats = commandStatistics
+        return Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: .orange)
+                HStack {
+                    CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: .orange)
+                    Spacer()
+                    if let rate = stats.successRatePct {
+                        Text(String(format: "%.0f%%", rate))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(rate >= 90 ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
+                    }
+                }
+                if stats.totalCount > 0 {
+                    HStack(spacing: 12) {
+                        curveStat(L10n.text("Success Rate"), stats.successRatePct.map { String(format: "%.0f%%", $0) } ?? "—")
+                        if let mostUsed = stats.mostUsedCommand {
+                            curveStat(L10n.text("Most Used"), mostUsed.replacingOccurrences(of: "-", with: " ").capitalized)
+                        }
+                    }
+                }
                 ForEach(commands.prefix(12)) { record in
                     HStack {
                         Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
@@ -506,6 +1022,7 @@ struct HistoryDashboardView: View {
                     }
                     .help(record.errorMessage ?? record.status.capitalized)
                 }
+                dataConfidenceNote(for: commands.map(\.executedAt))
             }
         }
     }

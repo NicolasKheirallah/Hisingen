@@ -166,8 +166,12 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     }
 
     /// Static model-family reference values are available. This does not mean the exact VIN,
-    /// battery, wheel, market or model-year variant has been verified.
-    var hasModelReferenceSpecs: Bool { brand == .polestar }
+    /// battery, wheel, market or model-year variant has been verified — it means the capacity/
+    /// WLTP tables below have a non-zero entry for this model family. Volvo BEVs (XC40/EX40/C40/
+    /// EC40/EX30/EX90/ES90) do; Volvo ICE/PHEV/unrecognized models don't, so this is model-driven
+    /// rather than brand-driven — a Polestar-only check would hide those Volvo models' own
+    /// reference numbers even though the same table already carries them.
+    var hasModelReferenceSpecs: Bool { nominalWltpRangeKm > 0 && nominalUsableCapacityKwh > 0 }
 
     /// Base per-model-family capacity table. This is the single source of truth for battery
     /// capacity — `VehicleState.factoryNominalBatteryCapacityKwh`/`factoryUsableBatteryCapacityKwh`
@@ -369,6 +373,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case chargingCurrentLimit
     case chargingSchedule
     case chargingScheduleOverride
+    case chargeLocations
     case locks
     case reducedGuardLock
     case trunk
@@ -391,6 +396,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .steeringWheelHeating: return L10n.text("Steering-wheel heating selection")
         case .climateTimers: return L10n.text("Climate timers")
         case .preCleaning: return L10n.text("Cabin pre-cleaning")
+        case .chargeLocations: return L10n.text("Saved charge locations")
         case .chargeTarget: return L10n.text("Charge target")
         case .chargingCurrentLimit: return L10n.text("Charging current limit")
         case .chargingSchedule: return L10n.text("Charging schedule")
@@ -416,7 +422,8 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
-        .chargingSchedule, .chargingScheduleOverride, .locks, .reducedGuardLock, .trunk, .windows,
+        .chargingSchedule, .chargingScheduleOverride, .chargeLocations,
+        .locks, .reducedGuardLock, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
         .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
@@ -488,9 +495,15 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .tyrePressureValues, .honkAndFlash, .reducedGuardLock:
+            case .honkAndFlash, .reducedGuardLock:
                 return .unavailable
             case .softwareInstallControl:
+                return .backendDependent
+            case .tyrePressureValues:
+                // The reference MY23 capture reported warning level only (no kPa), but this is
+                // a firmware/backend question, not a vehicle-hardware fact — EU-market cars
+                // carry TPMS hardware. Probe at runtime; the health parser also scans for
+                // pressures at alternate field positions before giving up.
                 return .backendDependent
             default:
                 return .supported
@@ -502,6 +515,8 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             case .connectivity, .softwareInstallControl, .preCleaning, .chargingCurrentLimit,
                  .reducedGuardLock:
                 return .backendDependent
+            case .chargeLocations:
+                return .backendDependent
             default:
                 return .supported
             }
@@ -512,7 +527,9 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             case .chargingCurrentLimit, .preCleaning, .connectivity, .softwareInstallControl,
                  .reducedGuardLock:
                 return .unavailable
-            case .softwareStatus:
+            case .softwareStatus, .chargeLocations:
+                // Charge-location management is unverified on the SEA-platform Polestar 4;
+                // probe at runtime rather than promising a control that may 404.
                 return .backendDependent
             default:
                 return .supported
@@ -526,7 +543,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .unavailable
-            case .preCleaning, .softwareInstallControl, .windows, .trunk:
+            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations:
                 return .unavailable
             // Volvo's public APIs expose no software/OTA resource at all — not a backend
             // that might answer on some vehicles, but an endpoint that does not exist.
@@ -608,7 +625,7 @@ private extension VehicleCapability {
             return .climateStatus
         case .preCleaning: return .airQuality
         case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
-             .chargingScheduleOverride: return .chargingSchedule
+             .chargingScheduleOverride, .chargeLocations: return .chargingSchedule
         case .locks, .reducedGuardLock, .trunk: return .exteriorStatus
         case .windows: return .exteriorStatus
         case .honkAndFlash: return .exteriorStatus

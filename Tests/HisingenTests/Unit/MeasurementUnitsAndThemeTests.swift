@@ -244,7 +244,30 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers), "")
         XCTAssertEqual(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers), "85%")
         XCTAssertEqual(Format.lockStatusSymbol(for: sample), "lock.fill")
-        XCTAssertEqual(sample.currentRangeVsModelWltpPercent, 85.8)
+        XCTAssertEqual(sample.currentRangeVsModelWltpPercent(), 85.8)
+
+        let volvoXC40 = VehicleState(
+            batteryPercentage: 85, rangeKm: 350, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
+            modelName: "XC40", modelYear: "2024", registrationNo: nil, vin: "YV1TEST",
+            ownerFirstName: nil, odometerKm: 10000, daysToService: nil, distanceToServiceKm: nil,
+            serviceWarning: false, fluidWarnings: [], exteriorStatus: ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: false),
+            imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
+        )
+        // 350km reported at 85% SOC vs the XC40's own 570km WLTP reference (Volvo models now
+        // resolve via `hasModelReferenceSpecs`, not just Polestar).
+        XCTAssertEqual(volvoXC40.currentRangeVsModelWltpPercent(), 72.2)
+
+        // A VIN-specific override entered in Settings takes priority over the model table.
+        let override = VehicleSpecificationOverride(usableBatteryCapacityKwh: nil, wltpRangeKm: 400)
+        XCTAssertEqual(sample.currentRangeVsModelWltpPercent(specification: override), 102.9)
+
+        // Below the 20% low-SOC cutoff the vehicle's own range readout is considered too noisy.
+        var lowBattery = sample
+        lowBattery.batteryPercentage = 15
+        XCTAssertNil(lowBattery.currentRangeVsModelWltpPercent())
 
         var unlockedSample = sample
         unlockedSample.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false)

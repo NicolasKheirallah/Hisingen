@@ -21,7 +21,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
             ChargingSample(
                 timestamp: $0.timestamp,
                 batteryPercentage: $0.soc,
-                powerWatts: $0.powerKw.map { Int($0 * 1000.0) }
+                powerWatts: $0.powerKw.map { Int($0 * 1000.0) },
+                chargingType: $0.chargingType.flatMap(ChargingType.init(rawValue:)) ?? .unknown
             )
         }
         return ChargingSession(
@@ -50,6 +51,9 @@ struct HistoricalChargingSample: Codable, Equatable, Sendable {
     let powerKw: Double?
     let voltageVolts: Double?
     let currentAmps: Double?
+    /// Raw `ChargingType.rawValue` ("ac"/"dc"/"wireless"/"none"), or `nil` for samples recorded
+    /// before this column existed.
+    let chargingType: String?
 }
 
 /// Represents a recorded battery state of health (SoH) milestone over time.
@@ -206,7 +210,8 @@ final class VehicleDatabase: @unchecked Sendable {
             soc REAL NOT NULL,
             power_kw REAL,
             voltage_volts REAL,
-            current_amps REAL
+            current_amps REAL,
+            charging_type TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_charging_samples_session ON charging_samples(session_id, timestamp ASC);
 
@@ -263,6 +268,7 @@ final class VehicleDatabase: @unchecked Sendable {
             // implementation. Keep them quarantined rather than presenting them as measurements.
             try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
             try? db.execute(sql: "UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';")
+            try? db.execute(sql: "ALTER TABLE charging_samples ADD COLUMN charging_type TEXT;")
         } catch {
             logger.error("Could not initialize database schema: \(error, privacy: .public)")
         }
@@ -359,10 +365,11 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     func recordChargingSample(sessionId: String, vin: String, soc: Double,
-                              powerKw: Double?, voltage: Double?, current: Double?) {
+                              powerKw: Double?, voltage: Double?, current: Double?,
+                              chargingType: String? = nil) {
         let sql = """
-        INSERT INTO charging_samples (session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO charging_samples (session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         """
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(sessionId, at: 1)
@@ -372,6 +379,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(powerKw, at: 5)
             try stmt.bindDouble(voltage, at: 6)
             try stmt.bindDouble(current, at: 7)
+            try stmt.bindText(chargingType, at: 8)
             try stmt.executeUpdate()
         } process: { _ in }
     }
@@ -426,7 +434,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {
         let sql = """
-        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps
+        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type
         FROM charging_samples WHERE session_id = ? ORDER BY timestamp ASC;
         """
         return (try? db.query(sql: sql) { stmt in
@@ -443,7 +451,8 @@ final class VehicleDatabase: @unchecked Sendable {
                     id: id, sessionId: sess, vin: vin, timestamp: ts, soc: soc,
                     powerKw: stmt.columnDouble(at: 5),
                     voltageVolts: stmt.columnDouble(at: 6),
-                    currentAmps: stmt.columnDouble(at: 7)
+                    currentAmps: stmt.columnDouble(at: 7),
+                    chargingType: stmt.columnText(at: 8)
                 ))
             }
             return list

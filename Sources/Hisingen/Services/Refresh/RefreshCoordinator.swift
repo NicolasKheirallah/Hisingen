@@ -360,7 +360,8 @@ final class RefreshCoordinator {
            let session = ChargingSession.completed(
                previous: previous,
                current: state,
-               pricePerKwh: preferences.electricityPricePerKwh
+               pricePerKwh: preferences.electricityPricePerKwh,
+               usableCapacityKwh: preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
            ) {
             state.chargingSessions.append(session)
             if state.chargingSessions.count > 20 {

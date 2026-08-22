@@ -102,6 +102,9 @@ extension PolestarAPI {
         async let errorsTask: OptionalCapability<[VehicleChronosError]> = optionalCapability(
             .vehicleErrors, enabled: features.contains(.vehicleErrors), vin: vin
         ) { try await self.grpc.fetchErrors(vin: vin, accessToken: serviceToken) }
+        async let chargeLocationsTask: OptionalCapability<[ChargeLocationSnapshot]> = optionalCapability(
+            .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
+        ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
         // GetMyCars runs whenever softwareUpdates or remoteOTA is enabled — it provides the
         // authoritative installed version and OTA capability flags.
         async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
@@ -125,6 +128,7 @@ extension PolestarAPI {
         let location = try await locationTask
         let ampLimit = try await ampLimitTask
         let serviceErrors = try await errorsTask
+        let chargeLocations = try await chargeLocationsTask
         let otaCapabilities = try await myCarsTask
 
         let primaryReportedAt = battery?.timestamp?.date
@@ -203,6 +207,7 @@ extension PolestarAPI {
         if connectivity.value != nil { probes.record(.connectivity, as: .supported) }
         if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
         if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
+        if chargeLocations.value?.isEmpty == false { probes.record(.chargeLocations, as: .supported) }
 
         let healthDetails: VehicleHealthDetails? = {
             guard features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings) else { return nil }
@@ -298,6 +303,7 @@ extension PolestarAPI {
         state.packages = features.contains(.vehicleIdentity) ? packageNames : []
         state.accountMarket = market
         state.chargingCurrentLimitAmps = ampLimit.value
+        state.chargeLocations = chargeLocations.value ?? []
         state.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
         return state
     }

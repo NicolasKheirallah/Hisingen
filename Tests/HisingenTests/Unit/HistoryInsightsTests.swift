@@ -8,7 +8,7 @@ struct HistoryInsightsTests {
                         powerKw: Double?, start: Date = Date(timeIntervalSince1970: 1_700_000_000)) -> HistoricalChargingSample {
         HistoricalChargingSample(
             id: id, sessionId: "session", vin: "VIN", timestamp: start.addingTimeInterval(minutesAfterStart * 60),
-            soc: soc, powerKw: powerKw, voltageVolts: nil, currentAmps: nil
+            soc: soc, powerKw: powerKw, voltageVolts: nil, currentAmps: nil, chargingType: nil
         )
     }
 

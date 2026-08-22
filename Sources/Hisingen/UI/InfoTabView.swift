@@ -440,8 +440,36 @@ struct InfoTabView: View {
                         let formattedCabin = cabinPM == 0 ? "< 1 µg/m³" : "\(cabinPM) µg/m³"
                         KVRow(L10n.text("Cabin PM2.5"), formattedCabin, symbol: "aqi.medium")
                     }
+                    if let cabinPM10 = air.particulateMatter10 {
+                        let formattedPM10 = cabinPM10 == 0 ? "< 1 µg/m³" : "\(cabinPM10) µg/m³"
+                        KVRow(L10n.text("Cabin PM10"), formattedPM10, symbol: "aqi.high")
+                    }
                     if let outdoorPM = air.externalParticulateMatter25 {
                         KVRow(L10n.text("Outdoor PM2.5"), "\(outdoorPM) µg/m³", symbol: "sun.haze.fill")
+                    }
+                    if let runtimeLeft = air.runtimeRemainingMinutes, air.cleaningState == .on || air.cleaningState == .pending {
+                        KVRow(L10n.text("Purification Time Left"),
+                              Format.shortDuration(minutes: runtimeLeft), symbol: "timer")
+                    }
+                    if let endingAt = air.endingAt, air.cleaningState == .on,
+                       endingAt.timeIntervalSinceNow > 0 {
+                        KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endingAt),
+                              symbol: "clock.badge.checkmark")
+                    }
+                    if let reason = air.startReason, reason != .unspecified,
+                       air.cleaningState == .on || air.cleaningState == .pending {
+                        KVRow(L10n.text("Started By"), reason.displayName, symbol: "person.wave.2")
+                    }
+                    if let lastValid = air.lastCycleValid {
+                        KVRow(L10n.text("Last Cycle"),
+                              lastValid ? L10n.text("Completed normally") : L10n.text("Did not complete"),
+                              symbol: lastValid ? "checkmark.seal" : "exclamationmark.triangle",
+                              valueWarning: !lastValid)
+                    }
+                    if let errorKind = air.errorKind, errorKind != .none {
+                        KVRow(L10n.text("Purifier Status"), errorKind.displayName,
+                              symbol: errorKind == .interrupted ? "pause.circle" : "xmark.octagon",
+                              warning: errorKind == .generic)
                     }
                     if let filterLife = air.filterRemainingPercent {
                         HStack {
@@ -736,9 +764,15 @@ struct InfoTabView: View {
     private var batteryHealthCard: some View {
         let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
             .map { $0.toDomainSession(database: database) }
+        // Reads the same last-stored estimate `VehicleStateStore.save` smoothed toward, so this
+        // card's number matches whatever gets persisted rather than showing an independently
+        // unsmoothed figure.
+        let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
+            .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
         guard let estimate = BatteryHealthEstimator.estimate(
             state: state, chargingSessions: sessions,
-            specification: preferences.vehicleSpecificationOverride(for: state.vin)
+            specification: preferences.vehicleSpecificationOverride(for: state.vin),
+            previous: previousHealth
         ) else {
             return AnyView(EmptyView())
         }

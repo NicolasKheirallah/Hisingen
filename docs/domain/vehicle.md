@@ -13,7 +13,7 @@ Key computed properties:
 - `isComplete` — `chargingState == .complete`, or battery% within 0.5 of target, or ≥99.5% with no target set.
 - `isStale(at:)` / `dataTimestamp` / `freshnessDescription` — see [freshness in data-flow.md](../architecture/data-flow.md#freshness).
 - `capabilityProfile: VehicleCapabilityProfile` — built on demand from `modelName`, `vin`, and `probedCapabilities`.
-- `currentRangeVsModelWltpPercent` — a range comparison against static model-family reference data (see below), only computed where a Polestar model reference is available.
+- `currentRangeVsModelWltpPercent(specification:)` — a range comparison against static model-family reference data, or a VIN-specific `VehicleSpecificationOverride` when one exists (see below), computed for any model with a non-zero reference entry in `VehicleModelFamily`'s tables (`hasModelReferenceSpecs`) — Polestar and the Volvo BEVs that have verified numbers.
 - `stateSummary: VehicleStateSummary` — the single most-important-thing-to-show string, prioritized: alarm triggered > low battery (≤15%, not charging) > openings needing attention > unlocked > charging fault > service warning > fluid warning > health warning > tyre warning > actionable software failure > unavailable > engine running/secured > neutral "no active warnings reported".
 - `cacheableCopy` — the version persisted to `VehicleStateStore`. Built by passing only a specific subset of fields (VIN, battery/charging/range, availability, model name/year, powertrain/fuel, capability observations, charging history, timestamps) into the initializer — every other field, including PII *and* location/exterior/lock status, is dropped by omission rather than an explicit strip list. See [architecture/persistence.md](../architecture/persistence.md).
 - `mergingLastKnown(from:features:)` — see [architecture/data-flow.md#data-merging](../architecture/data-flow.md#data-merging).
@@ -60,7 +60,24 @@ Remote command dispatch is compiled into every build for both brands ([ADR-0009]
 
 ## Current Range vs Model WLTP
 
-`VehicleState.currentRangeVsModelWltpPercent` — compares the currently reported range at the currently reported SOC with the static model-family WLTP range at the same SOC. It is shown as a direct percentage without a health score or qualitative rating. It is not measured battery State of Health; weather, tyres, speed, terrain, HVAC, vehicle variant and recent driving can all change it.
+`VehicleState.currentRangeVsModelWltpPercent(specification:)` — compares the currently reported range at the currently reported SOC with a WLTP reference at the same SOC: a VIN-specific `VehicleSpecificationOverride.wltpRangeKm` entered in Settings when one exists, otherwise `VehicleModelFamily.nominalWltpRangeKm` for any model where `hasModelReferenceSpecs` is true. It is shown as a direct percentage without a health score or qualitative rating. It is not measured battery State of Health; weather, tyres, speed, terrain, HVAC, vehicle variant and recent driving can all change it. Requires `batteryPercentage >= 20` — below that the vehicle's own range readout is too noisy to be a useful denominator.
+
+`VehicleModelFamily.hasModelReferenceSpecs` is model-driven, not brand-driven: it's true wherever `nominalWltpRangeKm` and `nominalUsableCapacityKwh` are both non-zero. That covers every Polestar model plus the Volvo BEVs with verified numbers in the same table (XC40, EX40, C40, EC40, EX30, EX90, ES90); it's false for Volvo ICE/PHEV/unrecognized models, which have no BEV reference data to compare against.
+
+## Battery Health & SoH (Calculated)
+
+`BatteryHealthEstimator.estimate(state:chargingSessions:specification:previous:now:)` (`Domain/BatteryHealthEstimator.swift`) — a weighted blend of up to four independent signals, each individually bounded and only included when its inputs are available:
+
+- **Charge-power integration** (base weight 0.55, the strongest signal) — trapezoidal-integrates observed `ChargingSample.powerWatts` over time across recent sessions, applies a charging-type-specific loss factor (AC ≈0.88, DC ≈0.97, unknown ≈0.90 — AC still passes through the onboard charger; DC mostly bypasses it), divides by the SOC gained, and takes the median across qualifying sessions. The signal's actual weight scales down from that 0.55 ceiling when fewer sessions qualify or when they disagree with each other (`sessionConfidence` × `agreementConfidence`), so one noisy session doesn't carry the same trust as five consistent ones.
+- **Range versus model/VIN reference** (weight 0.20) — compares reported range at the reported SOC against a temperature-corrected expected range. The temperature correction only applies when `VehicleWeather.timestamp` is within a few hours of the range reading it's meant to explain, so a stale weather-vs-range pairing falls back to the temperature-unknown default instead of misapplying it.
+- **Long-term consumption** (weight 0.10) — compares `BatteryDiagnostics.averageConsumption` against the model's reference Wh/km. Volvo's value is confirmed kWh/100km (the API tags its own unit); Polestar's is an unlabeled raw gRPC double with no independently verified unit, so a 5–60 kWh/100km plausibility band exists specifically to degrade a possible unit mismatch to "signal skipped" rather than silently corrupting the blend.
+- **Age/mileage prior** (weight 0.15 baseline) — a conservative fleet-style fallback, explicitly not vehicle telemetry. Its weight is a true Bayesian-style prior: it carries more (up to 0.35) when it's the only signal available and steps aside toward 0.15 as real telemetry-backed signals accumulate.
+
+Reference capacity prefers, in order: a user-entered VIN-specific `VehicleSpecificationOverride`, then the provider's own reported pack spec (`VehicleState.reportedBatteryCapacityKwh` — exact for that VIN on Volvo), then the generic per-model-family table (which can't distinguish Standard Range/Long Range trims).
+
+**Temporal smoothing**: each fresh calculation is blended toward the most recent `battery_health_history` row (`BatteryHealthPriorEstimate`) rather than standing entirely on its own — a battery can't meaningfully change SoH between two polls minutes apart, so refresh-to-refresh noise shouldn't visibly move the number. How much a new reading is trusted over the prior scales with confidence (high 0.6 / medium 0.4 / low 0.25 blend weight toward the new value). A prior older than 14 days is treated as a cold start rather than an anchor, since real degradation could plausibly have happened in that window. Both `VehicleStateStore.save` (the persisted path) and `InfoTabView`'s battery health card read the same last-stored row, so the displayed number matches what gets written to history.
+
+Every SoH surface labels this as a calculated estimate, never a BMS measurement — see `BatteryHealthEstimate.methodologySummary` and [domain/charging.md](charging.md).
 
 ## Where types live
 

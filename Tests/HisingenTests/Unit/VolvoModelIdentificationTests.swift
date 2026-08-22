@@ -42,11 +42,19 @@ struct VolvoModelIdentificationTests {
     }
 
     @Test
-    func testVolvoHasNoVerifiedNominalSpecs() {
-        XCTAssertFalse(VehicleModelFamily.volvoEX30.hasModelReferenceSpecs)
+    func testModelReferenceSpecsAvailability() {
+        // `hasModelReferenceSpecs` is model-driven (a non-zero WLTP/capacity table entry), not
+        // brand-driven: Volvo BEVs with real reference numbers in the table resolve just like
+        // Polestar, while Volvo models with no BEV specs (ICE/PHEV/unrecognized) still don't.
+        XCTAssertTrue(VehicleModelFamily.volvoEX30.hasModelReferenceSpecs)
+        XCTAssertTrue(VehicleModelFamily.volvoXC40.hasModelReferenceSpecs)
         XCTAssertTrue(VehicleModelFamily.polestar2.hasModelReferenceSpecs)
-        XCTAssertNil(VehicleModelFamily.volvoEX30.averageConsumptionWhPerKm)
+        XCTAssertFalse(VehicleModelFamily.volvoXC60.hasModelReferenceSpecs)
+        XCTAssertFalse(VehicleModelFamily.volvoUnknown("Something New").hasModelReferenceSpecs)
+
+        XCTAssertNotNil(VehicleModelFamily.volvoEX30.averageConsumptionWhPerKm)
         XCTAssertNotNil(VehicleModelFamily.polestar2.averageConsumptionWhPerKm)
+        XCTAssertNil(VehicleModelFamily.volvoXC60.averageConsumptionWhPerKm)
     }
 
     @Test
