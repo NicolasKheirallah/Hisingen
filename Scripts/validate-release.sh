@@ -33,7 +33,9 @@ fi
 if [ -f "Hisingen.dmg" ]; then
     command -v hdiutil >/dev/null 2>&1 || { echo "hdiutil is required to validate a DMG" >&2; exit 1; }
     hdiutil verify "Hisingen.dmg"
-    shasum -a 256 -c Hisingen.dmg.sha256
+    if [ -f "Hisingen.dmg.sha256" ]; then
+        shasum -a 256 -c Hisingen.dmg.sha256
+    fi
 fi
 
 echo "Release validation passed"

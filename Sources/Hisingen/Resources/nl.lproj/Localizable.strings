@@ -1245,3 +1245,6 @@
 /* Vehicle software & OTA */
 
 /* OTA install preconditions & gRPC command failures */
+
+"Command sent — waiting for the vehicle" = "Opdracht verzonden — wachten op de auto";
+"Values below may update once the car reports in." = "De waarden hieronder kunnen wijzigen zodra de auto rapporteert.";

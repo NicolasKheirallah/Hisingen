@@ -409,6 +409,10 @@ final class RefreshCoordinator {
         var state = state.mergingLastKnown(
             from: previous, features: preferences.features, imageCache: imageCache
         )
+        // A fresh, provider-backed snapshot supersedes any optimistic command patch; the
+        // "waiting for the vehicle" marker must not survive into it (and is deliberately not
+        // carried across by `mergingLastKnown`).
+        state.pendingCommand = nil
         if preferences.storeChargingHistory,
            let session = ChargingSession.completed(
                previous: previous,

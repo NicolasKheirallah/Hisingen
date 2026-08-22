@@ -1237,3 +1237,6 @@
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Vehicle alarm triggered";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
+
+"Command sent — waiting for the vehicle" = "명령 전송됨 — 차량 대기 중";
+"Values below may update once the car reports in." = "차량이 보고하면 아래 값이 업데이트될 수 있습니다.";

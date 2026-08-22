@@ -63,6 +63,9 @@ struct VehicleTabView: View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             multiCarChips
             heroCard
+            if state.isAwaitingVehicleConfirmation {
+                pendingCommandChip.transition(cardTransition)
+            }
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
             if let card = chargingCard { card.transition(cardTransition) }
@@ -88,6 +91,30 @@ struct VehicleTabView: View {
         .onAppear {
             dismissedSoftwareEventIdentifier = preferences.dismissedSoftwareEventIdentifier(for: state.vin)
         }
+    }
+
+    /// Labels optimistic post-command values as unconfirmed instead of presenting them as
+    /// vehicle-reported truth. Disappears when the follow-up refresh lands.
+    private var pendingCommandChip: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "clock.arrow.circlepath")
+                .foregroundStyle(HisingenTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.text("Command sent — waiting for the vehicle"))
+                    .font(.system(size: 11, weight: .semibold))
+                Text(L10n.text("Values below may update once the car reports in."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(9)
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(HisingenTheme.accent.opacity(0.25), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var multiCarChips: some View {

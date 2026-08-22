@@ -36,6 +36,61 @@ struct VehicleStateCodableTests {
         #expect(decoded == original)
     }
 
+    @Test("Service and trip-computer clusters survive a round trip")
+    func testServiceAndTripClustersRoundTrip() throws {
+        var state = fullyPopulated()
+        state.serviceInfo = ServiceSnapshot(
+            daysToService: 21, distanceToServiceKm: 1_400, serviceWarning: true,
+            fluidWarnings: ["Brake fluid"], engineHoursToService: 512,
+            trigger: "MILEAGE", preferredWorkshopID: "VSC-042", preferredWorkshopName: "Gothenburg")
+        state.tripComputer = TripComputerSnapshot(
+            manualTripKm: 120.5, automaticTripKm: 310.2, averageSpeedKmH: 62.0,
+            electricRangeKm: 41, electricDistanceKm: 88.4,
+            fuelDistanceKm: 210.0, regeneratedEnergyKwh: 3.7)
+
+        let roundTripped = try JSONDecoder().decode(
+            VehicleState.self, from: JSONEncoder().encode(state))
+        #expect(roundTripped == state)
+    }
+
+    @Test("Flat pre-cluster service and trip fields still decode into the clusters")
+    func testLegacyServiceAndTripDecode() throws {
+        var object = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(fullyPopulated())) as! [String: Any]
+        // Strip clustered encodings, inject the flat shapes older builds wrote.
+        object.removeValue(forKey: "serviceInfo")
+        object.removeValue(forKey: "tripComputer")
+        object["daysToService"] = 17
+        object["distanceToServiceKm"] = 900
+        object["serviceWarning"] = false
+        object["fluidWarnings"] = [String]()
+        object["tripMeterManualKm"] = 64.5
+        object["averageSpeedKmH"] = 48.25
+        object["tripComputerElectricRangeKm"] = 33
+
+        let decoded = try JSONDecoder().decode(
+            VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(decoded.serviceInfo.daysToService == 17)
+        #expect(decoded.serviceInfo.distanceToServiceKm == 900)
+        #expect(decoded.tripComputer.manualTripKm == 64.5)
+        #expect(decoded.tripComputer.averageSpeedKmH == 48.25)
+        #expect(decoded.tripComputer.electricRangeKm == 33)
+    }
+
+    @Test("Pending-command marker survives persistence but is absent when unset")
+    func testPendingCommandCodable() throws {
+        var state = fullyPopulated()
+        state.pendingCommand = PendingCommandSummary(
+            commandIdentifier: "lock", issuedAt: Date(timeIntervalSince1970: 1_750_000_100))
+        let decoded = try JSONDecoder().decode(
+            VehicleState.self, from: JSONEncoder().encode(state))
+        #expect(decoded.pendingCommand == state.pendingCommand)
+
+        let bare = try JSONDecoder().decode(
+            VehicleState.self, from: JSONEncoder().encode(fullyPopulated()))
+        #expect(bare.pendingCommand == nil)
+    }
+
     /// Builds a pre-cluster snapshot payload: takes a genuine modern encoding, removes the
     /// nested `fuelSystem` object and re-injects its fields under the flat legacy keys.
     private func legacyPayload(fuel: FuelSystemSnapshot) throws -> Data {

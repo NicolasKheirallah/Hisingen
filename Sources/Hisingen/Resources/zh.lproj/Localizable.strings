@@ -1237,3 +1237,6 @@
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Vehicle alarm triggered";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
+
+"Command sent — waiting for the vehicle" = "命令已发送 — 等待车辆确认";
+"Values below may update once the car reports in." = "车辆上报后，以下数值可能会更新。";

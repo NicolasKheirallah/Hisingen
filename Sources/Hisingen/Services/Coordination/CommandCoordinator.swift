@@ -232,6 +232,8 @@ final class CommandCoordinator {
         }
         current.fetchedAt = Date()
         current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
+        current.pendingCommand = PendingCommandSummary(
+            commandIdentifier: command.identifier, issuedAt: Date())
         context.applyOptimisticState(current)
     }
 }

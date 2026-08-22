@@ -1253,3 +1253,6 @@
 
 
 /* OTA install preconditions & gRPC command failures */
+
+"Command sent — waiting for the vehicle" = "Kommando skickat — väntar på fordonet";
+"Values below may update once the car reports in." = "Värdena nedan kan uppdateras när bilen rapporterar in.";

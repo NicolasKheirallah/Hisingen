@@ -1361,3 +1361,6 @@
 "charge-power integration" = "charge-power integration";
 "long-term consumption" = "long-term consumption";
 "range versus model reference" = "range versus model reference";
+
+"Command sent — waiting for the vehicle" = "Command sent — waiting for the vehicle";
+"Values below may update once the car reports in." = "Values below may update once the car reports in.";

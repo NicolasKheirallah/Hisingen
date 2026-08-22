@@ -1245,3 +1245,6 @@
 /* Vehicle software & OTA */
 
 /* OTA install preconditions & gRPC command failures */
+
+"Command sent — waiting for the vehicle" = "Kommando sendt — venter på køretøjet";
+"Values below may update once the car reports in." = "Værdierne nedenfor kan opdateres, når bilen melder ind.";

@@ -157,6 +157,54 @@ struct FuelSystemSnapshot: Codable, Equatable, Sendable {
     var type: String?
 }
 
+/// OEM service/maintenance signals. Stage-2 `VehicleState` cluster (see FuelSystemSnapshot).
+struct ServiceSnapshot: Codable, Equatable, Sendable {
+    var daysToService: Int?
+    var distanceToServiceKm: Int?
+    var serviceWarning: Bool
+    var fluidWarnings: [String]
+    var engineHoursToService: Int?
+    /// Raw provider service-trigger code (e.g. "TIME", "MILEAGE").
+    var trigger: String?
+    var preferredWorkshopID: String?
+    var preferredWorkshopName: String?
+
+    init(daysToService: Int? = nil, distanceToServiceKm: Int? = nil,
+         serviceWarning: Bool = false, fluidWarnings: [String] = [],
+         engineHoursToService: Int? = nil, trigger: String? = nil,
+         preferredWorkshopID: String? = nil, preferredWorkshopName: String? = nil) {
+        self.daysToService = daysToService
+        self.distanceToServiceKm = distanceToServiceKm
+        self.serviceWarning = serviceWarning
+        self.fluidWarnings = fluidWarnings
+        self.engineHoursToService = engineHoursToService
+        self.trigger = trigger
+        self.preferredWorkshopID = preferredWorkshopID
+        self.preferredWorkshopName = preferredWorkshopName
+    }
+}
+
+/// Trip-computer readings reported by the vehicle. Stage-2 `VehicleState` cluster.
+struct TripComputerSnapshot: Codable, Equatable, Sendable {
+    var manualTripKm: Double?
+    var automaticTripKm: Double?
+    var averageSpeedKmH: Double?
+    var electricRangeKm: Int?
+    var electricDistanceKm: Double?
+    var fuelDistanceKm: Double?
+    var regeneratedEnergyKwh: Double?
+}
+
+/// A remote command that was accepted but whose effect has not yet been confirmed by a
+/// fresh vehicle fetch. Display-only: the UI renders it as "waiting for the vehicle" instead
+/// of presenting optimistic values as vehicle-reported truth. Cleared on the next
+/// authoritative snapshot in `RefreshCoordinator.apply`.
+struct PendingCommandSummary: Codable, Equatable, Sendable {
+    /// Matches `RemoteCommand.identifier` and the command-audit trail.
+    var commandIdentifier: String
+    var issuedAt: Date
+}
+
 struct VehicleState: Codable, Equatable, Sendable {
     var batteryPercentage: Double?
     var rangeKm: Int?
@@ -175,18 +223,14 @@ struct VehicleState: Codable, Equatable, Sendable {
     let vin: String
     let ownerFirstName: String?
     let odometerKm: Int?
-    let daysToService: Int?
-    let distanceToServiceKm: Int?
-    let serviceWarning: Bool
-    let fluidWarnings: [String]
     var exteriorStatus: ExteriorSnapshot? = nil
     var healthDetails: VehicleHealthDetails? = nil
     var softwareInfo: VehicleSoftwareInfo? = nil
     var chargingSchedules: [VehicleSchedule] = []
     var climateStatus: VehicleClimateStatus? = nil
     var climateTimers: [VehicleSchedule] = []
-    var tripMeterManualKm: Double? = nil
-    var tripMeterAutomaticKm: Double? = nil
+    var serviceInfo = ServiceSnapshot()
+    var tripComputer = TripComputerSnapshot()
     var connectivity: VehicleConnectivity? = nil
     var airQuality: VehicleAirQuality? = nil
     var batteryDiagnostics: BatteryDiagnostics? = nil
@@ -233,8 +277,6 @@ struct VehicleState: Codable, Equatable, Sendable {
     var reportedBatteryCapacityKwh: Double? = nil
     var externalColour: String? = nil
     var gearbox: String? = nil
-    var engineHoursToService: Int? = nil
-    var averageSpeedKmH: Double? = nil
     var structureWeek: String? = nil
     var internalVehicleIdentifier: String? = nil
     var pno34: String? = nil
@@ -243,8 +285,6 @@ struct VehicleState: Codable, Equatable, Sendable {
     var wheels: String? = nil
     var packages: [String] = []
     var steeringOrientation: String? = nil
-    var serviceTrigger: String? = nil
-    var tripComputerElectricRangeKm: Int? = nil
     var chargingCurrentLimitAmps: Int? = nil
     /// Saved charging locations from Polestar's Chronos ChargeLocationService. Populated when
     /// remote-charging features are enabled; empty for Volvo (no official equivalent).
@@ -252,15 +292,87 @@ struct VehicleState: Codable, Equatable, Sendable {
     var interiorImageData: Data? = nil
     var warrantyInfo: VehicleWarrantyInfo? = nil
     var optimisticCommandLockUntil: Date? = nil
-    var electricDistanceKm: Double? = nil
-    var fuelDistanceKm: Double? = nil
-    var regeneratedEnergyKwh: Double? = nil
     var frontBrakePadStatus: String? = nil
     var rearBrakePadStatus: String? = nil
-    var preferredWorkshopId: String? = nil
-    var preferredWorkshopName: String? = nil
     var vehicleErrors: [VehicleChronosError] = []
     var otaCapabilities: VehicleOTACapabilities? = nil
+
+    /// Set when a command is accepted optimistically; cleared by the next authoritative
+    /// fetch so the UI can label optimistic values as "waiting for the vehicle".
+    var pendingCommand: PendingCommandSummary? = nil
+
+    /// True while the displayed state carries an optimistic patch that no fresh fetch has
+    /// confirmed yet. Window matches `optimisticCommandLockUntil`.
+    var isAwaitingVehicleConfirmation: Bool {
+        guard pendingCommand != nil else { return false }
+        return (optimisticCommandLockUntil ?? .distantPast) > Date()
+    }
+
+    // MARK: Service compatibility accessors
+    // The four originally-`let` members stay read-only through the cluster.
+
+    var daysToService: Int? {
+        get { serviceInfo.daysToService }
+        set { serviceInfo.daysToService = newValue }
+    }
+    var distanceToServiceKm: Int? {
+        get { serviceInfo.distanceToServiceKm }
+        set { serviceInfo.distanceToServiceKm = newValue }
+    }
+    var serviceWarning: Bool {
+        get { serviceInfo.serviceWarning }
+        set { serviceInfo.serviceWarning = newValue }
+    }
+    var fluidWarnings: [String] {
+        get { serviceInfo.fluidWarnings }
+        set { serviceInfo.fluidWarnings = newValue }
+    }
+    var engineHoursToService: Int? {
+        get { serviceInfo.engineHoursToService }
+        set { serviceInfo.engineHoursToService = newValue }
+    }
+    var serviceTrigger: String? {
+        get { serviceInfo.trigger }
+        set { serviceInfo.trigger = newValue }
+    }
+    var preferredWorkshopId: String? {
+        get { serviceInfo.preferredWorkshopID }
+        set { serviceInfo.preferredWorkshopID = newValue }
+    }
+    var preferredWorkshopName: String? {
+        get { serviceInfo.preferredWorkshopName }
+        set { serviceInfo.preferredWorkshopName = newValue }
+    }
+
+    // MARK: Trip-computer compatibility accessors
+    var tripMeterManualKm: Double? {
+        get { tripComputer.manualTripKm }
+        set { tripComputer.manualTripKm = newValue }
+    }
+    var tripMeterAutomaticKm: Double? {
+        get { tripComputer.automaticTripKm }
+        set { tripComputer.automaticTripKm = newValue }
+    }
+    var averageSpeedKmH: Double? {
+        get { tripComputer.averageSpeedKmH }
+        set { tripComputer.averageSpeedKmH = newValue }
+    }
+    var tripComputerElectricRangeKm: Int? {
+        get { tripComputer.electricRangeKm }
+        set { tripComputer.electricRangeKm = newValue }
+    }
+    var electricDistanceKm: Double? {
+        get { tripComputer.electricDistanceKm }
+        set { tripComputer.electricDistanceKm = newValue }
+    }
+    var fuelDistanceKm: Double? {
+        get { tripComputer.fuelDistanceKm }
+        set { tripComputer.fuelDistanceKm = newValue }
+    }
+    var regeneratedEnergyKwh: Double? {
+        get { tripComputer.regeneratedEnergyKwh }
+        set { tripComputer.regeneratedEnergyKwh = newValue }
+    }
 
     // MARK: Fuel/engine
     // Clustered storage: the persisted snapshot format encodes `fuelSystem` as one nested
@@ -340,8 +452,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         chargingType: ChargingType, chargerConnection: ChargerConnection,
         availability: VehicleAvailability, modelName: String?, modelYear: String?,
         registrationNo: String?, vin: String, ownerFirstName: String?, odometerKm: Int?,
-        daysToService: Int?, distanceToServiceKm: Int?, serviceWarning: Bool,
-        fluidWarnings: [String], exteriorStatus: ExteriorSnapshot? = nil,
+        daysToService: Int? = nil, distanceToServiceKm: Int? = nil, serviceWarning: Bool = false,
+        fluidWarnings: [String] = [], exteriorStatus: ExteriorSnapshot? = nil,
         healthDetails: VehicleHealthDetails? = nil, softwareInfo: VehicleSoftwareInfo? = nil,
         chargingSchedules: [VehicleSchedule] = [], climateStatus: VehicleClimateStatus? = nil,
         climateTimers: [VehicleSchedule] = [], tripMeterManualKm: Double? = nil,
@@ -377,18 +489,12 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.vin = vin
         self.ownerFirstName = ownerFirstName
         self.odometerKm = odometerKm
-        self.daysToService = daysToService
-        self.distanceToServiceKm = distanceToServiceKm
-        self.serviceWarning = serviceWarning
-        self.fluidWarnings = fluidWarnings
         self.exteriorStatus = exteriorStatus
         self.healthDetails = healthDetails
         self.softwareInfo = softwareInfo
         self.chargingSchedules = chargingSchedules
         self.climateStatus = climateStatus
         self.climateTimers = climateTimers
-        self.tripMeterManualKm = tripMeterManualKm
-        self.tripMeterAutomaticKm = tripMeterAutomaticKm
         self.connectivity = connectivity
         self.airQuality = airQuality
         self.batteryDiagnostics = batteryDiagnostics
@@ -403,6 +509,16 @@ struct VehicleState: Codable, Equatable, Sendable {
             levelPercent: fuelLevelPercent,
             rangeKm: fuelRangeKm
         )
+        serviceInfo = ServiceSnapshot(
+            daysToService: daysToService,
+            distanceToServiceKm: distanceToServiceKm,
+            serviceWarning: serviceWarning,
+            fluidWarnings: fluidWarnings
+        )
+        tripComputer = TripComputerSnapshot(
+            manualTripKm: tripMeterManualKm,
+            automaticTripKm: tripMeterAutomaticKm
+        )
         self.reportedBatteryCapacityKwh = reportedBatteryCapacityKwh
         self.imageData = imageData
         self.fetchedAt = fetchedAt
@@ -414,9 +530,13 @@ struct VehicleState: Codable, Equatable, Sendable {
         case batteryPercentage, rangeKm, chargingState, estimatedChargingTimeToFullMinutes
         case chargeTargetPercentage, chargingPowerWatts, chargingCurrentAmps, chargingVoltageVolts
         case chargingType, chargerConnection, availability, modelName, modelYear, registrationNo
-        case vin, ownerFirstName, odometerKm, daysToService, distanceToServiceKm, serviceWarning
-        case fluidWarnings, exteriorStatus, healthDetails, softwareInfo, chargingSchedules
-        case climateStatus, climateTimers, tripMeterManualKm, tripMeterAutomaticKm, connectivity
+        // serviceInfo/tripComputer are the current encodings; their flat member keys below
+        // exist only for the decoder's legacy fallback.
+        case vin, ownerFirstName, odometerKm, serviceInfo, tripComputer, pendingCommand
+        case daysToService, distanceToServiceKm, serviceWarning, fluidWarnings
+        case tripMeterManualKm, tripMeterAutomaticKm
+        case exteriorStatus, healthDetails, softwareInfo, chargingSchedules
+        case climateStatus, climateTimers, connectivity
         case airQuality, batteryDiagnostics, weather, location, unavailableFeatures, probedCapabilities
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
         // `fuelSystem` is the current encoding; the flat fuel cases below exist ONLY for the
@@ -456,18 +576,12 @@ struct VehicleState: Codable, Equatable, Sendable {
             vin: try values.decode(String.self, forKey: .vin),
             ownerFirstName: try values.decodeIfPresent(String.self, forKey: .ownerFirstName),
             odometerKm: try values.decodeIfPresent(Int.self, forKey: .odometerKm),
-            daysToService: try values.decodeIfPresent(Int.self, forKey: .daysToService),
-            distanceToServiceKm: try values.decodeIfPresent(Int.self, forKey: .distanceToServiceKm),
-            serviceWarning: try values.decode(Bool.self, forKey: .serviceWarning),
-            fluidWarnings: try values.decode([String].self, forKey: .fluidWarnings),
             exteriorStatus: try values.decodeIfPresent(ExteriorSnapshot.self, forKey: .exteriorStatus),
             healthDetails: try values.decodeIfPresent(VehicleHealthDetails.self, forKey: .healthDetails),
             softwareInfo: try values.decodeIfPresent(VehicleSoftwareInfo.self, forKey: .softwareInfo),
             chargingSchedules: try values.decodeIfPresent([VehicleSchedule].self, forKey: .chargingSchedules) ?? [],
             climateStatus: try values.decodeIfPresent(VehicleClimateStatus.self, forKey: .climateStatus),
             climateTimers: try values.decodeIfPresent([VehicleSchedule].self, forKey: .climateTimers) ?? [],
-            tripMeterManualKm: try values.decodeIfPresent(Double.self, forKey: .tripMeterManualKm),
-            tripMeterAutomaticKm: try values.decodeIfPresent(Double.self, forKey: .tripMeterAutomaticKm),
             connectivity: try values.decodeIfPresent(VehicleConnectivity.self, forKey: .connectivity),
             airQuality: try values.decodeIfPresent(VehicleAirQuality.self, forKey: .airQuality),
             batteryDiagnostics: try values.decodeIfPresent(BatteryDiagnostics.self, forKey: .batteryDiagnostics),
@@ -489,8 +603,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.chargeLocations = try values.decodeIfPresent([ChargeLocationSnapshot].self, forKey: .chargeLocations) ?? []
         self.externalColour = try values.decodeIfPresent(String.self, forKey: .externalColour)
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
-        self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
-        self.averageSpeedKmH = try values.decodeIfPresent(Double.self, forKey: .averageSpeedKmH)
         // Fuel/engine cluster: prefer the nested encoding; fall back to the flat legacy keys
         // so snapshots persisted before the migration keep decoding.
         if let clustered = try values.decodeIfPresent(FuelSystemSnapshot.self, forKey: .fuelSystem) {
@@ -509,6 +621,40 @@ struct VehicleState: Codable, Equatable, Sendable {
                 type: try read("fuelType")
             )
         }
+        // Clustered members: prefer the nested encodings; fall back to the flat legacy keys
+        // so snapshots persisted before the cluster migration keep decoding.
+        func readFlat<T: Decodable>(_ key: String) throws -> T? {
+            guard let key = CodingKeys(stringValue: key) else { return nil }
+            return try values.decodeIfPresent(T.self, forKey: key)
+        }
+        if let clustered = try values.decodeIfPresent(ServiceSnapshot.self, forKey: .serviceInfo) {
+            serviceInfo = clustered
+        } else {
+            serviceInfo = ServiceSnapshot(
+                daysToService: try readFlat("daysToService"),
+                distanceToServiceKm: try readFlat("distanceToServiceKm"),
+                serviceWarning: try values.decodeIfPresent(Bool.self, forKey: .serviceWarning) ?? false,
+                fluidWarnings: try values.decodeIfPresent([String].self, forKey: .fluidWarnings) ?? [],
+                engineHoursToService: try readFlat("engineHoursToService"),
+                trigger: try readFlat("serviceTrigger"),
+                preferredWorkshopID: try readFlat("preferredWorkshopId"),
+                preferredWorkshopName: try readFlat("preferredWorkshopName")
+            )
+        }
+        if let clustered = try values.decodeIfPresent(TripComputerSnapshot.self, forKey: .tripComputer) {
+            tripComputer = clustered
+        } else {
+            tripComputer = TripComputerSnapshot(
+                manualTripKm: try readFlat("tripMeterManualKm"),
+                automaticTripKm: try readFlat("tripMeterAutomaticKm"),
+                averageSpeedKmH: try readFlat("averageSpeedKmH"),
+                electricRangeKm: try readFlat("tripComputerElectricRangeKm"),
+                electricDistanceKm: try readFlat("electricDistanceKm"),
+                fuelDistanceKm: try readFlat("fuelDistanceKm"),
+                regeneratedEnergyKwh: try readFlat("regeneratedEnergyKwh")
+            )
+        }
+        pendingCommand = try values.decodeIfPresent(PendingCommandSummary.self, forKey: .pendingCommand)
         self.structureWeek = try values.decodeIfPresent(String.self, forKey: .structureWeek)
         self.internalVehicleIdentifier = try values.decodeIfPresent(String.self, forKey: .internalVehicleIdentifier)
         self.pno34 = try values.decodeIfPresent(String.self, forKey: .pno34)
@@ -517,18 +663,11 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.wheels = try values.decodeIfPresent(String.self, forKey: .wheels)
         self.packages = try values.decodeIfPresent([String].self, forKey: .packages) ?? []
         self.steeringOrientation = try values.decodeIfPresent(String.self, forKey: .steeringOrientation)
-        self.serviceTrigger = try values.decodeIfPresent(String.self, forKey: .serviceTrigger)
-        self.tripComputerElectricRangeKm = try values.decodeIfPresent(Int.self, forKey: .tripComputerElectricRangeKm)
         self.chargingCurrentLimitAmps = try values.decodeIfPresent(Int.self, forKey: .chargingCurrentLimitAmps)
         self.interiorImageData = try values.decodeIfPresent(Data.self, forKey: .interiorImageData)
         self.warrantyInfo = try values.decodeIfPresent(VehicleWarrantyInfo.self, forKey: .warrantyInfo)
-        self.electricDistanceKm = try values.decodeIfPresent(Double.self, forKey: .electricDistanceKm)
-        self.fuelDistanceKm = try values.decodeIfPresent(Double.self, forKey: .fuelDistanceKm)
-        self.regeneratedEnergyKwh = try values.decodeIfPresent(Double.self, forKey: .regeneratedEnergyKwh)
         self.frontBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .frontBrakePadStatus)
         self.rearBrakePadStatus = try values.decodeIfPresent(String.self, forKey: .rearBrakePadStatus)
-        self.preferredWorkshopId = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopId)
-        self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
         self.retainedDataCategories = try values.decodeIfPresent([AppFeature].self, forKey: .retainedDataCategories) ?? []
         self.retainedDataAt = try values.decodeIfPresent(Date.self, forKey: .retainedDataAt)
     }
@@ -555,18 +694,12 @@ struct VehicleState: Codable, Equatable, Sendable {
         try values.encode(vin, forKey: .vin)
         try values.encode(ownerFirstName, forKey: .ownerFirstName)
         try values.encode(odometerKm, forKey: .odometerKm)
-        try values.encode(daysToService, forKey: .daysToService)
-        try values.encode(distanceToServiceKm, forKey: .distanceToServiceKm)
-        try values.encode(serviceWarning, forKey: .serviceWarning)
-        try values.encode(fluidWarnings, forKey: .fluidWarnings)
         try values.encodeIfPresent(exteriorStatus, forKey: .exteriorStatus)
         try values.encodeIfPresent(healthDetails, forKey: .healthDetails)
         try values.encodeIfPresent(softwareInfo, forKey: .softwareInfo)
         try values.encode(chargingSchedules, forKey: .chargingSchedules)
         try values.encodeIfPresent(climateStatus, forKey: .climateStatus)
         try values.encode(climateTimers, forKey: .climateTimers)
-        try values.encode(tripMeterManualKm, forKey: .tripMeterManualKm)
-        try values.encode(tripMeterAutomaticKm, forKey: .tripMeterAutomaticKm)
         try values.encodeIfPresent(connectivity, forKey: .connectivity)
         try values.encodeIfPresent(airQuality, forKey: .airQuality)
         try values.encodeIfPresent(batteryDiagnostics, forKey: .batteryDiagnostics)
@@ -583,11 +716,12 @@ struct VehicleState: Codable, Equatable, Sendable {
         try values.encode(powertrain, forKey: .powertrain)
         // Nested cluster is the current persisted layout; flat fuel keys are decode-only.
         try values.encode(fuelSystem, forKey: .fuelSystem)
+        try values.encode(serviceInfo, forKey: .serviceInfo)
+        try values.encode(tripComputer, forKey: .tripComputer)
+        try values.encodeIfPresent(pendingCommand, forKey: .pendingCommand)
         try values.encode(reportedBatteryCapacityKwh, forKey: .reportedBatteryCapacityKwh)
         try values.encodeIfPresent(externalColour, forKey: .externalColour)
         try values.encodeIfPresent(gearbox, forKey: .gearbox)
-        try values.encodeIfPresent(engineHoursToService, forKey: .engineHoursToService)
-        try values.encodeIfPresent(averageSpeedKmH, forKey: .averageSpeedKmH)
         try values.encodeIfPresent(structureWeek, forKey: .structureWeek)
         try values.encodeIfPresent(internalVehicleIdentifier, forKey: .internalVehicleIdentifier)
         try values.encodeIfPresent(pno34, forKey: .pno34)
@@ -596,19 +730,12 @@ struct VehicleState: Codable, Equatable, Sendable {
         try values.encodeIfPresent(wheels, forKey: .wheels)
         try values.encode(packages, forKey: .packages)
         try values.encodeIfPresent(steeringOrientation, forKey: .steeringOrientation)
-        try values.encodeIfPresent(serviceTrigger, forKey: .serviceTrigger)
-        try values.encode(tripComputerElectricRangeKm, forKey: .tripComputerElectricRangeKm)
         try values.encode(chargingCurrentLimitAmps, forKey: .chargingCurrentLimitAmps)
         try values.encodeIfPresent(interiorImageData, forKey: .interiorImageData)
         try values.encodeIfPresent(warrantyInfo, forKey: .warrantyInfo)
         try values.encode(chargeLocations, forKey: .chargeLocations)
-        try values.encode(electricDistanceKm, forKey: .electricDistanceKm)
-        try values.encode(fuelDistanceKm, forKey: .fuelDistanceKm)
-        try values.encode(regeneratedEnergyKwh, forKey: .regeneratedEnergyKwh)
         try values.encode(frontBrakePadStatus, forKey: .frontBrakePadStatus)
         try values.encode(rearBrakePadStatus, forKey: .rearBrakePadStatus)
-        try values.encodeIfPresent(preferredWorkshopId, forKey: .preferredWorkshopId)
-        try values.encodeIfPresent(preferredWorkshopName, forKey: .preferredWorkshopName)
         try values.encode(retainedDataCategories, forKey: .retainedDataCategories)
         try values.encode(retainedDataAt, forKey: .retainedDataAt)
     }
@@ -687,10 +814,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         return model.nominalUsableCapacityKwh
     }
 
-    var effectiveNominalBatteryCapacityKwh: Double {
-        factoryNominalBatteryCapacityKwh
-    }
-
     var batteryDegradationPercent: Double? {
         // Neither provider exposes a validated *measured* capacity or SoH value — this property
         // specifically represents that absence and must stay `nil` rather than infer one from
@@ -699,12 +822,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         // it returns a distinct `BatteryHealthEstimate` type precisely so a calculated figure can
         // never be mistaken for what this property represents.
         return nil
-    }
-
-    var batteryStateOfHealthPercent: Double? {
-        guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else { return nil }
-        let soh = max(50.0, min(100.0, 100.0 - deg))
-        return ((soh * 10).rounded()) / 10.0
     }
 
     var configuredUsableBatteryCapacityKwh: Double {
@@ -785,8 +902,14 @@ struct VehicleState: Codable, Equatable, Sendable {
         }
     }
 
+    /// Derived label. Because neither provider exposes a measured SoH (see
+    /// `batteryDegradationPercent`), this currently always reads "Unavailable" — it exists so
+    /// a future verified source plugs into exactly one place.
     var batteryHealthStatus: String {
-        guard let soh = batteryStateOfHealthPercent else { return L10n.text("Unavailable") }
+        guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else {
+            return L10n.text("Unavailable")
+        }
+        let soh = max(50.0, min(100.0, 100.0 - deg))
         if soh >= 95.0 { return L10n.text("Optimal") }
         if soh >= 85.0 { return L10n.text("Good") }
         if soh >= 75.0 { return L10n.text("Normal") }

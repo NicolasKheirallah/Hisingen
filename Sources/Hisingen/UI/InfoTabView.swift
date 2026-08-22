@@ -873,7 +873,7 @@ struct InfoTabView: View {
         let status = L10n.text("Calculated") + " · " + estimate.confidence.displayName
         let usable = estimate.estimatedUsableCapacityKwh
         let factoryUsable = estimate.referenceUsableCapacityKwh
-        let nominal = state.effectiveNominalBatteryCapacityKwh
+        let nominal = state.factoryNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
         let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
 

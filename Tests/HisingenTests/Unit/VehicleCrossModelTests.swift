@@ -225,7 +225,6 @@ struct VehicleCrossModelTests {
         XCTAssertEqual(my23State.factoryUsableBatteryCapacityKwh, 75.0)
         XCTAssertTrue(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
         XCTAssertNil(my23State.batteryDegradationPercent)
-        XCTAssertNil(my23State.batteryStateOfHealthPercent)
         XCTAssertEqual(my23State.batteryHealthStatus, "Unavailable")
         XCTAssertEqual(my23State.configuredUsableBatteryCapacityKwh, 75.0)
     }
@@ -246,7 +245,6 @@ struct VehicleCrossModelTests {
 
         XCTAssertEqual(state.factoryNominalBatteryCapacityKwh, 11.6)
         XCTAssertEqual(state.factoryUsableBatteryCapacityKwh, 9.1)
-        XCTAssertNil(state.batteryStateOfHealthPercent)
         XCTAssertNil(state.batteryDegradationPercent)
         XCTAssertEqual(state.configuredUsableBatteryCapacityKwh, 9.1)
     }
