@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     private let volvoSignInPresenter = VolvoSignInPresenter()
+    private let polestarCommandSignInPresenter = PolestarCommandSignInPresenter()
     private let updateChecker = UpdateChecker()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
@@ -59,6 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.signOut() }
+        statusController.onTestConnection = { [weak self] brand in
+            guard let self else { return (false, L10n.text("Hisingen is no longer running.")) }
+            return await self.testConnection(for: brand)
+        }
         notifier.onPermissionChanged = { [weak self] permission in
             self?.statusController.updateNotificationPermission(permission)
         }
@@ -244,6 +249,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Authorizes the Polestar command client (remote commands) through a real browser window
+    /// instead of Hisingen scripting the login form itself — see `PolestarAPI.beginCommandAuthorization()`/
+    /// `completeCommandAuthorization(callbackURL:)` and `PolestarCommandSignInPresenter`. This is
+    /// a separate, explicit step from the base Polestar sign-in; remote commands stay unavailable
+    /// until the user completes it (and again whenever the resulting session eventually expires).
+    private func beginPolestarCommandAuthorization() {
+        guard preferences.activeBrand == .polestar, preferences.hasResumableSession(for: .polestar) else {
+            showRemoteResult(
+                title: L10n.text("Sign in to Polestar first"),
+                message: L10n.text("Connect your Polestar account before authorizing remote commands."),
+                success: false
+            )
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let authorizeURL = try await polestarAPI.beginCommandAuthorization()
+                let callbackURL = try await polestarCommandSignInPresenter.signIn(authorizeURL: authorizeURL)
+                try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
+                showRemoteResult(
+                    title: L10n.text("Remote commands authorized"),
+                    message: L10n.text("Polestar remote commands are now available."),
+                    success: true
+                )
+            } catch {
+                let mapped = error as? LocalizedError
+                showRemoteResult(
+                    title: L10n.text("Authorization failed"),
+                    message: mapped?.errorDescription ?? error.localizedDescription, success: false
+                )
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         commandRefreshTask?.cancel()
         garageRefreshTask?.cancel()
@@ -346,6 +386,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
             await self?.refreshGarageVehicles()
+        }
+    }
+
+    /// Performs a real, cheap, read-only connectivity check for `brand` by re-running the same
+    /// session-restore path already used at launch and by the background garage scan (never a
+    /// fabricated result). Returns the elapsed time on success, or a human-readable failure
+    /// reason — including "no stored session", which is reported without making any network call.
+    private func testConnection(for brand: VehicleBrand) async -> (success: Bool, message: String) {
+        guard preferences.hasResumableSession(for: brand) else {
+            return (false, L10n.text("No active session found. Please sign in."))
+        }
+        let start = Date()
+        do {
+            let providerCars: [CarSummary]
+            switch brand {
+            case .polestar:
+                let token = (try? Keychain.readSessionToken()) ?? nil
+                let password = token?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
+                let preferredVIN = preferences.vin(for: brand)
+                if let token, !token.isEmpty {
+                    try await polestarAPI.restoreSession(
+                        token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                        features: preferences.features
+                    )
+                } else if let password, !preferences.email.isEmpty {
+                    try await polestarAPI.authenticate(
+                        email: preferences.email, password: password,
+                        preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                        features: preferences.features
+                    )
+                } else {
+                    return (false, L10n.text("No stored Polestar credentials found."))
+                }
+                providerCars = await polestarAPI.cars
+            case .volvo:
+                let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
+                    ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
+                let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
+                    ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
+                let token = (try? Keychain.readVolvoSessionToken()) ?? nil
+                guard let clientSecret, let apiKey, let token, !token.isEmpty else {
+                    return (false, L10n.text("No stored Volvo session found."))
+                }
+                await volvoAPI.configure(clientID: preferences.volvoClientID,
+                                          clientSecret: clientSecret, vccApiKey: apiKey)
+                let preferredVIN = preferences.vin(for: brand)
+                try await volvoAPI.restoreSession(
+                    token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
+                    features: preferences.features
+                )
+                providerCars = await volvoAPI.cars
+            }
+            guard !providerCars.isEmpty else {
+                return (false, L10n.text("Signed in, but no vehicles were returned."))
+            }
+            let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
+            return (true, L10n.format("Connection active & verified (%d ms)", elapsedMs))
+        } catch {
+            let mapped = VehicleServiceError.map(error, provider: brand)
+            return (false, mapped.errorDescription ?? error.localizedDescription)
         }
     }
 
@@ -669,6 +769,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
+        case .polestarCommandAuthorization:
+            beginPolestarCommandAuthorization()
         case .switchToBrand(let brand):
             switch brand {
             case .polestar:
@@ -809,6 +911,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        if url.scheme?.lowercased() == "polestar-explore" {
+            polestarCommandSignInPresenter.handleCallbackURL(url)
+            return
+        }
         guard url.scheme?.lowercased() == "hisingen" else { return }
 
         if url.host == "oauth" || url.path.contains("callback") || url.query?.contains("code=") == true {

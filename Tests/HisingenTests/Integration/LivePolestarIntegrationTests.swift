@@ -227,7 +227,7 @@ struct LivePolestarReadOnlyIntegrationTests {
         print("\n========================================================")
         print("🖼 [3. PUBLIC VEHICLE STUDIO & RENDER CDN]")
         let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
-        let publicApiKey = "REDACTED-ROTATE-THIS-KEY"
+        let publicApiKey = BuiltinPolestarSecrets.imageApiKey
         let query = """
         query GetCarImages($vin: String!) {
           getCarImages(vin: $vin) {
@@ -3068,7 +3068,7 @@ struct LivePolestarRemoteCommandIntegrationTests {
         }
 
         let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
-        let publicApiKey = "REDACTED-ROTATE-THIS-KEY"
+        let publicApiKey = BuiltinPolestarSecrets.imageApiKey
 
         // 1. Introspect CarImages type
         let introQuery = """

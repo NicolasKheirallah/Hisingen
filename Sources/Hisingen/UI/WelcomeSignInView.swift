@@ -5,6 +5,9 @@ import SwiftUI
 struct WelcomeSignInView: View {
     let error: String?
     let onSettingsChanged: (SettingsChange) -> Void
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+        (false, L10n.text("Connection testing is not available."))
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -14,7 +17,8 @@ struct WelcomeSignInView: View {
                     errorBanner(error)
                 }
                 Card {
-                    AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged)
+                    AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
+                                            onTestConnection: onTestConnection)
                 }
             }
             .padding(HisingenTheme.sectionSpacing)

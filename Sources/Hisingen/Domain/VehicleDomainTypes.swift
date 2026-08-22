@@ -308,21 +308,6 @@ enum SoftwareUpdateState: String, Codable, Sendable {
         }
     }
 }
-
-/// The precise `ota_mobcache.SoftwareState` enum value as reported by the backend, before
-/// it is collapsed into the coarser `SoftwareUpdateState` used by the UI.
-///
-/// The backend enum (`com.volvocars.conncar.ota.mobcache.discovery.api.StateEnum`, recovered
-/// from the official Polestar APK v5.10.0 teardown) runs 0…14. **State 15 is NOT in the app's
-/// enum** — it is an undocumented backend extension observed for an update that has been
-/// *announced* to the vehicle but not yet *authorized for download*. State 1 is
-/// `DOWNLOAD_READY` (the update is ready to download/install). These are **distinct** states
-/// that `SoftwareUpdateState.available` collapses into one case — this raw enum preserves
-/// the distinction so the UI can show the exact rollout phase and the installability check
-/// can be precise.
-///
-/// Established by `testDecodeGetSoftwareInfoRecursively`, the official APK teardown (E1),
-/// and the OTA investigation — see `docs/api/ota-investigation.md`.
 enum SoftwareStateRaw: Int, Codable, Sendable {
     case unknown = 0
     case downloadReady = 1
@@ -857,13 +842,6 @@ struct ChargingSample: Codable, Equatable, Sendable {
     }
 }
 
-
-/// A service-level error reported by the vehicle's Chronos backend (`ErrorService/GetErrors`).
-/// Recovered from the official Polestar APK v5.10.0 teardown — see
-/// `docs/api/ota-investigation.md` (E1). The `GetErrorsResponse` is a oneof-style message
-/// where exactly one of the per-service error fields (3-8) is populated, identified by
-/// `serviceErrorCase`. Each sub-error carries an `Error` enum (field 1) and optionally an
-/// `Action` enum (field 2).
 struct VehicleChronosError: Codable, Equatable, Sendable {
     /// Which Chronos service reported the error. Maps to the `ServiceErrorCase` oneof field
     /// numbers in `GetErrorsResponse`: 3=AmpLimit, 4=ChargeLocation, 5=ChargeNow,
@@ -924,11 +902,6 @@ struct VehicleChronosError: Codable, Equatable, Sendable {
     }
 }
 
-/// OTA capability flags and installed software version recovered from
-/// `car_information.CarInformation/GetMyCars` (gRPC). These are **backend-authoritative**
-/// per-vehicle capability declarations from the `Car` proto — not heuristic probes.
-/// Recovered from the official Polestar APK v5.10.0 teardown — see
-/// `docs/api/ota-investigation.md` (E10).
 struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
     /// installed version from the `Car.consumerSoftwareVersion` field — `GetSoftwareInfo`
@@ -1019,7 +992,6 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
 }
 
 /// Who set the OTA schedule, from the `SetBy` enum in `SchedulerService`.
-/// Recovered from the APK's `ota_mobcache.schedule.api.SetBy` enum.
 enum ScheduleSetBy: Int, Codable, Sendable {
     case unknown = 0
     case app = 1

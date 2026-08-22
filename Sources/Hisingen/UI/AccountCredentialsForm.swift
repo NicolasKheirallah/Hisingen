@@ -9,6 +9,9 @@ struct AccountCredentialsForm: View {
 
     let style: Style
     let onSettingsChanged: (SettingsChange) -> Void
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+        (false, L10n.text("Connection testing is not available."))
+    }
 
     @State private var selectedBrand = VehicleBrand.polestar
     @Environment(\.preferencesStore) private var preferences
@@ -389,16 +392,12 @@ struct AccountCredentialsForm: View {
     private func testCurrentConnection() {
         isTestingConnection = true
         testConnectionResult = nil
+        let brand = selectedBrand
         Task {
-            let start = Date()
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            let elapsed = Int(Date().timeIntervalSince(start) * 1000)
+            let result = await onTestConnection(brand)
+            guard brand == selectedBrand else { return } // user switched brands mid-check
             isTestingConnection = false
-            if isCurrentlyConnected {
-                testConnectionResult = (true, L10n.format("Connection active & verified (%d ms)", elapsed))
-            } else {
-                testConnectionResult = (false, L10n.text("No active session found. Please sign in."))
-            }
+            testConnectionResult = (result.success, result.message)
         }
     }
 

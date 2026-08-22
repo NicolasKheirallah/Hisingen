@@ -173,7 +173,6 @@ extension PolestarGRPC {
 
     /// Fetches vehicle service errors from `chronos.services.v1.ErrorService/GetErrors` (C3).
     /// The response is a oneof-style message where exactly one per-service error
-    /// field (3-8) is populated. Recovered from the official Polestar APK v5.10.0 teardown.
     func fetchErrors(vin: String, accessToken: String) async throws -> [VehicleChronosError] {
         // ErrorService is server-streaming and may take longer than the default 10s request
         // timeout to return the first frame on PCCS — use a dedicated session with a longer
@@ -229,8 +228,7 @@ extension PolestarGRPC {
     /// Fetches vehicle information from `car_information.CarInformation/GetMyCars` (C3 gRPC).
     /// Returns backend-authoritative capability flags and the **actually installed** software
     /// version (`consumerSoftwareVersion`) — which `GetSoftwareInfo` does not provide during
-    /// a rollout. Recovered from the official Polestar APK v5.10.0 teardown — see
-    /// `docs/api/ota-investigation.md` (E10).
+    /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
         let body = try await firstMessage(path: Self.myCarsPath, message: Data(),
                                           vin: vin, accessToken: accessToken)
@@ -713,7 +711,6 @@ extension PolestarGRPC {
     ///  10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions, 9: amperageLimitSettings,
     ///  8: targetChargeLevelSettings, 15: supportsChargeNow, 29: supportsPlugAndCharge}`,
     /// `34: AirPurification{1: supportsRemoteStart}`, `16: honkFlashType (enum)`.
-    /// Recovered from the official Polestar APK v5.10.0 teardown.
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
         let outer = Protobuf.fields(data)
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {

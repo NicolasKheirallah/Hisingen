@@ -10,6 +10,7 @@ enum SettingsChange {
     case presentation
     case launchAtLogin
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
+    case polestarCommandAuthorization
     case switchToBrand(VehicleBrand)
     case closeSettings
 }
@@ -27,6 +28,9 @@ struct SettingsView: View {
     var imageCache: CarImageCache = CarImageCache()
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+        (false, L10n.text("Connection testing is not available."))
+    }
 
     @State private var appTheme: AppTheme = .hisingen
     @State private var appearanceMode: AppearanceMode = .system
@@ -213,7 +217,8 @@ struct SettingsView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader(symbol: "person.crop.circle", title: L10n.text("Account"), color: .accentColor)
-                AccountCredentialsForm(style: .compact, onSettingsChanged: onSettingsChanged)
+                AccountCredentialsForm(style: .compact, onSettingsChanged: onSettingsChanged,
+                                        onTestConnection: onTestConnection)
             }
         }
     }
@@ -983,6 +988,26 @@ struct SettingsView: View {
                             ))
                             .labelsHidden()
                             .toggleStyle(.switch)
+                            .controlSize(.small)
+                        }
+                        .padding(8)
+                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L10n.text("Authorize Remote Commands"))
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(L10n.text("Opens your browser to sign in for remote commands. Hisingen never sees your Polestar password for this step, and this is separate from the account sign-in above."))
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                onSettingsChanged(.polestarCommandAuthorization)
+                            } label: {
+                                Text(L10n.text("Authorize…"))
+                                    .font(.system(size: 10, weight: .medium))
+                            }
                             .controlSize(.small)
                         }
                         .padding(8)

@@ -38,7 +38,9 @@ final class StatusItemController: NSObject {
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
-    var onTestConnection: () -> Void = {}
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+        (false, L10n.text("Connection testing is not available."))
+    }
 
     private var selectedTabBinding: Binding<HisingenContentView.Tab> {
         Binding(
@@ -572,6 +574,9 @@ final class StatusItemController: NSObject {
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
+            onTestConnection: { [weak self] brand in
+                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."))
+            },
             settingsMode: settingsMode,
             selectedTab: selectedTabBinding,
             database: database,
@@ -717,6 +722,9 @@ final class StatusItemController: NSObject {
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
+            onTestConnection: { [weak self] brand in
+                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."))
+            },
             settingsMode: settingsMode,
             selectedTab: selectedTabBinding,
             database: database,

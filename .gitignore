@@ -22,6 +22,7 @@ DerivedData/
 # secrets. Never tracked — the XOR masking is trivially reversible, so a
 # committed copy publishes the live credentials.
 Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift
+Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift
 
 Hisingen.dmg.sha256
 # Reverse-engineering deep-dives — internal only, never upload
@@ -33,3 +34,8 @@ docs/api/ota-investigation.md
 # Static website build output and local dependencies
 website/node_modules/
 website/dist/
+docs/research/api-capability-review.md
+docs/research/api-investigation-backlog.md
+docs/research/feature-opportunities.md
+.gitignore
+docs/research/feature-roadmap.md

@@ -22,6 +22,7 @@ struct HisingenContentView: View {
     let onSelectCar: (String) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
+    let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String)
     let settingsMode: Bool
     let database: VehicleDatabase
     let reverseGeocoder: ReverseGeocoder
@@ -66,7 +67,11 @@ struct HisingenContentView: View {
         onRemoteCommand: @escaping (RemoteCommand) -> Void,
         onSelectCar: @escaping (String) -> Void,
         onSettingsChanged: @escaping (SettingsChange) -> Void,
-        onSignOut: @escaping () -> Void, settingsMode: Bool,
+        onSignOut: @escaping () -> Void,
+        onTestConnection: @escaping (VehicleBrand) async -> (success: Bool, message: String) = { _ in
+            (false, L10n.text("Connection testing is not available."))
+        },
+        settingsMode: Bool,
         selectedTab: Binding<Tab>, database: VehicleDatabase,
          reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache
     ) {
@@ -89,6 +94,7 @@ struct HisingenContentView: View {
         self.onSelectCar = onSelectCar
         self.onSettingsChanged = onSettingsChanged
         self.onSignOut = onSignOut
+        self.onTestConnection = onTestConnection
         self.settingsMode = settingsMode
         self.database = database
         self.reverseGeocoder = reverseGeocoder
@@ -109,10 +115,10 @@ struct HisingenContentView: View {
                                       tabSelection.wrappedValue = .vehicle
                                  }
                                  onSettingsChanged(change)
-                             }, onSignOut: onSignOut)
+                             }, onSignOut: onSignOut, onTestConnection: onTestConnection)
                      .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
             } else if !authenticated {
-                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged)
+                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged, onTestConnection: onTestConnection)
             } else if let state {
                 tabBar
                 Divider().opacity(0.4)

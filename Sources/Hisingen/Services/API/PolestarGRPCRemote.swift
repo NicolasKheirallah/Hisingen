@@ -20,7 +20,7 @@ extension PolestarGRPC {
         let isInvocation = isInvocationCommand(command)
         if isInvocation && commandToken == nil {
             throw RemoteCommandError.rejected(
-                L10n.text("Polestar mobile credentials required for remote controls. Please sign in with your email and password in Settings.")
+                L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
             )
         }
         self.activeCommandToken = commandToken ?? accessToken
@@ -87,7 +87,7 @@ extension PolestarGRPC {
             guard (40...100).contains(target) else { throw RemoteCommandError.rejected(nil) }
             var payload = Data()
             payload.append(Protobuf.intField(2, target))
-            // The APK uses ChargeTargetLevelSettingType.CUSTOM (3), not DAILY (1).
+            //  uses ChargeTargetLevelSettingType.CUSTOM (3), not DAILY (1).
             // DAILY is accepted by the backend (returns SYNCED) but doesn't actually change
             // the target SOC — it's a preset type, not an override. CUSTOM (3) is the
             // setting type that actually applies the requested target level.
@@ -378,7 +378,6 @@ extension PolestarGRPC {
     }
     /// `TailgateControlRequest`: `{1: request (InvocationRequest), 2: tailgateControl (TailgateControlType)}`.
     /// `TailgateControlType`: 0=UNSPECIFIED, 1=OPEN_TAILGATE, 2=CLOSE_TAILGATE.
-    /// Recovered from the official Polestar APK v5.10.0 teardown.
     static func tailgateRequest(_ vin: String, open: Bool) -> Data {
         var request = invocationOnlyRequest(vin)
         request.append(Protobuf.intField(2, open ? 1 : 2))

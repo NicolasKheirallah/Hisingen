@@ -42,8 +42,7 @@ actor PolestarGRPC {
     /// When true, uses server-streaming gRPC methods (`GetBattery`, `GetExterior`) that the
     /// server keeps open and pushes updates over, instead of the one-shot `GetLatest*` methods.
     /// The streaming variants return the same first-frame data but may be fresher since the
-    /// server expects an ongoing connection. Recovered from the official Polestar APK v5.10.0
-    /// teardown — see `docs/api/ota-investigation.md` (E1).
+    /// server expects an ongoing connection.
     var useStreaming = false
 
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
