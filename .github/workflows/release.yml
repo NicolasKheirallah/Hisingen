@@ -37,7 +37,6 @@ jobs:
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
-          POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
         run: |
           test -n "$MACOS_CERT_P12" || { echo "MACOS_CERT_P12 is required"; exit 1; }
           test -n "$MACOS_CERT_PASSWORD" || { echo "MACOS_CERT_PASSWORD is required"; exit 1; }
@@ -47,7 +46,6 @@ jobs:
           test -n "$VOLVO_CLIENT_ID" || { echo "VOLVO_CLIENT_ID is required"; exit 1; }
           test -n "$VOLVO_CLIENT_SECRET" || { echo "VOLVO_CLIENT_SECRET is required"; exit 1; }
           test -n "$VOLVO_VCC_API_KEY" || { echo "VOLVO_VCC_API_KEY is required"; exit 1; }
-          test -n "$POLESTAR_IMAGE_API_KEY" || { echo "POLESTAR_IMAGE_API_KEY is required"; exit 1; }
 
       - name: Select available Xcode toolchain
         run: sh Scripts/select-xcode.sh
