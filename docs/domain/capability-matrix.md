@@ -39,12 +39,11 @@ All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) s
 | Climate start/stop | Expected (supported) | |
 | Service warnings | Expected (supported) | |
 | Software install control | **Unsupported** | No Volvo OTA endpoint is used — see [architecture/technical-debt.md](../architecture/technical-debt.md#volvo-software-info-is-synthetic-not-derived-from-any-api) |
+| Direct tyre-pressure values | **Unsupported** | Volvo's `tyres` endpoint is indirect TPMS (inferred from wheel-speed-sensor imbalance, not a per-wheel pressure sensor) and returns a warning enum only — there is no numeric kPa/PSI field on any Volvo model, so this is a static negative rather than `.backendDependent`. Tyre *warning* status itself (OK/low/very low/high) is still fully supported and displayed; only the numeric-value capability is unavailable. |
 | Charge target | Runtime detected | Only ever `.supported`/`.unavailable` once the Energy Capabilities endpoint has been probed; `.backendDependent` before that |
 | Charging current limit | Runtime detected | Same as above |
-| Everything else (windows, trunk, seat/steering heating, climate temperature, schedules, tyre-pressure values, trip meters, connectivity, climate timers) | Best effort | `.backendDependent` — no static claim either way |
+| Everything else (windows, trunk, seat/steering heating, climate temperature, schedules, trip meters, connectivity, climate timers) | Best effort | `.backendDependent` — no static claim either way |
 | Remote command execution | Runtime-implemented for 6 of ~20 commands | Lock, unlock, climate start/stop, honk-flash, flash-lights work; everything else returns `RemoteCommandError.unsupported` regardless of capability state — see [api/volvo.md](../api/volvo.md#remote-commands) |
-
-Volvo tyre-pressure "support" is worth a specific caveat: the tyres endpoint always returns a warning enum, never a numeric pressure — so even where the capability shows as available, only a qualitative warning (OK/low/very low/high) is ever displayed, never a PSI/kPa value.
 
 ## What this table doesn't claim
 

@@ -291,7 +291,7 @@ struct VehicleCrossModelTests {
         VehicleStateStore(defaults: defaults, database: database).save(state)
         let counts = database.recordCounts()
         XCTAssertEqual(counts.telemetry, 1)
-        XCTAssertEqual(counts.batteryHealth, 0)
+        XCTAssertEqual(counts.batteryHealth, 1)
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
     }
 

@@ -1710,7 +1710,7 @@ struct VehicleTabView: View {
                                    badge: AppFeature.tyreAndWarnings.title)
         }
         let hasWarning = tyres.contains(where: { $0.warning.needsAttention })
-        return AnyView(TireStatusCardView(tyres: tyres, hasWarning: hasWarning, isVolvo: state.isVolvo))
+        return AnyView(TireStatusCardView(tyres: tyres, hasWarning: hasWarning))
     }
 
     private var locationCard: AnyView? {
@@ -2195,15 +2195,18 @@ struct DoorsAndOpeningsCardView: View {
 struct TireStatusCardView: View {
     let tyres: [TyrePressure]
     let hasWarning: Bool
-    var isVolvo: Bool = false
 
     @State private var hoveredPosition: TyrePosition? = nil
 
-    /// Volvo's Connected Vehicle API v2 `tyres` endpoint only reports a status enum
-    /// (LOW/NORMAL/HIGH/etc.) per wheel, never a numeric kPa reading — unlike Polestar, which
-    /// reports exact pressure. This isn't a Hisingen gap; there's no numeric value to show.
-    private var isVolvoWithoutNumericReadings: Bool {
-        isVolvo && !tyres.isEmpty && tyres.allSatisfy { $0.kilopascals == nil }
+    /// Some vehicles only ever report a per-tyre warning level (OK/low/very low/high), never a
+    /// numeric kPa reading — indirect TPMS (iTPMS), inferred from wheel-speed-sensor imbalance,
+    /// as opposed to direct TPMS's physical per-wheel pressure sensor. This isn't brand-specific:
+    /// it's true of Volvo's whole lineup *and* Polestar 2 (see `VehicleCapabilityProfile`'s
+    /// `.tyrePressureValues` case for `.polestar2`, `.unavailable` for the same reason). Keyed on
+    /// the data actually reported rather than the brand, so it stays correct for both today and
+    /// doesn't need updating if a future model's sensor support changes.
+    private var reportsWarningLevelOnly: Bool {
+        !tyres.isEmpty && tyres.allSatisfy { $0.kilopascals == nil }
     }
 
     var body: some View {
@@ -2227,8 +2230,8 @@ struct TireStatusCardView: View {
                     )
                 }
 
-                if isVolvoWithoutNumericReadings {
-                    Text(L10n.text("Volvo reports a warning level per tyre, not an exact pressure reading."))
+                if reportsWarningLevelOnly {
+                    Text(L10n.text("This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading."))
                         .font(.system(size: 9.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

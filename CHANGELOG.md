@@ -180,6 +180,17 @@ All notable changes to Hisingen are documented in this file. The project follows
   `catch` for a too-large or network-failed response could never match.
 - Fixed the Settings "Test Connection" button reporting success and a
   latency figure without making any network request.
+- Fixed the Polestar gRPC charging-state field being decoded by reading the
+  raw wire value as a position in a hardcoded array instead of matching it
+  explicitly; a future backend change that inserts or reorders a case could
+  have silently relabelled a known charging state as the wrong one.
+- Fixed Volvo's "Direct tyre-pressure values" capability showing as
+  perpetually "backend dependent" instead of a definitive unavailable —
+  Volvo's tyre API is indirect (inferred from wheel-speed-sensor imbalance)
+  and has no numeric-pressure field on any model, so this can never resolve
+  through a live probe and belongs in the static baseline, matching how
+  Polestar 2's equivalent case is already handled. Tyre *warning* status
+  (OK/low/very low/high) is unaffected and remains fully supported.
 
 ### Security and CI
 

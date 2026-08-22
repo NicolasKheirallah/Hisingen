@@ -1227,6 +1227,8 @@ Hisingen is maintained by [Nicolas Kheirallah](https://github.com/NicolasKheiral
 
 Thanks as well to everyone testing the app on different cars and configurations. Real-world feedback is one of the most useful ways to improve Hisingen, especially when vehicle behaviour differs between models in ways that aren't obvious from documentation alone.
 
+Thanks to the [pypolestar devs](https://github.com/pypolestar/polestar_api/) who has made most of this work possible!
+
 ---
 
 # License

@@ -26,8 +26,7 @@ struct InfoTabView: View {
                 DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked)
             }
             if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
-                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }),
-                                   isVolvo: state.isVolvo)
+                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }))
             }
             if state.location?.latitude != nil {
                 parkingLocationCard

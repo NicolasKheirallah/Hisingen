@@ -534,6 +534,16 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .unavailable
             case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
                 return .unavailable
+            // Volvo's `tyres` endpoint (indirect TPMS, inferred from wheel-speed imbalance,
+            // not a per-wheel pressure sensor) reports a warning-level enum only — there is no
+            // numeric kPa/PSI field to report, on any Volvo model, regardless of API product or
+            // vehicle configuration. This is a fixed API/hardware fact, not something a live
+            // probe could ever resolve differently, so it belongs in the static baseline (like
+            // Polestar 2's equivalent case above) rather than sitting at `.backendDependent`
+            // forever. Tyre *warning* status itself is still fully supported — see
+            // `healthDetails.tyres[].warning`; only the "direct value" capability is unavailable.
+            case .tyrePressureValues:
+                return .unavailable
             default:
                 return .backendDependent
             }
@@ -544,6 +554,9 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .supported
             case .softwareInstallControl, .softwareStatus:
+                return .unavailable
+            // See the comment on the same case above — applies to every Volvo model.
+            case .tyrePressureValues:
                 return .unavailable
             default:
                 return .backendDependent

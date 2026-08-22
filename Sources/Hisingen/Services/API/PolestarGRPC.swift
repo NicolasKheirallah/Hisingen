@@ -49,12 +49,8 @@ actor PolestarGRPC {
 
     func liveUpdates(vin: String, accessToken: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
         let base = try await resolvedHost(.c3, accessToken: accessToken)
-        var batteryRequest = Data()
-        batteryRequest.append(Protobuf.stringField(1, UUID().uuidString))
-        batteryRequest.append(Protobuf.stringField(2, vin))
-        var exteriorRequest = Data()
-        exteriorRequest.append(Protobuf.stringField(1, UUID().uuidString))
-        exteriorRequest.append(Protobuf.stringField(2, vin))
+        let batteryRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        let exteriorRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
         let batteryStreamPath = batteryStreamPath
         let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
 
@@ -507,9 +503,30 @@ actor PolestarGRPC {
                 default: break
                 }
             case 7:
-                let values = ["UNSPECIFIED", "CHARGING", "IDLE", "SCHEDULED", "DISCHARGING",
-                              "ERROR", "SMART_CHARGING", "DONE", "SMART_CHARGING_PAUSED"]
-                if Int(field.varint) < values.count { state = ChargingState(apiValue: values[Int(field.varint)]) }
+                // Each wire value is matched to its name explicitly — not read as an index into
+                // an array — so a future backend change that inserts or reorders a case can only
+                // ever leave an *existing* value's meaning intact or make a new value fall to
+                // `default` (state stays unset), never silently relabel a known value as the
+                // wrong state the way positional-array indexing would. Mirrors the `connection`/
+                // `type`/`powerState` switches in this same function, which never used indexing.
+                let name: String
+                switch field.varint {
+                case 0: name = "UNSPECIFIED"
+                case 1: name = "CHARGING"
+                case 2: name = "IDLE"
+                case 3: name = "SCHEDULED"
+                case 4: name = "DISCHARGING"
+                case 5: name = "ERROR"
+                case 6: name = "SMART_CHARGING"
+                case 7: name = "DONE"
+                case 8: name = "SMART_CHARGING_PAUSED"
+                // A value outside the known range is preserved as its raw number rather than
+                // silently leaving `state` unset — `ChargingState(apiValue:)` maps anything it
+                // doesn't recognize to `.unknown(rawValue)`, so a future backend addition shows
+                // up as a visibly-unrecognized state instead of vanishing.
+                default: name = String(field.varint)
+                }
+                state = ChargingState(apiValue: name)
             case 10: watts = Int(field.varint)
             case 11: amps = Int(field.varint)
             case 3 where field.wire == 1: averageConsumption = Protobuf.double(from: field.data)
