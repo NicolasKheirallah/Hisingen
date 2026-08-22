@@ -965,10 +965,20 @@ struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     let minimumSoc: Int
     /// Smart/price-optimised charging enabled for this location.
     let optimisedChargingEnabled: Bool
+    /// Backend mode for optimised charging: 0 unavailable, 1 intelligent timer, 2 price-optimised.
+    let optimisedChargingMode: Int
     /// 1 = recent, 2 = saved, 3 = saved third-party.
     let kind: Int
 
     var isSavedLocation: Bool { kind == 2 || kind == 3 }
+
+    var optimisedChargingModeName: String? {
+        switch optimisedChargingMode {
+        case 1: return L10n.text("Intelligent timer")
+        case 2: return L10n.text("Price-optimised")
+        default: return nil
+        }
+    }
 }
 
 struct VehicleChronosError: Codable, Equatable, Sendable {

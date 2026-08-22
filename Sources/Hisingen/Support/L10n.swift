@@ -1,7 +1,13 @@
 import Foundation
 
 enum L10n {
-    private static var bundle: Bundle {
+    private static let bundleLock = NSLock()
+    private static var localizedBundleCache: [String: Bundle?] = [:]
+
+    /// Resolved once per process. This used to be a computed property that probed several
+    /// `Bundle(path:)` candidates on *every* `text()` call — a filesystem hit per localized
+    /// string, on render paths in a permanent menu-bar app.
+    private static let bundle: Bundle = {
         if let resBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
            let bundle = Bundle(path: resBundlePath) {
             return bundle
@@ -24,25 +30,41 @@ enum L10n {
             }
         }
         return .main
-    }
+    }()
 
+    /// Read per call (a cheap cached-preferences lookup) so language changes apply without an
+    /// explicit invalidation hook; only the expensive bundle resolution is memoized.
     private static var selectedLanguageCode: String? {
         InterfaceLanguage(rawValue: UserDefaults.standard.string(forKey: "interface_language") ?? "")?.languageCode
     }
 
     private static func localizedBundle(for languageCode: String) -> Bundle? {
+        bundleLock.lock()
+        defer { bundleLock.unlock() }
+        if let cached = localizedBundleCache[languageCode] { return cached }
         let candidates = [languageCode, String(languageCode.prefix(2))]
+        var resolved: Bundle?
         for candidate in candidates {
             if let path = bundle.path(forResource: candidate, ofType: "lproj"),
                let localizedBundle = Bundle(path: path) {
-                return localizedBundle
+                resolved = localizedBundle
+                break
             }
         }
-        return nil
+        localizedBundleCache[languageCode] = resolved
+        return resolved
     }
 
     private static var englishBundle: Bundle? {
         localizedBundle(for: "en")
+    }
+
+    /// Drops the memoized per-language bundles. Needed after locale files change on disk
+    /// (development rebuilds); harmless to call at any time.
+    static func invalidateBundleCache() {
+        bundleLock.lock()
+        defer { bundleLock.unlock() }
+        localizedBundleCache.removeAll()
     }
 
     static func text(_ key: String) -> String {

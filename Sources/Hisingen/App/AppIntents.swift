@@ -11,7 +11,7 @@ private enum AutomationHandoff {
     }
 
     static func canSendVolvoCommand(requiresRestrictedScopes: Bool = false) -> String? {
-        let preferences = PreferencesStore()
+        let preferences = PreferencesStore.shared
         guard !preferences.vin.isEmpty else { return "No vehicle is configured in Hisingen." }
         guard preferences.activeBrand == .volvo else {
             return "This shortcut is available only for Volvo commands exposed by the official public API."
@@ -25,12 +25,14 @@ private enum AutomationHandoff {
     static func dispatchAndWait(
         _ route: String, command: String, timeout: TimeInterval = 45
     ) async -> String {
-        let preferences = PreferencesStore()
+        let preferences = PreferencesStore.shared
         let vin = preferences.vin
         let startedAt = Date().addingTimeInterval(-1)
         guard dispatch(route) else { return "Hisingen could not be opened to send the request." }
 
-        let database = VehicleDatabase()
+        // Shared database handle — a fresh SQLite connection per Shortcut invocation
+        // previously ran the full schema DDL on every run.
+        let database = VehicleDatabase.shared
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
@@ -47,9 +49,9 @@ private enum AutomationHandoff {
     }
 
     static func snapshot() -> (VehicleState, PreferencesStore)? {
-        let preferences = PreferencesStore()
+        let preferences = PreferencesStore.shared
         guard !preferences.vin.isEmpty,
-              let state = VehicleStateStore(database: VehicleDatabase()).snapshot(for: preferences.vin)
+              let state = VehicleStateStore(database: VehicleDatabase.shared).snapshot(for: preferences.vin)
         else { return nil }
         return (state, preferences)
     }
@@ -63,9 +65,9 @@ struct GetVehicleBatteryIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        let preferences = PreferencesStore()
+        let preferences = PreferencesStore.shared
         let vin = preferences.vin
-        let store = VehicleStateStore(database: VehicleDatabase())
+        let store = VehicleStateStore(database: VehicleDatabase.shared)
         guard let state = store.snapshot(for: vin) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
@@ -84,7 +86,8 @@ struct GetVehicleBatteryIntent: AppIntent {
             }
         }
         let summary = parts.joined(separator: ", ")
-        let model = state.modelName ?? "Vehicle"
+        let nick = preferences.vehicleNickname(for: vin)
+        let model = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
         let response = "\(model): \(summary)."
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
@@ -162,7 +165,7 @@ struct GetVehicleStatusIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        guard let (state, _) = AutomationHandoff.snapshot() else {
+        guard let (state, preferences) = AutomationHandoff.snapshot() else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
         var details: [String] = []
@@ -171,7 +174,9 @@ struct GetVehicleStatusIntent: AppIntent {
             details.append(exterior.itemsNeedingAttention.map(\.displayName).joined(separator: ", "))
         }
         details.append(state.stateSummary.message)
-        let response = "\(state.modelName ?? "Vehicle"): \(details.joined(separator: "; ")). Data \(Format.relativeAge(since: state.dataTimestamp))."
+        let nick = preferences.vehicleNickname(for: state.vin)
+        let name = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
+        let response = "\(name): \(details.joined(separator: "; ")). Data \(Format.relativeAge(since: state.dataTimestamp))."
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
@@ -209,8 +214,9 @@ struct GetRecentTripsIntent: AppIntent {
         guard let (state, preferences) = AutomationHandoff.snapshot() else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
+        // Push the 7-day bound into SQL instead of decoding up to 20k telemetry rows per run.
         let cutoff = Date().addingTimeInterval(-7 * 86_400)
-        let trips = VehicleDatabase().derivedTrips(for: state.vin, limit: 1_000).filter { $0.endedAt >= cutoff }
+        let trips = VehicleDatabase.shared.derivedTrips(for: state.vin, limit: 1_000, since: cutoff)
         let distance = trips.reduce(0) { $0 + $1.distanceKm }
         let minutes = Int(trips.reduce(0) { $0 + $1.duration } / 60)
         let response = "Last 7 days: \(trips.count) inferred trips, \(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit)), \(Format.shortDuration(minutes: minutes)) driving."
@@ -241,6 +247,52 @@ struct HonkAndFlashIntent: AppIntent {
         }
         let result = await AutomationHandoff.dispatchAndWait("honk-flash", command: "honk-flash")
         return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+/// Sets the active vehicle's target charge level through Hisingen's normal command path.
+/// The parameter is validated by the same capability/bounds logic as the in-app slider,
+/// so an out-of-range request surfaces the vehicle's own limits instead of failing blindly.
+@available(macOS 13.0, *)
+struct SetChargeTargetIntent: AppIntent {
+    static let title: LocalizedStringResource = "Set Charge Target"
+    static let description = IntentDescription("Sets the vehicle's target charge level percentage.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Charge Target (%)", default: 80, inclusiveRange: (40, 100))
+    var percent: Int
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.dispatchAndWait(
+            "charge-target/\(percent)", command: "set-charge-target", timeout: 60
+        )
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+/// Returns where the vehicle was last reported, with a one-tap map link in Shortcuts output.
+/// Uses only the locally cached snapshot; it never wakes the car or hits the location API,
+/// so running it repeatedly costs nothing and reveals nothing fresher than Hisingen holds.
+@available(macOS 13.0, *)
+struct WhereIsMyCarIntent: AppIntent {
+    static let title: LocalizedStringResource = "Where Is My Car"
+    static let description = IntentDescription("Returns the last reported parking position of the active vehicle.")
+    static let openAppWhenRun = false
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
+        guard let (state, preferences) = AutomationHandoff.snapshot(),
+              let lat = state.location?.latitude, let lon = state.location?.longitude else {
+            return .result(value: "unknown",
+                           dialog: "No location has been reported for this vehicle yet.")
+        }
+        let when = state.location?.timestamp.map { Format.relativeAge(since: $0) } ?? "unknown time"
+        let nick = preferences.vehicleNickname(for: state.vin)
+        let name = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
+        let response = "\(name): \(String(format: "%.5f, %.5f", lat, lon)), reported \(when)."
+        return .result(value: "\(response) Map: https://maps.apple.com/?ll=\(lat),\(lon)",
+                       dialog: IntentDialog(stringLiteral: response))
     }
 }
 

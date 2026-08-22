@@ -133,3 +133,17 @@ See [api/authentication.md](../api/authentication.md).
 **Isolation:** everything is declared `@MainActor` — there is no cross-actor hop between AppKit and SwiftUI in this app; `StatusItemController` pushes state into SwiftUI by rebuilding the view struct and reassigning `NSHostingController.rootView`, not via `ObservableObject`.
 
 See [runtime.md](runtime.md#ui-bridging) for the exact bridging mechanism.
+
+## Added 2026-08-22
+
+- **`Services/Integration/SpotlightIndexer`** — publishes the active vehicle snapshot to the
+  local CoreSpotlight index (no VIN in the index; wiped on sign-out).
+- **`UI/ChargingMiniPanel`** (`ChargingMiniPanelController`) — borderless non-activating
+  NSPanel shown while charging; position autosaved; driven from `AppDelegate`'s state handler.
+- **`Domain/HistoryInsights`** — pure computations behind the History dashboard: charge curves
+  (incl. voltage/current), 10–80 % timing, idle tail, loss/tariff estimates, seasonal split,
+  monthly mileage, battery slope/projection, command statistics, data coverage, filter-life
+  and cost-per-km estimates, service projection, anomaly detection.
+- **`Domain/Statistics`** — additional aggregate helpers used by History cards.
+- **Persistence additions** — `connectivity_history`, `cabin_climate_history`,
+  `fuel_entries`, `telemetry_logs.avg_consumption_unit`; full JSON backup export.

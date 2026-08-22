@@ -34,6 +34,9 @@ struct SettingsView: View {
 
     @State private var appTheme: AppTheme = .hisingen
     @State private var appearanceMode: AppearanceMode = .system
+    @State private var privacyRedactionEnabled = false
+    @State private var chargingStatOrder: [String] = []
+    @State private var floatingPanelEnabled = false
     @State private var carRenderAngle: CarRenderAngle = .frontThreeQuarter
     @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = .inlineHeader
     @State private var registrationBadgePosition: RegistrationNumberBadgePosition = .belowGreeting
@@ -102,6 +105,8 @@ struct SettingsView: View {
                 appearanceCard
                 displayCard
                 featureQuickActions
+
+                chargingStatOrderEditor
                 vehicleDataCard
                 remoteControlsCard
                 capabilitiesCard
@@ -147,6 +152,9 @@ struct SettingsView: View {
             notifyStaleTelemetry = preferences.notifyStaleTelemetry
             notifySlowCharging = preferences.notifySlowCharging
             notifyPlugInReminder = preferences.notifyPlugInReminder
+            privacyRedactionEnabled = preferences.privacyRedactionEnabled
+            chargingStatOrder = preferences.chargingStatOrder
+            floatingPanelEnabled = preferences.floatingChargingPanelEnabled
             lowBatteryThreshold = preferences.lowBatteryThreshold
             notifyRainWithWindows = preferences.notifyRainWithWindowsOpen
             notifyEveningUnlocked = preferences.notifyEveningUnlocked
@@ -265,6 +273,48 @@ struct SettingsView: View {
 
                 // Appearance Mode Selector (System / Light / Dark)
                 VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Screenshot Privacy Mode"))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(HisingenTheme.ink)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Floating Charging Panel"))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(HisingenTheme.ink)
+                            Text(L10n.text("Small always-on-top panel with charge progress while plugged in."))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $floatingPanelEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: floatingPanelEnabled) { _, newValue in
+                                preferences.floatingChargingPanelEnabled = newValue
+                                onSettingsChanged(.presentation)
+                            }
+                    }
+                    .padding(.vertical, 2)
+
+                            Text(L10n.text("Blurs VIN, plate and coordinates across the app for safe sharing."))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $privacyRedactionEnabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .onChange(of: privacyRedactionEnabled) { _, newValue in
+                                preferences.privacyRedactionEnabled = newValue
+                                onSettingsChanged(.presentation)
+                            }
+                    }
+                    .padding(.vertical, 2)
+
                     Text(L10n.text("Mode"))
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(HisingenTheme.ink)
@@ -981,6 +1031,83 @@ struct SettingsView: View {
     }
 
 
+    /// Up/down editor for the Charging card's detail-row order. Rows not listed here keep
+    /// their natural position after the ordered ones.
+    private var chargingStatOrderEditor: some View {
+        let titles: [String: String] = [
+            "connection": "Charger Connection", "type": "Charging Type", "draw": "Current Draw",
+            "limit": "Current Limit", "voltage": "Voltage", "target": "Target Limit",
+            "powerModule": "Power Module", "timeToTarget": "Time to Target",
+            "timeToMinSoc": "Time to Min SOC", "avgConsumption": "Avg Consumption",
+            "avgSinceCharge": "Avg Since Last Charge", "energySinceCharge": "Energy Since Charge",
+        ]
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "list.number", title: L10n.text("Charging Stat Order"), color: .indigo)
+                    Spacer()
+                    if !chargingStatOrder.isEmpty {
+                        Button(L10n.text("Reset")) {
+                            chargingStatOrder = []
+                            preferences.chargingStatOrder = []
+                            onSettingsChanged(.presentation)
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                    }
+                }
+                Text(L10n.text("Reorders the detail rows on the Charging card. Unlisted rows keep their default position below."))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                ForEach(Array(chargingStatOrder.enumerated()), id: \.element) { index, id in
+                    HStack {
+                        Text(titles[id] ?? id).font(.system(size: 11))
+                        Spacer()
+                        Button {
+                            guard index > 0 else { return }
+                            chargingStatOrder.swapAt(index, index - 1)
+                            preferences.chargingStatOrder = chargingStatOrder
+                            onSettingsChanged(.presentation)
+                        } label: { Image(systemName: "arrow.up") }
+                        .buttonStyle(.borderless)
+                        .disabled(index == 0)
+                        Button {
+                            guard index < chargingStatOrder.count - 1 else { return }
+                            chargingStatOrder.swapAt(index, index + 1)
+                            preferences.chargingStatOrder = chargingStatOrder
+                            onSettingsChanged(.presentation)
+                        } label: { Image(systemName: "arrow.down") }
+                        .buttonStyle(.borderless)
+                        .disabled(index == chargingStatOrder.count - 1)
+                    }
+                    .padding(.vertical, 1)
+                }
+                // Remaining unlisted rows, offered for adoption into the order.
+                ForEach(unorderedStatIDs(titles: titles), id: \.self) { pending in
+                    HStack {
+                        Text(pending).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(L10n.text("Add")) {
+                            let known = ["connection","type","draw","limit","voltage","target","powerModule","timeToTarget","timeToMinSoc","avgConsumption","avgSinceCharge","energySinceCharge"]
+                            let key = known.first { titles[$0] == pending } ?? pending
+                            chargingStatOrder.append(key)
+                            preferences.chargingStatOrder = chargingStatOrder
+                            onSettingsChanged(.presentation)
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private func unorderedStatIDs(titles: [String: String]) -> [String] {
+        let all = ["connection","type","draw","limit","voltage","target","powerModule",
+                   "timeToTarget","timeToMinSoc","avgConsumption","avgSinceCharge","energySinceCharge"]
+        return Set(all).subtracting(chargingStatOrder).map { titles[$0] ?? $0 }.sorted()
+    }
+
     private var featureQuickActions: some View {
         HStack(spacing: 8) {
             Button {
@@ -1652,7 +1779,9 @@ struct SettingsView: View {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
                         Button {
-                            database.vacuum()
+                            // VACUUM rewrites the whole database file; never on the main thread.
+                            let db = database
+                            Task.detached(priority: .utility) { db.vacuum() }
                             Task { await loadDatabaseStats() }
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -1675,7 +1804,8 @@ struct SettingsView: View {
                         .tint(databaseVacuumed ? HisingenTheme.semanticGood : nil)
 
                         Button {
-                            database.pruneHistoricalSamples(olderThanDays: 90)
+                            let db = database
+                            Task.detached(priority: .utility) { db.pruneHistoricalSamples(olderThanDays: 90) }
                             Task { await loadDatabaseStats() }
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -1700,8 +1830,14 @@ struct SettingsView: View {
 
                     HStack(spacing: 8) {
                         Button {
-                            let csv = database.exportChargingSessionsCSV(for: state?.vin)
-                            saveCSVWithPanel(suggestedFilename: "charging_sessions_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                            let vin = state?.vin
+                            let db = database
+                            Task { @MainActor in
+                                let csv = await Task.detached(priority: .userInitiated) {
+                                    db.exportChargingSessionsCSV(for: vin)
+                                }.value
+                                saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                            }
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.and.arrow.up")
@@ -1713,8 +1849,14 @@ struct SettingsView: View {
                         .controlSize(.small)
 
                         Button {
-                            let csv = database.exportBatteryHealthCSV(for: state?.vin)
-                            saveCSVWithPanel(suggestedFilename: "battery_health_\(state?.vin.prefix(8) ?? "all").csv", csvContent: csv)
+                            let vin = state?.vin
+                            let db = database
+                            Task { @MainActor in
+                                let csv = await Task.detached(priority: .userInitiated) {
+                                    db.exportBatteryHealthCSV(for: vin)
+                                }.value
+                                saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                            }
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.and.arrow.up")
@@ -1729,8 +1871,13 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Button {
                             guard let vin = state?.vin else { return }
-                            saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv",
-                                             csvContent: database.exportTelemetryCSV(for: vin))
+                            let db = database
+                            Task { @MainActor in
+                                let csv = await Task.detached(priority: .userInitiated) {
+                                    db.exportTelemetryCSV(for: vin)
+                                }.value
+                                saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
+                            }
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.and.arrow.up")
@@ -1744,8 +1891,13 @@ struct SettingsView: View {
 
                         Button {
                             guard let vin = state?.vin else { return }
-                            saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv",
-                                             csvContent: database.exportCommandAuditsCSV(for: vin))
+                            let db = database
+                            Task { @MainActor in
+                                let csv = await Task.detached(priority: .userInitiated) {
+                                    db.exportCommandAuditsCSV(for: vin)
+                                }.value
+                                saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
+                            }
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.and.arrow.up")
@@ -1760,12 +1912,45 @@ struct SettingsView: View {
 
                     Button {
                         guard let vin = state?.vin else { return }
-                        saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv",
-                                         csvContent: database.exportAirQualityCSV(for: vin))
+                        let db = database
+                        Task { @MainActor in
+                            let csv = await Task.detached(priority: .userInitiated) {
+                                db.exportAirQualityCSV(for: vin)
+                            }.value
+                            saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "square.and.arrow.up")
                             Text(L10n.text("Export Air Quality (CSV)"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(state == nil)
+
+                    Button {
+                        // Full local-history backup across every stored vehicle.
+                        // Coordinates are included only when location history is opted in,
+                        // mirroring the retention preference elsewhere in this pane.
+                        let includeCoords = preferences.persistLocationHistory
+                        let db = database
+                        Task { @MainActor in
+                            let data: Data? = await Task.detached(priority: .userInitiated) {
+                                try? db.exportBackupJSON(includeCoordinates: includeCoords)
+                            }.value
+                            guard let data else { return }
+                            saveDataWithPanel(
+                                suggestedFilename: "hisingen_backup_\(Int(Date().timeIntervalSince1970)).json",
+                                contentType: .json,
+                                data: data
+                            )
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "archivebox")
+                            Text(L10n.text("Export Full Backup (JSON)"))
                         }
                         .frame(maxWidth: .infinity)
                     }

@@ -184,6 +184,33 @@ struct ControlsTabView: View {
                     if profile.hasSelectableClimateTemperature {
                         VStack(spacing: 10) {
                             HStack {
+                                Button {
+                                    // "Max Preheat": the invocation carries one temperature
+                                    // plus seat/steering levels — there is no separate
+                                    // front/rear defroster field in this backend, so the
+                                    // honest maximum is 30 °C with the wheel heated.
+                                    onRemoteCommand(.startClimate(
+                                        temperatureCelsius: 30,
+                                        frontLeftSeat: .off, frontRightSeat: .off,
+                                        rearLeftSeat: .off, rearRightSeat: .off,
+                                        steeringWheel: preferences.remoteSteeringWheelHeating == .off ? .level2 : .off
+                                    ))
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "windshield.front.heat")
+                                        Text(L10n.text("Max Heat"))
+                                            .font(.system(size: 9, weight: .semibold))
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .tint(.orange)
+                                .disabled(isDisabled(.startClimate(
+                                    temperatureCelsius: 30,
+                                    frontLeftSeat: .off, frontRightSeat: .off,
+                                    rearLeftSeat: .off, rearRightSeat: .off,
+                                    steeringWheel: .off)))
+                                Spacer()
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(L10n.text("Preconditioning Command Setpoint"))
                                         .font(.system(size: 11, weight: .medium))
@@ -501,6 +528,27 @@ struct ControlsTabView: View {
                         }
 
                         if let ampLimit {
+                            // Common household breaker sizes; chips outside the vehicle's
+                            // advertised range are hidden rather than doomed to fail.
+                            let chips = [6, 8, 10, 13, 16].filter { $0 != ampLimit }
+                            if !chips.isEmpty {
+                                HStack(spacing: 6) {
+                                    ForEach(chips, id: \.self) { preset in
+                                        Button {
+                                            onRemoteCommand(.setAmpLimit(preset))
+                                        } label: {
+                                            Text("\(preset) A")
+                                                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                                .frame(minWidth: 34)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                        .disabled(isDisabled(.setAmpLimit(preset)))
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.bottom, 2)
+                            }
                             Slider(value: Binding(
                                 get: { ampLimitDraft ?? Double(ampLimit) },
                                 set: { ampLimitDraft = $0 }
@@ -638,6 +686,12 @@ struct ControlsTabView: View {
                     .toggleStyle(.switch)
                     .controlSize(.mini)
                     .disabled(remoteCommandInProgress)
+                    if let modeName = location.optimisedChargingModeName {
+                        Text(modeName)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 4)
+                    }
 
                     Button(role: .destructive) {
                         onRemoteCommand(.deleteChargeLocation(id: location.id))

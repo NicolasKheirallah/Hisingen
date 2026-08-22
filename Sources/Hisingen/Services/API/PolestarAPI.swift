@@ -49,6 +49,8 @@ actor PolestarAPI {
     var commandTokenExpiry: Date?
     var commandPendingVerifier: String?
     var commandPendingState: String?
+    /// Single-flight guard for the command client's refresh grant (see `validCommandToken`).
+    var commandRefreshTask: Task<String?, Never>?
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
@@ -86,6 +88,11 @@ actor PolestarAPI {
     var capabilityCache: [String: CapabilityCacheEntry] = [:]
     var remoteCommandsInFlight: Set<String> = []
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
+    /// Bumped whenever account state is cleared/reset. Multi-step operations capture it on
+    /// entry and drop their results if a reset interleaved — the actor serializes individual
+    /// writes but not whole logical transactions (e.g. a slow discovery from a superseded
+    /// login could otherwise repopulate `cars` after sign-out cleared them).
+    private var sessionEpoch = 0
     let preferences: PreferencesStore
 
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore = PreferencesStore()) {
@@ -315,21 +322,8 @@ actor PolestarAPI {
     }
 
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
-        guard let tokenEndpoint else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.formBody([
-            "grant_type": "authorization_code",
-            "client_id": oidcClientID,
-            "code": code,
-            "redirect_uri": oidcRedirectURL.absoluteString,
-            "code_verifier": verifier
-        ])
-        let token = try await Self.requestToken(request: request, session: session,
-                                                invalidReason: .callbackRejected)
+        let token = try await exchangeCode(code, verifier: verifier,
+                                           clientID: oidcClientID, redirectURI: oidcRedirectURL)
         try apply(token)
     }
 
@@ -481,6 +475,7 @@ actor PolestarAPI {
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
+        let requestEpoch = sessionEpoch
         let query = """
         query GetConsumerCarsV2 {
           getConsumerCarsV2 { vin internalVehicleIdentifier modelName modelYear registrationNo pno34 structureWeek }
@@ -488,13 +483,22 @@ actor PolestarAPI {
         """
         var accountCars: [ConsumerCarDTO] = []
         var legacyCars: [ConsumerCarDTO] = []
-        if let response: GraphQLResponse<ConsumerCarsPayloadDTO> = try? await graphQL(
-            query: query, variables: nil, token: token, operation: "vehicle discovery"
-        ) {
+        // A failure here is only degradable when it is specific to this data source. Auth,
+        // rate-limit, server, and transport failures must propagate — previously a swallowed
+        // 401 or 429 fell through to the manual-VIN branch and surfaced as
+        // `.notConfigured` ("Open Settings to sign in"), masking the real problem.
+        do {
+            let response: GraphQLResponse<ConsumerCarsPayloadDTO> = try await graphQL(
+                query: query, variables: nil, token: token, operation: "vehicle discovery"
+            )
             legacyCars = response.data?.getConsumerCarsV2 ?? []
+        } catch {
+            if Self.isRequestLevelFailure(error) { throw error }
+            logger.warning("Polestar vehicle discovery degraded (provider-specific): \(String(describing: error), privacy: .public)")
+            legacyCars = []
         }
-        let vdmsCars = (try? await fetchAppBackendCars(token: accessToken ?? token)) ?? []
-        if !vdmsCars.isEmpty {
+        do {
+            let vdmsCars = try await fetchAppBackendCars(token: accessToken ?? token)
             accountCars = vdmsCars.map { vdmsCar in
                 if let matching = legacyCars.first(where: { $0.vin == vdmsCar.vin }) {
                     return ConsumerCarDTO(
@@ -513,8 +517,21 @@ actor PolestarAPI {
                 }
                 return vdmsCar
             }
-        } else {
+        } catch {
+            if Self.isRequestLevelFailure(error) {
+                // The app-backend endpoint is a secondary discovery source. If the primary
+                // query already produced cars, keep those instead of failing the session;
+                // only fail when we would otherwise report an empty garage.
+                if legacyCars.isEmpty { throw error }
+                logger.warning("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
+            } else {
+                logger.warning("Polestar VDMS discovery degraded (provider-specific): \(String(describing: error), privacy: .public)")
+            }
             accountCars = legacyCars
+        }
+        guard requestEpoch == sessionEpoch else {
+            logger.debug("Discarding superseded Polestar vehicle discovery")
+            return
         }
         if accountCars.isEmpty {
             guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
@@ -598,8 +615,9 @@ actor PolestarAPI {
         guard accessToken != nil else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
-
+        let requestEpoch = sessionEpoch
         try await fetchCarInfo(preferredVIN: vin)
+        guard requestEpoch == sessionEpoch else { return }
         guard selectedVIN == vin else { throw PolestarError.notConfigured }
     }
 
@@ -756,6 +774,7 @@ actor PolestarAPI {
 
 
     func clearAccountState(keepRefreshToken: Bool = false) {
+        sessionEpoch &+= 1
         accessToken = nil
         tokenExpiry = nil
         if !keepRefreshToken { refreshToken = nil }
@@ -919,6 +938,20 @@ actor PolestarAPI {
         switch error {
         case .authenticationRequired, .rateLimited: return true
         default: return false
+        }
+    }
+
+    /// Errors that mean the request itself failed — authentication, rate limiting, server
+    /// outage, or transport breakdown. Callers that degrade provider-specific gaps to "no
+    /// data" must still surface these: swallowing an expired session or a rate-limit window
+    /// here is what made outages masquerade as "Open Settings to sign in".
+    static func isRequestLevelFailure(_ error: Error) -> Bool {
+        switch error as? PolestarError {
+        case .authenticationRequired, .rateLimited, .server, .network, .invalidResponse,
+             .responseTooLarge:
+            return true
+        default:
+            return false
         }
     }
 

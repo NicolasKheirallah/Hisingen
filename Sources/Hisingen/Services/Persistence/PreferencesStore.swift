@@ -5,6 +5,11 @@ import SwiftUI
 /// Storage intentionally uses the legacy keys so existing installations migrate in place.
 @MainActor
 final class PreferencesStore {
+    /// Process-wide instance for call sites outside the view hierarchy (App Intents,
+    /// service wiring) that previously constructed throwaway stores — each of which also
+    /// opened its own Keychain handle set.
+    static let shared = PreferencesStore()
+
     nonisolated(unsafe) private let d: UserDefaults
     private let keychain: KeychainStore
 
@@ -88,6 +93,29 @@ final class PreferencesStore {
             return ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
         }
     }
+    /// Preferred display order of the Charging card's detail rows. Identifiers not present
+    /// keep their natural position after the ordered ones — so a partial list is safe.
+    var chargingStatOrder: [String] {
+        get {
+            guard let raw = d.array(forKey: "charging_stat_order") as? [String] else { return [] }
+            return raw
+        }
+        set { d.set(newValue, forKey: "charging_stat_order") }
+    }
+
+    /// Floating always-on-top panel while charging.
+    var floatingChargingPanelEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "floating_charging_panel") }
+        set { UserDefaults.standard.set(newValue, forKey: "floating_charging_panel") }
+    }
+
+    /// Screenshot privacy mode: when on, views marked `.privacySensitive()` (VIN, plate,
+    /// coordinates) render as placeholders under SwiftUI's privacy redaction.
+    var privacyRedactionEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "privacy_redaction_enabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "privacy_redaction_enabled") }
+    }
+
     func vehicleNickname(for vin: String) -> String {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); guard !key.isEmpty else { return "" }
         if let values = d.dictionary(forKey: "polestar_vehicle_nicknames_v1") as? [String: String], let value = values[key] { return value }

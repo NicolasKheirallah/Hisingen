@@ -29,9 +29,17 @@ extension PolestarAPI {
     /// re-authorizes through a real browser window (`AppDelegate.beginPolestarCommandAuthorization()`,
     /// surfaced as "Authorize Remote Commands" in Settings). Callers should treat a `nil` return
     /// as "not authorized for remote commands right now," not as a transient error to retry.
+    ///
+    /// Refreshes are single-flight: parallel commands used to each fire a `refresh_token`
+    /// grant with the *same* stored token, and under a rotate-on-use identity provider one
+    /// replay fails while both paths then persist different rotated tokens (last writer
+    /// wins, orphaning the other).
     func validCommandToken() async -> String? {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return token }
+        if let existing = commandRefreshTask {
+            return await existing.value
+        }
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
         guard let refresh = stored, let tokenEndpoint else { return nil }
         var request = URLRequest(url: tokenEndpoint)
@@ -40,15 +48,30 @@ extension PolestarAPI {
         request.httpBody = Self.formBody([
             "grant_type": "refresh_token", "client_id": commandClientID, "refresh_token": refresh
         ])
-        guard let token = try? await Self.requestToken(request: request, session: session,
-                                                        invalidReason: .expiredSession) else {
-            return nil
+        let currentSession = session
+        let task = Task { [logger] () -> String? in
+            do {
+                let token = try await Self.requestToken(request: request, session: currentSession,
+                                                        invalidReason: .expiredSession)
+                await self.applyCommandToken(token, fallbackRefresh: refresh)
+                return token.accessToken
+            } catch {
+                // Distinguish "not authorized" from "network hiccup" at least in the log so
+                // a Wi-Fi blip isn't misdiagnosed as an expired authorization.
+                logger.warning("Polestar command-token refresh failed: \(String(describing: error), privacy: .public)")
+                return nil
+            }
         }
+        commandRefreshTask = task
+        defer { commandRefreshTask = nil }
+        return await task.value
+    }
+
+    private func applyCommandToken(_ token: TokenResponseDTO, fallbackRefresh: String) {
         commandAccessToken = token.accessToken
-        commandRefreshToken = token.refreshToken ?? refresh
+        commandRefreshToken = token.refreshToken ?? fallbackRefresh
         commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
         if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
-        return token.accessToken
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -79,6 +102,10 @@ extension PolestarAPI {
         commandAccessToken = nil
         commandRefreshToken = nil
         commandTokenExpiry = nil
+        // A stale pending PKCE pair surviving sign-out would let a later callback matching
+        // the old state complete a flow the user never restarted.
+        commandPendingVerifier = nil
+        commandPendingState = nil
         refreshTask?.cancel()
         refreshTask = nil
         cancelImageDownloads()

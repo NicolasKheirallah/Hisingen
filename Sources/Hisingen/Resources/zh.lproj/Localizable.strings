@@ -610,7 +610,7 @@
 "Network Type" = "Network Type";
 "Network type" = "Network type";
 "New climate timer" = "New climate timer";
-"Next Vehicle (⌥])" = "Next Vehicle (⌥])";
+"Next Vehicle (⌃⌥])" = "Next Vehicle (⌃⌥])";
 "Nickname" = "车辆昵称";
 "Nickname & Registration" = "昵称与车牌号";
 "No Remote Controls Enabled" = "未启用远程控制";
@@ -737,7 +737,7 @@
 "Pressure Warning" = "胎压异常报警";
 "Pressure monitoring and system alerts" = "Pressure monitoring and system alerts";
 "Preview:" = "Preview:";
-"Previous Vehicle (⌥[)" = "Previous Vehicle (⌥[)";
+"Previous Vehicle (⌃⌥[)" = "Previous Vehicle (⌃⌥[)";
 "Private Notification Banners" = "Private Notification Banners";
 "Projected" = "Projected";
 "Providing power" = "Providing power";
@@ -990,7 +990,7 @@
 "Swedish Gold" = "瑞典金 (Swedish Gold)";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "瑞典松木与尤加利大地色系，温润自然的有机触感";
 "Switch Vehicle" = "Switch Vehicle";
-"Switch Vehicle (⌥[ / ⌥])" = "切换车辆 (⌥[ / ⌥])";
+"Switch Vehicle (⌃⌥[ / ⌃⌥])" = "切换车辆 (⌃⌥[ / ⌃⌥])";
 "Switch to %@ (%@ · %d%%)…" = "Switch to %@ (%@ · %d%%)…";
 "Switch to %@ (%@)…" = "Switch to %@ (%@)…";
 "Switch to Volvo Account" = "Switch to Volvo Account";

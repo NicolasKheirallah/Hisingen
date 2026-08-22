@@ -66,6 +66,7 @@ struct KeychainStore: Sendable {
 
     let service: String
     private let memoryCache: InMemorySecretCache
+    private let volvoBundleLock = NSLock()
 
     init(service: String) {
         self.service = service
@@ -127,9 +128,7 @@ struct KeychainStore: Sendable {
     }
 
     func saveVolvoSessionToken(_ token: String) throws {
-        var bundle = readVolvoBundle()
-        bundle.sessionToken = token
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.sessionToken = token }
     }
 
     func readVolvoSessionToken() throws -> String? {
@@ -137,15 +136,11 @@ struct KeychainStore: Sendable {
     }
 
     func deleteVolvoSessionToken() throws {
-        var bundle = readVolvoBundle()
-        bundle.sessionToken = nil
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.sessionToken = nil }
     }
 
     func saveVolvoClientSecret(_ value: String) throws {
-        var bundle = readVolvoBundle()
-        bundle.clientSecret = value
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.clientSecret = value }
     }
 
     func readVolvoClientSecret() throws -> String? {
@@ -153,15 +148,11 @@ struct KeychainStore: Sendable {
     }
 
     func deleteVolvoClientSecret() throws {
-        var bundle = readVolvoBundle()
-        bundle.clientSecret = nil
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.clientSecret = nil }
     }
 
     func saveVolvoApiKey(_ value: String) throws {
-        var bundle = readVolvoBundle()
-        bundle.apiKey = value
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.apiKey = value }
     }
 
     func readVolvoApiKey() throws -> String? {
@@ -169,9 +160,7 @@ struct KeychainStore: Sendable {
     }
 
     func deleteVolvoApiKey() throws {
-        var bundle = readVolvoBundle()
-        bundle.apiKey = nil
-        try saveVolvoBundle(bundle)
+        try mutateVolvoBundle { $0.apiKey = nil }
     }
 
     private static let passwordDraftAccount = "polestar-password-draft"
@@ -250,6 +239,18 @@ struct KeychainStore: Sendable {
         }
     }
 
+    /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
+    /// holding three secrets, so concurrent single-field writes (e.g. a sign-in flow saving
+    /// the client secret while a token refresh persists the session token) would otherwise
+    /// drop one of the fields — last writer wins with its stale copy of the other two.
+    private func mutateVolvoBundle(_ mutate: (inout VolvoSecretBundle) -> Void) throws {
+        volvoBundleLock.lock()
+        defer { volvoBundleLock.unlock() }
+        var bundle = readVolvoBundle()
+        mutate(&bundle)
+        try saveVolvoBundle(bundle)
+    }
+
     private func readVolvoBundle() -> VolvoSecretBundle {
         if let raw = try? read(account: Self.volvoBundleAccount),
            let data = raw.data(using: .utf8),
@@ -278,8 +279,13 @@ struct KeychainStore: Sendable {
         try save(str, account: Self.volvoBundleAccount)
     }
 
+    /// Only explicitly test-prefixed services bypass the real Keychain. The previous check
+    /// treated *any* service name other than the production one as a test store, so renaming
+    /// or adding a second production service would have silently persisted nothing.
     private var isTestService: Bool {
-        service.hasPrefix("io.kheirallah.hisingen.tests.") || service != "io.kheirallah.hisingen"
+        service.hasPrefix("io.kheirallah.hisingen.tests.")
+            || service.hasPrefix("io.kheirallah.hisingen.live-")
+            || service.hasPrefix("io.kheirallah.hisingen.diagnostic-")
     }
 
     private static let testStore = TestSecretStore()
@@ -368,8 +374,17 @@ struct KeychainStore: Sendable {
         let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
         if legacyStatus == errSecSuccess, let data = legacyItem as? Data, let result = String(data: data, encoding: .utf8) {
             memoryCache.set(cacheKey(account: account), value: result)
-            try? save(result, account: account)
-            _ = SecItemDelete(legacyQuery as CFDictionary)
+            // Migrate the legacy (file-based keychain) item into the data-protection
+            // keychain. The legacy copy is deleted only once the new write has verifiably
+            // succeeded — deleting first (or ignoring a failed save) permanently destroys
+            // the credential when the DP keychain is unavailable, which is exactly what
+            // happens when code-signing identities change between builds.
+            do {
+                try save(result, account: account)
+                _ = SecItemDelete(legacyQuery as CFDictionary)
+            } catch {
+                Self.logger.error("Keychain migration for \(account, privacy: .public) deferred: DP save failed, legacy item kept")
+            }
             return result
         }
 

@@ -65,6 +65,7 @@ extension VolvoAPI {
     }
 
     func resetSession() async {
+        sessionEpoch &+= 1
         accessToken = nil
         refreshToken = nil
         tokenExpiry = nil

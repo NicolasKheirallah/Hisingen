@@ -138,7 +138,8 @@ struct HisingenContentView: View {
                                            imageCache: imageCache)
                                 .id(state.vin)
                         case .info:
-                            InfoTabView(state: state, database: database, imageCache: imageCache)
+                            InfoTabView(state: state, database: database, imageCache: imageCache,
+                                        reverseGeocoder: reverseGeocoder)
                                 .id(state.vin)
                         case .history:
                             HistoryDashboardView(state: state, database: database)
@@ -418,7 +419,7 @@ struct HisingenContentView: View {
                         Label(vehicleMenuLabel(car), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
                     }
                     .accessibilityLabel(vehicleMenuAccessibilityLabel(car, isSelected: isSelected))
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .option)
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.option, .control])
                 }
                 ForEach(Array(cars.enumerated().dropFirst(9)), id: \.element.vin) { _, car in
                     let isSelected = car.vin == currentVin
@@ -441,6 +442,7 @@ struct HisingenContentView: View {
             Divider()
             Button {
                 selectedTab = .settings
+                tabSelection.wrappedValue = .settings
             } label: {
                 Label(L10n.text("Add or Manage Vehicles…"), systemImage: "person.crop.circle.badge.plus")
             }
@@ -461,7 +463,7 @@ struct HisingenContentView: View {
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .withoutFocusRing()
-        .help(L10n.format("%@ — Switch Vehicle (⌥[ / ⌥])", currentTitle))
+        .help(L10n.format("%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])", currentTitle))
         .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentTitle))
     }
 
@@ -575,6 +577,9 @@ struct VehicleTabView: View {
     @State private var moreExpanded = true
     @State private var chargingJustStarted = false
     @State private var dismissedSoftwareEventIdentifier: String?
+    /// Persistent charging history, prefetched off the main thread. Reading it inside
+    /// `chargingCard` ran a SQLite query on every `body` evaluation.
+    @State private var persistentChargingSessions: [ChargingSession] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 
@@ -628,6 +633,17 @@ struct VehicleTabView: View {
         }
         .animation(cardChangeAnimation, value: warningsSignature)
         .animation(cardChangeAnimation, value: pillSignature)
+        .task(id: state.vin) {
+            // Prefetch persistent charging history off-main; the charging card renders from
+            // this instead of querying SQLite synchronously per render pass.
+            let db = database
+            let vin = state.vin
+            let sessions = await Task.detached(priority: .userInitiated) {
+                db.recentChargingSessions(for: vin).map { $0.toDomainSession(database: db) }
+            }.value
+            guard !Task.isCancelled else { return }
+            persistentChargingSessions = sessions
+        }
         .onAppear {
             dismissedSoftwareEventIdentifier = preferences.dismissedSoftwareEventIdentifier(for: state.vin)
         }
@@ -1172,48 +1188,69 @@ struct VehicleTabView: View {
         return parts.joined(separator: " · ")
     }
 
+    /// Stable identifiers for the Charging card's detail rows, reordered from Settings →
+    /// Features. Identifiers absent from the saved order keep their natural position after
+    /// the ordered ones, so a partial or stale preference can never drop a row.
+    private let chargingStatIdentifiers: [String] = [
+        "connection", "type", "draw", "limit", "voltage", "target",
+        "powerModule", "timeToTarget", "timeToMinSoc", "avgConsumption", "avgSinceCharge", "energySinceCharge",
+    ]
+
     private var chargingDetailRows: [KVRow] {
-        var rows: [KVRow] = []
+        let tagged = chargingDetailTagged()
+        let order = preferences.chargingStatOrder
+        return tagged.enumerated()
+            .sorted { lhs, rhs in
+                let li = order.firstIndex(of: lhs.element.id) ?? Int.max
+                let ri = order.firstIndex(of: rhs.element.id) ?? Int.max
+                if li != ri { return li < ri }
+                return lhs.offset < rhs.offset
+            }
+            .map { $0.element.row }
+    }
+
+    private func chargingDetailTagged() -> [(id: String, row: KVRow)] {
+        var rows: [(id: String, row: KVRow)] = []
         if features.contains(.chargingDetails) {
             if state.chargerConnection != .unknown {
-                rows.append(KVRow(L10n.text("Charger Connection"), state.chargerConnection.displayName,
-                                  symbol: "powerplug.fill", valueWarning: state.chargerConnection == .fault))
+                rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.chargerConnection.displayName,
+                                  symbol: "powerplug.fill", valueWarning: state.chargerConnection == .fault)))
             }
             if state.chargingType != .unknown, state.chargingType != .none {
-                rows.append(KVRow(L10n.text("Charging Type"), state.chargingType.displayName, symbol: "bolt.circle"))
+                rows.append(("type", KVRow(L10n.text("Charging Type"), state.chargingType.displayName, symbol: "bolt.circle")))
             }
             if let drawAmps = state.chargingCurrentAmps, drawAmps > 0 {
-                rows.append(KVRow(L10n.text("Current Draw"), "\(drawAmps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))
+                rows.append(("draw", KVRow(L10n.text("Current Draw"), "\(drawAmps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger."))))
             }
             if let limitAmps = state.chargingCurrentLimitAmps, limitAmps > 0 {
-                rows.append(KVRow(L10n.text("Current Limit"), "\(limitAmps) A", symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings.")))
+                rows.append(("limit", KVRow(L10n.text("Current Limit"), "\(limitAmps) A", symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings."))))
             }
             if let volts = state.chargingVoltageVolts, volts > 0 {
-                rows.append(KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt.fill", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))
+                rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt.fill", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger."))))
             }
             if let target = state.chargeTargetPercentage {
-                rows.append(KVRow(L10n.text("Target Limit"), "\(target)%", symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target.")))
+                rows.append(("target", KVRow(L10n.text("Target Limit"), "\(target)%", symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target."))))
             }
         }
         if features.contains(.batteryDiagnostics), let diag = state.batteryDiagnostics {
             if diag.chargerPowerState != .unknown {
-                rows.append(KVRow(L10n.text("Power Module"), diag.chargerPowerState.displayName,
-                                  symbol: "batteryblock", valueWarning: diag.chargerPowerState == .fault))
+                rows.append(("powerModule", KVRow(L10n.text("Power Module"), diag.chargerPowerState.displayName,
+                                  symbol: "batteryblock", valueWarning: diag.chargerPowerState == .fault)))
             }
             if let m = diag.timeToTargetMinutes {
-                rows.append(KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: m), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target.")))
+                rows.append(("timeToTarget", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: m), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target."))))
             }
             if let minM = diag.timeToMinimumSOCMinutes {
-                rows.append(KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minM), symbol: "battery.50percent", info: L10n.text("Vehicle Dynamic Calculation. Estimated time to reach minimum operating state of charge.")))
+                rows.append(("timeToMinSoc", KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minM), symbol: "battery.50percent", info: L10n.text("Vehicle Dynamic Calculation. Estimated time to reach minimum operating state of charge."))))
             }
             if let v = diag.averageConsumption {
-                rows.append(KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: v, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))
+                rows.append(("avgConsumption", KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: v, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer."))))
             }
             if let avgSince = diag.averageConsumptionSinceCharge {
-                rows.append(KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: avgSince, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))
+                rows.append(("avgSinceCharge", KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: avgSince, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged."))))
             }
             if let wh = diag.energyUsedSinceChargeWh {
-                rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))
+                rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge."))))
             }
         }
         return rows
@@ -1221,7 +1258,9 @@ struct VehicleTabView: View {
 
     private var chargingReadyDate: Date? {
         guard let minutes = state.estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
-        return Date().addingTimeInterval(TimeInterval(minutes * 60))
+        // Anchor at the fetch time, not render time: recomputing from `Date()` made the
+        // projected endpoint drift forward on every re-render between refreshes.
+        return state.fetchedAt.addingTimeInterval(TimeInterval(minutes * 60))
     }
 
     private var chargingCard: AnyView? {
@@ -1238,8 +1277,7 @@ struct VehicleTabView: View {
             }
             return []
         }()
-        let persistentSessions = database.recentChargingSessions(for: state.vin).map { $0.toDomainSession(database: database) }
-        let allChargingSessions = !state.chargingSessions.isEmpty ? state.chargingSessions : persistentSessions
+        let allChargingSessions = !state.chargingSessions.isEmpty ? state.chargingSessions : persistentChargingSessions
 
         guard state.powertrain.hasElectricRange, (headline != nil || !details.isEmpty || !activeSamples.isEmpty
             || !allChargingSessions.isEmpty) else { return nil }
@@ -1995,14 +2033,11 @@ struct VehicleTabView: View {
     }
 
     private func exportChargingHistoryCSV(sessions: [ChargingSession]) {
-        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
-        let rows = sessions.map { s in
-            let dateStr = ISO8601DateFormatter().string(from: s.startDate)
-            let costStr = s.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
-            let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
-            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(preferences.currencySymbol)"
-        }.joined(separator: "\n")
-        let csvData = headers + rows
+        let csvData = ChargingHistoryExport.csv(
+            sessions: sessions,
+            tariffPricePerKwh: preferences.electricityPricePerKwh,
+            currencySymbol: preferences.currencySymbol
+        )
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
@@ -2488,7 +2523,7 @@ struct LocationCardView: View {
                     VStack(alignment: .trailing, spacing: 6) {
                         Button {
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                             if let label = PreferencesStore().activeBrand.displayName
+                             if let label = preferences.activeBrand.displayName
                                 .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
                                let url = URL(string: "maps://?q=\(label)&ll=\(lat),\(lon)") {
                                 NSWorkspace.shared.open(url)
@@ -3013,24 +3048,7 @@ struct ChargingCurveView: View {
     }
 
     private func smoothPath(_ points: [CGPoint]) -> Path {
-        var path = Path()
-        guard let first = points.first else { return path }
-        path.move(to: first)
-        guard points.count > 1 else { return path }
-        if points.count == 2 {
-            path.addLine(to: points[1])
-            return path
-        }
-        for i in 0..<points.count - 1 {
-            let p0 = points[max(0, i - 1)]
-            let p1 = points[i]
-            let p2 = points[i + 1]
-            let p3 = points[min(points.count - 1, i + 2)]
-            let cp1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
-            let cp2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
-            path.addCurve(to: p2, control1: cp1, control2: cp2)
-        }
-        return path
+        ChargingCharts.smoothPath(points)
     }
 }
 
@@ -3055,7 +3073,7 @@ struct MiniSparklineView: View {
                 }
 
                 ZStack {
-                    smoothPath(points)
+                    ChargingCharts.smoothPath(points)
                         .addingClosedBottom(firstX: points.first?.x ?? 0, lastX: points.last?.x ?? w, bottomY: h)
                         .fill(
                             LinearGradient(
@@ -3064,7 +3082,7 @@ struct MiniSparklineView: View {
                             )
                         )
 
-                    smoothPath(points)
+                    ChargingCharts.smoothPath(points)
                         .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
 
                     if let last = points.last {
@@ -3079,7 +3097,23 @@ struct MiniSparklineView: View {
         )
     }
 
-    private func smoothPath(_ points: [CGPoint]) -> Path {
+
+}
+
+private extension Path {
+    func addingClosedBottom(firstX: CGFloat, lastX: CGFloat, bottomY: CGFloat) -> Path {
+        var closed = self
+        closed.addLine(to: CGPoint(x: lastX, y: bottomY))
+        closed.addLine(to: CGPoint(x: firstX, y: bottomY))
+        closed.closeSubpath()
+        return closed
+    }
+}
+
+/// Chart geometry shared by `ChargingCurveView` and `MiniSparklineView`.
+enum ChargingCharts {
+    /// Catmull-Rom → cubic Bézier smoothing over the given points.
+    static func smoothPath(_ points: [CGPoint]) -> Path {
         var path = Path()
         guard let first = points.first else { return path }
         path.move(to: first)
@@ -3101,20 +3135,11 @@ struct MiniSparklineView: View {
     }
 }
 
-private extension Path {
-    func addingClosedBottom(firstX: CGFloat, lastX: CGFloat, bottomY: CGFloat) -> Path {
-        var closed = self
-        closed.addLine(to: CGPoint(x: lastX, y: bottomY))
-        closed.addLine(to: CGPoint(x: firstX, y: bottomY))
-        closed.closeSubpath()
-        return closed
-    }
-}
-
 struct ChargingSessionRow: View {
     let session: ChargingSession
 
     @State private var isHovered = false
+    @Environment(\.preferencesStore) private var preferences
 
     var body: some View {
         DisclosureGroup {
@@ -3134,7 +3159,6 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
-                    let preferences = PreferencesStore()
                     if let cost = session.estimatedCost(tariff: preferences.electricityPricePerKwh) {
                         KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, preferences.currencySymbol), symbol: "creditcard")
                     }
@@ -3146,7 +3170,6 @@ struct ChargingSessionRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .font(.system(size: 11, weight: .medium))
-                    let preferences = PreferencesStore()
                     let costStr = session.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: " · %.2f %@", $0, preferences.currencySymbol) } ?? ""
                     Text(String(format: "+%.0f%% · ≈%.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
                         .font(.system(size: 10))

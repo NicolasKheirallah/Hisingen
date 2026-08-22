@@ -65,3 +65,10 @@ Two files, both real network calls, both gated to be read-only by design and by 
 The Volvo job's env var (`HISINGEN_TEST_VOLVO_VCC_API_KEY`) matches what `LiveVolvoIntegrationTests.swift` checks, and the workflow filters specifically to `LiveVolvoReadOnlyIntegrationTests` — so, unlike an earlier revision of this workflow, a populated secret set now actually exercises live Volvo credentials in CI rather than silently self-skipping. See [operations/ci.md](../operations/ci.md).
 
 Neither test can wake a sleeping vehicle on its own — they read whatever state the backend currently reports, same as a normal refresh.
+
+## Test framework (2026-08-22)
+
+The suite is **Swift Testing** (`import Testing`) exclusively. The current CommandLineTools
+toolchain cannot compile `import XCTest` — new test files must use `@Test` structs with
+`#expect`/`#require`. Fixture JSON files under the tests target cover provider decoding;
+wire-level proto fixtures are built inline with the `Protobuf.*Field` helpers.

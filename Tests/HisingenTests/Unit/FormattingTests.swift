@@ -4,6 +4,14 @@ import Testing
 
 @MainActor
 struct FormattingTests {
+    /// Isolated preference store per test — the dead `Preferences` global (deleted) wrote to
+    /// `UserDefaults.standard` and leaked state across runs on developer machines.
+    private func makeStore() throws -> (store: PreferencesStore, defaults: UserDefaults, suiteName: String) {
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        return (PreferencesStore(defaults: defaults), defaults, suiteName)
+    }
+
     @Test
     func testShortDuration() {
         XCTAssertEqual(Format.shortDuration(minutes: 45), "45min")
@@ -30,76 +38,82 @@ struct FormattingTests {
     }
 
     @Test
-    func testLegacyPreferenceValuesMigrate() {
-        UserDefaults.standard.set("Range (km)", forKey: "statusbar_display_option")
-        UserDefaults.standard.set("Miles (mi)", forKey: "distance_unit")
-        defer {
-            UserDefaults.standard.removeObject(forKey: "statusbar_display_option")
-            UserDefaults.standard.removeObject(forKey: "distance_unit")
-        }
-        XCTAssertEqual(Preferences.menuBarStyle, .range)
-        XCTAssertEqual(Preferences.distanceUnit, .miles)
+    func testLegacyPreferenceValuesMigrate() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("Range (km)", forKey: "statusbar_display_option")
+        defaults.set("Miles (mi)", forKey: "distance_unit")
+        XCTAssertEqual(store.menuBarStyle, .range)
+        XCTAssertEqual(store.distanceUnit, .miles)
     }
 
     @Test
-    func testVehicleModelBadgePositionPreference() {
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
-        Preferences.vehicleModelBadgePosition = .topRightOverlay
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topRightOverlay)
-        Preferences.vehicleModelBadgePosition = .topLeftOverlay
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .topLeftOverlay)
-        Preferences.vehicleModelBadgePosition = .subheadline
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .subheadline)
-        Preferences.vehicleModelBadgePosition = .hidden
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .hidden)
-        Preferences.vehicleModelBadgePosition = .inlineHeader
-        XCTAssertEqual(Preferences.vehicleModelBadgePosition, .inlineHeader)
+    func testVehicleModelBadgePositionPreference() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(store.vehicleModelBadgePosition, .inlineHeader)
+        store.vehicleModelBadgePosition = .topRightOverlay
+        XCTAssertEqual(store.vehicleModelBadgePosition, .topRightOverlay)
+        store.vehicleModelBadgePosition = .topLeftOverlay
+        XCTAssertEqual(store.vehicleModelBadgePosition, .topLeftOverlay)
+        store.vehicleModelBadgePosition = .subheadline
+        XCTAssertEqual(store.vehicleModelBadgePosition, .subheadline)
+        store.vehicleModelBadgePosition = .hidden
+        XCTAssertEqual(store.vehicleModelBadgePosition, .hidden)
+        store.vehicleModelBadgePosition = .inlineHeader
+        XCTAssertEqual(store.vehicleModelBadgePosition, .inlineHeader)
     }
 
     @Test
-    func testRegistrationBadgePositionPreference() {
-        XCTAssertEqual(Preferences.registrationBadgePosition, .belowGreeting)
-        Preferences.registrationBadgePosition = .platePill
-        XCTAssertEqual(Preferences.registrationBadgePosition, .platePill)
-        Preferences.registrationBadgePosition = .inlineHeader
-        XCTAssertEqual(Preferences.registrationBadgePosition, .inlineHeader)
-        Preferences.registrationBadgePosition = .topRightOverlay
-        XCTAssertEqual(Preferences.registrationBadgePosition, .topRightOverlay)
-        Preferences.registrationBadgePosition = .topLeftOverlay
-        XCTAssertEqual(Preferences.registrationBadgePosition, .topLeftOverlay)
-        Preferences.registrationBadgePosition = .hidden
-        XCTAssertEqual(Preferences.registrationBadgePosition, .hidden)
-        Preferences.registrationBadgePosition = .belowGreeting
-        XCTAssertEqual(Preferences.registrationBadgePosition, .belowGreeting)
+    func testRegistrationBadgePositionPreference() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(store.registrationBadgePosition, .belowGreeting)
+        store.registrationBadgePosition = .platePill
+        XCTAssertEqual(store.registrationBadgePosition, .platePill)
+        store.registrationBadgePosition = .inlineHeader
+        XCTAssertEqual(store.registrationBadgePosition, .inlineHeader)
+        store.registrationBadgePosition = .topRightOverlay
+        XCTAssertEqual(store.registrationBadgePosition, .topRightOverlay)
+        store.registrationBadgePosition = .topLeftOverlay
+        XCTAssertEqual(store.registrationBadgePosition, .topLeftOverlay)
+        store.registrationBadgePosition = .hidden
+        XCTAssertEqual(store.registrationBadgePosition, .hidden)
+        store.registrationBadgePosition = .belowGreeting
+        XCTAssertEqual(store.registrationBadgePosition, .belowGreeting)
     }
 
     @Test
-    func testVehicleLabelFormatPreference() {
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelAndYear)
-        Preferences.vehicleLabelFormat = .registration
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .registration)
-        Preferences.vehicleLabelFormat = .nickname
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .nickname)
-        Preferences.vehicleLabelFormat = .modelOnly
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelOnly)
-        Preferences.vehicleLabelFormat = .nicknameAndRegistration
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .nicknameAndRegistration)
-        Preferences.vehicleLabelFormat = .registrationAndModel
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .registrationAndModel)
-        Preferences.vehicleLabelFormat = .modelAndYear
-        XCTAssertEqual(Preferences.vehicleLabelFormat, .modelAndYear)
+    func testVehicleLabelFormatPreference() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(store.vehicleLabelFormat, .modelAndYear)
+        store.vehicleLabelFormat = .registration
+        XCTAssertEqual(store.vehicleLabelFormat, .registration)
+        store.vehicleLabelFormat = .nickname
+        XCTAssertEqual(store.vehicleLabelFormat, .nickname)
+        store.vehicleLabelFormat = .modelOnly
+        XCTAssertEqual(store.vehicleLabelFormat, .modelOnly)
+        store.vehicleLabelFormat = .nicknameAndRegistration
+        XCTAssertEqual(store.vehicleLabelFormat, .nicknameAndRegistration)
+        store.vehicleLabelFormat = .registrationAndModel
+        XCTAssertEqual(store.vehicleLabelFormat, .registrationAndModel)
+        store.vehicleLabelFormat = .modelAndYear
+        XCTAssertEqual(store.vehicleLabelFormat, .modelAndYear)
     }
 
     @Test
-    func testFormattedVehicleTitle() {
+    func testFormattedVehicleTitle() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
         let testVIN = "YS2TEST1234567890"
-        Preferences.setVehicleNickname("Silver Comet", for: testVIN)
+        store.setVehicleNickname("Silver Comet", for: testVIN)
         defer {
-            Preferences.setVehicleNickname("", for: testVIN)
+            store.setVehicleNickname("", for: testVIN)
         }
 
         // Test Registration Format
-        let regTitle = Preferences.formattedVehicleTitle(
+        let regTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -109,7 +123,7 @@ struct FormattingTests {
         XCTAssertEqual(regTitle, "ZCJ 06G")
 
         // Test Nickname Format
-        let nickTitle = Preferences.formattedVehicleTitle(
+        let nickTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -119,7 +133,7 @@ struct FormattingTests {
         XCTAssertEqual(nickTitle, "Silver Comet")
 
         // Test Model & Year Format
-        let modelYrTitle = Preferences.formattedVehicleTitle(
+        let modelYrTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -129,7 +143,7 @@ struct FormattingTests {
         XCTAssertEqual(modelYrTitle, "Polestar 2 · 2024")
 
         // Test Model Only Format
-        let modelOnlyTitle = Preferences.formattedVehicleTitle(
+        let modelOnlyTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -139,7 +153,7 @@ struct FormattingTests {
         XCTAssertEqual(modelOnlyTitle, "Polestar 2")
 
         // Test Nickname & Registration Format
-        let nickAndRegTitle = Preferences.formattedVehicleTitle(
+        let nickAndRegTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -149,7 +163,7 @@ struct FormattingTests {
         XCTAssertEqual(nickAndRegTitle, "Silver Comet (ZCJ 06G)")
 
         // Test Registration & Model Format
-        let regAndModelTitle = Preferences.formattedVehicleTitle(
+        let regAndModelTitle = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -159,7 +173,7 @@ struct FormattingTests {
         XCTAssertEqual(regAndModelTitle, "ZCJ 06G · Polestar 2")
 
         // Test fallback when registration is empty
-        let regFallback = Preferences.formattedVehicleTitle(
+        let regFallback = store.formattedVehicleTitle(
             vin: testVIN,
             modelName: "Polestar 2",
             modelYear: "2024",
@@ -455,7 +469,9 @@ struct FormattingTests {
 
         XCTAssertEqual(Format.barTitle(for: chargingCar, style: .battery, unit: .kilometers), "82%")
         XCTAssertEqual(Format.barTitle(for: chargingCar, style: .batteryAndRange, unit: .kilometers), "82% · 348km")
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .chargingAware, unit: .kilometers), "82% · 1h42m")
+        // Charging-aware renders as "82%→90 · 1h42m": the arrow shows time-to-TARGET when a
+        // sub-100 % target is set, answering "when do I unplug" rather than "when is it full".
+        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .chargingAware, unit: .kilometers), "82%→90 · 1h42m")
         XCTAssertEqual(Format.barTitle(for: chargingCar, style: .compactCharging, unit: .kilometers), "82% (1h42m)")
         XCTAssertEqual(Format.barTitle(for: chargingCar, style: .batteryAndPower, unit: .kilometers), "82% · 7.2 kW")
         XCTAssertEqual(Format.barTitle(for: chargingCar, style: .range, unit: .kilometers), "348km")
@@ -539,8 +555,10 @@ struct FormattingTests {
     }
 
     @Test
-    func testMenuBarTintingPreference() {
-        XCTAssertTrue(Preferences.tintMenuBarIcon)
+    func testMenuBarTintingPreference() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(store.tintMenuBarIcon)
     }
 
     @Test
@@ -555,19 +573,17 @@ struct FormattingTests {
     }
 
     @Test
-    func testVehicleNicknamesAreStoredPerVIN() {
+    func testVehicleNicknamesAreStoredPerVIN() throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
         let firstVIN = "YSMNICKNAME000001"
         let secondVIN = "YSMNICKNAME000002"
-        defer {
-            Preferences.setVehicleNickname("", for: firstVIN)
-            Preferences.setVehicleNickname("", for: secondVIN)
-        }
 
-        Preferences.setVehicleNickname("Comet", for: firstVIN)
-        Preferences.setVehicleNickname("Nova", for: secondVIN)
+        store.setVehicleNickname("Comet", for: firstVIN)
+        store.setVehicleNickname("Nova", for: secondVIN)
 
-        XCTAssertEqual(Preferences.vehicleNickname(for: firstVIN), "Comet")
-        XCTAssertEqual(Preferences.vehicleNickname(for: secondVIN), "Nova")
+        XCTAssertEqual(store.vehicleNickname(for: firstVIN), "Comet")
+        XCTAssertEqual(store.vehicleNickname(for: secondVIN), "Nova")
     }
 
     @Test

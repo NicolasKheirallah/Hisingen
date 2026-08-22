@@ -18,7 +18,8 @@ struct HistoryInsightsTests {
         HistoricalTelemetryRecord(
             id: id, vin: "VIN", timestamp: start.addingTimeInterval(daysAfterStart * 86_400),
             odometerKm: odometerKm, tripManualKm: nil, tripAutomaticKm: nil,
-            averageConsumption: consumption, ambientTemperatureCelsius: nil,
+            averageConsumption: consumption,
+            averageConsumptionUnit: nil, ambientTemperatureCelsius: nil,
             latitude: nil, longitude: nil
         )
     }

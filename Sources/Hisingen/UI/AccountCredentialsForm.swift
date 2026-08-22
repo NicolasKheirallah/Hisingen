@@ -412,17 +412,30 @@ struct AccountCredentialsForm: View {
         if !nicknameVIN.isEmpty {
             preferences.setVehicleNickname(polestarNickname, for: nicknameVIN)
         }
+        var keychainFailed = false
         if !polestarPassword.isEmpty {
-            try? Keychain.savePassword(polestarPassword)
+            do {
+                try Keychain.savePassword(polestarPassword)
+                // The plaintext must not linger: neither in this view's state nor in the
+                // app-lifetime draft store on `PreferencesStore`.
+                polestarPassword = ""
+                preferences.accountDraft.polestarPassword = ""
+            } catch {
+                keychainFailed = true
+            }
         }
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.7)) {
-            showSavedFeedback = true
+            showSavedFeedback = !keychainFailed
+            if keychainFailed {
+                testConnectionResult = (false, L10n.text("Couldn't save the password to the Keychain. Please try again."))
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                 showSavedFeedback = false
             }
         }
+        guard !keychainFailed else { return }
         onSettingsChanged(credentialsChanged ? .credentials : .presentation)
     }
 
@@ -449,8 +462,12 @@ struct AccountCredentialsForm: View {
             vccApiKey: apiKeyToSend,
             nickname: volvoNickname
         ))
+        // The secrets were handed to the sign-in flow; drop the plaintext copies here and in
+        // the app-lifetime draft store so they don't outlive the Settings sheet.
         volvoClientSecret = ""
         volvoApiKey = ""
+        preferences.accountDraft.volvoClientSecret = ""
+        preferences.accountDraft.volvoApiKey = ""
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { volvoSigningIn = false }
     }
 

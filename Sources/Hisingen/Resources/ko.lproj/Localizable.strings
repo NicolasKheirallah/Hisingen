@@ -610,7 +610,7 @@
 "Network Type" = "Network Type";
 "Network type" = "Network type";
 "New climate timer" = "New climate timer";
-"Next Vehicle (⌥])" = "Next Vehicle (⌥])";
+"Next Vehicle (⌃⌥])" = "Next Vehicle (⌃⌥])";
 "Nickname" = "차량 별명";
 "Nickname & Registration" = "별명 및 등록번호";
 "No Remote Controls Enabled" = "활성화된 원격 제어 없음";
@@ -737,7 +737,7 @@
 "Pressure Warning" = "타이어 공기압 경고";
 "Pressure monitoring and system alerts" = "Pressure monitoring and system alerts";
 "Preview:" = "Preview:";
-"Previous Vehicle (⌥[)" = "Previous Vehicle (⌥[)";
+"Previous Vehicle (⌃⌥[)" = "Previous Vehicle (⌃⌥[)";
 "Private Notification Banners" = "Private Notification Banners";
 "Projected" = "Projected";
 "Providing power" = "Providing power";
@@ -990,7 +990,7 @@
 "Swedish Gold" = "스웨디시 골드 (Swedish Gold)";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "스웨덴 소나무와 유칼립투스 어스 톤의 편안한 유기적 감성";
 "Switch Vehicle" = "Switch Vehicle";
-"Switch Vehicle (⌥[ / ⌥])" = "차량 전환 (⌥[ / ⌥])";
+"Switch Vehicle (⌃⌥[ / ⌃⌥])" = "차량 전환 (⌃⌥[ / ⌃⌥])";
 "Switch to %@ (%@ · %d%%)…" = "Switch to %@ (%@ · %d%%)…";
 "Switch to %@ (%@)…" = "Switch to %@ (%@)…";
 "Switch to Volvo Account" = "Switch to Volvo Account";

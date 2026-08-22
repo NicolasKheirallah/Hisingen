@@ -22,8 +22,23 @@ struct DiagnosticsSnapshot: Sendable {
 }
 
 enum RefreshPolicy {
+    /// Floor for polls while the vehicle reports itself unavailable (asleep, power saving,
+    /// in service). Deep-sleeping cars answer every poll with the same stale snapshot, so
+    /// hammering the backend buys nothing; 15 minutes still recovers promptly on wake.
+    static let vehicleAsleepInterval: TimeInterval = 900
+
     static func regularInterval(isCharging: Bool, isClimateActive: Bool = false) -> TimeInterval {
         (isCharging || isClimateActive) ? 60 : 300
+    }
+
+    /// Effective interval combines the activity-based cadence with vehicle availability:
+    /// an asleep vehicle stretches toward `vehicleAsleepInterval`, never shortening the
+    /// charging cadence below its normal value.
+    static func interval(isCharging: Bool, isClimateActive: Bool,
+                         isVehicleAvailable: Bool?) -> TimeInterval {
+        let base = regularInterval(isCharging: isCharging, isClimateActive: isClimateActive)
+        guard isVehicleAvailable == false else { return base }
+        return max(base, vehicleAsleepInterval)
     }
 
     static func retryDelay(failureCount: Int, retryAfter: TimeInterval?,
@@ -45,6 +60,16 @@ final class RefreshCoordinator {
     private let imageCache: CarImageCache
     private let preferences: PreferencesStore
     private let clearPasswordAfterSession: () -> Void
+    /// Re-reads stored session credentials. After a successful session the coordinator
+    /// deliberately drops its in-memory copies (and deletes the password); when the access
+    /// token later expires mid-run, `beginSession` must recover the refresh token from here
+    /// instead of declaring `.noStoredSession` forever — which previously wedged refreshes
+    /// in a permanent authentication-failure loop until app restart.
+    private let readStoredSessionToken: () -> String?
+    private let readStoredPassword: () -> String?
+    /// Computes the delay before the next attempt. Injectable so tests can collapse the
+    /// production exponential backoff (which legitimately stretches to minutes) to zero.
+    private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
     private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "refresh")
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "io.kheirallah.hisingen.network")
@@ -84,12 +109,18 @@ final class RefreshCoordinator {
          observesEnvironment: Bool = true,
          imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore,
-         clearPasswordAfterSession: @escaping () -> Void = { try? Keychain.deletePassword() }) {
+         clearPasswordAfterSession: @escaping () -> Void = { try? Keychain.deletePassword() },
+         readStoredSessionToken: @escaping () -> String? = { (try? Keychain.readSessionToken()) ?? nil },
+         readStoredPassword: @escaping () -> String? = { (try? Keychain.readPassword()) ?? nil },
+         retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
         self.preferences = preferences
         self.clearPasswordAfterSession = clearPasswordAfterSession
+        self.readStoredSessionToken = readStoredSessionToken
+        self.readStoredPassword = readStoredPassword
+        self.retryDelay = retryDelay
         guard observesEnvironment else { return }
         installSystemObservers()
         monitor.pathUpdateHandler = { [weak self] path in
@@ -190,7 +221,17 @@ final class RefreshCoordinator {
 
     func refreshIfStale() {
         guard let latest else { refreshNow(); return }
-        let interval = RefreshPolicy.regularInterval(isCharging: latest.isCharging, isClimateActive: latest.isClimateActive)
+        let interval = RefreshPolicy.interval(
+            isCharging: latest.isCharging,
+            isClimateActive: latest.isClimateActive,
+            isVehicleAvailable: {
+                switch latest.availability {
+                case .available: return true
+                case .unavailable: return false
+                case .unknown: return nil
+                }
+            }()
+        )
         if Date().timeIntervalSince(latest.fetchedAt) >= interval { refreshNow() }
     }
 
@@ -232,6 +273,11 @@ final class RefreshCoordinator {
         observerTokens.removeAll()
     }
 
+    /// Signs out. Deliberate order: local data is wiped *first*, before the remote revoke
+    /// round-trip, because privacy-on-failure beats session-persistence-on-failure — if the
+    /// revoke request fails, the user still loses nothing by having local history cleared,
+    /// whereas the reverse ordering would leave telemetry on disk after a failed sign-out.
+    /// The only signal when revocation fails is `.secureStorage` in `lastError`.
     func signOut() {
         cancelCurrentWork()
         let requestGeneration = generation
@@ -273,9 +319,15 @@ final class RefreshCoordinator {
         task = Task {
             do {
                 do {
-                    if let pendingSessionToken {
+                    // Prefer the in-memory copy, then recover from the Keychain. Recovery is
+                    // what keeps routine access-token expiry from becoming a permanent
+                    // failure loop: after a successful session the pendings above are nil by
+                    // design, but the refresh token still lives in the Keychain.
+                    var sessionToken = pendingSessionToken ?? readStoredSessionToken()
+                    if sessionToken?.isEmpty == true { sessionToken = nil }
+                    if let sessionToken {
                         try await api.restoreSession(
-                            token: pendingSessionToken,
+                            token: sessionToken,
                             preferredVIN: preferredVIN,
                             features: preferences.features
                         )
@@ -285,8 +337,9 @@ final class RefreshCoordinator {
                 } catch {
                     guard ServiceErrorPolicy.decision(error, provider: api.brand).error.requiresAuthentication else { throw error }
 
-
-                    guard let password = pendingPassword, !pendingEmail.isEmpty else { throw error }
+                    var password = pendingPassword ?? readStoredPassword()
+                    if password?.isEmpty == true { password = nil }
+                    guard let password, !pendingEmail.isEmpty else { throw error }
                     try await api.authenticate(
                         email: pendingEmail,
                         password: password,
@@ -374,9 +427,20 @@ final class RefreshCoordinator {
         failureCount = 0
         rateLimitedUntil = nil
         stateStore.save(state)
+        SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.vin))
         onState?(state)
         startLiveStreamingIfNeeded(vin: state.vin)
-        schedule(after: RefreshPolicy.regularInterval(isCharging: state.isCharging, isClimateActive: state.isClimateActive), retrySession: false)
+        schedule(after: RefreshPolicy.interval(
+            isCharging: state.isCharging,
+            isClimateActive: state.isClimateActive,
+            isVehicleAvailable: {
+                switch state.availability {
+                case .available: return true
+                case .unavailable: return false
+                case .unknown: return nil
+                }
+            }()
+        ), retrySession: false)
         publishDiagnostics()
     }
 
@@ -394,9 +458,7 @@ final class RefreshCoordinator {
         let retryAfter: TimeInterval?
         if case .rateLimited(let value) = error { retryAfter = value } else { retryAfter = nil }
         let needsSession = retrySession || error.requiresNewSession
-        let delay = RefreshPolicy.retryDelay(
-            failureCount: failureCount, retryAfter: retryAfter, requiresNewSession: needsSession
-        )
+        let delay = retryDelay(failureCount, retryAfter, needsSession)
         if case .rateLimited = error { rateLimitedUntil = Date().addingTimeInterval(delay) }
         schedule(after: delay, retrySession: needsSession)
         publishDiagnostics()
@@ -501,6 +563,10 @@ final class RefreshCoordinator {
         let requestGeneration = generation
         streamTask = Task { [weak self] in
             var failure = 0
+            // Streamed frames can arrive several times a minute; persisting every frame used
+            // to write the full snapshot blob (plus telemetry rows) per message. UI updates
+            // stay immediate; disk writes coalesce.
+            var lastPersistAt = Date.distantPast
             while !Task.isCancelled {
                 guard let self, requestGeneration == self.generation,
                       self.latest?.vin == vin else { return }
@@ -516,7 +582,11 @@ final class RefreshCoordinator {
                               var current = self.latest, current.vin == vin else { return }
                         current.applyLiveUpdate(update)
                         self.latest = current
-                        self.stateStore.save(current)
+                        let now = Date()
+                        if now.timeIntervalSince(lastPersistAt) >= 10 {
+                            lastPersistAt = now
+                            self.stateStore.save(current)
+                        }
                         self.onState?(current)
                     }
                     throw VehicleServiceError.temporarilyUnavailable(

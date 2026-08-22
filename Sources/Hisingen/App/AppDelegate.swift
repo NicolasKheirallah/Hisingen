@@ -10,12 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let vehicleDatabase = VehicleDatabase()
     private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
     private let reverseGeocoder = ReverseGeocoder()
+    private lazy var miniPanel = ChargingMiniPanelController(preferences: preferences)
     private let imageCache = CarImageCache()
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     private let volvoSignInPresenter = VolvoSignInPresenter()
     private let polestarCommandSignInPresenter = PolestarCommandSignInPresenter()
     private let updateChecker = UpdateChecker()
+    private let sessionManager = SessionManager()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
     private let capabilityGate = CapabilityGate()
@@ -68,6 +70,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifier.onPermissionChanged = { [weak self] permission in
             self?.statusController.updateNotificationPermission(permission)
         }
+        notifier.onQuickAction = { [weak self] action, vin in
+            guard let self else { return }
+            // Act only on the currently selected vehicle: switching accounts from a
+            // notification tap would bypass the deliberate friction of vehicle switching.
+            guard vin == self.preferences.vin(for: .volvo) || vin == self.preferences.vin(for: .polestar),
+                  vin == self.preferences.vin(for: self.preferences.activeBrand) else { return }
+            switch action {
+            case .lockVehicle:
+                self.performRemoteCommand(.lock)
+            case .resumeChargeSchedule:
+                if self.preferences.activeBrand == .polestar {
+                    self.performRemoteCommand(.stopChargingOverride)
+                }
+            }
+        }
         statusController.updateNotificationPermission(notifier.permission)
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore,
                                                 imageCache: imageCache, preferences: preferences)
@@ -117,31 +134,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch preferences.activeBrand {
         case .polestar:
             guard !preferences.email.isEmpty else { return }
-            let sessionToken = (try? Keychain.readSessionToken()) ?? nil
-            let password = sessionToken?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
+            let (sessionToken, password) = sessionManager.polestarCredentials()
             guard sessionToken != nil || password != nil else { return }
             refreshCoordinator.start(
                 email: preferences.email, password: password, sessionToken: sessionToken,
                 preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
             )
         case .volvo:
-            let clientID = !preferences.volvoClientID.isEmpty ? preferences.volvoClientID : BuiltinVolvoSecrets.clientID
-            let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil) ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
-            let vccApiKey = ((try? Keychain.readVolvoApiKey()) ?? nil) ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
-            let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
-
-            guard !clientID.isEmpty,
-                  let clientSecret, !clientSecret.isEmpty,
-                  let vccApiKey, !vccApiKey.isEmpty,
-                  let sessionToken, !sessionToken.isEmpty
-            else { return }
+            guard let credentials = sessionManager.volvoCredentials(preferences: preferences) else { return }
             Task { [weak self] in
                 guard let self else { return }
-                await volvoAPI.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
+                await volvoAPI.configure(clientID: credentials.clientID,
+                                          clientSecret: credentials.clientSecret,
+                                          vccApiKey: credentials.apiKey)
 
                 guard preferences.activeBrand == .volvo else { return }
                 refreshCoordinator.start(
-                    email: "", password: nil, sessionToken: sessionToken,
+                    email: "", password: nil, sessionToken: credentials.sessionToken,
                     preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
                 )
             }
@@ -294,7 +303,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func signOut() {
         commandRefreshTask?.cancel()
         commandRefreshTask = nil
+        SpotlightIndexer.removeAll()
         refreshCoordinator.signOut()
+    }
+
+    /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen.
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity,
+                     restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard SpotlightIndexer.isHisingenActivity(userActivity) else { return false }
+        statusController.togglePopover()
+        return true
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -319,6 +337,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.scheduleGarageScan(after: 8)
         }
         refreshCoordinator.onState = { [weak self] state in
+            self?.miniPanel.update(state: state)
+            self?.notifyChargingAnomalyIfNeeded(for: state)
             guard let self else { return }
             notifier.vehicleStateDidUpdate(state)
             latest = state
@@ -420,41 +440,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let providerCars: [CarSummary]
             switch brand {
             case .polestar:
-                let token = (try? Keychain.readSessionToken()) ?? nil
-                let password = token?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
-                let preferredVIN = preferences.vin(for: brand)
-                if let token, !token.isEmpty {
-                    try await polestarAPI.restoreSession(
-                        token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                        features: preferences.features
-                    )
-                } else if let password, !preferences.email.isEmpty {
-                    try await polestarAPI.authenticate(
-                        email: preferences.email, password: password,
-                        preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                        features: preferences.features
-                    )
-                } else {
-                    return (false, L10n.text("No stored Polestar credentials found."))
-                }
-                providerCars = await polestarAPI.cars
+                providerCars = try await sessionManager.restorePolestarSession(api: polestarAPI, preferences: preferences)
             case .volvo:
-                let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
-                    ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
-                let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
-                    ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
-                let token = (try? Keychain.readVolvoSessionToken()) ?? nil
-                guard let clientSecret, let apiKey, let token, !token.isEmpty else {
-                    return (false, L10n.text("No stored Volvo session found."))
-                }
-                await volvoAPI.configure(clientID: preferences.volvoClientID,
-                                          clientSecret: clientSecret, vccApiKey: apiKey)
-                let preferredVIN = preferences.vin(for: brand)
-                try await volvoAPI.restoreSession(
-                    token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                    features: preferences.features
-                )
-                providerCars = await volvoAPI.cars
+                providerCars = try await sessionManager.restoreVolvoSession(api: volvoAPI, preferences: preferences)
             }
             guard !providerCars.isEmpty else {
                 return (false, L10n.text("Signed in, but no vehicles were returned."))
@@ -480,41 +468,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch brand {
                 case .polestar:
                     provider = polestarAPI
+                    // The dormant brand's provider is not kept warm, so re-establish its
+                    // session before scanning its vehicles.
                     if brand != originalBrand {
-                        let token = (try? Keychain.readSessionToken()) ?? nil
-                        let password = token?.isEmpty == false ? nil : ((try? Keychain.readPassword()) ?? nil)
-                        let preferredVIN = preferences.vin(for: brand)
-                        if let token, !token.isEmpty {
-                            try await polestarAPI.restoreSession(
-                                token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                                features: preferences.features
-                            )
-                        } else if let password, !preferences.email.isEmpty {
-                            try await polestarAPI.authenticate(
-                                email: preferences.email, password: password,
-                                preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                                features: preferences.features
-                            )
-                        }
+                        _ = try await sessionManager.restorePolestarSession(api: polestarAPI, preferences: preferences)
                     }
                 case .volvo:
                     provider = volvoAPI
                     if brand != originalBrand {
-                        let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
-                            ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
-                        let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
-                            ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
-                        let token = (try? Keychain.readVolvoSessionToken()) ?? nil
-                        guard let clientSecret, let apiKey, let token else { continue }
-                        await volvoAPI.configure(
-                            clientID: preferences.volvoClientID,
-                            clientSecret: clientSecret, vccApiKey: apiKey
-                        )
-                        let preferredVIN = preferences.vin(for: brand)
-                        try await volvoAPI.restoreSession(
-                            token: token, preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-                            features: preferences.features
-                        )
+                        _ = try await sessionManager.restoreVolvoSession(api: volvoAPI, preferences: preferences)
                     }
                 }
 
@@ -544,6 +506,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toggleSettingsInPopover() {
         statusController.showSettings()
+    }
+
+    /// One-shot anomaly notice per completed session. Location lives on the persisted DB
+    /// session (domain sessions don't carry it), so detection runs here against the store.
+    private func notifyChargingAnomalyIfNeeded(for state: VehicleState) {
+        guard preferences.features.contains(.notifications),
+              let last = vehicleDatabase.recentChargingSessions(for: state.vin, limit: 1).first,
+              last.locationName?.isEmpty == false,
+              let ended = last.endedAt,
+              Date().timeIntervalSince(ended) < 600 else { return }
+        let key = "anomaly_\(last.id)"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let priors = vehicleDatabase.priorSessionPeaks(
+            vin: state.vin, locationName: last.locationName ?? "",
+            excludingSessionID: last.id)
+        guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,
+                                                 priorPeaksKwAtSameLocation: priors) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        notifier.notifyCommandNotice(
+            title: L10n.text("Unusually slow charging"),
+            body: L10n.format("Peak power at %@ was far below this location's usual level — the cable or charger may be derating.", last.locationName!))
     }
 
     private func performRemoteCommand(_ command: RemoteCommand) {
@@ -715,7 +698,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         current.fetchedAt = Date()
         current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
         latest = current
-        stateStore.save(current)
+        // In-memory only: this patch is partly synthesized (e.g. an assumed 30-minute
+        // climate window), so it must not be persisted as if the vehicle had reported it.
+        // The authoritative snapshot lands with the follow-up refresh ~12 s after the
+        // command, and `optimisticCommandLockUntil` keeps stale responses from reverting
+        // the visible state in the meantime.
         render()
     }
 
@@ -765,18 +752,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func settingsChanged(_ change: SettingsChange) {
         switch change {
         case .credentials:
-
-
             let switchedFromAnotherBrand = preferences.activeBrand != .polestar
             switchActiveBrand(to: .polestar)
             applyLaunchAtLogin(userInitiated: true)
             notifier.featureSelectionDidChange()
             updateNotificationAuthorizationIfNeeded()
             updateCheckConfiguration()
-            let password = (try? Keychain.readPassword()) ?? nil
-            if switchedFromAnotherBrand, password?.isEmpty ?? true {
-
-
+            // Deliberately reads the raw stored password rather than
+            // `sessionManager.polestarCredentials()` — that helper suppresses the password
+            // whenever a token exists, but here a freshly saved password must take priority
+            // over any stale token so the coordinator actually exercises it.
+            let password = ((try? Keychain.readPassword()) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+            if switchedFromAnotherBrand, password == nil {
                 resumeStoredSession()
             } else {
                 refreshCoordinator.credentialsChanged(
@@ -1025,6 +1012,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
                 )
             }
+
+        case "charge-target":
+            // Polestar-only: Volvo's official API exposes no charging writes.
+            guard preferences.activeBrand == .polestar else {
+                notifier.notifyCommandNotice(
+                    title: L10n.text("Command Restricted"),
+                    body: L10n.text("Volvo's official API does not support changing charge settings.")
+                )
+                return
+            }
+            let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems
+            let percent = queryItems?.first(where: { $0.name == "percent" || $0.name == "target" })?
+                .value.flatMap { Int($0) } ?? 80
+            performRemoteCommand(.setChargeTarget(percent))
 
         default:
             volvoSignInPresenter.handleCallbackURL(url)

@@ -6,22 +6,26 @@ import Testing
 struct InputBoundaryTests {
 
     @Test
-    func testTemperatureClampingAndStepPrecision() {
+    func testTemperatureClampingAndStepPrecision() throws {
 
-        Preferences.remoteClimateTemperature = 21.5
-        XCTAssertEqual(Preferences.remoteClimateTemperature, 21.5)
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+        store.remoteClimateTemperature = 21.5
+        XCTAssertEqual(store.remoteClimateTemperature, 21.5)
 
-        Preferences.remoteClimateTemperature = 15.0
-        XCTAssertEqual(Preferences.remoteClimateTemperature, 16.0)
+        store.remoteClimateTemperature = 15.0
+        XCTAssertEqual(store.remoteClimateTemperature, 16.0)
 
-        Preferences.remoteClimateTemperature = 35.0
-        XCTAssertEqual(Preferences.remoteClimateTemperature, 30.0)
+        store.remoteClimateTemperature = 35.0
+        XCTAssertEqual(store.remoteClimateTemperature, 30.0)
 
-        Preferences.remoteClimateTemperature = 21.3
-        XCTAssertEqual(Preferences.remoteClimateTemperature, 21.5)
+        store.remoteClimateTemperature = 21.3
+        XCTAssertEqual(store.remoteClimateTemperature, 21.5)
 
-        Preferences.remoteClimateTemperature = 21.2
-        XCTAssertEqual(Preferences.remoteClimateTemperature, 21.0)
+        store.remoteClimateTemperature = 21.2
+        XCTAssertEqual(store.remoteClimateTemperature, 21.0)
     }
 
     @Test

@@ -57,6 +57,35 @@ Rain-with-windows and evening-unlocked notifications are edge-triggered (only fi
 
 `Preferences.privateNotificationDetails` (default **true**). When enabled, charging/battery notification **bodies** are replaced with generic text ("Open Hisingen for details," "Your Polestar started/finished charging") — titles are never masked. **This does not apply to rain-with-windows or evening-unlocked notifications**, which always show full detail regardless of the private-mode toggle — a real inconsistency worth knowing about if a user asks why private mode "isn't working" for those two.
 
+## Additional edge-triggered checks (2026-08-22)
+
+Beyond the pipeline above, `vehicleStateDidUpdate` also runs these independently-gated checks:
+
+- **Openings left open** — any opening needing attention while engine off, sustained 15 min.
+- **Service due** — `serviceWarning` or ≤30 days / ≤1 000 km remaining (edge-triggered).
+- **Stale telemetry** — `state.isStale()` with a per-VIN identifier.
+- **Slow charging** — actively charging below 2 kW, sustained 15 min.
+- **Plug-in reminder** — EV range vehicle at ≤40 %, disconnected, not charging (edge).
+- **Rain-with-windows / evening-unlocked / software-update transitions** as documented above.
+
+Sustained conditions use `trackSustained(condition:key:duration:)`: fires once when the
+condition has held for the full duration, resets when it clears.
+
+## Quick actions (interactive banners)
+
+Two categories carry buttons: **vehicle-unlocked-actionable** (evening-unlocked banner →
+*Lock*) and **charging-interrupted-actionable** (interrupted banner → *Resume Schedule*).
+Actions are foreground-only by design — tapping opens Hisingen so the same capability gates,
+brand checks, and command audit apply as the in-app controls. They act **only on the
+currently selected vehicle**; switching accounts from a banner deliberately isn't possible.
+Routing lives in `AppDelegate.notifier.onQuickAction`.
+
+## Charging anomaly notice
+
+Not part of this pipeline — see [domain/charging.md](charging.md#charging-anomaly-detection-failing-cable-hint):
+AppDelegate posts a one-shot "Unusually slow charging" notice when a completed session's peak
+is far below its location's norm.
+
 ## Authorization
 
 `Notifier` queries `UNUserNotificationCenter` authorization status at init and on `applicationDidBecomeActive`. There is **no automatic permission prompt at first launch** — `requestAuthorizationFromSettings()` (requesting `[.alert, .sound]` only, no badge) is only called from the Settings UI, when the user has a relevant notification toggle enabled. `willPresent` always returns `[.banner, .sound]`, so notifications show even while Hisingen is the frontmost app.

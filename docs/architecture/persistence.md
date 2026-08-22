@@ -73,6 +73,10 @@ It does not mean the data cannot be copied by macOS backups, filesystem snapshot
 | Battery-health milestones | SQLite | VIN | Long-term until clear/sign-out | Yes |
 | Historical telemetry | SQLite | VIN | Maintenance-prunable after 90 days | Yes |
 | Remote-command audit history | SQLite | VIN | Until clear/sign-out | Yes |
+| Connectivity samples (wake/signal) | SQLite | VIN | Change-gated; pruned with samples | Moderate |
+| Cabin climate samples | SQLite | VIN | Hourly heartbeat; pruned with samples | Low |
+| Manual fuel fill-ups | SQLite | VIN | Until cleared/sign-out | No |
+| Full JSON backup export | User-chosen file | All vehicles | User-managed | Yes (coordinates only when opted in) |
 | Reverse-geocode cache | Memory | Process | Process lifetime | Yes |
 | Provider capability/request caches | Memory | Provider/VIN | Short-lived | Low/moderate |
 | Vehicle images | Separate image cache/runtime storage | VIN | Implementation-specific | Potentially |
@@ -178,6 +182,7 @@ A row can contain:
 - odometer;
 - trip meters;
 - average consumption;
+- consumption unit (`kwh` / `l`; NULL for rows written before 2026-08 — historically EV-only);
 - ambient temperature;
 - latitude;
 - longitude.
@@ -201,6 +206,26 @@ A row can contain:
 - execution time;
 - duration; and
 - error description.
+
+### `connectivity_history`
+
+Change-gated connectivity samples (written only when network type, signal bars, or wake
+reason changed, or after a one-hour heartbeat). Powers the Info tab's Connectivity & Wake
+card: current wake reason, signal sparkline, recent wake-reason counts.
+
+A row can contain: VIN; timestamp; network type; signal bars (0–4); wake reason.
+
+### `cabin_climate_history`
+
+Hourly-gated interior/requested cabin temperatures from digital-twin climate platforms.
+Powers the History tab's Cabin Temperature Trend card. Hidden on vehicles that never report
+interior temperature.
+
+### `fuel_entries`
+
+Manual fill-ups for hybrid/combustion economics: VIN; date; litres; price per litre; optional
+odometer. Included in lifetime cost-per-distance and the Fuel Fill-Ups card. Added
+2026-08-22 — see [domain/charging.md](../domain/charging.md#fuel-fill-ups-hybrid--combustion).
 
 ---
 

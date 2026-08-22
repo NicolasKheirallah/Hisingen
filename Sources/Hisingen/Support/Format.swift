@@ -13,18 +13,22 @@ enum Format {
         return value >= 10 ? String(format: "%.0f kW", value) : String(format: "%.1f kW", value)
     }
 
+    private static let groupedDistanceFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
+
     static func distance(km: Int, grouped: Bool = false, unit: DistanceUnit) -> String {
         let value = unit.convert(km: km)
         if grouped {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            return "\(formatter.string(from: NSNumber(value: value)) ?? String(value)) \(unit.suffix)"
+            return "\(groupedDistanceFormatter.string(from: NSNumber(value: value)) ?? String(value)) \(unit.suffix)"
         }
         return "\(value) \(unit.suffix)"
     }
 
     static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit) -> String {
-        let value = unit == .kilometers ? km : km * 0.621371
+        let value = unit == .kilometers ? km : km * UnitConversion.kilometersPerMile
         return String(format: "%.*f %@", decimals, value, unit.suffix)
     }
 
@@ -75,16 +79,30 @@ enum Format {
         return isLocked ? "lock.fill" : "lock.open.fill"
     }
 
+    /// Completion-time rendering shares one formatter per time zone instead of building a new
+    /// `DateFormatter` per call — this feeds a computed property evaluated on every popover
+    /// render while charging.
+    private static let completionTimeLock = NSLock()
+    private static var completionTimeFormatters: [String: DateFormatter] = [:]
+
     static func completionTime(from minutes: Int, baseDate: Date = Date(), timeZone: TimeZone = .current) -> String {
         let target = baseDate.addingTimeInterval(TimeInterval(minutes * 60))
+        let key = timeZone.identifier
+        completionTimeLock.lock()
+        if let cached = completionTimeFormatters[key] {
+            completionTimeLock.unlock()
+            return cached.string(from: target)
+        }
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         formatter.timeZone = timeZone
+        completionTimeFormatters[key] = formatter
+        completionTimeLock.unlock()
         return formatter.string(from: target)
     }
 
-    static func chargingRateKmPerHour(powerWatts: Int, consumptionWhPerKm: Double = 180.0) -> Int {
+    static func chargingRateKmPerHour(powerWatts: Int, consumptionWhPerKm: Double = UnitConversion.defaultConsumptionWhPerKm) -> Int {
         guard powerWatts > 0, consumptionWhPerKm > 0 else { return 0 }
         let rate = Double(powerWatts) / consumptionWhPerKm
         return max(1, Int(rate.rounded()))
@@ -92,17 +110,17 @@ enum Format {
 
     static func chargingRateFormatted(
         powerWatts: Int,
-        consumptionWhPerKm: Double = 180.0,
+        consumptionWhPerKm: Double = UnitConversion.defaultConsumptionWhPerKm,
         unit: DistanceUnit = .kilometers
     ) -> String {
         let kmH = chargingRateKmPerHour(powerWatts: powerWatts, consumptionWhPerKm: consumptionWhPerKm)
-        let converted = unit == .kilometers ? kmH : Int((Double(kmH) * 0.621371).rounded())
+        let converted = unit == .kilometers ? kmH : Int((Double(kmH) * UnitConversion.kilometersPerMile).rounded())
         let speedSuffix = unit == .kilometers ? "km/h" : "mph"
         return "+\(converted) \(speedSuffix)"
     }
 
     static func speed(kmH: Int, unit: DistanceUnit) -> String {
-        let converted = unit == .kilometers ? kmH : Int((Double(kmH) * 0.621371).rounded())
+        let converted = unit == .kilometers ? kmH : Int((Double(kmH) * UnitConversion.kilometersPerMile).rounded())
         return "\(converted) \(unit == .kilometers ? "km/h" : "mph")"
     }
 
@@ -156,6 +174,13 @@ enum Format {
         return formatter
     }()
 
+    /// Shared ISO-8601 formatter for exports (previously constructed per session row).
+    static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     static func shortDate(date: Date) -> String {
         dateFormatter.string(from: date)
     }
@@ -206,9 +231,18 @@ enum Format {
             return primaryRange ?? "--"
 
         case .chargingAware:
-            if includeChargingContext, data.isCharging,
-               let minutes = data.estimatedChargingTimeToFullMinutes, minutes > 0 {
-                return [primaryPct, Format.shortDuration(minutes: minutes)].compactMap { $0 }.joined(separator: " · ")
+            if includeChargingContext, data.isCharging {
+                // Prefer time-to-TARGET when a sub-100 % target is set; fall back to the
+                // backend's time-to-full. Renders as "⚡72→80 · 25m" so the menu bar answers
+                // "when do I unplug" rather than "when is it 100 %".
+                let minutes = data.batteryDiagnostics?.timeToTargetMinutes
+                    ?? data.estimatedChargingTimeToFullMinutes
+                if let minutes, minutes > 0 {
+                    let arrow = (data.chargeTargetPercentage.map { $0 < 100 } ?? false)
+                        ? "→\(data.chargeTargetPercentage!)" : ""
+                    let head = [primaryPct ?? "", arrow].filter { !$0.isEmpty }.joined(separator: "")
+                    return "\(head) · \(Format.shortDuration(minutes: minutes))"
+                }
             }
             return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"
 

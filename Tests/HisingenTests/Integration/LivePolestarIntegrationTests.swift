@@ -1375,7 +1375,7 @@ struct LivePolestarRemoteCommandIntegrationTests {
         // Step 3: Now try to acquire command token
         do {
             print("  Attempting to execute remote Lock from restored session...")
-            await MainActor.run { Preferences.email = email }
+            await MainActor.run { PreferencesStore.shared.email = email }
             try freshKeychain.savePassword(password)
             let result = try await api.executeRemoteCommand(.lock, vin: vin)
             print("  ✅ SUCCESS: Lock executed -> \(result.outcome)")
@@ -3203,10 +3203,10 @@ struct LivePolestarRemoteCommandIntegrationTests {
         let appKeychain = KeychainStore.app
         try appKeychain.savePassword(password)
 
-        Preferences.email = email
-        Preferences.activeBrand = .polestar
+        PreferencesStore.shared.email = email
+        PreferencesStore.shared.activeBrand = .polestar
         if let preferredVIN {
-            Preferences.vin = preferredVIN
+            PreferencesStore.shared.vin = preferredVIN
         }
 
         let api = PolestarAPI(keychain: appKeychain)
@@ -3343,9 +3343,9 @@ struct LivePolestarRemoteCommandIntegrationTests {
     @Test("Live Location and Weather Resolution Probe")
     func testLiveLocationAndWeatherResolution() async throws {
         let env = ProcessInfo.processInfo.environment
-        let rawEmail = env["POLESTAR_LOGIN"] ?? env["HISINGEN_TEST_EMAIL"] ?? Preferences.email
+        let rawEmail = await MainActor.run { env["POLESTAR_LOGIN"] ?? env["HISINGEN_TEST_EMAIL"] ?? PreferencesStore.shared.email }
         let rawPassword = env["POLESTAR_PASS"] ?? env["HISINGEN_TEST_PASSWORD"] ?? (try? KeychainStore.app.readPassword())
-        let preferredVIN = env["POLESTAR_VIN"] ?? env["HISINGEN_TEST_VIN"] ?? (Preferences.vin.isEmpty ? nil : Preferences.vin)
+        let preferredVIN = await MainActor.run { env["POLESTAR_VIN"] ?? env["HISINGEN_TEST_VIN"] ?? (PreferencesStore.shared.vin.isEmpty ? nil : PreferencesStore.shared.vin) }
 
         let email = (rawEmail.isEmpty) ? nil : rawEmail
         let password = (rawPassword?.isEmpty ?? true) ? nil : rawPassword

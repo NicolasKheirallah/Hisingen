@@ -14,12 +14,22 @@ extension PolestarAPI {
         await grpc.setUseStreaming(features.contains(.realTimeUpdates))
 
         let query = Self.telematicsQuery(features: features)
-        let response: GraphQLResponse<TelematicsPayloadDTO>? = try? await graphQL(
-            query: query,
-            variables: ["vins": [vin]],
-            token: token,
-            operation: "vehicle telematics"
-        )
+        // Same rule as discovery: only provider-specific failures may degrade to "no
+        // telematics data". A swallowed 401 here used to produce an empty-looking state
+        // instead of a sign-in prompt, and a swallowed 429 looked like a dead battery read.
+        let response: GraphQLResponse<TelematicsPayloadDTO>?
+        do {
+            response = try await graphQL(
+                query: query,
+                variables: ["vins": [vin]],
+                token: token,
+                operation: "vehicle telematics"
+            )
+        } catch {
+            if Self.isRequestLevelFailure(error) { throw error }
+            logger.warning("Polestar vehicle telematics degraded (provider-specific): \(String(describing: error), privacy: .public)")
+            response = nil
+        }
         let telematics = response?.data?.carTelematicsV2
 
         let battery = Self.matchingReading(telematics?.battery, vin: vin, vinOf: { $0.vin })

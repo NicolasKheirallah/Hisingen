@@ -20,12 +20,22 @@ enum HTTPBodyReader {
             }
             var data = Data()
             data.reserveCapacity(min(max(0, Int(response.expectedContentLength)), limit))
+            // `AsyncBytes` only exposes per-byte iteration, so each element costs one
+            // suspension. Batching into a staging buffer keeps the hard DoS cap while
+            // avoiding a Data-reallocation per byte on multi-megabyte payloads.
+            var pending = [UInt8]()
+            pending.reserveCapacity(64 * 1_024)
             for try await byte in bytes {
-                guard data.count < limit else {
+                guard data.count + pending.count < limit else {
                     throw Self.responseTooLarge(operation: operation, provider: provider)
                 }
-                data.append(byte)
+                pending.append(byte)
+                if pending.count >= 64 * 1_024 {
+                    data.append(contentsOf: pending)
+                    pending.removeAll(keepingCapacity: true)
+                }
             }
+            data.append(contentsOf: pending)
             return (data, response)
         } catch let error as URLError {
             throw Self.network(error, provider: provider)

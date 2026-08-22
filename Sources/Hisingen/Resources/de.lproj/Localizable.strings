@@ -610,7 +610,7 @@
 "Network Type" = "Netzwerktyp";
 "Network type" = "Netzwerktyp";
 "New climate timer" = "Neuer Klima-Timer";
-"Next Vehicle (⌥])" = "Nächstes Fahrzeug (⌥])";
+"Next Vehicle (⌃⌥])" = "Nächstes Fahrzeug (⌃⌥])";
 "Nickname" = "Spitzname";
 "Nickname & Registration" = "Spitzname & Kennzeichen";
 "No Remote Controls Enabled" = "Keine Fernsteuerung aktiviert";
@@ -737,7 +737,7 @@
 "Pressure Warning" = "Reifendruckwarnung";
 "Pressure monitoring and system alerts" = "Drucküberwachung und Systemwarnungen";
 "Preview:" = "Vorschau:";
-"Previous Vehicle (⌥[)" = "Vorheriges Fahrzeug (⌥[)";
+"Previous Vehicle (⌃⌥[)" = "Vorheriges Fahrzeug (⌃⌥[)";
 "Private Notification Banners" = "Private Benachrichtigungen";
 "Projected" = "Prognose";
 "Providing power" = "Liefert Leistung";
@@ -990,7 +990,7 @@
 "Swedish Gold" = "Swedish Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Schwedische Kiefer und Eukalyptus-Erdtöne, organisch-weiches Gefühl";
 "Switch Vehicle" = "Fahrzeug wechseln";
-"Switch Vehicle (⌥[ / ⌥])" = "Fahrzeug wechseln (⌥[ / ⌥])";
+"Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Fahrzeug wechseln (⌃⌥[ / ⌃⌥])";
 "Switch to %@ (%@ · %d%%)…" = "Zu %@ (%@ · %d%%) wechseln…";
 "Switch to %@ (%@)…" = "Zu %@ (%@) wechseln…";
 "Switch to Volvo Account" = "Zum Volvo-Konto wechseln";

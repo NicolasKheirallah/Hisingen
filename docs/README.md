@@ -13,16 +13,19 @@ Sources/Hisingen/
 ├── Services/
 │   ├── API/          PolestarAPI, PolestarGRPC*, VolvoAPI — the two VehicleProviding implementations
 │   ├── Refresh/       RefreshCoordinator — polling, backoff, coalescing
-│   ├── Persistence/   Keychain, Preferences, VehicleStateStore
-│   ├── Notifications/ Notifier, ChargingTransitionDetector
+│   ├── Persistence/   Keychain, Preferences, VehicleStateStore, SQLite history (sessions,
+│   │                  samples, telemetry, battery health, air quality, connectivity,
+│   │                  cabin climate, fuel fill-ups, command audits)
+│   ├── Notifications/ Notifier (+ quick actions), ChargingTransitionDetector
 │   ├── Security/      RemoteActionAuthorizer, VolvoSignInPresenter
-│   ├── Location/      ReverseGeocoder
+│   ├── Location/      ReverseGeocoder (cached CLGeocoder)
+│   ├── Integration/   SpotlightIndexer — local Spotlight publication of vehicle state
 │   └── Updates/       UpdateChecker
 ├── Support/      Format, L10n, PKCE — small stateless helpers
 └── UI/           StatusItemController (AppKit shell) + SwiftUI views
 ```
 
-41 Swift files, ~15,000 lines. See [architecture/components.md](architecture/components.md) for what each piece owns.
+100+ Swift source files, ~30,000 lines. See [architecture/components.md](architecture/components.md) for what each piece owns.
 
 ## Main architectural concepts
 

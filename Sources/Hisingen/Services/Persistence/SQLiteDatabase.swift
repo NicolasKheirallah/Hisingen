@@ -110,11 +110,10 @@ final class SQLiteDatabase: @unchecked Sendable {
 
     /// Prepares, binds parameters, and executes a statement within a thread lock.
     ///
-    /// - Important: `bindings` and `process` run while the lock is held, and the lock is
-    ///   **not** recursive. Calling any other method on this database (directly, or via a
-    ///   repository method such as `VehicleDatabase.deleteSnapshot`) from inside either
-    ///   closure deadlocks the calling thread permanently. Collect what you need, return,
-    ///   and perform follow-up writes after this call returns.
+    /// - Important: `bindings` and `process` run while the (recursive) lock is held. Calling
+    ///   back into this database from inside either closure works only by accident of the
+    ///   recursive lock and risks re-entrancy bugs; collect what you need, return, and perform
+    ///   follow-up writes after this call returns.
     func query<T>(sql: String, bindings: (SQLiteStatement) throws -> Void = { _ in },
                   process: (SQLiteStatement) throws -> T) throws -> T {
         lock.lock()
@@ -172,12 +171,21 @@ final class SQLiteStatement: @unchecked Sendable {
 
     // MARK: - Binding Parameters (1-indexed)
 
+    /// Tells SQLite to copy bound buffers immediately. Passing `nil` here would be
+    /// `SQLITE_STATIC`, which requires the buffer to outlive `sqlite3_step` — a contract the
+    /// callers of these helpers cannot honour for Swift temporaries.
+    private static let transientDestructor = unsafeBitCast(
+        UnsafeRawPointer(bitPattern: -1)!, to: sqlite3_destructor_type.self
+    )
+
     func bindText(_ value: String?, at index: Int32) throws {
         guard let value else {
             sqlite3_bind_null(stmt, index)
             return
         }
-        let status = sqlite3_bind_text(stmt, index, (value as NSString).utf8String, -1, nil)
+        let status = value.withCString { cString in
+            sqlite3_bind_text(stmt, index, cString, -1, Self.transientDestructor)
+        }
         guard status == SQLITE_OK else {
             throw SQLiteError.bindParameter("Bind text at index \(index) failed: \(errorMessage)")
         }
@@ -219,7 +227,7 @@ final class SQLiteStatement: @unchecked Sendable {
             return
         }
         let status = value.withUnsafeBytes { rawBuffer in
-            sqlite3_bind_blob(stmt, index, rawBuffer.baseAddress, Int32(value.count), nil)
+            sqlite3_bind_blob(stmt, index, rawBuffer.baseAddress, Int32(value.count), Self.transientDestructor)
         }
         guard status == SQLITE_OK else {
             throw SQLiteError.bindParameter("Bind blob at index \(index) failed: \(errorMessage)")

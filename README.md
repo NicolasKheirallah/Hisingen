@@ -44,6 +44,11 @@ With Hisingen you can:
 * use supported remote controls without picking up your phone
 * bring vehicle information into Apple Shortcuts
 * monitor a real multi-provider garage in one place
+* manage saved Polestar charge locations — rename, per-location current limit,
+  minimum charge level, optimised-charging mode, delete
+* log fuel fill-ups so hybrid and petrol costs count toward lifetime cost-per-distance
+* keep an optional always-on-top charging mini-panel on screen while plugged in
+* surface vehicle state in system Spotlight and act on banners with quick actions
 
 What appears in Hisingen depends on what your individual car actually supports.
 
@@ -171,8 +176,14 @@ For electric and plug-in hybrid vehicles, Hisingen can show information such as:
 * charging-current limit
 * estimated charging completion
 * energy consumption
+* one-tap amp presets (6/8/10/13/16 A) beside the current-limit slider
+* saved charge location settings (Polestar): rename, per-location current limit,
+  minimum charge level, optimised-charging mode, delete
 
 The interface only shows values that make sense for the selected vehicle.
+
+If a completed session at a known location peaks far below its usual level,
+Hisingen flags it — often the first sign of a failing cable or derated charger.
 
 Hisingen can also calculate an experimental battery State of Health estimate
 from the telemetry it has observed. This is always labelled as a calculated
@@ -282,7 +293,7 @@ Instead of presenting controls that won't work, Hisingen adjusts the interface t
 
 ## Location
 
-When enabled and available from the vehicle provider, Hisingen can show the car's latest reported location and open it in Apple Maps.
+When enabled and available from the vehicle provider, Hisingen can show the car's latest reported location as a street **address** (with precise coordinates below), open it in Apple Maps, and chart cabin temperature trends where the vehicle reports them.
 
 Vehicle location should be treated as the **latest location reported by the car**, not as guaranteed real-time tracking.
 
@@ -825,6 +836,9 @@ Depending on the vehicle and the features you've enabled, notifications can incl
 * authentication issues
 * an unlocked parked vehicle
 * weather-related warnings when openings are detected
+* unusually slow charging vs a location's own history
+* interactive banners: Lock from an unlocked-vehicle alert, Resume Schedule
+  from an interrupted-charging alert
 
 Notification behaviour can be configured in Settings.
 
@@ -858,6 +872,21 @@ Keyboard shortcuts are available for common actions such as navigating the app o
 
 Global shortcuts can require macOS Accessibility permission.
 
+## System Spotlight
+
+Search your car's nickname and see battery, range and charging state right in Spotlight
+results — entirely local, no VIN stored in the index.
+
+## Screenshot Privacy Mode
+
+One toggle blurs VIN, registration plate, coordinates and addresses across the app so shared
+screenshots stay safe.
+
+## Floating charging panel
+
+Optional tiny always-on-top panel with SoC→target, power and ETA while charging. It never
+steals focus; drag it anywhere and the position is remembered.
+
 ## Apple Shortcuts
 
 Hisingen exposes cached vehicle information and verified Volvo command handoffs to Apple
@@ -887,7 +916,19 @@ Hisingen also registers:
 hisingen://
 ```
 
-for local application navigation and automation.
+for local application navigation and automation. Recognized routes:
+
+| Route | Action | Brand |
+| --- | --- | --- |
+| `hisingen://lock` | Lock vehicle | Volvo |
+| `hisingen://unlock` | Unlock vehicle | Volvo |
+| `hisingen://climate/start?temp=21` | Start climate (temp optional) | Volvo |
+| `hisingen://climate/stop` | Stop climate | Volvo |
+| `hisingen://flash` · `honk-flash` | Lights / honk+flash | Volvo |
+| `hisingen://charge-target?percent=80` | Set charge target | Polestar |
+
+Commands follow the same capability gates as the in-app controls: an unsupported brand or
+vehicle answers with a local notice instead of dispatching anything to a backend.
 
 ---
 

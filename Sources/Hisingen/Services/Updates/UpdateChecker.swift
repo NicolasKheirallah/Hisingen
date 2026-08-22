@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 enum UpdateCheckResult: Equatable {
     case updateAvailable(String)
@@ -8,6 +9,7 @@ enum UpdateCheckResult: Equatable {
 
 @MainActor
 final class UpdateChecker {
+    private static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "updates")
     private static let releasesListAPI = URL(string: "https://api.github.com/repos/NicolasKheirallah/hisingen/releases?per_page=30")!
     // Not /releases/latest: that page (like the API endpoint above) resolves to whichever
     // release GitHub most recently published, which is the CI's unsigned rolling "latest"
@@ -82,8 +84,9 @@ final class UpdateChecker {
                     defaults.removeObject(forKey: "available_update_version")
                 }
             } catch {
-
-
+                // A failed check is non-fatal (the cached version, if any, still applies),
+                // but it should not vanish without a trace.
+                Self.logger.info("Update check failed: \(error.localizedDescription, privacy: .public)")
             }
             finish(with: result)
         }

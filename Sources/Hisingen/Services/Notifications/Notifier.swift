@@ -23,6 +23,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private var sustainedConditionStartedAt: [String: Date] = [:]
     private var sustainedNotificationsDelivered = Set<String>()
 
+    /// Handler for notification quick actions, set by the app delegate so the notifier never
+    /// reaches into command dispatch itself. Receives the action identifier from the tapped
+    /// banner; the notification's thread VIN is passed alongside for multi-vehicle safety.
+    var onQuickAction: ((_ action: QuickAction, _ vin: String) -> Void)?
+
+    enum QuickAction {
+        case lockVehicle
+        case resumeChargeSchedule
+    }
+
+    static let unlockedCategoryID = "vehicle-unlocked-actionable"
+    static let chargingInterruptedCategoryID = "charging-interrupted-actionable"
+
 
     var onPermissionChanged: ((NotificationPermission) -> Void)?
 
@@ -31,8 +44,39 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.preferences = preferences
         super.init()
         guard available else { return }
+        registerQuickActionCategories()
         UNUserNotificationCenter.current().delegate = self
         refreshAuthorizationStatus()
+    }
+
+    /// Registers the two notification categories that carry quick actions. Actions are
+    /// foreground-only on purpose: acting on a vehicle command without opening the app would
+    /// bypass the same capability gates the in-app controls honour.
+    private func registerQuickActionCategories() {
+        let lock = UNNotificationAction(
+            identifier: "lock-vehicle",
+            title: L10n.text("Lock"),
+            options: [.authenticationRequired]
+        )
+        let resume = UNNotificationAction(
+            identifier: "resume-charge",
+            title: L10n.text("Resume Schedule")
+        )
+        let unlockedCategory = UNNotificationCategory(
+            identifier: Self.unlockedCategoryID,
+            actions: [lock],
+            intentIdentifiers: [],
+            options: []
+        )
+        let interruptedCategory = UNNotificationCategory(
+            identifier: Self.chargingInterruptedCategoryID,
+            actions: [resume],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([
+            unlockedCategory, interruptedCategory
+        ])
     }
 
 
@@ -80,9 +124,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                      body: privateBody(L10n.text("The vehicle reported a charging fault.")))
             case .interrupted where preferences.notifyChargingProblem:
                 post(event, state: state, title: L10n.text("Charging interrupted"),
-                     body: privateBody(L10n.text("Charging stopped before the target was reached.")))
+                     body: privateBody(L10n.text("Charging stopped before the target was reached.")),
+                     category: Self.chargingInterruptedCategoryID)
             case .lowBattery(let threshold) where preferences.notifyLowBattery:
-                let brandName = state.model.brand.displayName
+                let brandName = displayName(for: state)
                 post(event, state: state, title: L10n.format("Battery at %d%%", threshold),
                      body: privateBody(L10n.format("Your %@ battery is low.", brandName)))
             default:
@@ -243,7 +288,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
         let content = UNMutableNotificationContent()
         content.title = "🌧️ " + L10n.text("Rain Alert")
-        content.body = L10n.text("Rain detected near your vehicle with windows left open!")
+        content.body = privateBody(L10n.text("Rain detected near your vehicle with windows left open!"))
         content.threadIdentifier = "hisingen.weather.\(current.vin)"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).rain-windows", content: content, trigger: nil)
@@ -265,8 +310,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let brandName = current.model.brand.displayName
         let content = UNMutableNotificationContent()
         content.title = "🔒 " + L10n.text("Security Reminder")
-        content.body = L10n.format("Your %@ is parked and currently unlocked.", brandName)
+        content.body = privateBody(L10n.format("Your %@ is parked and currently unlocked.", brandName))
         content.threadIdentifier = "hisingen.security.\(current.vin)"
+        content.categoryIdentifier = Self.unlockedCategoryID
+        content.userInfo = ["vin": current.vin]
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).evening-unlocked", content: content, trigger: nil)
         )
@@ -282,13 +329,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyPlugInReminder,
               Self.plugInReminderCondition(current),
-              !Self.plugInReminderCondition(previous),
-              let batteryPercentage = current.batteryPercentage else { return }
+              !Self.plugInReminderCondition(previous) else { return }
 
-        let brandTitle = current.model.brand.displayName
+        let brandTitle = displayName(for: current)
+        let detailedBody = current.batteryPercentage.map {
+            L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, $0)
+        } ?? L10n.format("Your %@ is parked and unplugged. Connect to a charger to ensure departure range.", brandTitle)
         let content = UNMutableNotificationContent()
         content.title = "⚡️ " + L10n.text("Plug-In Reminder")
-        content.body = L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, batteryPercentage)
+        content.body = privateBody(detailedBody)
         content.threadIdentifier = "hisingen.charging.\(current.vin)"
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "hisingen.\(current.vin).plugin-reminder", content: content, trigger: nil)
@@ -325,7 +374,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func chargingBody(_ state: VehicleState) -> String {
-        let brandName = state.model.brand.displayName
+        let brandName = displayName(for: state)
         guard !preferences.privateNotificationDetails else { return L10n.format("Your %@ started charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
@@ -336,7 +385,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func completionBody(_ state: VehicleState) -> String {
-        let brandName = state.model.brand.displayName
+        let brandName = displayName(for: state)
         guard !preferences.privateNotificationDetails else { return L10n.format("Your %@ finished charging.", brandName) }
         var values: [String] = []
         if let battery = state.batteryPercentage { values.append(String(format: "%.0f%%", battery)) }
@@ -346,16 +395,25 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         return values.isEmpty ? L10n.format("Your %@ finished charging.", brandName) : values.joined(separator: " · ")
     }
 
+    /// Vehicle display name for notification copy: user nickname when set, brand fallback.
+    private func displayName(for state: VehicleState) -> String {
+        let nick = preferences.vehicleNickname(for: state.vin)
+        return nick.isEmpty ? state.model.brand.displayName : nick
+    }
+
     private func privateBody(_ detailed: String) -> String {
         preferences.privateNotificationDetails ? L10n.text("Open Hisingen for details.") : detailed
     }
 
-    private func post(_ event: ChargingEvent, state: VehicleState, title: String, body: String) {
+    private func post(_ event: ChargingEvent, state: VehicleState, title: String,
+                      body: String, category: String? = nil) {
         postNotice(
             identifier: "hisingen.\(state.vin).\(event.identifierComponent)",
             thread: "hisingen.charging.\(state.vin)",
             title: title,
-            body: body
+            body: body,
+            category: category,
+            vin: state.vin
         )
     }
 
@@ -368,14 +426,43 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
-    private func postNotice(identifier: String, thread: String, title: String, body: String) {
+    private func postNotice(identifier: String, thread: String, title: String,
+                            body: String, category: String? = nil, vin: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.threadIdentifier = thread
+        if let category { content.categoryIdentifier = category }
+        if let vin { content.userInfo = ["vin": vin] }
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         )
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let action = Self.quickAction(forResponse: response) else { return }
+        let vin = response.notification.request.content.userInfo["vin"] as? String
+            ?? Self.vin(fromThread: response.notification.request.content.threadIdentifier)
+        Task { @MainActor [weak self] in
+            self?.onQuickAction?(action, vin)
+        }
+    }
+
+    nonisolated static func quickAction(forResponse response: UNNotificationResponse) -> QuickAction? {
+        switch response.actionIdentifier {
+        case "lock-vehicle": return .lockVehicle
+        case "resume-charge": return .resumeChargeSchedule
+        default: return nil
+        }
+    }
+
+    nonisolated static func vin(fromThread thread: String) -> String {
+        // Threads are "hisingen.<domain>.<vin>".
+        guard let vin = thread.split(separator: ".").last else { return "" }
+        return String(vin)
     }
 
     nonisolated func userNotificationCenter(

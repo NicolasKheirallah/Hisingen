@@ -9,7 +9,6 @@ final class StatusItemController: NSObject {
     private var latestState: VehicleState?
     private var latestError: String?
     private var authenticated = false
-    private var monitor: AnyObject?
     private var settingsMode = false
     private var selectedTab: HisingenContentView.Tab = .vehicle
     private var pendingPopoverRefresh: Task<Void, Never>?
@@ -86,32 +85,45 @@ final class StatusItemController: NSObject {
         installGlobalHotKey()
     }
 
-    deinit {
-        pendingPopoverRefresh?.cancel()
-    }
-
     private func installGlobalHotKey() {
         installLocalHotKey()
         guard AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
     }
 
+    /// Only ever *installs* the monitor when accessibility is newly granted; never revokes.
     func refreshGlobalHotKeyAccess() {
         guard globalKeyMonitor == nil, AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
     }
 
+    /// The hot-key combination: ⌃⌥ (Control+Option). Plain ⌥+[ / ⌥+1…9 were previously
+    /// matched in the *global* monitor, which cannot consume events — so typing characters
+    /// like "¡", "±", or "™" in any other app switched vehicles behind the user's back.
+    /// Requiring Control as well makes the combination exclusive enough to be safe globally.
+    private static let hotKeyModifiers: NSEvent.ModifierFlags = [.option, .control]
+
+    private static func matchesHotKey(_ event: NSEvent, _ character: Character) -> Bool {
+        // `charactersIgnoringModifiers` strips Option but keeps Control; compare against the
+        // unmodified character so both plain and Option-shifted layouts resolve identically.
+        guard let chars = event.charactersIgnoringModifiers?.lowercased(),
+              chars.first == character else { return false }
+        let required = hotKeyModifiers
+        return event.modifierFlags.isSuperset(of: required)
+    }
+
     private func installGlobalHotKeyIfAuthorized() {
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.modifierFlags.contains(.option) else { return }
-            let chars = event.charactersIgnoringModifiers?.lowercased()
-            if chars == "p" {
+            guard let self else { return }
+            if Self.matchesHotKey(event, "p") {
                 Task { @MainActor in self.toggleFromHotKey() }
-            } else if chars == "[" {
+            } else if Self.matchesHotKey(event, "[") {
                 Task { @MainActor in self.cycleVehicle(forward: false) }
-            } else if chars == "]" {
+            } else if Self.matchesHotKey(event, "]") {
                 Task { @MainActor in self.cycleVehicle(forward: true) }
-            } else if let digit = chars?.first?.wholeNumberValue, digit >= 1 && digit <= 9 {
+            } else if let digit = event.charactersIgnoringModifiers?.first?.wholeNumberValue,
+                      digit >= 1 && digit <= 9,
+                      Self.matchesHotKey(event, Character("\(digit)")) {
                 Task { @MainActor in self.selectVehicleByIndex(digit - 1) }
             }
         }
@@ -119,18 +131,19 @@ final class StatusItemController: NSObject {
 
     private func installLocalHotKey() {
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.modifierFlags.contains(.option) else { return event }
-            let chars = event.charactersIgnoringModifiers?.lowercased()
-            if chars == "p" {
+            guard let self else { return event }
+            if Self.matchesHotKey(event, "p") {
                 self.toggleFromHotKey()
                 return nil
-            } else if chars == "[" {
+            } else if Self.matchesHotKey(event, "[") {
                 self.cycleVehicle(forward: false)
                 return nil
-            } else if chars == "]" {
+            } else if Self.matchesHotKey(event, "]") {
                 self.cycleVehicle(forward: true)
                 return nil
-            } else if let digit = chars?.first?.wholeNumberValue, digit >= 1 && digit <= 9 {
+            } else if let digit = event.charactersIgnoringModifiers?.first?.wholeNumberValue,
+                      digit >= 1 && digit <= 9,
+                      Self.matchesHotKey(event, Character("\(digit)")) {
                 self.selectVehicleByIndex(digit - 1)
                 return nil
             }
@@ -236,7 +249,7 @@ final class StatusItemController: NSObject {
             for (index, car) in cars.enumerated() {
                 let name = car.displayTitle()
                 let battery = cachedSnapshots[car.vin]?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
-                let shortcut = index < 9 ? "⌥\(index + 1)" : ""
+                let shortcut = index < 9 ? "⌃⌥\(index + 1)" : ""
                 let title = shortcut.isEmpty
                     ? "\(name)\(battery) (\(car.vin.prefix(8))...)"
                     : "\(name)\(battery) (\(car.vin.prefix(8))...)   [\(shortcut)]"
@@ -258,7 +271,7 @@ final class StatusItemController: NSObject {
                 switchMenu.addItem(item)
             }
             let switchItem = menu.addItem(
-                withTitle: L10n.text("Switch Vehicle (⌥[ / ⌥])"),
+                withTitle: L10n.text("Switch Vehicle (⌃⌥[ / ⌃⌥])"),
                 action: nil,
                 keyEquivalent: ""
             )
@@ -502,14 +515,11 @@ final class StatusItemController: NSObject {
 
     @objc private func contextExportChargingCSV() {
         guard let state = latestState, !state.chargingSessions.isEmpty else { return }
-        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
-        let rows = state.chargingSessions.map { s in
-            let dateStr = ISO8601DateFormatter().string(from: s.startDate)
-            let costStr = s.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
-            let peakKw = s.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
-            return "\(dateStr),\(s.startBatteryPercentage),\(s.endBatteryPercentage),\(s.percentageAdded),\(s.kwhDelivered),\(peakKw),\(s.durationMinutes),\(costStr),\(preferences.currencySymbol)"
-        }.joined(separator: "\n")
-        let csvData = headers + rows
+        let csvData = ChargingHistoryExport.csv(
+            sessions: state.chargingSessions,
+            tariffPricePerKwh: preferences.electricityPricePerKwh,
+            currencySymbol: preferences.currencySymbol
+        )
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
@@ -554,35 +564,7 @@ final class StatusItemController: NSObject {
     private func showPopover() {
         guard !popover.isShown else { return }
          popover.appearance = preferences.appearanceMode.nsAppearance
-        let view = AnyView(HisingenContentView(
-            state: latestState,
-            error: latestError,
-            authenticated: authenticated,
-            cars: cars,
-            activeVin: activeVin,
-            cachedSnapshots: cachedSnapshots,
-            remoteCommandInProgress: remoteCommandInProgress,
-            updateVersion: updateVersion,
-            checkingForUpdates: checkingForUpdates,
-            notificationPermission: notificationPermission,
-            diagnostics: diagnostics,
-            onRefresh: { [weak self] in self?.onRefresh() },
-            onSettings: { [weak self] in self?.toggleSettings() },
-            onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
-            onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
-            onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
-            onSelectCar: { [weak self] vin in self?.selectCar(vin) },
-            onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
-            onSignOut: { [weak self] in self?.onSignOut() },
-            onTestConnection: { [weak self] brand in
-                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."))
-            },
-            settingsMode: settingsMode,
-            selectedTab: selectedTabBinding,
-            database: database,
-             reverseGeocoder: reverseGeocoder, imageCache: imageCache
-        ).environment(\.preferencesStore, preferences))
-        let hosting = NSHostingController(rootView: view)
+        let hosting = NSHostingController(rootView: makeRootView())
         popover.contentViewController = hosting
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -699,10 +681,11 @@ final class StatusItemController: NSObject {
         }
     }
 
-    private func applyPopoverRefresh() {
-        guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
-         popover.appearance = preferences.appearanceMode.nsAppearance
-        let view = AnyView(HisingenContentView(
+    /// Single home for the popover's SwiftUI tree construction. `showPopover` and
+    /// `applyPopoverRefresh` were previously two verbatim copies of these ~30 lines, already
+    /// drifting in their trailing statements.
+    private func makeRootView() -> AnyView {
+        AnyView(HisingenContentView(
             state: latestState,
             error: latestError,
             authenticated: authenticated,
@@ -730,7 +713,12 @@ final class StatusItemController: NSObject {
             database: database,
              reverseGeocoder: reverseGeocoder, imageCache: imageCache
         ).environment(\.preferencesStore, preferences))
-        hosting.rootView = view
+    }
+
+    private func applyPopoverRefresh() {
+        guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
+         popover.appearance = preferences.appearanceMode.nsAppearance
+        hosting.rootView = makeRootView()
     }
 
     private func barTitle(for data: VehicleState?) -> String {
@@ -758,6 +746,10 @@ final class StatusItemController: NSObject {
 extension StatusItemController: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         settingsMode = false
+        // Tear the SwiftUI tree down with the popover: hidden views kept running geocode
+        // tasks and pulse animations, and the copied snapshot dictionaries stayed alive
+        // until the next rootView replacement. The tree is rebuilt by `showPopover`.
+        popover.contentViewController = nil
     }
 }
 

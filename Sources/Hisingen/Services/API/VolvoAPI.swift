@@ -55,6 +55,9 @@ actor VolvoAPI {
 
     var cars: [CarSummary] = []
     var selectedVIN: String?
+    /// Bumped by `resetSession()`; long-running discovery captures it on entry and discards
+    /// results if a reset interleaved (same rationale as the Polestar epoch guard).
+    var sessionEpoch = 0
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     var endpointBackoff: [String: Date] = [:]
@@ -169,6 +172,7 @@ actor VolvoAPI {
     }
 
     func discoverVehicles(preferredVIN: String?) async throws {
+        let requestEpoch = sessionEpoch
         let savedVIN: String? = if let preferredVIN, !preferredVIN.isEmpty {
             preferredVIN
         } else {
@@ -195,13 +199,21 @@ actor VolvoAPI {
                 let nickname = await MainActor.run { preferences.vehicleNickname(for: vin) }
                 summaries.append(CarSummary(vin: vin, title: nickname.isEmpty ? "Volvo" : nickname))
             }
+            guard sessionEpoch == requestEpoch else { return }
             cars = summaries
             let selected = (savedVIN != nil) ? (cars.first(where: { $0.vin == savedVIN }) ?? cars.first) : cars.first
             selectedVIN = selected?.vin
         } catch {
-            logger.warning("Volvo vehicle discovery fallback: \(error.localizedDescription, privacy: .public)")
+            // Only provider-specific gaps may degrade to the saved-VIN fallback list.
+            // Swallowing an auth failure or an outage here fabricated a one-car garage
+            // titled "Volvo" and hid the real problem behind plausible-looking data.
+            // Error descriptions can embed request paths (which contain VINs), so they are
+            // logged private rather than public.
+            logger.warning("Volvo vehicle discovery degraded to stored VIN: \(String(describing: error), privacy: .private)")
+            if Self.isRequestLevelFailure(error) { throw error }
             if let vin = savedVIN, !vin.isEmpty {
                 let nickname = await MainActor.run { preferences.vehicleNickname(for: vin) }
+                guard sessionEpoch == requestEpoch else { return }
                 cars = [CarSummary(vin: vin, title: nickname.isEmpty ? "Volvo" : nickname)]
                 selectedVIN = vin
             } else {
@@ -278,9 +290,25 @@ actor VolvoAPI {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let err = json["error"] as? String ?? "auth_error"
                 let desc = json["error_description"] as? String ?? ""
-                logger.error("Volvo token request rejected: \(err, privacy: .public) - \(desc, privacy: .public)")
+                logger.error("Volvo token request rejected: \(err, privacy: .public) - \(desc, privacy: .private)")
+                // A 400 is not always bad credentials: `invalid_client` means the app's own
+                // credentials are wrong, while anything else at 401 genuinely is a session
+                // problem. Previously every 4xx here reported "invalid credentials", sending
+                // users to re-enter a password that was never the issue.
+                switch err {
+                case "invalid_client", "unauthorized_client":
+                    throw VolvoError.appNotConfigured
+                case "invalid_grant", "expired_token":
+                    throw VolvoError.authenticationRequired(.invalidCredentials)
+                default:
+                    throw response.statusCode == 401
+                        ? VolvoError.authenticationRequired(.invalidCredentials)
+                        : VolvoError.server(statusCode: response.statusCode)
+                }
             }
-            throw VolvoError.authenticationRequired(.invalidCredentials)
+            throw response.statusCode == 401
+                ? VolvoError.authenticationRequired(.invalidCredentials)
+                : VolvoError.server(statusCode: response.statusCode)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: "token request") {
             throw failure
@@ -336,6 +364,10 @@ actor VolvoAPI {
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
         if let value = envelope?.data { return value }
         guard let direct = try? JSONDecoder.volvo.decode(T.self, from: data) else {
+            // Keep the underlying decode error in the (private) log: `DecodingError` names
+            // the exact missing/mismatched key, which is the difference between a five-minute
+            // diagnosis and a guessing game when Volvo changes a payload shape.
+            logger.error("Volvo response for \(path, privacy: .public) matched neither envelope nor direct decoding")
             throw VolvoError.decoding(operation: path)
         }
         return direct
@@ -381,6 +413,18 @@ actor VolvoAPI {
         switch error {
         case .authenticationRequired, .appNotConfigured, .rateLimited: return true
         default: return false
+        }
+    }
+
+    /// Request-level failures that must propagate instead of degrading to fallback data —
+    /// auth problems, rate limiting, server outages, transport breakdowns.
+    static func isRequestLevelFailure(_ error: Error) -> Bool {
+        switch error as? VolvoError {
+        case .authenticationRequired, .appNotConfigured, .rateLimited, .server,
+             .network, .invalidResponse, .responseTooLarge:
+            return true
+        default:
+            return false
         }
     }
 

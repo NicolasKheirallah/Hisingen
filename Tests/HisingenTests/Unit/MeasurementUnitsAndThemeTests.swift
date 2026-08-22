@@ -135,7 +135,7 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     @MainActor
-    func testAppearanceModeOptions() {
+    func testAppearanceModeOptions() throws {
         XCTAssertEqual(AppearanceMode.allCases.count, 3)
         XCTAssertEqual(AppearanceMode.system.title, L10n.text("System (Automatic)"))
         XCTAssertEqual(AppearanceMode.light.title, L10n.text("Light"))
@@ -149,19 +149,24 @@ struct MeasurementUnitsAndThemeTests {
         XCTAssertEqual(AppearanceMode.light.nsAppearance?.name, .aqua)
         XCTAssertEqual(AppearanceMode.dark.nsAppearance?.name, .darkAqua)
 
-        Preferences.appearanceMode = .light
-        XCTAssertEqual(Preferences.appearanceMode, .light)
-        Preferences.applyAppearance()
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        store.appearanceMode = .light
+        XCTAssertEqual(store.appearanceMode, .light)
+        store.applyAppearance()
         XCTAssertEqual(NSApplication.shared.appearance?.name, .aqua)
 
-        Preferences.appearanceMode = .dark
-        XCTAssertEqual(Preferences.appearanceMode, .dark)
-        Preferences.applyAppearance()
+        store.appearanceMode = .dark
+        XCTAssertEqual(store.appearanceMode, .dark)
+        store.applyAppearance()
         XCTAssertEqual(NSApplication.shared.appearance?.name, .darkAqua)
 
-        Preferences.appearanceMode = .system
-        XCTAssertEqual(Preferences.appearanceMode, .system)
-        Preferences.applyAppearance()
+        store.appearanceMode = .system
+        XCTAssertEqual(store.appearanceMode, .system)
+        store.applyAppearance()
         XCTAssertNil(NSApplication.shared.appearance as NSAppearance?)
     }
 

@@ -64,7 +64,10 @@ actor PolestarGRPC {
         let batteryStreamPath = batteryStreamPath
         let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
 
-        return AsyncThrowingStream { continuation in
+        // `bufferingNewest` bounds memory if the UI consumer stalls while the push stream
+        // stays chatty; dropping stale frames is correct because each frame is a full
+        // snapshot, not a delta.
+        return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(16)) { continuation in
             let worker = Task {
                 do {
                     try await withThrowingTaskGroup(of: Void.self) { group in

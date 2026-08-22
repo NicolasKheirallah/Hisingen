@@ -606,7 +606,7 @@
 "Network Type" = "Network Type";
 "Network type" = "Network type";
 "New climate timer" = "New climate timer";
-"Next Vehicle (⌥])" = "Next Vehicle (⌥])";
+"Next Vehicle (⌃⌥])" = "Next Vehicle (⌃⌥])";
 "Nickname" = "Nickname";
 "Nickname & Registration" = "Nickname & Registration";
 "No Remote Controls Enabled" = "No Remote Controls Enabled";
@@ -733,7 +733,7 @@
 "Pressure Warning" = "Pressure Warning";
 "Pressure monitoring and system alerts" = "Pressure monitoring and system alerts";
 "Preview:" = "Preview:";
-"Previous Vehicle (⌥[)" = "Previous Vehicle (⌥[)";
+"Previous Vehicle (⌃⌥[)" = "Previous Vehicle (⌃⌥[)";
 "Private Notification Banners" = "Private Notification Banners";
 "Projected" = "Projected";
 "Providing power" = "Providing power";
@@ -986,7 +986,7 @@
 "Swedish Gold" = "Swedish Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Swedish pine and eucalyptus earth tones, organic soft feel";
 "Switch Vehicle" = "Switch Vehicle";
-"Switch Vehicle (⌥[ / ⌥])" = "Switch Vehicle (⌥[ / ⌥])";
+"Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Switch Vehicle (⌃⌥[ / ⌃⌥])";
 "Switch to %@ (%@ · %d%%)…" = "Switch to %@ (%@ · %d%%)…";
 "Switch to %@ (%@)…" = "Switch to %@ (%@)…";
 "Switch to Volvo Account" = "Switch to Volvo Account";
@@ -1298,7 +1298,7 @@
 "Switch to %@" = "Switch to %@";
 
 /* History dashboard, live streaming, exact vehicle references, and calculated SoH */
-"%@ — Switch Vehicle (⌥[ / ⌥])" = "%@ — Switch Vehicle (⌥[ / ⌥])";
+"%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])" = "%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])";
 "%d logs" = "%d logs";
 "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry." = "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry.";
 "Apply References" = "Apply References";

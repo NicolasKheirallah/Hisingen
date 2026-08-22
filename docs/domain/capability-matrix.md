@@ -16,7 +16,8 @@ The static per-model fallback table from `VehicleCapabilityProfile.support(for:)
 | Charging schedule / override | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Locks / trunk / windows / honk-flash | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Exterior status (doors/windows/lock) | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
-| Direct tyre-pressure values | Best effort | **Verified** (kPa decoded) | Expected (supported) | Expected (supported) | Best effort |
+| Direct tyre-pressure values | Best effort | **Best effort** (backend-dependent — see note) | Expected (supported) | Expected (supported) | Best effort |
+| Saved charge locations (CRUD) | n/a | **Expected** (implemented; live verification per model outstanding) | **Expected** | **Best effort** (unverified on SEA platform) | n/a |
 | Service / vehicle warnings | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
 | Trip meters | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
 | Connectivity diagnostics | Best effort | **Verified** (live decoded) | Best effort | **Unsupported** | Best effort |
@@ -24,6 +25,13 @@ The static per-model fallback table from `VehicleCapabilityProfile.support(for:)
 | Software install control | Best effort | **Verified** (state-gated) | Best effort | **Unsupported** | Best effort |
 | Software install/cancel (OTA writes) | Best effort | **Verified** (state-gated) | Best effort | **Unsupported** | Best effort |
 | Remote commands (climate/locks/windows/honk/charging/timers) | Best effort | **Verified** (all live verified) | Best effort | Best effort | Best effort |
+
+**Polestar 2 tyre pressures (corrected 2026-08-22):** an earlier revision marked kPa
+values as *Verified*; the reference MY23 capture returns warning level only, so the static
+prior is now `.backendDependent`. The health parser additionally scans neighbouring protobuf
+fields for a coherent four-value pressure quadruple before giving up, so firmware variants
+that report at other positions upgrade automatically. Warning-level status (OK/low/very
+low/high) is decoded on all models regardless.
 
 Per Hisingen's own README: Polestar 1 needs "broad live verification"; Polestar 2 is "model-aware... direct tyre pressure and selectable climate temperature are not assumed"; Polestar 3 has "runtime confirmation for backend-dependent capabilities"; Polestar 4 has "Digital Twin support; current limit, pre-cleaning, legacy connectivity, and remote OTA are not assumed"; Polestar 5/6 are "conservative backend-dependent" with only positive runtime observations trusted. Future/unrecognized Polestar models preserve their name and remain fully probeable rather than being rejected.
 
@@ -38,7 +46,7 @@ All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) s
 | Exterior status | Expected (supported) | |
 | Climate start/stop | Expected (supported) | |
 | Service warnings | Expected (supported) | |
-| Software install control | **Unsupported** | No Volvo OTA endpoint is used — see [architecture/technical-debt.md](../architecture/technical-debt.md#volvo-software-info-is-synthetic-not-derived-from-any-api) |
+| Software install control | **Unsupported** | No Volvo OTA endpoint is used — see the comment in `VehicleCapabilityProfile.support(for:)` (`Sources/Hisingen/Domain/VehicleCapabilities.swift`) |
 | Direct tyre-pressure values | **Unsupported** | Volvo's `tyres` endpoint is indirect TPMS (inferred from wheel-speed-sensor imbalance, not a per-wheel pressure sensor) and returns a warning enum only — there is no numeric kPa/PSI field on any Volvo model, so this is a static negative rather than `.backendDependent`. Tyre *warning* status itself (OK/low/very low/high) is still fully supported and displayed; only the numeric-value capability is unavailable. |
 | Charge target | Runtime detected | Only ever `.supported`/`.unavailable` once the Energy Capabilities endpoint has been probed; `.backendDependent` before that |
 | Charging current limit | Runtime detected | Same as above |

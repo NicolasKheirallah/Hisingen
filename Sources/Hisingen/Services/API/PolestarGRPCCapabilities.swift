@@ -167,6 +167,7 @@ extension PolestarGRPC {
                 ampLimit: Int(varint(f, 5) ?? 0),
                 minimumSoc: Int(varint(f, 6) ?? 0),
                 optimisedChargingEnabled: (varint(f, 7) ?? 0) == 1,
+                optimisedChargingMode: Int(varint(f, 9) ?? 0),
                 kind: Int(varint(f, 12) ?? 0)
             )
         }

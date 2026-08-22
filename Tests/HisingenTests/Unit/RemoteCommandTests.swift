@@ -142,13 +142,16 @@ struct RemoteCommandTests {
 
     @Test
     @MainActor
-    func testRequireBiometricsPreference() {
-        let original = Preferences.requireBiometricsForRemoteControls
-        Preferences.requireBiometricsForRemoteControls = true
-        XCTAssertTrue(Preferences.requireBiometricsForRemoteControls)
-        Preferences.requireBiometricsForRemoteControls = false
-        XCTAssertFalse(Preferences.requireBiometricsForRemoteControls)
-        Preferences.requireBiometricsForRemoteControls = original
+    func testRequireBiometricsPreference() throws {
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        store.requireBiometricsForRemoteControls = true
+        XCTAssertTrue(store.requireBiometricsForRemoteControls)
+        store.requireBiometricsForRemoteControls = false
+        XCTAssertFalse(store.requireBiometricsForRemoteControls)
     }
 
     @Test

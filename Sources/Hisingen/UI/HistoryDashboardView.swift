@@ -17,12 +17,24 @@ struct HistoryDashboardView: View {
         case week = "7 Days"
         case month = "30 Days"
         case all = "All"
+        case custom = "Custom…"
         var id: String { rawValue }
         var days: Int? { self == .week ? 7 : (self == .month ? 30 : nil) }
     }
 
+    @State private var fuelLitersText: String = ""
+    @State private var fuelPriceText: String = ""
+    @State private var fuelOdometerText: String = ""
+    @State private var showFuelSheet = false
+    @State private var customRangeStart: Date = Calendar.current.date(byAdding: .day, value: -14, to: Date()) ?? Date()
+    @State private var customRangeEnd: Date = Date()
+    @State private var showCustomRangeEditor = false
+
     private var cutoff: Date? {
-        period.days.flatMap { Calendar.current.date(byAdding: .day, value: -$0, to: Date()) }
+        if period == .custom {
+            return customRangeStart
+        }
+        return period.days.flatMap { Calendar.current.date(byAdding: .day, value: -$0, to: Date()) }
     }
 
     private var trips: [TripHistoryEntry] {
@@ -99,6 +111,14 @@ struct HistoryDashboardView: View {
         database.recentTelemetry(for: state.vin, limit: 2_000)
     }
 
+    private var fuelEntries: [VehicleDatabase.FuelEntry] {
+        state.powertrain.hasCombustionEngine ? database.recentFuelEntries(for: state.vin, limit: 50) : []
+    }
+
+    private var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] {
+        database.recentCabinClimate(for: state.vin, limit: 200)
+    }
+
     private var allTimeOdometerPoints: [HistoryInsights.OdometerPoint] {
         HistoryInsights.odometerTrend(from: allTimeTelemetryRecords)
     }
@@ -154,14 +174,17 @@ struct HistoryDashboardView: View {
                 tripListCard
             }
             if !chargingSessions.isEmpty { chargingHistoryCard }
+            if !fuelEntries.isEmpty { recentFillsCard }
             if efficiencyPoints.count >= 3 { efficiencyChartCard }
             if odometerPoints.count >= 3 { odometerChartCard }
             if !batteryHealthRecords.isEmpty { batteryHealthCard }
             if airQualityRecords.count >= 2 { airQualityCard }
+            if cabinClimateRecords.count >= 2 { cabinClimateCard }
             if !commands.isEmpty { automationHistoryCard }
             if trips.isEmpty && chargingSessions.isEmpty && commands.isEmpty
                 && batteryHealthRecords.isEmpty && airQualityRecords.count < 2 { emptyCard }
         }
+        .sheet(isPresented: $showFuelSheet) { fuelEntrySheet }
     }
 
     private var periodPicker: some View {
@@ -173,6 +196,25 @@ struct HistoryDashboardView: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .accessibilityLabel(L10n.text("History Period"))
+        .popover(isPresented: $showCustomRangeEditor, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.text("Custom Range")).font(.system(size: 12, weight: .semibold))
+                DatePicker(L10n.text("From"), selection: $customRangeStart,
+                           in: ...customRangeEnd, displayedComponents: .date)
+                    .font(.system(size: 11))
+                DatePicker(L10n.text("To"), selection: $customRangeEnd,
+                           in: customRangeStart...Date(), displayedComponents: .date)
+                    .font(.system(size: 11))
+                Text(period == .custom ? "" : L10n.text("Choose “Custom…” to apply."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .frame(width: 260)
+        }
+        .onChange(of: period) { newValue in
+            if newValue == .custom { showCustomRangeEditor = true }
+        }
     }
 
     private var overviewCard: some View {
@@ -180,11 +222,29 @@ struct HistoryDashboardView: View {
         let drivingTime = trips.reduce(0) { $0 + $1.duration }
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
         let estimatedCost = energy * preferences.electricityPricePerKwh
+        // Predicted service date from the observed km/day rate and the vehicle's own
+        // remaining-distance/time countdowns.
+        let serviceProjection = HistoryInsights.projectService(
+            currentOdometerKm: state.odometerKm.map(Double.init),
+            distanceToServiceKm: state.distanceToServiceKm,
+            daysToService: state.daysToService,
+            odometerPoints: odometerPoints
+        )
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("History Overview"), color: .indigo)
                     Spacer()
+                    if state.powertrain.hasCombustionEngine {
+                        Button {
+                            showFuelSheet = true
+                        } label: {
+                            Label(L10n.text("Add Fuel"), systemImage: "drop.fill")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.text("Log a fill-up so fuel spend is included in cost estimates"))
+                    }
                     exportMenu
                 }
                 HStack(spacing: 8) {
@@ -196,6 +256,50 @@ struct HistoryDashboardView: View {
                     metric(L10n.text("Charge Sessions"), "\(chargingSessions.count)", "bolt.fill")
                     metric(L10n.text("Estimated Energy"), String(format: "%.1f kWh", energy), "bolt.circle")
                     metric(L10n.text("Estimated Cost"), String(format: "%.2f %@", estimatedCost, preferences.currencySymbol), "creditcard")
+                }
+                if let serviceProjection {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.system(size: 10))
+                            .foregroundStyle(HisingenTheme.accent)
+                        Text(L10n.format("Next service projected around %@",
+                                         Format.dateFormatter.string(from: serviceProjection.projectedDate ?? Date())))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                        if let odo = serviceProjection.projectedOdometerKm {
+                            Text("· " + Format.distance(km: Int(odo.rounded()), unit: preferences.distanceUnit))
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                // Lifetime figure — deliberately ignores the period filter so it answers
+                // "what has ownership cost me so far" rather than "this month".
+                let fuelSpend = database.lifetimeFuelCost(for: state.vin)
+                let lifetimeCostPerKm = HistoryInsights.costPerKm(
+                    totalEnergyKwh: database.lifetimeChargingEnergyKwh(for: state.vin),
+                    pricePerKwh: preferences.electricityPricePerKwh,
+                    odometerPoints: allTimeOdometerPoints,
+                    fuelCost: fuelSpend
+                )
+                if let costPerKm = lifetimeCostPerKm, preferences.electricityPricePerKwh > 0 {
+                    HStack(spacing: 5) {
+                        Image(systemName: "speedometer")
+                            .font(.system(size: 10))
+                            .foregroundStyle(HisingenTheme.accent)
+                        Text(L10n.format("Lifetime charging cost ≈ %@ per %@",
+                                         String(format: "%.3f %@", costPerKm * (preferences.distanceUnit == .kilometers ? 1 : 1.609344), preferences.currencySymbol),
+                                         preferences.distanceUnit == .kilometers ? "km" : "mi"))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                        Text(L10n.text("(estimated)"))
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -222,6 +326,12 @@ struct HistoryDashboardView: View {
                 exportCSV(database.exportTelemetryCSV(for: state.vin), name: "Telemetry")
             }
             .disabled(telemetryRecords.isEmpty)
+            Button(L10n.text("Session Samples")) {
+                guard let session = selectedSession else { return }
+                exportCSV(database.exportChargingSamplesCSV(sessionID: session.id),
+                          name: "Charging-Samples")
+            }
+            .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
         } label: {
             Label(L10n.text("Export"), systemImage: "square.and.arrow.up")
                 .font(.system(size: 10, weight: .medium))
@@ -318,6 +428,17 @@ struct HistoryDashboardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: .green)
+                    if selectedSession?.endedAt == nil {
+                        // Live session: the curve keeps growing as polls arrive.
+                        HStack(spacing: 3) {
+                            Circle().fill(HisingenTheme.chartPositive).frame(width: 5, height: 5)
+                            Text(L10n.text("Live"))
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        }
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.green.opacity(0.15), in: Capsule())
+                        .accessibilityLabel(L10n.text("Session in progress"))
+                    }
                     if let badgeColor = chargingTypeBadgeColor(chargingType) {
                         Text(chargingType.displayName)
                             .font(.system(size: 8.5, weight: .bold, design: .rounded))
@@ -357,7 +478,7 @@ struct HistoryDashboardView: View {
                         x: .value(L10n.text("Time"), point.timestamp),
                         y: .value(L10n.text("Charge level"), point.soc)
                     )
-                    .foregroundStyle(.linearGradient(colors: [Color.green.opacity(0.28), Color.green.opacity(0.02)],
+                    .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartPositive.opacity(0.28), HisingenTheme.chartPositive.opacity(0.02)],
                                                      startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
                     LineMark(
@@ -365,7 +486,7 @@ struct HistoryDashboardView: View {
                         y: .value(L10n.text("Charge level"), point.soc),
                         series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
                     )
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(HisingenTheme.chartPositive)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
                     .interpolationMethod(.catmullRom)
                 }
@@ -379,7 +500,7 @@ struct HistoryDashboardView: View {
                             x: .value(L10n.text("Time"), point.timestamp),
                             y: .value(L10n.text("Power"), point.powerKw ?? 0)
                         )
-                        .foregroundStyle(.linearGradient(colors: [Color.orange.opacity(0.25), Color.orange.opacity(0.02)],
+                        .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartAttention.opacity(0.25), HisingenTheme.chartAttention.opacity(0.02)],
                                                          startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.catmullRom)
                         LineMark(
@@ -695,7 +816,7 @@ struct HistoryDashboardView: View {
                             y: .value(L10n.text("Consumption"), point.kwhPer100Km),
                             series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
                         )
-                        .foregroundStyle(Color.mint)
+                        .foregroundStyle(HisingenTheme.chartInfo)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                         .interpolationMethod(.catmullRom)
                         PointMark(
@@ -703,14 +824,14 @@ struct HistoryDashboardView: View {
                             y: .value(L10n.text("Consumption"), point.kwhPer100Km)
                         )
                         .symbolSize(14)
-                        .foregroundStyle(Color.mint.opacity(0.85))
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.85))
                     }
                     ForEach(smoothed) { point in
                         LineMark(
                             x: .value(L10n.text("Date"), point.timestamp),
                             y: .value(L10n.text("Smoothed"), point.value)
                         )
-                        .foregroundStyle(Color.mint.opacity(0.4))
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.4))
                         .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
                         .interpolationMethod(.catmullRom)
                     }
@@ -805,7 +926,7 @@ struct HistoryDashboardView: View {
                         y: .value(L10n.text("Odometer"), convertDistance(point.odometerKm)),
                         series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
                     )
-                    .foregroundStyle(Color.indigo)
+                    .foregroundStyle(HisingenTheme.accent)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.catmullRom)
                 }
@@ -859,7 +980,7 @@ struct HistoryDashboardView: View {
                             x: .value(L10n.text("Date"), record.timestamp),
                             y: .value(L10n.text("State of Health"), record.stateOfHealthPct)
                         )
-                        .foregroundStyle(Color.pink)
+                        .foregroundStyle(HisingenTheme.chartHealth)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                         .interpolationMethod(.catmullRom)
                         PointMark(
@@ -867,7 +988,7 @@ struct HistoryDashboardView: View {
                             y: .value(L10n.text("State of Health"), record.stateOfHealthPct)
                         )
                         .symbolSize(16)
-                        .foregroundStyle(Color.pink.opacity(0.85))
+                        .foregroundStyle(HisingenTheme.chartHealth.opacity(0.85))
                     }
                     .chartYScale(domain: sohDomain(records))
                     .chartYAxisLabel("%")
@@ -1056,5 +1177,122 @@ struct HistoryDashboardView: View {
     private func openMap(latitude: Double, longitude: Double) {
         guard let url = URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Fuel Entries (hybrid / combustion)
+
+    private var fuelEntrySheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.text("Log Fuel Fill-Up")).font(.system(size: 13, weight: .semibold))
+            LabeledField(title: L10n.text("Volume (litres)"), text: $fuelLitersText)
+            LabeledField(title: L10n.text("Price per litre"), text: $fuelPriceText)
+            LabeledField(title: L10n.text("Odometer (km), optional"), text: $fuelOdometerText)
+            HStack {
+                Spacer()
+                Button(L10n.text("Cancel"), role: .cancel) { showFuelSheet = false }
+                Button(L10n.text("Save")) {
+                    guard let liters = Double(fuelLitersText.replacingOccurrences(of: ",", with: ".")),
+                          liters > 0,
+                          let price = Double(fuelPriceText.replacingOccurrences(of: ",", with: ".")) else { return }
+                    let odo = Double(fuelOdometerText.replacingOccurrences(of: ",", with: "."))
+                    _ = database.addFuelEntry(vin: state.vin, date: Date(), liters: liters,
+                                              pricePerLiter: price, odometerKm: odo)
+                    fuelLitersText = ""; fuelPriceText = ""; fuelOdometerText = ""
+                    showFuelSheet = false
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            Text(L10n.text("Fill-ups are stored locally and included in lifetime cost-per-distance estimates."))
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .frame(width: 300)
+    }
+
+    private var recentFillsCard: AnyView {
+        guard !fuelEntries.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: .mint)
+                ForEach(fuelEntries.prefix(8)) { entry in
+                    HStack {
+                        Text(Format.dateFormatter.string(from: entry.date))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f L · %.2f %@", entry.liters,
+                                    entry.liters * entry.pricePerLiter, preferences.currencySymbol))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        Button {
+                            database.deleteFuelEntry(id: entry.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(L10n.text("Delete fill-up"))
+                    }
+                    if entry.id != fuelEntries.prefix(8).last?.id { Divider().opacity(0.25) }
+                }
+            }
+        })
+    }
+
+    private struct LabeledField: View {
+        let title: String
+        @Binding var text: String
+        var body: some View {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+                TextField("", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            }
+        }
+    }
+
+    /// Cabin temperature trend from digital-twin climate readings (Polestar 3/4-class
+    /// platforms). Hidden entirely on vehicles that never report interior temperature.
+    private var cabinClimateCard: AnyView {
+        let chronological = cabinClimateRecords.sorted { $0.timestamp < $1.timestamp }
+        guard let latest = chronological.last?.interiorCelsius else { return AnyView(EmptyView()) }
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "thermometer.medium",
+                               title: L10n.text("Cabin Temperature Trend"), color: .orange)
+                    Spacer()
+                    Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+                Chart(chronological) { record in
+                    LineMark(
+                        x: .value(L10n.text("Date"), record.timestamp),
+                        y: .value(L10n.text("Interior"), record.interiorCelsius ?? 0)
+                    )
+                    .foregroundStyle(HisingenTheme.chartAttention)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                    if let requested = record.requestedCelsius {
+                        LineMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("Setpoint"), requested)
+                        )
+                        .foregroundStyle(HisingenTheme.accent.opacity(0.45))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
+                }
+                .frame(height: 100)
+                .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
+                Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        })
     }
 }

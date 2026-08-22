@@ -7,8 +7,11 @@ struct InfoTabView: View {
     let state: VehicleState
     let database: VehicleDatabase
     let imageCache: CarImageCache
+    let reverseGeocoder: ReverseGeocoder
 
     @State private var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
+    @State private var addressText: String?
+    @State private var addressResolved = false
     @Environment(\.preferencesStore) private var preferences
     @State private var vinCopied = false
 
@@ -38,6 +41,7 @@ struct InfoTabView: View {
                 tripComputerCard
             }
             fluidsAndLightingCard
+            connectivityWakeCard
             exteriorStylingCard
             interiorCabinCard
             powertrainSpecsCard
@@ -142,6 +146,11 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Plug & Charge"),
                               L10n.text("Supported"),
                               symbol: "plug"))
+        }
+        if caps.hasPerformanceSoftwareUpgrade {
+            rows.append(KVRow(L10n.text("Performance Software Upgrade"),
+                              L10n.text("Available"),
+                              symbol: "gauge.with.needle.100percent.high"))
         }
         if let installed = caps.installedSoftwareVersion {
             rows.append(KVRow(L10n.text("Backend-Reported Software"),
@@ -343,6 +352,7 @@ struct InfoTabView: View {
 
         let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? "N" : "S")
         let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? "E" : "W")
+        Task { await resolveAddress(latitude: lat, longitude: lon) }
         let modelTitle = state.modelName ?? L10n.text("Vehicle")
 
         return AnyView(Card {
@@ -371,7 +381,27 @@ struct InfoTabView: View {
                 }
 
                 VStack(spacing: 6) {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 11))
+                                .foregroundStyle(HisingenTheme.accent)
+                                .frame(width: 14)
+                            Text(L10n.text("Address"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                            .privacySensitive()
+                    }
+                    .padding(.vertical, 1)
                     KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
+                        .privacySensitive()
                     if let alt = location.altitudeMeters {
                         KVRow(L10n.text("Altitude"), String(format: "%.0f m", alt), symbol: "mountain.2.fill")
                     }
@@ -446,6 +476,14 @@ struct InfoTabView: View {
                     }
                     if let outdoorPM = air.externalParticulateMatter25 {
                         KVRow(L10n.text("Outdoor PM2.5"), "\(outdoorPM) µg/m³", symbol: "sun.haze.fill")
+                        if let cabinPM = air.particulateMatter25 {
+                            let delta = max(0, outdoorPM - cabinPM)
+                            KVRow(L10n.text("Purifier Effect"),
+                                  delta >= 1 ? L10n.format("%d µg/m³ PM2.5 removed", delta)
+                                             : L10n.text("No measurable reduction"),
+                                  symbol: "arrow.down.forward.and.arrow.up.backward",
+                                  info: L10n.text("Difference between the outdoor and in-cabin PM2.5 readings at the same sample."))
+                        }
                     }
                     if let runtimeLeft = air.runtimeRemainingMinutes, air.cleaningState == .on || air.cleaningState == .pending {
                         KVRow(L10n.text("Purification Time Left"),
@@ -494,6 +532,13 @@ struct InfoTabView: View {
                             }
                         }
                         .padding(.vertical, 2)
+                    }
+                    if let estimate = HistoryInsights.filterLifeEstimate(
+                        from: database.recentAirQuality(for: state.vin, limit: 500)) {
+                        KVRow(L10n.text("Filter Replacement (estimate)"),
+                              L10n.format("≈ %d days", Int(estimate.daysRemaining.rounded())),
+                              symbol: "calendar.badge.exclamationmark",
+                              info: L10n.text("A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
                     }
 
                     airQualityTrendChart
@@ -566,6 +611,53 @@ struct InfoTabView: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "gauge.with.dots.needle.bottom.50percent", title: L10n.text("Trip Computer & Distance"), color: .indigo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+            }
+        })
+    }
+
+    private var connectivityWakeCard: AnyView {
+        let current = state.connectivity
+        guard current?.wakeReason != nil || current?.networkType != nil else {
+            return AnyView(EmptyView())
+        }
+        let wakeReason = current?.wakeReason ?? current?.networkType
+        let history = database.recentConnectivity(for: state.vin, limit: 60)
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "antenna.radiowaves.left.and.right",
+                           title: L10n.text("Connectivity & Wake"), color: .cyan)
+                if let reason = current?.wakeReason {
+                    KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
+                }
+                if let network = current?.networkType {
+                    KVRow(L10n.text("Network"), network, symbol: "dot.radiowaves.up.forward")
+                }
+                if let bars = current?.signalBars {
+                    KVRow(L10n.text("Signal"), "\(bars)/4", symbol: "signalbars")
+                }
+                if history.count >= 3 {
+                    Chart(history.reversed()) { record in
+                        PointMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("Signal"), record.signalBars ?? 0)
+                        )
+                        .symbolSize(20)
+                        .foregroundStyle(Color.cyan.opacity(0.8))
+                    }
+                    .chartYScale(domain: 0...4)
+                    .chartYAxisLabel(L10n.text("Bars"))
+                    .frame(height: 70)
+                    .accessibilityLabel(L10n.text("Signal strength history chart"))
+                    let wakes = history.compactMap(\.wakeReason)
+                    if !wakes.isEmpty {
+                        KVRow(L10n.text("Recent Wake Reasons"),
+                              Dictionary(grouping: wakes, by: { $0 })
+                                  .map { "\($0.key) ×\($0.value.count)" }
+                                  .sorted()
+                                  .joined(separator: " · "),
+                              symbol: "clock.arrow.circlepath")
+                    }
+                }
             }
         })
     }
@@ -981,6 +1073,7 @@ struct InfoTabView: View {
                                 Text(state.vin)
                                     .font(.system(size: 10.5, design: .monospaced))
                                     .foregroundStyle(.primary)
+                                    .privacySensitive()
                                 Image(systemName: vinCopied ? "checkmark" : "doc.on.doc")
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(vinCopied ? Color.green : Color.secondary)
@@ -1143,5 +1236,13 @@ struct InfoTabView: View {
         let directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
         let index = Int(((normalized + 22.5) / 45.0).truncatingRemainder(dividingBy: 8))
         return directions[index]
+    }
+
+    private func resolveAddress(latitude: Double, longitude: Double) async {
+        addressResolved = false
+        addressText = nil
+        let resolved = await reverseGeocoder.geocode(latitude: latitude, longitude: longitude)
+        addressText = resolved
+        addressResolved = true
     }
 }

@@ -22,6 +22,43 @@ struct SQLiteDatabaseTests {
         #expect(name == "Polestar")
     }
 
+    @Test("Bound text and blob payloads survive until step (SQLITE_TRANSIENT contract)")
+    func testBlobAndTextBindRoundTrip() throws {
+        let db = try SQLiteDatabase.inMemory()
+        try db.execute(sql: "CREATE TABLE payloads (id INTEGER PRIMARY KEY, text_value TEXT, blob_value BLOB);")
+
+        // Large enough that a dangling-pointer bind would almost certainly read freed memory
+        // rather than accidentally-valid bytes.
+        let blob = Data((0..<256_000).map { UInt8(truncatingIfNeeded: $0 &+ 0x5A) })
+        let text = String(repeating: "Hisingen-持久化-", count: 4_000)
+
+        for id in 1...3 {
+            // Force allocations between the bind and the step: the temporary string/buffer
+            // lifetimes must not matter (this is what SQLITE_STATIC got wrong).
+            try autoreleasepool {
+                try db.query(sql: "INSERT INTO payloads (id, text_value, blob_value) VALUES (?, ?, ?);") { stmt in
+                    try stmt.bindInt64(Int64(id), at: 1)
+                    try stmt.bindText(text + String(id), at: 2)
+                    try stmt.bindBlob(blob, at: 3)
+                    try stmt.executeUpdate()
+                } process: { _ in }
+            }
+        }
+
+        for id in 1...3 {
+            let row = try db.query(sql: "SELECT text_value, blob_value FROM payloads WHERE id = ?;") { stmt in
+                try stmt.bindInt64(Int64(id), at: 1)
+            } process: { stmt -> (String, Data)? in
+                guard stmt.step(),
+                      let t = stmt.columnText(at: 0),
+                      let b = stmt.columnBlob(at: 1) else { return nil }
+                return (t, b)
+            }
+            #expect(row?.0 == text + String(id))
+            #expect(row?.1 == blob)
+        }
+    }
+
     @Test("Transactions commit on success and rollback on failure")
     func testTransactionsAndRollback() throws {
         let db = try SQLiteDatabase.inMemory()

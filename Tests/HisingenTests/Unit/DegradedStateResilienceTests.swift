@@ -166,21 +166,21 @@ struct AuthFailureReschedulingTests {
 
     @Test
     func testAuthenticationFailureSchedulesAnotherSessionAttempt() async throws {
-        let oldVIN = Preferences.vin
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer {
-            Preferences.vin = oldVIN
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-        Preferences.vin = "YSMTEST"
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.vin = "YSMTEST"
 
         let coordinator = RefreshCoordinator(
             api: AuthFailingProvider(),
             stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             observesEnvironment: false,
-            preferences: PreferencesStore(defaults: defaults),
-            clearPasswordAfterSession: {}
+            imageCache: CarImageCache(),
+            preferences: preferences,
+            clearPasswordAfterSession: {},
+            readStoredSessionToken: { nil },
+            readStoredPassword: { nil }
         )
         defer { coordinator.stop() }
 

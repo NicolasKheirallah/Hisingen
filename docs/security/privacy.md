@@ -576,3 +576,33 @@ The privacy documentation has intentionally separate responsibilities:
 - [`../architecture/persistence.md`](../architecture/persistence.md) — storage implementation.
 
 These documents must not contradict each other.
+
+---
+
+## 2026-08-22 additions
+
+### Screenshot Privacy Mode
+Settings → Appearance toggle. When enabled, views marked `.privacySensitive()` (VIN,
+registration plate, GPS coordinates, resolved address) render as SwiftUI placeholders under
+`.redacted(reason: .privacy)` across the main window. Menu-bar text is unaffected (AppKit).
+
+### System Spotlight index
+The active vehicle's nickname/model, battery %, range and charging flag are published to the
+local macOS Spotlight index (`CoreSpotlight`) so searching the car's name shows its state.
+The **VIN is never written to the index**; entries are deleted on sign-out. Index contents
+never exceed what the dashboard already displays.
+
+### Reverse-geocoded address
+The parking-location card resolves coordinates to a street/city via Apple `CLGeocoder`
+through the existing in-process `ReverseGeocoder` (memory cache keyed at 4-decimal
+precision). Coordinates go to Apple for lookup only when the location feature is enabled;
+results stay local. The coordinate row remains below the address and both honour privacy
+mode.
+
+### Manual fuel fill-ups
+Stored locally in SQLite; never sent anywhere.
+
+### Full JSON backup export
+User-initiated file export of all local history tables. Coordinates are included **only**
+when the location-history preference is on; there is no import path by design (a tampered
+file must not be able to inject telemetry).

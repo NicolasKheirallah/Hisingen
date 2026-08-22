@@ -64,6 +64,32 @@ Independent of the charging transitions above: if battery% drops to or below `Pr
 
 While charging, `VehicleState.mergingLastKnown` appends a `ChargingSample(timestamp:batteryPercentage:powerWatts:)` throttled to at most one sample per 20 seconds or 0.2% SOC change, capped at 50 samples, cleared entirely once charging stops.
 
+## Saved charge locations (Polestar)
+
+`ChargeLocationService` on PCCS supports full management, implemented 2026-08-22 with wire
+shapes cross-checked against kildahldev/unofficial-polestar-api:
+`CreateAtTheCarLocation`, `UpdateAlias`, `UpdateAmpLimit`, `UpdateMinimumSoc`,
+`UpdateOptimizedSetting`, `DeleteLocation`. Reads return full location objects including the
+optimised-charging mode (0 unavailable / 1 intelligent timer / 2 price-optimised). The
+Controls section only renders after a fetch returns locations — unverified platforms show
+nothing rather than controls that may not exist. Per-location charge timers and departure
+times are still read-only; their write RPCs are unverified (see
+[research/api-investigation-backlog.md](../research/api-investigation-backlog.md)).
+
+## Charging anomaly detection (failing-cable hint)
+
+When a completed session's peak power is below **60 % of the median** of ≥3 prior sessions at
+the same *named* location (`HistoryInsights.sessionPeakAnomaly`), AppDelegate posts a one-shot
+"Unusually slow charging" notice (deduped per session id via UserDefaults). First visits and
+unnamed locations never trigger it. Detection runs against the persisted DB session because
+the domain `ChargingSession` doesn't carry location.
+
+## Fuel fill-ups (hybrid / combustion)
+
+`fuel_entries` stores manual fill-ups (volume, price/L, optional odometer) so lifetime
+cost-per-distance includes petrol for PHEV/ICE instead of being silently electric-only. See
+[persistence](../architecture/persistence.md#fuel-entries).
+
 ## Notifications tied to charging
 
-See [domain/notifications.md](notifications.md) — `.started`/`.completed`/`.fault`/`.interrupted`/`.lowBattery` each map to an independently-toggleable `Preferences` notification setting.
+See [domain/notifications.md](notifications.md) — `.started`/`.completed`/`.fault`/`.interrupted`/`.lowBattery` each map to an independently-toggleable notification setting.

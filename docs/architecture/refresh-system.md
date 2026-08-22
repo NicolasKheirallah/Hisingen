@@ -89,3 +89,12 @@ Distinct from staleness on the *data* (see [data-flow.md](data-flow.md#freshness
 ## Diagnostics
 
 `DiagnosticsSnapshot` is republished after nearly every state transition: `lastSuccess`, `lastError`, `latency`, `nextRefresh`, `sessionValid`, `networkAvailable`, `refreshInProgress` (`task != nil`). `AppDelegate` uses `diagnostics.sessionValid` (OR'd with `Preferences.hasResumableSession`) to decide whether the UI should be in the authenticated or sign-in state.
+
+## Vehicle-asleep backoff (2026-08-22)
+
+`RefreshPolicy.interval` combines the activity cadence (60 s charging/climate, 300 s idle)
+with availability: when the vehicle reports `.unavailable` (asleep, power saving, service),
+the interval stretches to a **900 s floor** — a deep-sleeping car answers every poll with the
+same stale snapshot, so faster polling only burns the provider's rate budget. `.unknown`
+availability keeps the base cadence. Normal polling resumes on the first fetch where the
+vehicle reports available.

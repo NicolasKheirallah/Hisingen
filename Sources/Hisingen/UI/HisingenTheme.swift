@@ -252,6 +252,14 @@ enum HisingenTheme {
 
 
     static let semanticGood = Color.green
+
+    /// Chart series tokens. Themes with a strong accent identity (Polestar's monochrome
+    /// philosophy, Volvo Iron) collapse charts toward the theme accent; expressive themes
+    /// keep distinct hues so multi-series cards stay readable.
+    static var chartPositive: Color { decorativeTint(.green) == .green ? .green : HisingenTheme.accent }
+    static var chartInfo: Color { decorativeTint(.cyan) == .cyan ? .cyan : HisingenTheme.accent.opacity(0.85) }
+    static var chartAttention: Color { decorativeTint(.orange) == .orange ? .orange : HisingenTheme.accent.opacity(0.7) }
+    static var chartHealth: Color { decorativeTint(.pink) == .pink ? .pink : HisingenTheme.accent.opacity(0.9) }
     static let semanticActive = Color.blue
     static let semanticWarning = Color.orange
     static let semanticCritical = Color.red

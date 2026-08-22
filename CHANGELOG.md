@@ -10,6 +10,69 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Added fallback code signing and packaging in the release workflow when Apple Developer ID certificates are not configured.
 - Defaulted the Polestar public render-CDN key in `Scripts/inject-secrets.sh` to the documented public AppSync key.
 - Updated all GitHub Actions workflow pins to their latest verified immutable commit SHAs.
+- Added notification quick actions: an evening-unlocked banner offers a Lock
+  button and an interrupted-charging banner offers Resume Schedule. Actions
+  route through the same capability gates as the in-app controls and act only
+  on the currently selected vehicle.
+- Added a parameterized Set Charge Target shortcut intent and a Where Is My
+  Car intent that returns the last reported position plus a map link from the
+  local cache only, plus a matching hisingen://charge-target URL route.
+- Added a custom date-range option to the History dashboard alongside the
+  fixed 7-day/30-day/all periods.
+- Added a projected next-service estimate combining the vehicle's own service
+  countdowns with the observed km/day rate from odometer history.
+- Added a full local-history JSON backup export (all tables, all vehicles)
+  in Settings → Storage; coordinates are included only when location history
+  is opted in, and there is deliberately no import path.
+- Added per-session raw-sample CSV export for charging curves.
+- Telemetry rows now record whether a consumption figure is kWh/100 km or
+  L/100 km, so combustion history can never be misread as energy data going
+  forward.
+- Polling now stretches to a 15-minute floor while the vehicle reports itself
+  unavailable (asleep/power-saving), returning to normal cadence on wake.
+- Added a Connectivity & Wake card: why the car is currently awake, network
+  and signal level, a signal-history sparkline, and recent wake reasons —
+  built from locally recorded connectivity samples (Polestar platforms).
+- Added a cabin temperature trend chart for digital-twin climate platforms,
+  with dashed setpoint overlay; hidden on vehicles that never report it.
+- Menu bar charging countdown now targets the configured charge level
+  ("72→80 · 25m") instead of always counting down to 100 %.
+- Added an estimated lifetime charging cost per distance figure to the History
+  overview, clearly labeled as estimated.
+- Charge-location rows now name their optimised-charging mode (intelligent
+  timer vs price-optimised) when the backend reports one.
+- Added a Max Heat preconditioning macro (30 °C setpoint) alongside the
+  temperature slider on platforms that accept explicit temperatures. The
+  backend exposes no dedicated defroster field, so this is honestly labeled
+  as heat rather than defrost.
+- Added Screenshot Privacy Mode (Settings → Appearance): VIN, plate, and
+  coordinates render as placeholders across the app while enabled, so shared
+  screenshots stay safe.
+- Vehicle state is now surfaced in system Spotlight: searching the car's
+  nickname shows battery/range/charging at a glance; entries are wiped on
+  sign-out and contain no VIN.
+- Chart colors now follow theme tokens instead of hardcoded hues, keeping
+  multi-series cards readable under monochrome themes.
+- Added amp-limit preset chips (6/8/10/13/16 A) beside the charging-current
+  slider; presets outside the vehicle's advertised range are hidden.
+- Added a floating always-on-top charging mini-panel (optional, in Settings →
+  Appearance) showing SoC→target, power, and ETA without activating Hisingen;
+  position is remembered and it closes on unplug.
+- Charging detail rows on the Charging card can now be reordered from
+  Settings; unlisted rows keep their default position, so a partial order is
+  safe.
+- Vehicle nicknames now appear in notifications and Shortcuts responses
+  instead of the generic brand name (Spotlight already used them).
+- Completed sessions at a named location whose peak power falls far below that
+  location's own norm trigger an "unusually slow charging" notice — a failing
+  cable or derated charger hint. Requires three comparable prior sessions, so
+  first visits never fire it.
+- Hybrid and combustion owners can log fuel fill-ups locally (volume, price,
+  odometer); fill-ups are included in lifetime cost-per-distance so PHEV and
+  ICE economics are complete rather than silently electric-only.
+- The parking-location card now resolves a street address via reverse
+  geocoding, with GPS coordinates kept below as the precise fallback. Both
+  respect Screenshot Privacy Mode.
 
 ## [1.2.0] - 2026-08-22
 

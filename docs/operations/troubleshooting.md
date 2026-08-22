@@ -157,3 +157,30 @@ Add it to `VehicleModelFamily` and give it a conservative (`.backendDependent`-h
 ### GitHub release generation breaks
 
 Most likely cause given the pipeline's structure: a version/tag mismatch (`Info.plist` vs. tag) or a working-tree-not-clean failure at the very start of `make release` — both are deliberately fail-fast checks, not silent. If the failure is further along (signing/notarization), see "Notarization fails" above. If `softprops/action-gh-release` itself fails, check for a GitHub Actions/token-permission change (the job needs `contents: write`, set explicitly at the job level since the workflow-level default is `read`).
+
+## Tyre pressures show "Depends on vehicle service" (Polestar 2)
+
+Expected since 2026-08-22. The static profile no longer hard-blocks numeric pressures for
+Polestar 2; the capability is probed at runtime and the health parser also scans neighbouring
+fields for a pressure quadruple. Per-wheel **warning** status works on all models either way —
+see [domain/capability-matrix.md](../domain/capability-matrix.md).
+
+## Text is greyed out / shows placeholder bars
+
+Screenshot Privacy Mode is enabled (Settings → Appearance). VIN, plate, coordinates, and
+addresses render as placeholders while it's on.
+
+## The floating charging panel isn't appearing
+
+It requires Settings → Appearance → Floating Charging Panel to be enabled *and* the vehicle to
+currently report charging. It never activates Hisingen or steals focus; drag it anywhere — the
+position is remembered.
+
+## "Address" in the parking card says Unavailable
+
+Reverse geocoding uses Apple's services and needs network access; private/remote locations may
+not resolve. GPS coordinates remain below as the precise fallback.
+
+## A fuel fill-up was logged by mistake
+
+History → Fuel Fill-Ups list: trash icon deletes the entry locally.

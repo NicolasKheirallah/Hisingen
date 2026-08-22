@@ -251,10 +251,10 @@ struct HistoryInsightsAggregatesTests {
     func testSeasonalEfficiencyBucketsByTemperature() {
         let records = [
             HistoricalTelemetryRecord(id: 1, vin: "VIN", timestamp: start, odometerKm: nil, tripManualKm: nil,
-                                      tripAutomaticKm: nil, averageConsumption: 24, ambientTemperatureCelsius: -2,
+                                      tripAutomaticKm: nil, averageConsumption: 24, averageConsumptionUnit: "kwh", ambientTemperatureCelsius: -2,
                                       latitude: nil, longitude: nil),
             HistoricalTelemetryRecord(id: 2, vin: "VIN", timestamp: start, odometerKm: nil, tripManualKm: nil,
-                                      tripAutomaticKm: nil, averageConsumption: 16, ambientTemperatureCelsius: 22,
+                                      tripAutomaticKm: nil, averageConsumption: 16, averageConsumptionUnit: "kwh", ambientTemperatureCelsius: 22,
                                       latitude: nil, longitude: nil),
         ]
         let seasonal = HistoryInsights.seasonalEfficiency(from: records)

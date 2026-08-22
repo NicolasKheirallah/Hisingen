@@ -71,3 +71,20 @@ of vehicle brand — see [ADR-0003](adr/0003-shared-vehicle-domain-provider-dtos
 **VIN** (Vehicle Identification Number) — the key nearly all per-vehicle
 state is scoped by — see [ADR-0007](adr/0007-vin-scoped-state.md). Treated as
 sensitive: never logged or included in issue reports.
+
+## Added 2026-08-22
+
+**iTPMS** — indirect tyre-pressure monitoring: infers pressure loss from wheel-speed sensor
+imbalance rather than in-wheel sensors. Reports a warning level per corner but has no numeric
+pressure value. Polestar 2 (SPA platform) behaves this way over telematics.
+
+**Wake reason** — why the vehicle's connectivity module is currently awake (scheduled climate,
+active charging, telemetry poll), reported by the C3 DashboardService.
+
+**Charge location** — a saved GPS position in Polestar's Chronos backend with per-location
+charging settings (amp limit, minimum SoC, optimised-charging mode).
+
+**Optimised charging mode** — per-location strategy: *intelligent timer* or *price-optimised*.
+
+**SoH (State of Health)** — remaining usable battery capacity vs reference. Hisingen always
+labels it a **calculated estimate**; neither provider exposes a BMS measurement.

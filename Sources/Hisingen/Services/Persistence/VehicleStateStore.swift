@@ -14,7 +14,7 @@ final class VehicleStateStore {
     private let decoder = JSONDecoder()
     private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "state-store")
 
-    private let database: VehicleDatabase
+    let database: VehicleDatabase
     private let preferences: PreferencesStore
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
@@ -51,13 +51,16 @@ final class VehicleStateStore {
         }
 
         if state.odometerKm != nil || state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil {
-            let persistLocation = defaults.bool(forKey: "persist_location_history")
+            let persistLocation = preferences.persistLocationHistory
             database.recordTelemetry(
                 vin: state.vin, odometerKm: state.odometerKm.map(Double.init),
                 tripManualKm: state.tripMeterManualKm,
                 tripAutoKm: state.tripMeterAutomaticKm,
                 avgConsumption: state.batteryDiagnostics?.averageConsumption
                     ?? state.averageFuelConsumptionLPer100Km,
+                consumptionUnit: state.batteryDiagnostics?.averageConsumption != nil
+                    ? "kwh"
+                    : (state.averageFuelConsumptionLPer100Km != nil ? "l" : nil),
                 ambientTempC: state.weather?.temperatureCelsius,
                 latitude: persistLocation ? state.location?.latitude : nil,
                 longitude: persistLocation ? state.location?.longitude : nil
@@ -65,6 +68,19 @@ final class VehicleStateStore {
         }
 
         if let batteryPct = state.batteryPercentage {
+            // Connectivity trend (wake reason / signal / network) — change-gated inside.
+            database.recordConnectivity(
+                vin: state.vin,
+                networkType: state.connectivity?.networkType,
+                signalBars: state.connectivity?.signalBars,
+                wakeReason: state.connectivity?.wakeReason
+            )
+            // Cabin temperature trend — digital-twin platforms only; no-op when absent.
+            database.recordCabinClimate(
+                vin: state.vin,
+                interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
+                requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
+            )
             let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
                 .map { $0.toDomainSession(database: database) }
             let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
@@ -92,7 +108,7 @@ final class VehicleStateStore {
                     sessionId = session.id
                 } else {
                     let locName: String? = {
-                        guard defaults.bool(forKey: "persist_location_history") else { return nil }
+                        guard preferences.persistLocationHistory else { return nil }
                         guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else { return nil }
                         return String(format: "%.4f°, %.4f°", lat, lon)
                     }()
@@ -118,9 +134,10 @@ final class VehicleStateStore {
             }
         }
 
-        var values = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
-        values[state.vin] = state.cacheableCopy
-        store(values, key: snapshotsKey)
+        // SQLite is the authoritative snapshot store (`database.saveSnapshot` above). The
+        // UserDefaults mirror is no longer written: it previously re-encoded the entire
+        // per-VIN dictionary on every save — an O(all-vehicles) plist rewrite per refresh —
+        // and was only ever a legacy fallback for installs predating SQLite.
     }
 
     func baseline(for vin: String) -> ChargingBaseline? {

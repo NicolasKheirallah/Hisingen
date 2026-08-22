@@ -251,7 +251,11 @@ enum HistoryInsights {
         var points: [EfficiencyPoint] = []
         let chronological = records.sorted { $0.timestamp < $1.timestamp }
         for record in chronological {
-            guard let value = record.averageConsumption,
+            // Combustion rows carry L/100 km; only electric-unit readings may feed an
+            // energy-consumption trend. Rows from before the unit column existed (nil) keep
+            // their historical EV-only interpretation.
+            guard record.averageConsumptionUnit != "l",
+                  let value = record.averageConsumption,
                   efficiencyBounds.contains(value) else { continue }
             // `<=`, not `<`: a reading exactly 0.05 kWh/100km from the last kept point is still
             // "within tolerance," not just outside it — the boundary case matters here since
@@ -532,5 +536,114 @@ enum HistoryInsights {
     static func monthBucket(_ date: Date, calendar: Calendar = .current) -> Date {
         let components = calendar.dateComponents([.year, .month], from: date)
         return calendar.date(from: components) ?? dayBucket(date, calendar: calendar)
+    }
+}
+
+extension HistoryInsights {
+    struct ServiceProjection: Equatable {
+        /// Predicted calendar date the next service becomes due, from current usage rate.
+        let projectedDate: Date?
+        /// Predicted odometer reading at that date, when an odometer rate exists.
+        let projectedOdometerKm: Double?
+    }
+
+    /// Projects when the next service falls due by combining the vehicle's own remaining
+    /// distance/time-to-service with the observed km/day rate. Purely derived from values the
+    /// providers already report; no provider supplies a predicted date themselves.
+    static func projectService(currentOdometerKm: Double?,
+                               distanceToServiceKm: Int?,
+                               daysToService: Int?,
+                               odometerPoints: [OdometerPoint],
+                               now: Date = Date()) -> ServiceProjection? {
+        let rateKmPerDay: Double? = {
+            guard odometerPoints.count >= 2,
+                  let first = odometerPoints.first, let last = odometerPoints.last else { return nil }
+            let days = last.timestamp.timeIntervalSince(first.timestamp) / 86_400
+            guard days >= 7 else { return nil }
+            let km = last.odometerKm - first.odometerKm
+            guard km > 0 else { return nil }
+            return km / days
+        }()
+
+        // Distance-based estimate needs both a remaining figure and a rate to convert it.
+        var dateFromDistance: Date?
+        if let remaining = distanceToServiceKm, remaining > 0, let rate = rateKmPerDay, rate > 0 {
+            dateFromDistance = now.addingTimeInterval(Double(remaining) / rate * 86_400)
+        }
+        // Time-based fallback straight from the vehicle's own countdown.
+        var dateFromDays: Date?
+        if let days = daysToService, days > 0 {
+            dateFromDays = now.addingTimeInterval(Double(days) * 86_400)
+        }
+
+        let candidate = [dateFromDistance, dateFromDays].compactMap { $0 }.min()
+        guard let candidate else { return nil }
+        var projection = ServiceProjection(projectedDate: candidate, projectedOdometerKm: nil)
+        if let rate = rateKmPerDay,
+           let odo = currentOdometerKm ?? odometerPoints.last?.odometerKm {
+            let deltaDays = max(0, candidate.timeIntervalSince(now) / 86_400)
+            projection = ServiceProjection(projectedDate: candidate,
+                                           projectedOdometerKm: odo + rate * deltaDays)
+        }
+        return projection
+    }
+}
+
+extension HistoryInsights {
+    struct FilterLifeEstimate: Equatable {
+        /// Estimated days until the cabin filter reaches 0 %, from observed wear rate.
+        let daysRemaining: Double
+        /// Observed percentage-points lost per day.
+        let percentPerDay: Double
+    }
+
+    /// Estimates remaining filter life from the *observed* wear rate across stored air-quality
+    /// samples — explicitly a guesstimate: it extrapolates a linear rate from sparse readings
+    /// and assumes usage stays similar. Returns nil until at least 0.5 percentage points of
+    /// decline have been observed over at least 7 days.
+    static func filterLifeEstimate(from records: [AirQualityRecord],
+                                   now: Date = Date()) -> FilterLifeEstimate? {
+        let chronological = records
+            .compactMap { record -> (Date, Double)? in
+                record.filterRemainingPercent.map { (record.timestamp, $0) }
+            }
+            .sorted { $0.0 < $1.0 }
+        guard chronological.count >= 2,
+              let first = chronological.first, let last = chronological.last else { return nil }
+        let days = last.0.timeIntervalSince(first.0) / 86_400
+        guard days >= 7 else { return nil }
+        let dropped = first.1 - last.1
+        guard dropped >= 0.5, last.1 > 0 else { return nil }
+        let perDay = dropped / days
+        guard perDay > 0 else { return nil }
+        return FilterLifeEstimate(daysRemaining: last.1 / perDay, percentPerDay: perDay)
+    }
+
+    /// Lifetime energy cost per distance driven, from stored charging sessions and odometer
+    /// history. Both figures are local estimates; nil when either side lacks data.
+    /// - Parameter fuelCost: manual fill-up spend for PHEV/ICE — combined with electricity
+    ///   so hybrid economics are complete instead of silently electric-only.
+    static func costPerKm(totalEnergyKwh: Double?, pricePerKwh: Double,
+                          odometerPoints: [OdometerPoint],
+                          fuelCost: Double = 0) -> Double? {
+        let electricSpend = totalEnergyKwh.map { $0 * pricePerKwh } ?? 0
+        let totalSpend = electricSpend + max(0, fuelCost)
+        guard totalSpend > 0,
+              let distance = distanceCovered(from: odometerPoints), distance >= 100 else { return nil }
+        return totalSpend / distance
+    }
+}
+
+extension HistoryInsights {
+    /// Detects a completed session whose peak power is dramatically below what this vehicle
+    /// usually achieves at the same named location — a classic failing-cable / derated-EVSE
+    /// signal. Requires ≥3 comparable sessions so a first visit can never trigger it.
+    static func sessionPeakAnomaly(currentPeakKw: Double,
+                                   priorPeaksKwAtSameLocation: [Double]) -> Bool {
+        guard priorPeaksKwAtSameLocation.count >= 3 else { return false }
+        let sorted = priorPeaksKwAtSameLocation.sorted()
+        let median = sorted[sorted.count / 2]
+        guard median > 0 else { return false }
+        return currentPeakKw < median * 0.6
     }
 }

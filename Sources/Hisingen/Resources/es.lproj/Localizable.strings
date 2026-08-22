@@ -610,7 +610,7 @@
 "Network Type" = "Network Type";
 "Network type" = "Network type";
 "New climate timer" = "New climate timer";
-"Next Vehicle (⌥])" = "Next Vehicle (⌥])";
+"Next Vehicle (⌃⌥])" = "Next Vehicle (⌃⌥])";
 "Nickname" = "Apodo";
 "Nickname & Registration" = "Apodo y matrícula";
 "No Remote Controls Enabled" = "Sin controles remotos activados";
@@ -737,7 +737,7 @@
 "Pressure Warning" = "Aviso de presión de neumáticos";
 "Pressure monitoring and system alerts" = "Pressure monitoring and system alerts";
 "Preview:" = "Preview:";
-"Previous Vehicle (⌥[)" = "Previous Vehicle (⌥[)";
+"Previous Vehicle (⌃⌥[)" = "Previous Vehicle (⌃⌥[)";
 "Private Notification Banners" = "Private Notification Banners";
 "Projected" = "Projected";
 "Providing power" = "Providing power";
@@ -990,7 +990,7 @@
 "Swedish Gold" = "Swedish Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Tonos tierra de pino sueco y eucalipto, sensación orgánica y suave";
 "Switch Vehicle" = "Switch Vehicle";
-"Switch Vehicle (⌥[ / ⌥])" = "Cambiar vehículo (⌥[ / ⌥])";
+"Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Cambiar vehículo (⌃⌥[ / ⌃⌥])";
 "Switch to %@ (%@ · %d%%)…" = "Switch to %@ (%@ · %d%%)…";
 "Switch to %@ (%@)…" = "Switch to %@ (%@)…";
 "Switch to Volvo Account" = "Switch to Volvo Account";
