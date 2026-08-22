@@ -2,7 +2,7 @@ import Foundation
 
 enum L10n {
     private static let bundleLock = NSLock()
-    private static var localizedBundleCache: [String: Bundle?] = [:]
+    nonisolated(unsafe) private static var localizedBundleCache: [String: Bundle?] = [:]
 
     /// Resolved once per process. This used to be a computed property that probed several
     /// `Bundle(path:)` candidates on *every* `text()` call — a filesystem hit per localized

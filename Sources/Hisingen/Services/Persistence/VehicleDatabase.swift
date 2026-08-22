@@ -1377,7 +1377,7 @@ extension VehicleDatabase {
     private func batteryHealthHistoryAll() -> [BackupBatteryHealth] {
         batteryHealthHistoryAllRows().map { row in
             BackupBatteryHealth(
-                vin: row.vin, timestamp: backupISOFormatter.string(from: row.timestamp),
+                vin: row.vin, timestamp: Format.iso8601.string(from: row.timestamp),
                 odometerKm: row.odometerKm, stateOfHealthPct: row.stateOfHealthPct,
                 degradationPct: row.degradationPct, effectiveUsableKwh: row.effectiveUsableKwh,
                 measurementSource: row.measurementSource)
@@ -1471,13 +1471,6 @@ extension VehicleDatabase {
 }
 
 // MARK: - Connectivity & Cabin Climate History
-
-/// Shared by backup encoders in this file.
-private let backupISOFormatter: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    return f
-}()
-
 
 extension VehicleDatabase {
 

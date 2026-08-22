@@ -143,6 +143,20 @@ struct VehicleStateSummary: Equatable, Sendable {
     let severity: VehicleStateSeverity
 }
 
+/// Combustion/hybrid powertrain readings. Part of the staged `VehicleState` redesign:
+/// clusters become nested snapshots so adding a field touches this type plus (optionally) one
+/// computed shim on `VehicleState` — not the six-place ritual of the flat layout. Existing
+/// call sites keep reading `state.fuelLevelPercent` etc. through compatibility accessors.
+struct FuelSystemSnapshot: Codable, Equatable, Sendable {
+    var levelPercent: Double?
+    var rangeKm: Int?
+    var amountLiters: Double?
+    var averageConsumptionLPer100Km: Double?
+    var isEngineRunning: Bool?
+    /// Raw provider fuel-type string ("ELECTRIC", "DIESEL", …).
+    var type: String?
+}
+
 struct VehicleState: Codable, Equatable, Sendable {
     var batteryPercentage: Double?
     var rangeKm: Int?
@@ -184,13 +198,6 @@ struct VehicleState: Codable, Equatable, Sendable {
     var chargingSessions: [ChargingSession] = []
 
 
-    var powertrain: PowertrainType = .bev
-    var fuelLevelPercent: Double? = nil
-    var fuelRangeKm: Int? = nil
-    var fuelAmountLiters: Double? = nil
-    var averageFuelConsumptionLPer100Km: Double? = nil
-    var isEngineRunning: Bool? = nil
-    var fuelType: String? = nil
 
     var totalCombinedRangeKm: Int? {
         switch powertrain {
@@ -254,6 +261,41 @@ struct VehicleState: Codable, Equatable, Sendable {
     var preferredWorkshopName: String? = nil
     var vehicleErrors: [VehicleChronosError] = []
     var otaCapabilities: VehicleOTACapabilities? = nil
+
+    // MARK: Fuel/engine
+    // Clustered storage: the persisted snapshot format encodes `fuelSystem` as one nested
+    // value (see `encode(to:)`); the decoder still accepts the flat legacy keys so snapshots
+    // written before the migration keep loading.
+
+    var powertrain: PowertrainType = .bev
+    var fuelSystem: FuelSystemSnapshot = .init()
+
+    /// Compatibility accessors over the cluster. Existing call sites and tests read/write
+    /// these; prefer `state.fuelSystem.<field>` in new code.
+    var fuelLevelPercent: Double? {
+        get { fuelSystem.levelPercent }
+        set { fuelSystem.levelPercent = newValue }
+    }
+    var fuelRangeKm: Int? {
+        get { fuelSystem.rangeKm }
+        set { fuelSystem.rangeKm = newValue }
+    }
+    var fuelAmountLiters: Double? {
+        get { fuelSystem.amountLiters }
+        set { fuelSystem.amountLiters = newValue }
+    }
+    var averageFuelConsumptionLPer100Km: Double? {
+        get { fuelSystem.averageConsumptionLPer100Km }
+        set { fuelSystem.averageConsumptionLPer100Km = newValue }
+    }
+    var isEngineRunning: Bool? {
+        get { fuelSystem.isEngineRunning }
+        set { fuelSystem.isEngineRunning = newValue }
+    }
+    var fuelType: String? {
+        get { fuelSystem.type }
+        set { fuelSystem.type = newValue }
+    }
 
     /// True when this state came from the on-disk snapshot rather than a live fetch.
     ///
@@ -357,8 +399,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.chargingSamples = chargingSamples
         self.chargingSessions = chargingSessions
         self.powertrain = powertrain
-        self.fuelLevelPercent = fuelLevelPercent
-        self.fuelRangeKm = fuelRangeKm
+        fuelSystem = FuelSystemSnapshot(
+            levelPercent: fuelLevelPercent,
+            rangeKm: fuelRangeKm
+        )
         self.reportedBatteryCapacityKwh = reportedBatteryCapacityKwh
         self.imageData = imageData
         self.fetchedAt = fetchedAt
@@ -375,9 +419,13 @@ struct VehicleState: Codable, Equatable, Sendable {
         case climateStatus, climateTimers, tripMeterManualKm, tripMeterAutomaticKm, connectivity
         case airQuality, batteryDiagnostics, weather, location, unavailableFeatures, probedCapabilities
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
-        case powertrain, fuelLevelPercent, fuelRangeKm, reportedBatteryCapacityKwh
+        // `fuelSystem` is the current encoding; the flat fuel cases below exist ONLY for the
+        // decoder's legacy fallback — the explicit `encode(to:)` never writes them.
+        case powertrain, fuelSystem
+        case reportedBatteryCapacityKwh
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH
-        case fuelAmountLiters, averageFuelConsumptionLPer100Km, isEngineRunning, fuelType
+        case fuelLevelPercent, fuelRangeKm, fuelAmountLiters, averageFuelConsumptionLPer100Km
+        case isEngineRunning, fuelType
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
         case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
@@ -386,6 +434,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case preferredWorkshopId, preferredWorkshopName
         case retainedDataCategories, retainedDataAt
     }
+
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -429,8 +478,8 @@ struct VehicleState: Codable, Equatable, Sendable {
             chargingSamples: try values.decodeIfPresent([ChargingSample].self, forKey: .chargingSamples) ?? [],
             chargingSessions: try values.decodeIfPresent([ChargingSession].self, forKey: .chargingSessions) ?? [],
             powertrain: try values.decodeIfPresent(PowertrainType.self, forKey: .powertrain) ?? .bev,
-            fuelLevelPercent: try values.decodeIfPresent(Double.self, forKey: .fuelLevelPercent),
-            fuelRangeKm: try values.decodeIfPresent(Int.self, forKey: .fuelRangeKm),
+            fuelLevelPercent: nil,
+            fuelRangeKm: nil,
             reportedBatteryCapacityKwh: try values.decodeIfPresent(Double.self, forKey: .reportedBatteryCapacityKwh),
             imageData: try values.decodeIfPresent(Data.self, forKey: .imageData),
             fetchedAt: try values.decode(Date.self, forKey: .fetchedAt),
@@ -442,10 +491,24 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
         self.engineHoursToService = try values.decodeIfPresent(Int.self, forKey: .engineHoursToService)
         self.averageSpeedKmH = try values.decodeIfPresent(Double.self, forKey: .averageSpeedKmH)
-        self.fuelAmountLiters = try values.decodeIfPresent(Double.self, forKey: .fuelAmountLiters)
-        self.averageFuelConsumptionLPer100Km = try values.decodeIfPresent(Double.self, forKey: .averageFuelConsumptionLPer100Km)
-        self.isEngineRunning = try values.decodeIfPresent(Bool.self, forKey: .isEngineRunning)
-        self.fuelType = try values.decodeIfPresent(String.self, forKey: .fuelType)
+        // Fuel/engine cluster: prefer the nested encoding; fall back to the flat legacy keys
+        // so snapshots persisted before the migration keep decoding.
+        if let clustered = try values.decodeIfPresent(FuelSystemSnapshot.self, forKey: .fuelSystem) {
+            fuelSystem = clustered
+        } else {
+            func read<T: Decodable>(_ key: String) throws -> T? {
+                guard let key = CodingKeys(stringValue: key) else { return nil }
+                return try values.decodeIfPresent(T.self, forKey: key)
+            }
+            fuelSystem = FuelSystemSnapshot(
+                levelPercent: try read("fuelLevelPercent"),
+                rangeKm: try read("fuelRangeKm"),
+                amountLiters: try read("fuelAmountLiters"),
+                averageConsumptionLPer100Km: try read("averageFuelConsumptionLPer100Km"),
+                isEngineRunning: try read("isEngineRunning"),
+                type: try read("fuelType")
+            )
+        }
         self.structureWeek = try values.decodeIfPresent(String.self, forKey: .structureWeek)
         self.internalVehicleIdentifier = try values.decodeIfPresent(String.self, forKey: .internalVehicleIdentifier)
         self.pno34 = try values.decodeIfPresent(String.self, forKey: .pno34)
@@ -468,6 +531,86 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.preferredWorkshopName = try values.decodeIfPresent(String.self, forKey: .preferredWorkshopName)
         self.retainedDataCategories = try values.decodeIfPresent([AppFeature].self, forKey: .retainedDataCategories) ?? []
         self.retainedDataAt = try values.decodeIfPresent(Date.self, forKey: .retainedDataAt)
+    }
+
+    /// Encodes the clustered layout only (`fuelSystem` under its own key). The flat legacy
+    /// fuel keys are decode-only; re-encoding them is unnecessary since every writer of a
+    /// snapshot also understands the nested form.
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(batteryPercentage, forKey: .batteryPercentage)
+        try values.encode(rangeKm, forKey: .rangeKm)
+        try values.encode(chargingState, forKey: .chargingState)
+        try values.encode(estimatedChargingTimeToFullMinutes, forKey: .estimatedChargingTimeToFullMinutes)
+        try values.encode(chargeTargetPercentage, forKey: .chargeTargetPercentage)
+        try values.encode(chargingPowerWatts, forKey: .chargingPowerWatts)
+        try values.encode(chargingCurrentAmps, forKey: .chargingCurrentAmps)
+        try values.encode(chargingVoltageVolts, forKey: .chargingVoltageVolts)
+        try values.encode(chargingType, forKey: .chargingType)
+        try values.encode(chargerConnection, forKey: .chargerConnection)
+        try values.encode(availability, forKey: .availability)
+        try values.encode(modelName, forKey: .modelName)
+        try values.encode(modelYear, forKey: .modelYear)
+        try values.encode(registrationNo, forKey: .registrationNo)
+        try values.encode(vin, forKey: .vin)
+        try values.encode(ownerFirstName, forKey: .ownerFirstName)
+        try values.encode(odometerKm, forKey: .odometerKm)
+        try values.encode(daysToService, forKey: .daysToService)
+        try values.encode(distanceToServiceKm, forKey: .distanceToServiceKm)
+        try values.encode(serviceWarning, forKey: .serviceWarning)
+        try values.encode(fluidWarnings, forKey: .fluidWarnings)
+        try values.encodeIfPresent(exteriorStatus, forKey: .exteriorStatus)
+        try values.encodeIfPresent(healthDetails, forKey: .healthDetails)
+        try values.encodeIfPresent(softwareInfo, forKey: .softwareInfo)
+        try values.encode(chargingSchedules, forKey: .chargingSchedules)
+        try values.encodeIfPresent(climateStatus, forKey: .climateStatus)
+        try values.encode(climateTimers, forKey: .climateTimers)
+        try values.encode(tripMeterManualKm, forKey: .tripMeterManualKm)
+        try values.encode(tripMeterAutomaticKm, forKey: .tripMeterAutomaticKm)
+        try values.encodeIfPresent(connectivity, forKey: .connectivity)
+        try values.encodeIfPresent(airQuality, forKey: .airQuality)
+        try values.encodeIfPresent(batteryDiagnostics, forKey: .batteryDiagnostics)
+        try values.encodeIfPresent(weather, forKey: .weather)
+        try values.encodeIfPresent(location, forKey: .location)
+        try values.encode(unavailableFeatures, forKey: .unavailableFeatures)
+        try values.encodeIfPresent(probedCapabilities, forKey: .probedCapabilities)
+        try values.encode(chargingSamples, forKey: .chargingSamples)
+        try values.encode(chargingSessions, forKey: .chargingSessions)
+        try values.encode(imageData, forKey: .imageData)
+        try values.encode(fetchedAt, forKey: .fetchedAt)
+        try values.encode(vehicleReportedAt, forKey: .vehicleReportedAt)
+        try values.encode(dataWarnings, forKey: .dataWarnings)
+        try values.encode(powertrain, forKey: .powertrain)
+        // Nested cluster is the current persisted layout; flat fuel keys are decode-only.
+        try values.encode(fuelSystem, forKey: .fuelSystem)
+        try values.encode(reportedBatteryCapacityKwh, forKey: .reportedBatteryCapacityKwh)
+        try values.encodeIfPresent(externalColour, forKey: .externalColour)
+        try values.encodeIfPresent(gearbox, forKey: .gearbox)
+        try values.encodeIfPresent(engineHoursToService, forKey: .engineHoursToService)
+        try values.encodeIfPresent(averageSpeedKmH, forKey: .averageSpeedKmH)
+        try values.encodeIfPresent(structureWeek, forKey: .structureWeek)
+        try values.encodeIfPresent(internalVehicleIdentifier, forKey: .internalVehicleIdentifier)
+        try values.encodeIfPresent(pno34, forKey: .pno34)
+        try values.encodeIfPresent(accountMarket, forKey: .accountMarket)
+        try values.encodeIfPresent(upholstery, forKey: .upholstery)
+        try values.encodeIfPresent(wheels, forKey: .wheels)
+        try values.encode(packages, forKey: .packages)
+        try values.encodeIfPresent(steeringOrientation, forKey: .steeringOrientation)
+        try values.encodeIfPresent(serviceTrigger, forKey: .serviceTrigger)
+        try values.encode(tripComputerElectricRangeKm, forKey: .tripComputerElectricRangeKm)
+        try values.encode(chargingCurrentLimitAmps, forKey: .chargingCurrentLimitAmps)
+        try values.encodeIfPresent(interiorImageData, forKey: .interiorImageData)
+        try values.encodeIfPresent(warrantyInfo, forKey: .warrantyInfo)
+        try values.encode(chargeLocations, forKey: .chargeLocations)
+        try values.encode(electricDistanceKm, forKey: .electricDistanceKm)
+        try values.encode(fuelDistanceKm, forKey: .fuelDistanceKm)
+        try values.encode(regeneratedEnergyKwh, forKey: .regeneratedEnergyKwh)
+        try values.encode(frontBrakePadStatus, forKey: .frontBrakePadStatus)
+        try values.encode(rearBrakePadStatus, forKey: .rearBrakePadStatus)
+        try values.encodeIfPresent(preferredWorkshopId, forKey: .preferredWorkshopId)
+        try values.encodeIfPresent(preferredWorkshopName, forKey: .preferredWorkshopName)
+        try values.encode(retainedDataCategories, forKey: .retainedDataCategories)
+        try values.encode(retainedDataAt, forKey: .retainedDataAt)
     }
 
     var formattedBuildWeek: String? {

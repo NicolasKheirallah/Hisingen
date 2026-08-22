@@ -83,7 +83,7 @@ enum Format {
     /// `DateFormatter` per call — this feeds a computed property evaluated on every popover
     /// render while charging.
     private static let completionTimeLock = NSLock()
-    private static var completionTimeFormatters: [String: DateFormatter] = [:]
+    nonisolated(unsafe) private static var completionTimeFormatters: [String: DateFormatter] = [:]
 
     static func completionTime(from minutes: Int, baseDate: Date = Date(), timeZone: TimeZone = .current) -> String {
         let target = baseDate.addingTimeInterval(TimeInterval(minutes * 60))
@@ -175,7 +175,7 @@ enum Format {
     }()
 
     /// Shared ISO-8601 formatter for exports (previously constructed per session row).
-    static let iso8601: ISO8601DateFormatter = {
+    nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
