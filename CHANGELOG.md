@@ -5,74 +5,96 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [1.2.1] - 2026-08-22
 
-### Fixed
+### Added
 
-- Added fallback code signing and packaging in the release workflow when Apple Developer ID certificates are not configured.
-- Defaulted the Polestar public render-CDN key in `Scripts/inject-secrets.sh` to the documented public AppSync key.
-- Updated all GitHub Actions workflow pins to their latest verified immutable commit SHAs.
-- Added notification quick actions: an evening-unlocked banner offers a Lock
-  button and an interrupted-charging banner offers Resume Schedule. Actions
-  route through the same capability gates as the in-app controls and act only
-  on the currently selected vehicle.
-- Added a parameterized Set Charge Target shortcut intent and a Where Is My
-  Car intent that returns the last reported position plus a map link from the
-  local cache only, plus a matching hisingen://charge-target URL route.
-- Added a custom date-range option to the History dashboard alongside the
-  fixed 7-day/30-day/all periods.
-- Added a projected next-service estimate combining the vehicle's own service
+- Notification quick actions: an evening-unlocked banner offers a Lock button
+  and an interrupted-charging banner offers Resume Schedule. Actions route
+  through the same capability gates as the in-app controls and act only on
+  the currently selected vehicle.
+- A parameterized Set Charge Target shortcut intent and a Where Is My Car
+  intent returning the last reported position plus a map link from local
+  cache only, with a matching hisingen://charge-target URL route.
+- Custom date-range option in the History dashboard alongside the fixed
+  7-day/30-day/all periods.
+- Projected next-service estimate combining the vehicle's own service
   countdowns with the observed km/day rate from odometer history.
-- Added a full local-history JSON backup export (all tables, all vehicles)
-  in Settings → Storage; coordinates are included only when location history
-  is opted in, and there is deliberately no import path.
-- Added per-session raw-sample CSV export for charging curves.
-- Telemetry rows now record whether a consumption figure is kWh/100 km or
-  L/100 km, so combustion history can never be misread as energy data going
-  forward.
-- Polling now stretches to a 15-minute floor while the vehicle reports itself
-  unavailable (asleep/power-saving), returning to normal cadence on wake.
-- Added a Connectivity & Wake card: why the car is currently awake, network
-  and signal level, a signal-history sparkline, and recent wake reasons —
-  built from locally recorded connectivity samples (Polestar platforms).
-- Added a cabin temperature trend chart for digital-twin climate platforms,
-  with dashed setpoint overlay; hidden on vehicles that never report it.
-- Menu bar charging countdown now targets the configured charge level
-  ("72→80 · 25m") instead of always counting down to 100 %.
-- Added an estimated lifetime charging cost per distance figure to the History
-  overview, clearly labeled as estimated.
-- Charge-location rows now name their optimised-charging mode (intelligent
-  timer vs price-optimised) when the backend reports one.
-- Added a Max Heat preconditioning macro (30 °C setpoint) alongside the
-  temperature slider on platforms that accept explicit temperatures. The
-  backend exposes no dedicated defroster field, so this is honestly labeled
-  as heat rather than defrost.
-- Added Screenshot Privacy Mode (Settings → Appearance): VIN, plate, and
+- Full local-history JSON backup export (all tables, all vehicles) in
+  Settings → Storage; coordinates included only when location history is
+  opted in, with deliberately no import path.
+- Per-session raw-sample CSV export for charging curves.
+- Connectivity & Wake card: why the car is currently awake, network and
+  signal level, a signal-history sparkline, and recent wake reasons — built
+  from locally recorded connectivity samples (Polestar platforms).
+- Cabin temperature trend chart for digital-twin climate platforms, with
+  dashed setpoint overlay; hidden on vehicles that never report it.
+- Estimated lifetime charging cost per distance in the History overview,
+  clearly labeled as estimated.
+- Optimised-charging mode names (intelligent timer vs price-optimised) on
+  charge-location rows when the backend reports one.
+- Max Heat preconditioning macro (30 °C setpoint) alongside the temperature
+  slider on platforms accepting explicit temperatures. The backend exposes no
+  dedicated defroster field, so this is honestly labeled as heat rather than
+  defrost.
+- Screenshot Privacy Mode (Settings → Appearance): VIN, plate, and
   coordinates render as placeholders across the app while enabled, so shared
   screenshots stay safe.
-- Vehicle state is now surfaced in system Spotlight: searching the car's
-  nickname shows battery/range/charging at a glance; entries are wiped on
-  sign-out and contain no VIN.
-- Chart colors now follow theme tokens instead of hardcoded hues, keeping
-  multi-series cards readable under monochrome themes.
-- Added amp-limit preset chips (6/8/10/13/16 A) beside the charging-current
-  slider; presets outside the vehicle's advertised range are hidden.
-- Added a floating always-on-top charging mini-panel (optional, in Settings →
-  Appearance) showing SoC→target, power, and ETA without activating Hisingen;
-  position is remembered and it closes on unplug.
-- Charging detail rows on the Charging card can now be reordered from
-  Settings; unlisted rows keep their default position, so a partial order is
-  safe.
-- Vehicle nicknames now appear in notifications and Shortcuts responses
-  instead of the generic brand name (Spotlight already used them).
-- Completed sessions at a named location whose peak power falls far below that
-  location's own norm trigger an "unusually slow charging" notice — a failing
-  cable or derated charger hint. Requires three comparable prior sessions, so
-  first visits never fire it.
-- Hybrid and combustion owners can log fuel fill-ups locally (volume, price,
+- System Spotlight publication of vehicle state: searching the car's nickname
+  shows battery/range/charging at a glance; entries are wiped on sign-out and
+  contain no VIN.
+- Amp-limit preset chips (6/8/10/13/16 A) beside the charging-current slider;
+  presets outside the vehicle's advertised range are hidden.
+- Floating always-on-top charging mini-panel (optional, Settings → Appearance)
+  showing SoC→target, power, and ETA without activating Hisingen; position is
+  remembered and it closes on unplug.
+- Reorderable Charging-card detail rows from Settings; unlisted rows keep
+  their default position, so a partial order is safe.
+- Fuel fill-up logging for hybrid and combustion owners (volume, price,
   odometer); fill-ups are included in lifetime cost-per-distance so PHEV and
   ICE economics are complete rather than silently electric-only.
-- The parking-location card now resolves a street address via reverse
-  geocoding, with GPS coordinates kept below as the precise fallback. Both
-  respect Screenshot Privacy Mode.
+- Reverse-geocoded street address on the parking-location card, with GPS
+  coordinates kept below as the precise fallback. Both respect Screenshot
+  Privacy Mode.
+- Failing-cable hint: completed sessions at a named location whose peak power
+  falls far below that location's own norm trigger an "unusually slow
+  charging" notice. Requires three comparable prior sessions, so first visits
+  never fire it.
+
+### Changed
+
+- Menu bar charging countdown now targets the configured charge level
+  ("72→80 · 25m") instead of always counting down to 100 %.
+- Polling stretches to a 15-minute floor while the vehicle reports itself
+  unavailable (asleep/power-saving), returning to normal cadence on wake.
+- Telemetry rows record whether a consumption figure is kWh/100 km or
+  L/100 km, so combustion history can never be misread as energy data going
+  forward.
+- Chart colors follow theme tokens instead of hardcoded hues, keeping
+  multi-series cards readable under monochrome themes.
+- Vehicle nicknames appear in notifications and Shortcuts responses instead
+  of the generic brand name (Spotlight already used them).
+- Snapshot encoding moved to a clustered fuel/engine layout (`fuelSystem`)
+  with flat-key decode compatibility, so existing persisted snapshots keep
+  loading while new writes use the nested form.
+- Polestar authorization extracted behind a replaceable
+  `PolestarAuthorizationCodeSource` seam (scripted PingFederate conformer
+  today), containing provider-markup changes to one type.
+- `VehicleDatabase` persistence split into themed extensions (sessions,
+  telemetry, trends, health, fuel, exports, command audits) for navigability;
+  no behaviour change.
+
+### Fixed
+
+- Fallback code signing and packaging in the release workflow when Apple
+  Developer ID certificates are not configured.
+- Defaulted the Polestar public render-CDN key in `Scripts/inject-secrets.sh`
+  to the documented public AppSync key.
+- Updated all GitHub Actions workflow pins to their latest verified immutable
+  commit SHAs.
+- Cleared four compiler warnings: a stray `await` on a synchronous call, a
+  MainActor-isolated logger captured from a Sendable closure, the deprecated
+  single-parameter `onChange`, and an unused binding.
+- Full test suite migrated to Swift Testing; the previous XCTest files cannot
+  compile on the current toolchain.
 
 ## [1.2.0] - 2026-08-22
 

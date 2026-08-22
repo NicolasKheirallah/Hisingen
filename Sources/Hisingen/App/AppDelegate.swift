@@ -20,15 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let sessionManager = SessionManager()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
-    private let capabilityGate = CapabilityGate()
     private var refreshCoordinator: RefreshCoordinator!
     private var statusController: StatusItemController!
     private var latest: VehicleState?
     private var lastError: String?
     private var sessionValid = false
     private var lastDiagnostics: DiagnosticsSnapshot?
-    private var remoteCommandInProgress = false
-    private var commandRefreshTask: Task<Void, Never>?
+    private var commandCoordinator: CommandCoordinator!
     private var garageRefreshTask: Task<Void, Never>?
     private var garageScanInProgress = false
 
@@ -88,6 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.updateNotificationPermission(notifier.permission)
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore,
                                                 imageCache: imageCache, preferences: preferences)
+        commandCoordinator = CommandCoordinator(
+            context: self, preferences: preferences,
+            database: vehicleDatabase, authorizer: remoteAuthorizer)
         connectCoordinator()
         let initialAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
         let initialVIN = preferences.vin(for: preferences.activeBrand)
@@ -295,14 +296,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        commandRefreshTask?.cancel()
+        commandCoordinator.cancelPendingWork()
         garageRefreshTask?.cancel()
         refreshCoordinator.stop()
     }
 
     private func signOut() {
-        commandRefreshTask?.cancel()
-        commandRefreshTask = nil
+        commandCoordinator.cancelPendingWork()
         SpotlightIndexer.removeAll()
         refreshCoordinator.signOut()
     }
@@ -387,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func render() {
         let isAuth = sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
-        statusController.remoteCommandInProgress = remoteCommandInProgress
+        statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.render(data: latest, error: lastError, authenticated: isAuth, diagnostics: lastDiagnostics)
     }
 
@@ -456,7 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshGarageVehicles() async {
-        guard !garageScanInProgress, !remoteCommandInProgress else { return }
+        guard !garageScanInProgress, !commandCoordinator.isInProgress else { return }
         garageScanInProgress = true
         defer { garageScanInProgress = false }
 
@@ -484,11 +484,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let providerCars = await provider.cars
                 for car in providerCars {
                     guard !Task.isCancelled, preferences.activeBrand == originalBrand,
-                          !remoteCommandInProgress else { return }
+                          !commandCoordinator.isInProgress else { return }
                     if brand == originalBrand && car.vin == selectedVIN { continue }
                     try await provider.selectCar(vin: car.vin, features: preferences.features)
                     let state = try await provider.fetchVehicleState(vin: car.vin, features: preferences.features)
-                    guard preferences.activeBrand == originalBrand, !remoteCommandInProgress else { return }
+                    guard preferences.activeBrand == originalBrand, !commandCoordinator.isInProgress else { return }
                     stateStore.save(state)
                     statusController.cachedSnapshots[state.vin] = state
                     notifier.vehicleStateDidUpdate(state)
@@ -530,180 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func performRemoteCommand(_ command: RemoteCommand) {
-        guard !remoteCommandInProgress else {
-            showRemoteResult(title: L10n.text("Command not sent"),
-                             message: RemoteCommandError.busy.localizedDescription, success: false)
-            return
-        }
-        guard sessionValid, let state = latest,
-              (preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
-            showRemoteResult(title: L10n.text("Command not sent"),
-                             message: RemoteCommandError.missingContext.localizedDescription, success: false)
-            return
-        }
-        let availability = capabilityGate.availability(
-            for: command,
-            state: state,
-            brand: activeProvider.brand,
-            enabledFeatures: preferences.features.enabled,
-            commandInProgress: remoteCommandInProgress
-        )
-        guard availability == .available else {
-            showRemoteResult(title: L10n.text("Command not sent"),
-                             message: availability == .disabledBySettings
-                                 ? RemoteCommandError.disabled.localizedDescription
-                                 : RemoteCommandError.unsupported.localizedDescription,
-                             success: false)
-            return
-        }
-        let command = command.adapted(to: state.capabilityProfile)
-        let vehicle = [state.modelName, state.registrationNo].compactMap { value in
-            value?.isEmpty == false ? value : nil
-        }.joined(separator: " · ")
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard await remoteAuthorizer.authorize(
-                command, vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
-            ) else { return }
-            guard !remoteCommandInProgress else { return }
-            remoteCommandInProgress = true
-            render()
-            let commandStartedAt = Date()
-            defer {
-                remoteCommandInProgress = false
-                render()
-            }
-            do {
-                let result = try await activeProvider.executeRemoteCommand(command, vin: state.vin)
-                vehicleDatabase.recordCommandAudit(
-                    vin: state.vin,
-                    command: command.identifier,
-                    status: result.outcome.rawValue,
-                    durationMs: Int(Date().timeIntervalSince(commandStartedAt) * 1_000)
-                )
-                self.applyConfirmedStateChange(for: command, outcome: result.outcome)
-                let message: String
-                if let backendMessage = result.message, !backendMessage.isEmpty {
-                    message = backendMessage
-                } else {
-                    switch result.outcome {
-                    case .accepted: message = L10n.text("The vehicle service accepted the command.")
-                    case .delivered: message = L10n.text("The command was delivered to the vehicle.")
-                    case .completed: message = L10n.text("The vehicle completed the command.")
-                    }
-                }
-                showRemoteResult(title: L10n.text("Command sent"), message: message, success: true)
-                    let commandVIN = state.vin
-                    commandRefreshTask?.cancel()
-                    commandRefreshTask = Task { @MainActor [weak self] in
-                        do {
-                            try await Task.sleep(for: .seconds(12))
-                            guard !Task.isCancelled else { return }
-                            guard let self, self.sessionValid, self.latest?.vin == commandVIN else { return }
-                            self.commandRefreshTask = nil
-                            self.refreshCoordinator.refreshNow()
-                        } catch is CancellationError {
-                            // A new command, sign-out, or termination superseded this refresh.
-                        } catch {
-                            // The follow-up refresh is best effort.
-                        }
-                    }
-            } catch {
-                let mapped = error as? LocalizedError
-                vehicleDatabase.recordCommandAudit(
-                    vin: state.vin,
-                    command: command.identifier,
-                    status: "failed",
-                    durationMs: Int(Date().timeIntervalSince(commandStartedAt) * 1_000),
-                    error: mapped?.errorDescription ?? error.localizedDescription
-                )
-                showRemoteResult(
-                    title: L10n.text("Command failed"),
-                    message: mapped?.errorDescription ?? error.localizedDescription,
-                    success: false
-                )
-            }
-        }
-    }
-
-    /// Patches the visible state to what a command should have produced, so the lock icon or
-    /// climate row flips immediately instead of waiting for the follow-up refresh.
-    private func applyConfirmedStateChange(for command: RemoteCommand,
-                                           outcome: RemoteCommandOutcome) {
-        guard outcome == .completed || outcome == .accepted || outcome == .delivered,
-              var current = latest else { return }
-        switch command {
-        case .startClimate(let temperature, _, _, _, _, _):
-            current.climateStatus = VehicleClimateStatus(
-                activity: .heating,
-                timeRemainingMinutes: 30,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
-            )
-        case .stopClimate:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .startPreCleaning:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .ventilating,
-                timeRemainingMinutes: 10,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .stopPreCleaning:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .lock, .lockReducedGuard, .unlock, .unlockTrunk:
-            guard var exterior = current.exteriorStatus else { return }
-            if command == .unlock, activeProvider.brand == .volvo {
-                return
-            }
-            if command == .lock || command == .lockReducedGuard {
-                exterior.isLocked = true
-            } else {
-                exterior.isLocked = false
-            }
-            current.exteriorStatus = exterior
-        case .openTailgate, .closeTailgate:
-            guard var exterior = current.exteriorStatus else { return }
-            // Toggle the tailgate opening state optimistically
-            let isOpening = command == .openTailgate
-            if let idx = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
-                exterior.openings[idx] = OpeningReading(opening: .tailgate,
-                                                        state: isOpening ? .open : .closed)
-            } else {
-                exterior.openings.append(OpeningReading(opening: .tailgate,
-                                                        state: isOpening ? .open : .closed))
-            }
-            current.exteriorStatus = exterior
-        case .setChargeTarget(let target):
-            current.chargeTargetPercentage = target
-        case .setAmpLimit(let amps):
-            current.chargingCurrentLimitAmps = amps
-        default:
-            return
-        }
-        current.fetchedAt = Date()
-        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
-        latest = current
-        // In-memory only: this patch is partly synthesized (e.g. an assumed 30-minute
-        // climate window), so it must not be persisted as if the vehicle had reported it.
-        // The authoritative snapshot lands with the follow-up refresh ~12 s after the
-        // command, and `optimisticCommandLockUntil` keeps stale responses from reverting
-        // the visible state in the meantime.
-        render()
+        commandCoordinator.perform(command)
     }
 
     private func showRemoteResult(title: String, message: String, success: Bool) {
@@ -1031,5 +858,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         default:
             volvoSignInPresenter.handleCallbackURL(url)
         }
+    }
+}
+
+// MARK: - CommandExecutionContext
+
+extension AppDelegate: CommandExecutionContext {
+    var vehicleState: VehicleState? { latest }
+    var sessionIsValid: Bool { sessionValid }
+
+    func currentProvider() -> any VehicleProviding { activeProvider }
+    func applyOptimisticState(_ state: VehicleState) {
+        latest = state
+        render()
+    }
+    func commandInProgressDidChange() {
+        render()
+    }
+    func presentResult(title: String, message: String, success: Bool) {
+        showRemoteResult(title: title, message: message, success: success)
+    }
+    func refreshNowAfterCommand() {
+        refreshCoordinator.refreshNow()
     }
 }

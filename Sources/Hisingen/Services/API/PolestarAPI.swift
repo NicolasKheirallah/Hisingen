@@ -20,6 +20,7 @@ actor PolestarAPI {
     private let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
     private let appBackendURL = URL(string: "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!
 
+
     private var publicApiKey: String { BuiltinPolestarSecrets.imageApiKey }
     private let oidcProviderURL = URL(string: "https://polestarid.eu.polestar.com")!
 
@@ -92,20 +93,12 @@ actor PolestarAPI {
     /// writes but not whole logical transactions (e.g. a slow discovery from a superseded
     /// login could otherwise repopulate `cars` after sign-out cleared them).
     private var sessionEpoch = 0
-    /// How an authorization code is obtained for the primary (web) client. Production uses
-    /// the scripted PingFederate form-fill; the seam exists so provider-markup changes stay
-    /// contained to one conformer and a browser-based flow can replace it without touching
-    /// token exchange or discovery.
-    let authorizationFlow: any PolestarAuthorizationCodeSource
     let preferences: PreferencesStore
 
-    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
-         preferences: PreferencesStore = PreferencesStore(),
-         authorizationFlow: any PolestarAuthorizationCodeSource = ScriptedPolestarAuthorization()) {
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore = PreferencesStore()) {
         self.keychain = keychain
         self.imageCache = imageCache
         self.preferences = preferences
-        self.authorizationFlow = authorizationFlow
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
@@ -154,17 +147,100 @@ actor PolestarAPI {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
-        let context = PolestarAuthorizationContext(
+        let verifier = try Self.randomURLSafeString()
+        let state = try Self.randomURLSafeString()
+        let queryItems = Self.authorizationQueryItems(
             clientID: clientID ?? oidcClientID,
-            redirectURI: redirectURI ?? oidcRedirectURL,
+            redirectURI: (redirectURI ?? oidcRedirectURL).absoluteString,
             scope: scope ?? oidcScope,
-            authorizationEndpoint: authorizationEndpoint,
-            identityHost: oidcProviderURL
+            state: state,
+            challenge: Self.codeChallenge(for: verifier)
         )
-        return try await authorizationFlow.obtainAuthorizationCode(
-            email: email, password: password, context: context,
-            http: PolestarAuthorizationTransport(session: session, redirectDelegate: redirectDelegate)
+        guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+            throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
+        }
+        components.queryItems = queryItems
+        guard let url = components.url else {
+            throw PolestarError.incompatibleAPI(operation: "authorization request")
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await perform(request)
+        logger.info("Authorization page returned status \(response.statusCode, privacy: .public)")
+
+        let authorizationCallback = redirectDelegate.takeCallback() ?? response.url
+        if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state,
+                                              callbackURL: redirectURI ?? oidcRedirectURL) {
+            return (code, verifier)
+        }
+        let html = String(decoding: data, as: UTF8.self)
+        guard let resumePath = Self.extractResumePath(from: html) else {
+            throw PolestarError.incompatibleAPI(operation: "Polestar sign-in form")
+        }
+        let code = try await performLogin(
+            resumePath: resumePath,
+            queryItems: queryItems,
+            email: email,
+            password: password,
+            expectedState: state,
+            callbackURL: redirectURI ?? oidcRedirectURL
         )
+        return (code, verifier)
+    }
+
+    private func performLogin(resumePath: String, queryItems: [URLQueryItem],
+                              email: String, password: String,
+                              expectedState: String,
+                              callbackURL: URL? = nil) async throws -> String {
+        guard resumePath.hasPrefix("/"),
+              var components = URLComponents(url: oidcProviderURL.appendingPathComponent(resumePath),
+                                             resolvingAgainstBaseURL: false) else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        components.queryItems = (components.queryItems ?? []) + queryItems
+        guard let loginURL = components.url else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+
+        let (data, response) = try await postForm(
+            to: loginURL,
+            fields: ["pf.username": email, "pf.pass": password]
+        )
+        logger.info("Polestar sign-in returned status \(response.statusCode, privacy: .public)")
+        let loginCallback = redirectDelegate.takeCallback() ?? response.url
+        if let code = try extractValidatedCode(from: loginCallback, expectedState: expectedState,
+                                              callbackURL: callbackURL) { return code }
+
+        if let uid = Self.queryValue("uid", from: response.url) {
+            let (_, confirmation) = try await postForm(
+                to: loginURL,
+                fields: ["pf.submit": "true", "subject": uid]
+            )
+            let confirmationCallback = redirectDelegate.takeCallback() ?? confirmation.url
+            if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState,
+                                                  callbackURL: callbackURL) {
+                return code
+            }
+        }
+
+        let html = String(decoding: data, as: UTF8.self)
+        if html.contains("ERR001") {
+            throw PolestarError.authenticationRequired(.invalidCredentials)
+        }
+        throw PolestarError.authenticationRequired(.callbackRejected)
+    }
+
+    private func extractValidatedCode(from url: URL?, expectedState: String,
+                                      callbackURL: URL? = nil) throws -> String? {
+        guard let url else { return nil }
+        let expected = callbackURL ?? oidcRedirectURL
+        guard url.scheme == expected.scheme,
+              url.host == expected.host,
+              Self.normalizedPath(url) == Self.normalizedPath(expected) else { return nil }
+        guard Self.queryValue("state", from: url) == expectedState else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        return Self.queryValue("code", from: url)
     }
 
     /// Builds the command client's authorization URL for a real browser to open — the
@@ -178,19 +254,19 @@ actor PolestarAPI {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
-        let verifier = try PolestarOAuthSupport.randomURLSafeString()
-        let state = try PolestarOAuthSupport.randomURLSafeString()
+        let verifier = try Self.randomURLSafeString()
+        let state = try Self.randomURLSafeString()
         commandPendingVerifier = verifier
         commandPendingState = state
         guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
             throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
         }
-        components.queryItems = PolestarOAuthSupport.authorizationQueryItems(
+        components.queryItems = Self.authorizationQueryItems(
             clientID: commandClientID,
             redirectURI: commandRedirectURL.absoluteString,
             scope: oidcScope,
             state: state,
-            challenge: PolestarOAuthSupport.codeChallenge(for: verifier)
+            challenge: Self.codeChallenge(for: verifier)
         )
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
@@ -327,6 +403,7 @@ actor PolestarAPI {
             throw PolestarError.network(error)
         }
     }
+
 
     func graphQL<Payload: Decodable>(query: String, variables: [String: Any]?,
                                              token: String, operation: String) async throws
@@ -695,6 +772,7 @@ actor PolestarAPI {
         imageDownloadTasks.removeAll()
     }
 
+
     func clearAccountState(keepRefreshToken: Bool = false) {
         sessionEpoch &+= 1
         accessToken = nil
@@ -754,20 +832,64 @@ actor PolestarAPI {
         return components.percentEncodedQuery.map { Data($0.utf8) }
     }
 
-    /// Forwarder kept for `OAuthRedirectDelegate` and command-callback validation;
-    /// implementation lives with the other OAuth URL helpers.
+    private static func authorizationQueryItems(clientID: String, redirectURI: String,
+                                                scope: String, state: String,
+                                                challenge: String) -> [URLQueryItem] {
+        [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "scope", value: scope),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "code_challenge", value: challenge),
+            URLQueryItem(name: "code_challenge_method", value: "S256"),
+            URLQueryItem(name: "response_mode", value: "query")
+        ]
+    }
+
+    /// The app-scheme callback (`polestar-explore://explore.polestar.com`) carries no path,
+    /// which URL reports as "" here and "/" in some redirect forms — treat those as equal.
     static func normalizedPath(_ url: URL) -> String {
-        PolestarOAuthSupport.normalizedPath(url)
+        url.path == "/" ? "" : url.path
     }
 
     private static func queryValue(_ name: String, from url: URL?) -> String? {
-        PolestarOAuthSupport.queryValue(name, from: url)
+        guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        return components.queryItems?.first(where: { $0.name == name })?.value
     }
 
-    /// Kept as the test/diagnostic entry point; parsing logic lives behind the
-    /// authorization seam in `PolestarOAuthSupport`.
+    /// Wraps `PKCE.randomURLSafeString()` only to translate its `URLError` into the
+    /// Polestar error domain the rest of this actor throws.
+    private static func randomURLSafeString() throws -> String {
+        do { return try PKCE.randomURLSafeString() }
+        catch { throw PolestarError.invalidResponse(operation: "secure random generator") }
+    }
+
+    private static func codeChallenge(for verifier: String) -> String {
+        PKCE.codeChallenge(for: verifier)
+    }
+
     static func extractResumePath(from html: String) -> String? {
-        PolestarOAuthSupport.extractResumePath(from: html)
+        let patterns = [
+            #"(?:url|action):\s*"([^"]+)""#,
+            #"(?:resumePath|pf\.resumePath)\s*[:=]\s*['"]([^'"]+)['"]"#,
+            #"action="([^"]+)""#,
+            #"action:\s*'([^']+)'"#,
+            #"url:\s*'([^']+)'"#,
+            #"/as/[a-zA-Z0-9\-_./]+"#
+        ]
+        for (index, pattern) in patterns.enumerated() {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(html.startIndex..., in: html)
+            guard let match = regex.firstMatch(in: html, range: range) else { continue }
+            let group = match.numberOfRanges > 1 ? 1 : 0
+            guard let matchRange = Range(match.range(at: group), in: html) else { continue }
+            let value = String(html[matchRange])
+            if (index == patterns.count - 1 || value.hasPrefix("/")), !value.contains("..") {
+                return value
+            }
+        }
+        return nil
     }
 
     static func retryAfter(from response: HTTPURLResponse) -> TimeInterval? {
