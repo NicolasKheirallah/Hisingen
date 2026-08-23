@@ -26,6 +26,17 @@ final class CarImageCache: @unchecked Sendable {
         }
     }
 
+    func hasImage(for vin: String, angle: Int? = nil) -> Bool {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return false }
+        let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN
+        lock.lock()
+        defer { lock.unlock() }
+        if memoryCache[key] != nil { return true }
+        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
+        return fileManager.fileExists(atPath: fileURL.path)
+    }
+
     func image(for vin: String, angle: Int? = nil) -> Data? {
         let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !cleanVIN.isEmpty else { return nil }
@@ -59,22 +70,18 @@ final class CarImageCache: @unchecked Sendable {
             return mem
         }
 
-        // Try SQLite database storage first
+        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
+        if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
+            memoryCache[key] = data
+            return data
+        }
+
+        // Try SQLite database storage
         if let parts = parseKey(key) {
             if let dbImage = VehicleDatabase.shared.loadVehicleImage(for: parts.vin, angle: parts.angle) {
                 memoryCache[key] = dbImage.data
                 return dbImage.data
             }
-        }
-
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
-        if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
-            memoryCache[key] = data
-            // Populate database cache if read from disk
-            if let parts = parseKey(key) {
-                VehicleDatabase.shared.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
-            }
-            return data
         }
 
         return nil

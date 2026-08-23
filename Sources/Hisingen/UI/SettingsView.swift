@@ -127,13 +127,13 @@ struct SettingsView: View {
 
     private var availableRenderAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter {
-            imageCache.image(for: settingsVehicleVIN, angle: $0.rawValue) != nil
+            imageCache.hasImage(for: settingsVehicleVIN, angle: $0.rawValue)
         }
     }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: HisingenTheme.sectionSpacing) {
+            VStack(spacing: HisingenTheme.sectionSpacing) {
                 headerBar
                 accountCard
                 fleetVehiclesCard
@@ -415,22 +415,7 @@ struct SettingsView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 // Vehicle Thumbnail or Icon
-                if let imageBytes = imageCache.image(for: vin), let nsImg = NSImage(data: imageBytes) {
-                    Image(nsImage: nsImg)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 44, height: 26)
-                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
-                } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
-                            .frame(width: 28, height: 28)
-                        Image(systemName: brandIcon)
-                            .font(.system(size: 12))
-                            .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
-                    }
-                }
+                SettingsFleetThumbnailView(vin: vin, brandIcon: brandIcon, isActive: isActive, imageCache: imageCache)
 
                 VStack(alignment: .leading, spacing: 1.5) {
                     HStack(spacing: 6) {
@@ -2441,6 +2426,49 @@ struct SettingsStudioRenderPreview: View {
             let budget = 600
             let source = VehicleArtworkStore.source(vin: vin, angle: angle)
             if let data = imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin) {
+                if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
+                    artwork = cached
+                } else {
+                    artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
+                }
+            }
+        }
+    }
+}
+
+@MainActor
+struct SettingsFleetThumbnailView: View {
+    let vin: String
+    let brandIcon: String
+    let isActive: Bool
+    let imageCache: CarImageCache
+    @State private var artwork: VehicleArtworkStore.Artwork?
+
+    var body: some View {
+        Group {
+            if let cgImage = artwork?.image {
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 44, height: 26)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: brandIcon)
+                        .font(.system(size: 12))
+                        .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
+                }
+            }
+        }
+        .task(id: vin) {
+            guard imageCache.hasImage(for: vin) else { return }
+            let store = VehicleArtworkStore.shared
+            let budget = 128
+            let source = VehicleArtworkStore.source(vin: vin, angle: 0)
+            if let data = imageCache.image(for: vin) {
                 if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
                     artwork = cached
                 } else {

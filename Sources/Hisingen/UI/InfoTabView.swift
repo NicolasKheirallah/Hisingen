@@ -19,7 +19,7 @@ struct InfoTabView: View {
 
     private var availableExteriorAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter { angle in
-            imageCache.image(for: state.vin, angle: angle.rawValue) != nil
+            imageCache.hasImage(for: state.vin, angle: angle.rawValue)
                 || (angle == preferences.carRenderAngle && state.imageData != nil)
         }
     }
