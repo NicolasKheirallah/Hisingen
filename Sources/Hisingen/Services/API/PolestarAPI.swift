@@ -112,7 +112,12 @@ actor PolestarAPI {
     private var sessionEpoch = 0
     let preferences: PreferencesStore
 
-    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore = PreferencesStore()) {
+    @MainActor
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache()) {
+        self.init(keychain: keychain, imageCache: imageCache, preferences: .shared)
+    }
+
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore) {
         self.keychain = keychain
         self.imageCache = imageCache
         self.preferences = preferences

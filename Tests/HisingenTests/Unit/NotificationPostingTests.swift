@@ -3,6 +3,7 @@ import Testing
 import UserNotifications
 @testable import Hisingen
 
+@MainActor
 final class FakeNotificationDispatcher: NotificationDispatching {
     var added: [UNNotificationRequest] = []
     var removedIdentifiers: [[String]] = []

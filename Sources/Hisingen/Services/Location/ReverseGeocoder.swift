@@ -8,13 +8,13 @@ actor ReverseGeocoder {
     // CLGeocoder, not our HTTP transport — there is no request metadata to capture,
     // and coordinates must never enter a diagnostic artifact.
     private var cache: [String: String] = [:]
-    private let geocoder = CLGeocoder()
 
     func geocode(latitude: Double, longitude: Double) async -> String? {
         let key = String(format: "%.4f,%.4f", latitude, longitude)
         if let cached = cache[key] { return cached }
 
         let location = CLLocation(latitude: latitude, longitude: longitude)
+        let geocoder = CLGeocoder()
         do {
             let placemarks = try await geocoder.reverseGeocodeLocation(location)
             if let placemark = placemarks.first {

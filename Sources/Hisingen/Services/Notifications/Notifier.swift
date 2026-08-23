@@ -10,6 +10,7 @@ enum NotificationPermission: Sendable {
 
 /// Abstraction over `UNUserNotificationCenter` so posting logic is unit-testable.
 /// The production conformant is the shared center; tests inject an in-memory fake.
+@MainActor
 protocol NotificationDispatching: AnyObject {
     func add(_ request: UNNotificationRequest)
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
@@ -21,10 +22,13 @@ protocol NotificationDispatching: AnyObject {
 /// Wraps the shared center. Deliberately synchronous from the caller's perspective:
 /// `UNUserNotificationCenter.add(_:)`'s completion variant is deprecated, so the add
 /// hop wraps the async API in a task.
+@MainActor
 final class SystemNotificationDispatcher: NotificationDispatching {
     private let center = UNUserNotificationCenter.current()
     func add(_ request: UNNotificationRequest) {
-        Task { try? await center.add(request) }
+        Task { @MainActor in
+            try? await center.add(request)
+        }
     }
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
@@ -783,14 +787,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         return parts.dropFirst(2).joined(separator: ".")
     }
 
-    @MainActor
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        Self.presentationOptions(
-            appIsActive: NSApp.isActive,
-            interruptionLevel: notification.request.content.interruptionLevel
+        let interruptionLevel = notification.request.content.interruptionLevel
+        let appIsActive = await MainActor.run { NSApp.isActive }
+        return Self.presentationOptions(
+            appIsActive: appIsActive,
+            interruptionLevel: interruptionLevel
         )
     }
 }

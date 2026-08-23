@@ -11,11 +11,11 @@ final class PreferencesStore {
     /// opened its own Keychain handle set.
     static let shared = PreferencesStore()
 
-    nonisolated(unsafe) private let d: UserDefaults
+    private let d: UserDefaults
     private let keychain: KeychainStore
     private let logger = AppLog.logger("preferences")
 
-    nonisolated init(defaults: UserDefaults = .standard, keychain: KeychainStore = .app) {
+    init(defaults: UserDefaults = .standard, keychain: KeychainStore = .app) {
         d = defaults
         self.keychain = keychain
     }
