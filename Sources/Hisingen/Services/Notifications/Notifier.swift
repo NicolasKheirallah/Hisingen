@@ -24,23 +24,20 @@ protocol NotificationDispatching: AnyObject {
 /// hop wraps the async API in a task.
 @MainActor
 final class SystemNotificationDispatcher: NotificationDispatching {
-    private let center = UNUserNotificationCenter.current()
     func add(_ request: UNNotificationRequest) {
-        Task { @MainActor in
-            try? await center.add(request)
-        }
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
-        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
     func removeAllDeliveredNotifications() {
-        center.removeAllDeliveredNotifications()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
     func removeAllPendingNotificationRequests() {
-        center.removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>) {
-        center.setNotificationCategories(categories)
+        UNUserNotificationCenter.current().setNotificationCategories(categories)
     }
 }
 
@@ -105,7 +102,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     init(stateStore: VehicleStateStore,
          preferences: PreferencesStore,
          defaults: UserDefaults = .standard,
-         dispatcher: @autoclosure @escaping () -> any NotificationDispatching = SystemNotificationDispatcher(),
+         dispatcher: (any NotificationDispatching)? = nil,
          availableOverride: Bool? = nil,
          initialPermission: NotificationPermission? = nil,
          configuresSystemIntegration: Bool = true) {
@@ -113,7 +110,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.stateStore = stateStore
         self.preferences = preferences
         self.defaults = defaults
-        self.dispatcher = dispatcher
+        let actualDispatcher = dispatcher ?? SystemNotificationDispatcher()
+        self.dispatcher = { actualDispatcher }
         self.permission = initialPermission ?? .notDetermined
         let starts = (defaults.dictionary(forKey: "notifier_sustained_starts_v1") as? [String: Double]) ?? [:]
         self.sustainedConditionStartedAt = starts.mapValues(Date.init(timeIntervalSince1970:))
