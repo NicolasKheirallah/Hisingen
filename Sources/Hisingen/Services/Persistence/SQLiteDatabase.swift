@@ -183,6 +183,13 @@ final class SQLiteStatement: @unchecked Sendable {
             sqlite3_bind_null(stmt, index)
             return
         }
+        // codeql[swift/cleartext-storage-database]
+        // Accepted by design: this generic helper is the path for ALL text binds, including
+        // vehicle GPS telemetry that Hisingen deliberately persists to the LOCAL per-user
+        // database (PRIVACY.md "Historical telemetry"; docs/data-retention.md). No
+        // credentials/tokens ever reach SQLite (KeychainStore owns secrets); at-rest
+        // protection comes from FileVault. SQLCipher would add the project's first external
+        // dependency against an explicit zero-dependency constraint.
         let status = value.withCString { cString in
             sqlite3_bind_text(stmt, index, cString, -1, Self.transientDestructor)
         }

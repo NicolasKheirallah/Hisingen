@@ -1175,6 +1175,10 @@ struct HistoryDashboardView: View {
     }
 
     private func openMap(latitude: Double, longitude: Double) {
+        // codeql[swift/cleartext-transmission]
+        // Accepted by design: this is the "Open in Apple Maps" user action — the coordinates
+        // ARE the payload, transmitted over HTTPS to maps.apple.com at explicit user
+        // request. No background or implicit transmission of location occurs here.
         guard let url = URL(string: "https://maps.apple.com/?ll=\(latitude),\(longitude)") else { return }
         NSWorkspace.shared.open(url)
     }
