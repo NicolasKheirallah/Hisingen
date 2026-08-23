@@ -90,12 +90,15 @@ final class StatusItemController: NSObject {
         }
         popover.behavior = preferences.panelCloseBehavior.popoverBehavior
         popover.delegate = self
-         popover.appearance = preferences.appearanceMode.nsAppearance
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            popover.appearance = preferences.appearanceMode.nsAppearance
+            installGlobalHotKey()
+        }
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
-        installGlobalHotKey()
     }
 
     private func installGlobalHotKey() {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         installLocalHotKey()
         guard AXIsProcessTrusted() else { return }
         installGlobalHotKeyIfAuthorized()
@@ -140,6 +143,7 @@ final class StatusItemController: NSObject {
     }
 
     private func installLocalHotKey() {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             if Self.matchesHotKey(event, "p") {
@@ -657,7 +661,7 @@ final class StatusItemController: NSObject {
         showPopover()
     }
 
-    var availableVehicleVINs: [String] {
+    static func availableVehicleVINs(cars: [CarSummary], cachedSnapshots: [String: VehicleState]) -> [String] {
         var set = Set<String>()
         var list: [String] = []
         for car in cars {
@@ -671,6 +675,10 @@ final class StatusItemController: NSObject {
             }
         }
         return list
+    }
+
+    var availableVehicleVINs: [String] {
+        Self.availableVehicleVINs(cars: cars, cachedSnapshots: cachedSnapshots)
     }
 
     private func selectCar(_ vin: String) {

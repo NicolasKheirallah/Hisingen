@@ -101,20 +101,16 @@ struct MultiCarFleetSwitchingTests {
     }
 
     @Test
-    func statusItemControllerAvailableVehiclesIncludesAllFleetVINs() throws {
-        let (defaults, suite) = try makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
-        let controller = StatusItemController(database: .inMemory(), preferences: preferences)
-
-        controller.cars = [
+    func statusItemControllerAvailableVehiclesIncludesAllFleetVINs() {
+        let cars = [
             CarSummary(vin: Self.polestarVin1, title: "Polestar 1"),
             CarSummary(vin: Self.polestarVin2, title: "Polestar 2")
         ]
-        controller.cachedSnapshots[Self.volvoVin1] = vehicle(vin: Self.volvoVin1, brand: .volvo)
-        controller.cachedSnapshots[Self.volvoVin2] = vehicle(vin: Self.volvoVin2, brand: .volvo)
+        var cachedSnapshots: [String: VehicleState] = [:]
+        cachedSnapshots[Self.volvoVin1] = vehicle(vin: Self.volvoVin1, brand: .volvo)
+        cachedSnapshots[Self.volvoVin2] = vehicle(vin: Self.volvoVin2, brand: .volvo)
 
-        let available = controller.availableVehicleVINs
+        let available = StatusItemController.availableVehicleVINs(cars: cars, cachedSnapshots: cachedSnapshots)
         XCTAssertEqual(available.count, 4)
         XCTAssertTrue(available.contains(Self.polestarVin1))
         XCTAssertTrue(available.contains(Self.polestarVin2))

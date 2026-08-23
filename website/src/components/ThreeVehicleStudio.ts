@@ -81,9 +81,18 @@ export class ThreeVehicleStudio {
   private isDragging = false;
   private lastPointerX = 0;
   private specialIndex = -1;
-  private specialFade = 1; // 1 = fully on turntable, 0 = fully on special view
-  private specialTexture: THREE.Texture | null = null;
-  private prevTurntableTexture: THREE.Texture | null = null;
+  private showingSpecial = false;
+
+  // Generic texture crossfade (enter/leave special views)
+  private fadeActive = false;
+  private fadeWeight = 0;
+  private fadeFrom: THREE.Texture | null = null;
+  private fadeTo: THREE.Texture | null = null;
+
+  // Desired turntable pair (deferred while a fade is in flight)
+  private ttA: THREE.Texture | null = null;
+  private ttB: THREE.Texture | null = null;
+  private ttBlend = 0;
 
   // 2.5D parallax + crossfade material
   private carPlaneMesh!: THREE.Mesh;
@@ -153,6 +162,7 @@ export class ThreeVehicleStudio {
     this.loadTextures();
     this.createCallouts();
     this.setupEvents();
+    this.setupObserver();
     this.onResize();
 
     this.container.classList.add('is-loading');
@@ -565,7 +575,7 @@ export class ThreeVehicleStudio {
 
     for (const callout of this.callouts) {
       const { def, el, anchor } = callout;
-      if (!anchor?.texture || !this.ready || this.specialIndex !== -1 || this.container.classList.contains('is-fallback')) {
+      if (!anchor?.texture || !this.ready || this.specialIndex !== -1 || this.fadeActive || this.container.classList.contains('is-fallback')) {
         el.style.opacity = '0';
         continue;
       }
@@ -701,15 +711,13 @@ export class ThreeVehicleStudio {
       this.targetWindSpeed = Math.max(0.4, this.targetWindSpeed);
       this.targetAngle = Math.PI * 0.5;
       this.currentAngle = Math.PI * 0.5;
-      this.specialIndex = -1;
-      this.specialFade = 1;
+      this.leaveSpecial();
     } else {
       this.windActiveTarget = 0;
       if (mode === 'parallax') {
         this.targetAngle = 0;
         this.currentAngle = 0;
-        this.specialIndex = -1;
-        this.specialFade = 1;
+        this.leaveSpecial();
       }
     }
     this.requestRender();
@@ -723,24 +731,69 @@ export class ThreeVehicleStudio {
   public setAngleIndex(index: number): void {
     if (index >= 0 && index < 5) {
       const angleMap = [0, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.75, Math.PI];
-      this.specialIndex = -1;
       this.targetAngle = angleMap[index]!;
       this.currentAngle = this.targetAngle;
       this.angularVelocity = 0;
+      this.leaveSpecial();
       this.requestRender();
       return;
     }
 
     const view = this.specialViews.find((v) => v.index === index);
-    if (!view) return;
+    if (!view?.texture) return;
     this.specialIndex = index;
-    this.specialFade = this.specialFade; // animated in step()
-    this.prevTurntableTexture = (this.parallaxMaterial.uniforms.uTexA.value as THREE.Texture) ?? null;
-    if (view.texture) {
-      this.parallaxMaterial.uniforms.uTexB.value = view.texture;
-    }
+    this.startFade(this.parallaxMaterial.uniforms.uTexA.value as THREE.Texture, view.texture);
     this.shadowPlane.visible = index === 5;
     this.requestRender();
+  }
+
+  /** Crossfade back from a special view to the photographic turntable. */
+  private leaveSpecial(): void {
+    this.shadowPlane.visible = true;
+    if (this.specialIndex === -1 && !this.fadeActive) return;
+    const wasSpecial = this.specialIndex !== -1;
+    const specialTex = wasSpecial
+      ? ((this.parallaxMaterial.uniforms.uTexB.value as THREE.Texture) ?? this.fadeTo)
+      : this.fadeTo;
+    this.specialIndex = -1;
+    const nearest = this.nearestFrame(this.currentAngle);
+    if (this.showingSpecial || this.fadeActive) {
+      this.startFade(specialTex ?? nearest?.texture ?? null, nearest?.texture ?? null);
+    }
+  }
+
+  private startFade(from: THREE.Texture | null, to: THREE.Texture | null): void {
+    if (!from || !to) {
+      // No source texture — snap instead of fading
+      this.fadeActive = false;
+      if (to) {
+        this.parallaxMaterial.uniforms.uTexA.value = to;
+        this.parallaxMaterial.uniforms.uTexB.value = to;
+        this.parallaxMaterial.uniforms.uBlend.value = 0;
+      }
+      this.showingSpecial = this.specialIndex !== -1;
+      this.dirty = true;
+      return;
+    }
+    this.fadeFrom = from;
+    this.fadeTo = to;
+    this.fadeWeight = 0;
+    this.fadeActive = true;
+    this.dirty = true;
+  }
+
+  private nearestFrame(angle: number): TurntableFrame | undefined {
+    let best: TurntableFrame | undefined;
+    let bestDiff = Infinity;
+    for (const frame of this.frames) {
+      let diff = Math.abs(angle - frame.angle) % TWO_PI;
+      if (diff > Math.PI) diff = TWO_PI - diff;
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = frame;
+      }
+    }
+    return best;
   }
 
   public getMode(): StudioMode {
@@ -750,8 +803,6 @@ export class ThreeVehicleStudio {
   /* ---------- turntable crossfade ---------- */
 
   private updateTurntable(): void {
-    if (this.specialIndex !== -1) return;
-
     let norm = ((this.currentAngle % TWO_PI) + TWO_PI) % TWO_PI;
     const first = this.frames[0]!;
     const base = first.angle;
@@ -777,16 +828,29 @@ export class ThreeVehicleStudio {
 
     if (!prev.texture || !next.texture) return;
 
-    // Smoothstep the blend for weight distribution toward anchor frames
+    // Smoothstep the blend so anchor frames carry visual weight
     const eased = blend * blend * (3 - 2 * blend);
     const pair = `${prev.id}>${next.id}`;
+
+    if (this.fadeActive) {
+      // A crossfade owns the uniforms — only record the desired pair
+      this.ttA = prev.texture;
+      this.ttB = next.texture;
+      this.ttBlend = eased;
+      return;
+    }
+
     if (pair !== this.activePair) {
       this.activePair = pair;
+      this.ttA = prev.texture;
+      this.ttB = next.texture;
+      this.ttBlend = eased;
       this.parallaxMaterial.uniforms.uTexA.value = prev.texture;
       this.parallaxMaterial.uniforms.uTexB.value = next.texture;
+      this.parallaxMaterial.uniforms.uBlend.value = eased;
       this.dirty = true;
-    }
-    if (Math.abs((this.parallaxMaterial.uniforms.uBlend.value as number) - eased) > 0.002) {
+    } else if (Math.abs((this.parallaxMaterial.uniforms.uBlend.value as number) - eased) > 0.002) {
+      this.ttBlend = eased;
       this.parallaxMaterial.uniforms.uBlend.value = eased;
       this.dirty = true;
     }
@@ -860,17 +924,24 @@ export class ThreeVehicleStudio {
       }
     }
 
-    // Special-view crossfade
-    if (this.specialIndex !== -1 && this.specialFade > 0) {
-      this.specialFade = Math.max(0, this.specialFade - dt * 3);
-      this.parallaxMaterial.uniforms.uBlend.value = 1 - this.specialFade;
+    // Texture crossfade (enter/leave special views)
+    if (this.fadeActive) {
+      this.fadeWeight = Math.min(1, this.fadeWeight + dt * 3);
+      const eased = this.fadeWeight * this.fadeWeight * (3 - 2 * this.fadeWeight);
+      this.parallaxMaterial.uniforms.uTexA.value = this.fadeFrom;
+      this.parallaxMaterial.uniforms.uTexB.value = this.fadeTo;
+      this.parallaxMaterial.uniforms.uBlend.value = eased;
       this.dirty = true;
       animating = true;
-    } else if (this.specialIndex === -1 && this.specialFade < 1) {
-      this.specialFade = Math.min(1, this.specialFade + dt * 3);
-      this.parallaxMaterial.uniforms.uBlend.value = 1 - this.specialFade;
-      this.dirty = true;
-      animating = true;
+      if (this.fadeWeight >= 1) {
+        this.fadeActive = false;
+        this.parallaxMaterial.uniforms.uTexA.value = this.fadeTo;
+        this.parallaxMaterial.uniforms.uTexB.value = this.fadeTo;
+        this.parallaxMaterial.uniforms.uBlend.value = 0;
+        this.showingSpecial = this.specialIndex !== -1;
+        this.activePair = ''; // force turntable pair refresh after leaving a special view
+        this.dirty = true;
+      }
     }
 
     // Scroll-linked dolly
