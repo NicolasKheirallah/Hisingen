@@ -70,19 +70,36 @@ actor PolestarAPI {
 
     private(set) var cars: [CarSummary] = []
     var selectedVIN: String?
-    var internalVehicleIdentifier: String?
-    var modelName: String?
-    var modelYear: String?
-    var registrationNo: String?
-    var pno34: String?
-    var structureWeek: String?
-    var exteriorColorName: String?
-    var upholsteryName: String?
-    var wheelsName: String?
-    var packageNames: [String] = []
+
+    /// Discovery metadata for one vehicle, keyed by VIN.
+    ///
+    /// This replaces the former flat "currently selected car" fields. Those were global
+    /// mutable state that every selection path wrote and every telemetry fetch read, so a
+    /// background garage scan temporarily selecting car B contaminated an in-flight or
+    /// subsequent fetch for car A — wrong model names, wrong render images, and a
+    /// `selectedVIN == vin` post-check that failed under concurrency and surfaced as a
+    /// bogus "not configured" error. Reads are now always scoped to the VIN being fetched,
+    /// so concurrent selections cannot cross-contaminate anything.
+    struct CarIdentity {
+        var internalVehicleIdentifier: String?
+        var modelName: String?
+        var modelYear: String?
+        var registrationNo: String?
+        var pno34: String?
+        var structureWeek: String?
+        var exteriorColorName: String?
+        var upholsteryName: String?
+        var wheelsName: String?
+        var packageNames: [String] = []
+
+        static let empty = CarIdentity()
+    }
+    private(set) var identities: [String: CarIdentity] = [:]
+    func identity(for vin: String?) -> CarIdentity { vin.flatMap { identities[$0] } ?? .empty }
     var ownerFirstName: String?
     var market: String?
-    var carImageData: Data?
+    /// Render images per VIN (replaces the former single selected-car `carImageData`).
+    private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
     var capabilityBackoff: [String: [String: Date]] = [:]
     var capabilityCache: [String: CapabilityCacheEntry] = [:]
@@ -541,13 +558,10 @@ actor PolestarAPI {
             guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                   Self.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
             cars = [CarSummary(vin: manualVIN, title: manualVIN)]
-            if selectedVIN != manualVIN { carImageData = nil }
+            // A manually entered VIN has no discovery metadata; drop any stale identity
+            // so telemetry reads report "unknown" instead of another car's details.
+            identities.removeValue(forKey: manualVIN)
             selectedVIN = manualVIN
-            modelName = nil
-            modelYear = nil
-            registrationNo = nil
-            pno34 = nil
-            structureWeek = nil
             return
         }
         cars = accountCars.compactMap { car in
@@ -622,25 +636,29 @@ actor PolestarAPI {
         let requestEpoch = sessionEpoch
         try await fetchCarInfo(preferredVIN: vin)
         guard requestEpoch == sessionEpoch else { return }
-        guard selectedVIN == vin else { throw PolestarError.notConfigured }
+        // No selection-equality post-check here, by design: identity reads are per-VIN now,
+        // so a concurrent caller re-pointing `selectedVIN` after our discovery cannot
+        // corrupt this car's telemetry. The only genuine failure is the VIN having left
+        // the discovered garage entirely.
+        guard cars.contains(where: { $0.vin == vin }) else { throw PolestarError.notConfigured }
     }
 
     private func applyCarInfo(vin: String, from accountCars: [ConsumerCarDTO]) throws {
         guard let car = accountCars.first(where: { $0.vin == vin }) else {
             throw PolestarError.notConfigured
         }
-        if selectedVIN != vin { carImageData = nil }
+        identities[vin] = CarIdentity(
+            internalVehicleIdentifier: car.internalVehicleIdentifier,
+            modelName: car.modelName,
+            modelYear: car.modelYear?.value,
+            registrationNo: car.registrationNo,
+            pno34: car.pno34,
+            structureWeek: car.structureWeek?.value,
+            exteriorColorName: car.exteriorColorName,
+            upholsteryName: car.upholsteryName,
+            wheelsName: car.wheelsName,
+            packageNames: car.packageNames)
         selectedVIN = vin
-        internalVehicleIdentifier = car.internalVehicleIdentifier
-        modelName = car.modelName
-        modelYear = car.modelYear?.value
-        registrationNo = car.registrationNo
-        pno34 = car.pno34
-        structureWeek = car.structureWeek?.value
-        exteriorColorName = car.exteriorColorName
-        upholsteryName = car.upholsteryName
-        wheelsName = car.wheelsName
-        packageNames = car.packageNames
     }
 
     func fetchOwnerInfo() async {
@@ -655,12 +673,13 @@ actor PolestarAPI {
         market = info.market?.isEmpty == false ? info.market : nil
     }
 
-    func fetchCarImage() async {
+    func fetchCarImage(vin: String) async {
         let requestedAngle = await MainActor.run { preferences.carRenderAngle.rawValue }
-        if let vin = selectedVIN, let cached = imageCache.image(for: vin, angle: requestedAngle) {
-            carImageData = cached
+        if let cached = imageCache.image(for: vin, angle: requestedAngle) {
+            carImages[vin] = cached
         }
-        guard let pno34, let structureWeek, let modelYear else { return }
+        guard let identity = identities[vin], let pno34 = identity.pno34,
+              let structureWeek = identity.structureWeek, let modelYear = identity.modelYear else { return }
         let query = """
         query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String) {
           getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
@@ -691,7 +710,7 @@ actor PolestarAPI {
             ?? pool.first(where: { ($0["angle"] as? Int) == 1 })
             ?? pool.first(where: { ($0["angle"] as? Int) == 0 }) ?? pool.first
 
-        if carImageData == nil, let string = pick?["url"] as? String, let url = URL(string: string),
+        if carImages[vin] == nil, let string = pick?["url"] as? String, let url = URL(string: string),
            url.scheme == "https" {
             if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
                       for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image", provider: .polestar),
@@ -699,44 +718,40 @@ actor PolestarAPI {
                   http.statusCode == 200,
                   http.mimeType?.hasPrefix("image/") == true,
                   bytes.count <= 5_000_000 {
-                carImageData = bytes
-                if let vin = selectedVIN {
-                    let angle = (pick?["angle"] as? Int) ?? requestedAngle
-                    imageCache.save(bytes, for: vin, angle: angle)
-                    imageCache.save(bytes, for: vin)
-                }
+                carImages[vin] = bytes
+                let angle = (pick?["angle"] as? Int) ?? requestedAngle
+                imageCache.save(bytes, for: vin, angle: angle)
+                imageCache.save(bytes, for: vin)
             }
         }
 
-        if let vin = selectedVIN {
-            for other in pool {
-                guard let otherAngle = other["angle"] as? Int,
-                      let otherUrlStr = other["url"] as? String,
-                      let otherUrl = URL(string: otherUrlStr),
-                      otherUrl.scheme == "https",
-                      imageCache.image(for: vin, angle: otherAngle) == nil else { continue }
-                enqueueImageDownload(
-                    key: "\(vin)-angle-\(otherAngle)",
-                    request: URLRequest(url: otherUrl),
-                    operation: "vehicle angle image"
-                ) { data in
-                    self.imageCache.save(data, for: vin, angle: otherAngle)
-                }
+        for other in pool {
+            guard let otherAngle = other["angle"] as? Int,
+                  let otherUrlStr = other["url"] as? String,
+                  let otherUrl = URL(string: otherUrlStr),
+                  otherUrl.scheme == "https",
+                  imageCache.image(for: vin, angle: otherAngle) == nil else { continue }
+            enqueueImageDownload(
+                key: "\(vin)-angle-\(otherAngle)",
+                request: URLRequest(url: otherUrl),
+                operation: "vehicle angle image"
+            ) { data in
+                self.imageCache.save(data, for: vin, angle: otherAngle)
             }
+        }
 
-            if let interiorPool = images["interior"] as? [[String: Any]],
-               let interiorPick = interiorPool.first,
-               let interiorUrlStr = interiorPick["url"] as? String,
-               let interiorUrl = URL(string: interiorUrlStr),
-               interiorUrl.scheme == "https",
-                imageCache.interiorImage(for: vin) == nil {
-                enqueueImageDownload(
-                    key: "\(vin)-interior",
-                    request: URLRequest(url: interiorUrl),
-                    operation: "vehicle interior image"
-                ) { data in
-                    self.imageCache.saveInterior(data, for: vin)
-                }
+        if let interiorPool = images["interior"] as? [[String: Any]],
+           let interiorPick = interiorPool.first,
+           let interiorUrlStr = interiorPick["url"] as? String,
+           let interiorUrl = URL(string: interiorUrlStr),
+           interiorUrl.scheme == "https",
+           imageCache.interiorImage(for: vin) == nil {
+            enqueueImageDownload(
+                key: "\(vin)-interior",
+                request: URLRequest(url: interiorUrl),
+                operation: "vehicle interior image"
+            ) { data in
+                self.imageCache.saveInterior(data, for: vin)
             }
         }
     }
@@ -783,20 +798,11 @@ actor PolestarAPI {
         tokenExpiry = nil
         if !keepRefreshToken { refreshToken = nil }
         cars = []
+        identities = [:]
+        carImages = [:]
         selectedVIN = nil
-        internalVehicleIdentifier = nil
-        modelName = nil
-        modelYear = nil
-        registrationNo = nil
-        pno34 = nil
-        structureWeek = nil
-        exteriorColorName = nil
-        upholsteryName = nil
-        wheelsName = nil
-        packageNames = []
         ownerFirstName = nil
         market = nil
-        carImageData = nil
         targetCache = [:]
         capabilityBackoff = [:]
         capabilityCache = [:]

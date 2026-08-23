@@ -13,6 +13,11 @@ extension PolestarAPI {
 
         await grpc.setUseStreaming(features.contains(.realTimeUpdates))
 
+        // All identity reads are scoped to the VIN being fetched. A background garage scan
+        // selecting another vehicle concurrently can no longer leak its model name, plate,
+        // or render image into this snapshot.
+        let carIdentity = identities[vin] ?? .empty
+
         let query = Self.telematicsQuery(features: features)
         // Same rule as discovery: only provider-specific failures may degrade to "no
         // telematics data". A swallowed 401 here used to produce an empty-looking state
@@ -40,7 +45,7 @@ extension PolestarAPI {
 
         let needsChargingContext = features.contains(.chargingDetails) || features.contains(.remoteCharging)
             || battery == nil
-        let modelProfile = VehicleCapabilityProfile(modelName: modelName)
+        let modelProfile = VehicleCapabilityProfile(modelName: carIdentity.modelName)
         let needsExterior = features.contains(.exteriorStatus) || features.contains(.remoteLocks)
             || features.contains(.remoteWindows)
         let needsSoftware = features.contains(.softwareUpdates) || features.contains(.remoteOTA)
@@ -260,9 +265,9 @@ extension PolestarAPI {
             availability: vehicleAvailability,
 
 
-            modelName: modelName,
-            modelYear: features.contains(.vehicleIdentity) ? modelYear : nil,
-            registrationNo: features.contains(.vehicleIdentity) ? registrationNo : nil,
+            modelName: carIdentity.modelName,
+            modelYear: features.contains(.vehicleIdentity) ? carIdentity.modelYear : nil,
+            registrationNo: features.contains(.vehicleIdentity) ? carIdentity.registrationNo : nil,
             vin: vin,
             ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
             odometerKm: (odometer?.odometerMeters?.value).map { $0 / 1_000 }
@@ -286,7 +291,7 @@ extension PolestarAPI {
             location: features.contains(.vehicleLocation) ? location.value : nil,
             unavailableFeatures: unavailable,
             probedCapabilities: probes.count > 0 ? probes : nil,
-            imageData: features.contains(.vehicleImage) ? carImageData : nil,
+            imageData: features.contains(.vehicleImage) ? carImages[vin] : nil,
             fetchedAt: Date(),
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
@@ -304,13 +309,13 @@ extension PolestarAPI {
                 state.softwareInfo = sw
             }
         }
-        state.structureWeek = features.contains(.vehicleIdentity) ? structureWeek : nil
-        state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? internalVehicleIdentifier : nil
-        state.pno34 = features.contains(.vehicleIdentity) ? pno34 : nil
-        state.externalColour = features.contains(.vehicleIdentity) ? exteriorColorName : nil
-        state.upholstery = features.contains(.vehicleIdentity) ? upholsteryName : nil
-        state.wheels = features.contains(.vehicleIdentity) ? wheelsName : nil
-        state.packages = features.contains(.vehicleIdentity) ? packageNames : []
+        state.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
+        state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
+        state.pno34 = features.contains(.vehicleIdentity) ? carIdentity.pno34 : nil
+        state.externalColour = features.contains(.vehicleIdentity) ? carIdentity.exteriorColorName : nil
+        state.upholstery = features.contains(.vehicleIdentity) ? carIdentity.upholsteryName : nil
+        state.wheels = features.contains(.vehicleIdentity) ? carIdentity.wheelsName : nil
+        state.packages = features.contains(.vehicleIdentity) ? carIdentity.packageNames : []
         state.accountMarket = market
         state.chargingCurrentLimitAmps = ampLimit.value
         state.chargeLocations = chargeLocations.value ?? []

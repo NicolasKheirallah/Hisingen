@@ -12,7 +12,7 @@ final class RemoteActionAuthorizer {
         if requiresConfirmation {
             let alert = NSAlert()
             alert.alertStyle = command.risk == .destructive ? .critical : .warning
-            alert.messageText = command.title
+            alert.messageText = command.title(temperatureUnit: preferences.temperatureUnit)
             alert.informativeText = L10n.format(
                 "Send this command to %@? Hisingen will submit it once and then refresh vehicle state.",
                 vehicle
@@ -29,7 +29,7 @@ final class RemoteActionAuthorizer {
             showAuthenticationFailure(error)
             return false
         }
-        let reason = L10n.format("Authorize %@ for %@", command.title, vehicle)
+        let reason = L10n.format("Authorize %@ for %@", command.title(temperatureUnit: preferences.temperatureUnit), vehicle)
         let success = await withCheckedContinuation { continuation in
             context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
                 continuation.resume(returning: success)

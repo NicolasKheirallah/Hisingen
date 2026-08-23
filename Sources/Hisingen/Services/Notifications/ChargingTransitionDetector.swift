@@ -29,7 +29,70 @@ struct ChargingBaseline: Codable, Equatable, Sendable {
     var chargingSessionActive: Bool
     var interruptionSamples: Int
     var lowBatteryNotified: Bool
-    var lastEventFingerprint: String?
+    /// Recent event fingerprints, newest last. A set-with-history (not a single slot)
+    /// because one evaluation can emit two events at once — e.g. started + low battery —
+    /// and a single overwritten slot let the first event's duplicate slip through.
+    var recentEventFingerprints: [String] = []
+
+    enum CodingKeys: String, CodingKey {
+        case vin, state, connection, batteryPercentage, targetPercentage
+        case vehicleReportedAt, sampledAt, chargingSessionActive, interruptionSamples
+        case lowBatteryNotified, recentEventFingerprints, lastEventFingerprint
+    }
+
+    init(vin: String, state: ChargingState, connection: ChargerConnection,
+         batteryPercentage: Double?, targetPercentage: Int?, vehicleReportedAt: Date?,
+         sampledAt: Date?, chargingSessionActive: Bool, interruptionSamples: Int,
+         lowBatteryNotified: Bool, recentEventFingerprints: [String] = []) {
+        self.vin = vin
+        self.state = state
+        self.connection = connection
+        self.batteryPercentage = batteryPercentage
+        self.targetPercentage = targetPercentage
+        self.vehicleReportedAt = vehicleReportedAt
+        self.sampledAt = sampledAt
+        self.chargingSessionActive = chargingSessionActive
+        self.interruptionSamples = interruptionSamples
+        self.lowBatteryNotified = lowBatteryNotified
+        self.recentEventFingerprints = recentEventFingerprints
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        vin = try values.decode(String.self, forKey: .vin)
+        state = try values.decode(ChargingState.self, forKey: .state)
+        connection = try values.decode(ChargerConnection.self, forKey: .connection)
+        batteryPercentage = try values.decodeIfPresent(Double.self, forKey: .batteryPercentage)
+        targetPercentage = try values.decodeIfPresent(Int.self, forKey: .targetPercentage)
+        vehicleReportedAt = try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt)
+        sampledAt = try values.decodeIfPresent(Date.self, forKey: .sampledAt)
+        chargingSessionActive = try values.decode(Bool.self, forKey: .chargingSessionActive)
+        interruptionSamples = try values.decode(Int.self, forKey: .interruptionSamples)
+        lowBatteryNotified = try values.decode(Bool.self, forKey: .lowBatteryNotified)
+        if let history = try values.decodeIfPresent([String].self, forKey: .recentEventFingerprints) {
+            recentEventFingerprints = history
+        } else if let legacy = try values.decodeIfPresent(String.self, forKey: .lastEventFingerprint) {
+            // Pre-multi-event installs persisted a single fingerprint; keep its dedup.
+            recentEventFingerprints = [legacy]
+        } else {
+            recentEventFingerprints = []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(vin, forKey: .vin)
+        try container.encode(state, forKey: .state)
+        try container.encode(connection, forKey: .connection)
+        try container.encode(batteryPercentage, forKey: .batteryPercentage)
+        try container.encode(targetPercentage, forKey: .targetPercentage)
+        try container.encode(vehicleReportedAt, forKey: .vehicleReportedAt)
+        try container.encode(sampledAt, forKey: .sampledAt)
+        try container.encode(chargingSessionActive, forKey: .chargingSessionActive)
+        try container.encode(interruptionSamples, forKey: .interruptionSamples)
+        try container.encode(lowBatteryNotified, forKey: .lowBatteryNotified)
+        try container.encode(recentEventFingerprints, forKey: .recentEventFingerprints)
+    }
 }
 
 struct ChargingDetectionResult: Equatable, Sendable {
@@ -52,8 +115,7 @@ struct ChargingTransitionDetector {
             sampledAt: current.vehicleReportedAt ?? current.fetchedAt,
             chargingSessionActive: current.isCharging,
             interruptionSamples: 0,
-            lowBatteryNotified: false,
-            lastEventFingerprint: nil
+            lowBatteryNotified: false
         )
         guard let previous, previous.vin == current.vin else {
             return ChargingDetectionResult(events: [], baseline: baseline)
@@ -72,7 +134,7 @@ struct ChargingTransitionDetector {
 
         baseline.chargingSessionActive = previous.chargingSessionActive
         baseline.lowBatteryNotified = previous.lowBatteryNotified
-        baseline.lastEventFingerprint = previous.lastEventFingerprint
+        baseline.recentEventFingerprints = previous.recentEventFingerprints
         var events: [ChargingEvent] = []
 
         let explicitFault = current.chargingState == .fault || current.chargerConnection == .fault
@@ -108,12 +170,17 @@ struct ChargingTransitionDetector {
         }
 
         if !isRecent { events = [] }
+        // History cap bounds growth on long-running installs; 20 entries is far more
+        // than any single evaluation can emit, so dedup within a sample burst holds.
+        let recent = baseline.recentEventFingerprints.suffix(16)
+        var history = Array(recent)
         let filtered = events.filter { event in
             let fingerprint = Self.fingerprint(event: event, state: current)
-            if fingerprint == previous.lastEventFingerprint { return false }
-            baseline.lastEventFingerprint = fingerprint
+            guard !history.contains(fingerprint) else { return false }
+            history.append(fingerprint)
             return true
         }
+        baseline.recentEventFingerprints = history
         return ChargingDetectionResult(events: filtered, baseline: baseline)
     }
 

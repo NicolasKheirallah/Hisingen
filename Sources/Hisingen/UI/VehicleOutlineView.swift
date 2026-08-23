@@ -541,8 +541,17 @@ struct VehicleSideProfileTiresView: View {
         tyres.first(where: { $0.position == pos })
     }
 
-    private var frontWarning: Bool { tyre(for: .frontLeft)?.warning.needsAttention == true || tyre(for: .frontRight)?.warning.needsAttention == true }
-    private var rearWarning: Bool { tyre(for: .rearLeft)?.warning.needsAttention == true || tyre(for: .rearRight)?.warning.needsAttention == true }
+    /// Rolls two tyres of an axle up into one level: any attention-needing tyre wins (very low
+    /// outranks low/high), green only when *both* explicitly reported OK — an unreported axle
+    /// renders muted rather than falsely healthy.
+    private func axleState(_ a: TyrePosition, _ b: TyrePosition) -> TyrePressureWarning {
+        let pair = [tyre(for: a), tyre(for: b)].compactMap { $0 }.map(\.warning)
+        if pair.contains(.veryLow) { return .veryLow }
+        if let flagged = pair.first(where: \.needsAttention) { return flagged }
+        if !pair.isEmpty && pair.allSatisfy({ $0 == .none }) { return .none }
+        return .unknown
+    }
+
     private var frontHovered: Bool { hoveredPosition == .frontLeft || hoveredPosition == .frontRight }
     private var rearHovered: Bool { hoveredPosition == .rearLeft || hoveredPosition == .rearRight }
 
@@ -576,7 +585,7 @@ struct VehicleSideProfileTiresView: View {
                 // Rear Wheel (SVG X=379, Y=516 -> u=0.2304, v=0.6710)
                 tireWheelGlow(
                     u: 0.2304, v: 0.6710,
-                    warning: rearWarning, hovered: rearHovered,
+                    state: axleState(.rearLeft, .rearRight), hovered: rearHovered,
                     positionName: hoveredPosition == .rearRight ? "RR" : "RL",
                     og: og
                 )
@@ -584,7 +593,7 @@ struct VehicleSideProfileTiresView: View {
                 // Front Wheel (SVG X=1322, Y=516 -> u=0.8036, v=0.6710)
                 tireWheelGlow(
                     u: 0.8036, v: 0.6710,
-                    warning: frontWarning, hovered: frontHovered,
+                    state: axleState(.frontLeft, .frontRight), hovered: frontHovered,
                     positionName: hoveredPosition == .frontRight ? "FR" : "FL",
                     og: og
                 )
@@ -597,20 +606,30 @@ struct VehicleSideProfileTiresView: View {
     @ViewBuilder
     private func tireWheelGlow(
         u: CGFloat, v: CGFloat,
-        warning: Bool, hovered: Bool,
+        state: TyrePressureWarning, hovered: Bool,
         positionName: String,
         og: OutlineGeometry
     ) -> some View {
-        let activeColor = warning ? HisingenTheme.semanticWarning : (hovered ? HisingenTheme.accent : HisingenTheme.semanticGood)
+        let alerting = state.needsAttention
+        let activeColor: Color = {
+            switch state {
+            case .none:
+                return hovered ? HisingenTheme.accent : HisingenTheme.semanticGood
+            case .veryLow, .low, .high:
+                return HisingenTheme.tyreWarningColor(state)
+            case .unknown:
+                return hovered ? HisingenTheme.accent : HisingenTheme.inkMuted.opacity(0.55)
+            }
+        }()
         // Scaled wheel rim ring proportional to the vehicle height (202px in 769px SVG = 0.2627 * imageHeight)
         let ringSize: CGFloat = max(22, og.imageHeight * 0.2627)
         let pos = og.point(u: u, v: v)
 
         ZStack {
             // Animated pulse halo when hovered or warning
-            if hovered || warning {
+            if hovered || alerting {
                 Circle()
-                    .fill(activeColor.opacity(warning ? 0.35 : 0.22))
+                    .fill(activeColor.opacity(alerting ? 0.35 : 0.22))
                     .frame(width: ringSize + 10, height: ringSize + 10)
                     .scaleEffect(hovered ? 1.15 : 1.0)
                     .blur(radius: 2)
@@ -618,9 +637,9 @@ struct VehicleSideProfileTiresView: View {
 
             // Outer tire ring border
             Circle()
-                .stroke(activeColor.opacity(warning ? 0.95 : 0.75), lineWidth: warning ? 2.0 : 1.5)
+                .stroke(activeColor.opacity(alerting ? 0.95 : 0.75), lineWidth: alerting ? 2.0 : 1.5)
                 .frame(width: ringSize, height: ringSize)
-                .shadow(color: activeColor.opacity(warning ? 0.6 : 0.3), radius: warning ? 4 : 2)
+                .shadow(color: activeColor.opacity(alerting ? 0.6 : 0.3), radius: alerting ? 4 : 2)
 
             // Inner hubcap dot
             Circle()
@@ -629,7 +648,7 @@ struct VehicleSideProfileTiresView: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
         }
         .position(pos)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hovered || warning)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hovered || alerting)
     }
 }
 

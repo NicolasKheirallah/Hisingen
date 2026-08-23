@@ -167,7 +167,6 @@ struct DoorsAndOpeningsCardView: View {
 
 struct TireStatusCardView: View {
     let tyres: [TyrePressure]
-    let hasWarning: Bool
 
     @State private var hoveredPosition: TyrePosition? = nil
 
@@ -182,25 +181,37 @@ struct TireStatusCardView: View {
         !tyres.isEmpty && tyres.allSatisfy { $0.kilopascals == nil }
     }
 
-    var body: some View {
+    /// Header pill state: red/orange on any flagged tyre, green once every tyre explicitly
+    /// reported (or measured), green-with-caveat for partial reports, muted only when the
+    /// provider said nothing at all.
+    private var summaryPill: (text: String, color: Color, symbol: String) {
         let reportedCount = tyres.filter { $0.kilopascals != nil || $0.warning != .unknown }.count
-        let allReported = reportedCount == 4
-        let summaryText = hasWarning
-            ? L10n.text("Check Pressure")
-            : (allReported ? L10n.text("No warnings reported") : L10n.text("Data unavailable"))
-        let summaryColor: Color = hasWarning
-            ? HisingenTheme.semanticWarning
-            : (allReported ? HisingenTheme.semanticGood : .secondary)
+        let allReported = !tyres.isEmpty && reportedCount == tyres.count
+        if tyres.contains(where: { $0.warning.needsAttention }) {
+            return (L10n.text("Check Pressure"), HisingenTheme.semanticWarning, "exclamationmark.triangle.fill")
+        }
+        if allReported {
+            return (L10n.text("Everything looks good"), HisingenTheme.semanticGood, "checkmark.circle.fill")
+        }
+        if reportedCount > 0 {
+            return (L10n.text("No warnings reported"), HisingenTheme.semanticGood, "checkmark.circle.fill")
+        }
+        return (L10n.text("Data unavailable"), Color.secondary, "questionmark.circle")
+    }
+
+    var body: some View {
+        let hasValues = tyres.contains { $0.kilopascals != nil }
+        let summary = summaryPill
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: .blue)
-                    Spacer()
-                    Pill(
-                        text: summaryText,
-                        color: summaryColor,
-                        symbol: hasWarning ? "exclamationmark.triangle.fill" : (allReported ? "checkmark.circle.fill" : "questionmark.circle")
+                    CardHeader(
+                        symbol: "circle.grid.2x2",
+                        title: L10n.text(hasValues ? "Tire Pressure" : "Tire Status (iTPMS)"),
+                        color: .blue
                     )
+                    Spacer()
+                    Pill(text: summary.text, color: summary.color, symbol: summary.symbol)
                 }
 
                 if reportsWarningLevelOnly {
@@ -246,13 +257,23 @@ struct TirePillView: View {
     @Environment(\.preferencesStore) private var preferences
 
     var body: some View {
-        let warning = tyre?.warning.needsAttention == true
-        let explicitlyClear = tyre?.warning == TyrePressureWarning.none
-        let statusText = tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
-            ?? (warning ? L10n.text("Check") : (explicitlyClear ? L10n.text("No warning") : L10n.text("Unavailable")))
-        let statusColor: Color = warning
-            ? HisingenTheme.semanticWarning
-            : (explicitlyClear ? HisingenTheme.semanticGood : .secondary)
+        let warningState = tyre?.warning ?? TyrePressureWarning.unknown
+        let attention = warningState.needsAttention
+        let pressureText = tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
+        let statusText: String = {
+            switch (pressureText, attention) {
+            case (let pressure?, true): return "\(pressure) · \(warningState.displayName)"
+            case (let pressure?, false): return pressure
+            default: return warningState.displayName
+            }
+        }()
+        // Green dot means "measured fine or explicitly OK". A reading with no flag counts as
+        // good even when the warning enum stayed unknown (e.g. a discovered pressure quadruple
+        // without warning fields). Only truly unreported tyres fall back to muted/unknown.
+        let knownGood = !attention && (warningState == .none || pressureText != nil)
+        let statusColor: Color = attention
+            ? HisingenTheme.tyreWarningColor(warningState)
+            : (knownGood ? HisingenTheme.semanticGood : Color.secondary)
         let activeHover = isHovered || isHighlighted
 
         VStack(alignment: .leading, spacing: 3) {
@@ -267,7 +288,7 @@ struct TirePillView: View {
                     .accessibilityHidden(true)
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : (explicitlyClear ? HisingenTheme.ink : HisingenTheme.inkMuted))
+                    .foregroundStyle(attention ? statusColor : (knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -280,7 +301,7 @@ struct TirePillView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(
                     activeHover
-                        ? (warning ? HisingenTheme.semanticWarning.opacity(0.5) : HisingenTheme.accent.opacity(0.45))
+                        ? (attention ? statusColor.opacity(0.5) : HisingenTheme.accent.opacity(0.45))
                         : Color.primary.opacity(0.06),
                     lineWidth: activeHover ? 1.0 : 0.5
                 )

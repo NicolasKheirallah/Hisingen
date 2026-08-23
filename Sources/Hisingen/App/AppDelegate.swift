@@ -83,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        notifier.onOpen = { [weak self] vin in
+            self?.openVehicleFromNotification(vin: vin)
+        }
+        notifier.onWarningVehicleCountChanged = { [weak self] count in
+            self?.applyWarningBadge(count: count)
+        }
         statusController.updateNotificationPermission(notifier.permission)
         refreshCoordinator = RefreshCoordinator(api: activeProvider, stateStore: stateStore,
                                                 imageCache: imageCache, preferences: preferences)
@@ -179,8 +185,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cacheDormantBrandSnapshot()
     }
 
-    private func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {
-        var trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Banner tap: surface the app focused on the tapped vehicle, switching brand when
+    /// the VIN belongs to the dormant account.
+    private func openVehicleFromNotification(vin: String) {
+        guard !vin.isEmpty else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        if vin == preferences.vin(for: .volvo), preferences.activeBrand != .volvo {
+            switchActiveBrand(to: .volvo)
+        } else if vin == preferences.vin(for: .polestar), preferences.activeBrand != .polestar {
+            switchActiveBrand(to: .polestar)
+        }
+        refreshCoordinator.selectCar(vin: vin)
+        statusController.openPopover()
+    }
+
+    private var lastWarningVehicleCount = 0
+
+    private func applyWarningBadge(count: Int) {
+        lastWarningVehicleCount = count
+        applyWarningBadge()
+    }
+
+    /// Dock-tile badge with the number of vehicles reporting warnings/alarm; inert for
+    /// menu-bar-only users because the dock icon is hidden there anyway.
+    private func applyWarningBadge() {
+        guard preferences.features.contains(.notifications), preferences.showWarningBadge else {
+            NSApp.dockTile.badgeLabel = nil
+            return
+        }
+        NSApp.dockTile.badgeLabel = lastWarningVehicleCount > 0 ? "\(lastWarningVehicleCount)" : nil
+    }
+
+    private func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {        var trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedClientID.isEmpty && BuiltinVolvoSecrets.isConfigured {
             trimmedClientID = BuiltinVolvoSecrets.clientID
         }
@@ -335,6 +371,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func connectCoordinator() {
         refreshCoordinator.onLoading = { [weak self] in self?.statusController.showLoading() }
+        // Keep the visible "active car" marker synced from the coordinator's selection —
+        // it changes optimistically when a switch begins and again when one resolves,
+        // not only on session-level events.
+        refreshCoordinator.onSelectionChanged = { [weak self] vin in
+            self?.statusController.activeVin = vin
+        }
         refreshCoordinator.onCars = { [weak self] cars, vin in
             guard let self else { return }
             statusController.cars = cars
@@ -471,6 +513,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshGarageVehicles() async {
         guard !garageScanInProgress, !commandCoordinator.isInProgress else { return }
+        // Never run inside a coordinator operation or a provider rate-limit pause: the
+        // scan roughly doubles per-account request volume, which both extends the 429
+        // backoff window and starves the interactive paths (refresh, vehicle switching).
+        guard !refreshCoordinator.isBusy, !refreshCoordinator.isRateLimited else { return }
         garageScanInProgress = true
         defer { garageScanInProgress = false }
 
@@ -498,16 +544,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let providerCars = await provider.cars
                 for car in providerCars {
                     guard !Task.isCancelled, preferences.activeBrand == originalBrand,
-                          !commandCoordinator.isInProgress else { return }
+                          !commandCoordinator.isInProgress, !refreshCoordinator.isBusy else { return }
+                    // If the user switched vehicles mid-scan, stand down at once: the
+                    // coordinator owns provider selection from that moment, and racing it
+                    // flipped the shared selection under an in-flight switch — surfacing as
+                    // a bogus "not configured" failure and cross-contaminating per-car
+                    // identity data between the two vehicles.
+                    if preferences.vin(for: brand) != selectedVIN { return }
                     if brand == originalBrand && car.vin == selectedVIN { continue }
                     try await provider.selectCar(vin: car.vin, features: preferences.features)
                     let state = try await provider.fetchVehicleState(vin: car.vin, features: preferences.features)
-                    guard preferences.activeBrand == originalBrand, !commandCoordinator.isInProgress else { return }
+                    guard preferences.activeBrand == originalBrand,
+                          preferences.vin(for: brand) == selectedVIN,
+                          !commandCoordinator.isInProgress else { return }
                     stateStore.save(state)
                     statusController.cachedSnapshots[state.vin] = state
                     notifier.vehicleStateDidUpdate(state)
                 }
-                if !selectedVIN.isEmpty {
+                // Restore the pre-scan selection only while it is still ours to restore;
+                // after a user switch the coordinator has already selected the new car.
+                if !selectedVIN.isEmpty, preferences.vin(for: brand) == selectedVIN {
                     try? await provider.selectCar(vin: selectedVIN, features: preferences.features)
                 }
             } catch {
@@ -538,22 +594,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,
                                                  priorPeaksKwAtSameLocation: priors) else { return }
         UserDefaults.standard.set(true, forKey: key)
-        notifier.notifyCommandNotice(
-            title: L10n.text("Unusually slow charging"),
-            body: L10n.format("Peak power at %@ was far below this location's usual level — the cable or charger may be derating.", last.locationName!))
+        notifier.notifyChargingAnomaly(locationName: last.locationName ?? "", vin: state.vin)
     }
 
     private func performRemoteCommand(_ command: RemoteCommand) {
         commandCoordinator.perform(command)
     }
 
-    private func showRemoteResult(title: String, message: String, success: Bool) {
+    private func showRemoteResult(title: String, message: String, success: Bool, subtitle: String? = nil) {
         // Use UserNotifications so command results follow the system notification settings.
         // Success is also visible via the optimistic state update (slider/button flips).
         let identifier = "remote-command-\(UUID().uuidString)"
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message
+        if let subtitle { content.subtitle = subtitle }
         if !success { content.sound = .default }
 
         let request = UNNotificationRequest(
@@ -563,7 +618,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         UNUserNotificationCenter.current().add(request)
 
-        // Auto-dismiss after 5 seconds.
+        // Successes self-clean after 5 seconds; failures persist until dismissed — a
+        // failure vanishing before it was read reads as "command worked".
+        guard success else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
         }
@@ -639,8 +696,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateNotificationAuthorizationIfNeeded()
             updateCheckConfiguration()
             refreshCoordinator.reloadVehicleMetadata()
+            applyWarningBadge()
         case .notifications:
             updateNotificationAuthorizationIfNeeded()
+            applyWarningBadge()
         case .presentation:
             preferences.applyAppearance()
             refreshCoordinator.reloadVehicleMetadata()
@@ -661,7 +720,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && (preferences.notifyChargingStarted || preferences.notifyChargingComplete
                 || preferences.notifyChargingProblem || preferences.notifyLowBattery
                 || preferences.notifySoftwareUpdates || preferences.notifyVehicleWarnings
-                || preferences.notifyRainWithWindowsOpen || preferences.notifyEveningUnlocked) {
+                || preferences.notifyRainWithWindowsOpen || preferences.notifyEveningUnlocked
+                || preferences.notifyOpeningsLeftOpen || preferences.notifyServiceDue
+                || preferences.notifyStaleTelemetry || preferences.notifySlowCharging
+                || preferences.notifyPlugInReminder || preferences.notifyChargerConnection
+                || preferences.notifyClimateChanges) {
             notifier.requestAuthorizationFromSettings()
         }
     }
@@ -890,7 +953,11 @@ extension AppDelegate: CommandExecutionContext {
         render()
     }
     func presentResult(title: String, message: String, success: Bool) {
-        showRemoteResult(title: title, message: message, success: success)
+        let subtitle = latest.map { state -> String in
+            let nick = preferences.vehicleNickname(for: state.vin)
+            return nick.isEmpty ? state.model.brand.displayName : nick
+        }
+        showRemoteResult(title: title, message: message, success: success, subtitle: subtitle)
     }
     func refreshNowAfterCommand() {
         refreshCoordinator.refreshNow()

@@ -54,6 +54,27 @@ struct VehicleCapabilityParsingTests {
     }
 
     @Test
+    func testHealthyPolestarOmitsTyreFieldsButReportsEverythingElse() {
+        // Live Polestar 2 capture (2026-08): proto3 drops zero/unset values, so an all-clear
+        // car sends explicit 1s for every other category while the tyre quadruple (9–12) is
+        // absent. Within a substantive payload that omission must read as "no warning",
+        // otherwise the tyre card is stuck on "Unknown" forever.
+        var payload = Data()
+        payload.append(Protobuf.intField(5, 1))
+        payload.append(Protobuf.intField(6, 1))
+        payload.append(Protobuf.intField(7, 1))
+        payload.append(Protobuf.intField(8, 1))
+        payload.append(Protobuf.intField(13, 1))
+        for field in 14...35 { payload.append(Protobuf.intField(field, 1)) }
+        payload.append(Protobuf.intField(38, 1))
+        let report = PolestarGRPC.parseHealth(payload)
+        XCTAssertTrue(report.details.tyres.allSatisfy { $0.warning == .none && $0.kilopascals == nil })
+        XCTAssertEqual(report.details.tyres.count, 4)
+        XCTAssertFalse(report.details.warnings.contains(.tyrePressure))
+        XCTAssertTrue(report.details.reportedWarnings.contains(.tyrePressure))
+    }
+
+    @Test
     func testSoftwareInfoAndScheduleDecode() {
         var description = Data()
         description.append(Protobuf.stringField(1, "Polestar OS"))

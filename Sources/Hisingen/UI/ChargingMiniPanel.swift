@@ -31,9 +31,12 @@ final class ChargingMiniPanelController {
             targetPercent: state.chargeTargetPercentage
         ))
         panel.contentView = host
-        // Only order front when hidden so dragging the panel isn't disrupted by updates.
+        // Match the SwiftUI width so the frame never clips the density-scaled content.
+        let scaledWidth = 190 * HisingenTheme.contentScale
         if !panel.isVisible {
-            panel.setFrameOrigin(topRightPosition(for: panel.frame.size))
+            panel.setFrame(NSRect(origin: topRightPosition(for: NSSize(width: scaledWidth, height: panel.frame.height)),
+                                  size: NSSize(width: scaledWidth, height: panel.frame.height)),
+                           display: true)
             panel.orderFrontRegardless()
         }
     }
@@ -109,7 +112,9 @@ private struct ChargingMiniPanelView: View {
             .foregroundStyle(.secondary)
         }
         .padding(12)
-        .frame(width: 190)
+        // Honors the dropdown's Content Density zoom so the floating panel scales
+        // consistently with the main panel's text size preference.
+        .frame(width: 190 * HisingenTheme.contentScale)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(.regularMaterial)

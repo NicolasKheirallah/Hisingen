@@ -18,7 +18,7 @@ extension PolestarAPI {
         // It opens a real browser instead of reusing this sign-in's password, so it can't be
         // completed silently here.
         try await fetchCarInfo(preferredVIN: preferredVIN)
-        if features.contains(.vehicleImage) { await fetchCarImage() }
+        if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
     }
 
@@ -90,7 +90,7 @@ extension PolestarAPI {
             throw error
         }
         try await fetchCarInfo(preferredVIN: preferredVIN)
-        if features.contains(.vehicleImage) { await fetchCarImage() }
+        if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
         logger.info("Stored Polestar session restored")
     }
@@ -161,7 +161,7 @@ extension PolestarAPI {
     func selectCar(vin: String, features: FeatureSelection) async throws {
         guard cars.contains(where: { $0.vin == vin }) else { throw PolestarError.notConfigured }
         try await applyCarInfo(vin: vin)
-        if features.contains(.vehicleImage) { await fetchCarImage() }
+        if features.contains(.vehicleImage) { await fetchCarImage(vin: vin) }
         if features.contains(.ownerGreeting), ownerFirstName == nil { await fetchOwnerInfo() }
     }
 }

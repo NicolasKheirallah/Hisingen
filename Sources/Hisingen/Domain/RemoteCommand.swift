@@ -199,13 +199,30 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         }
     }
 
+    /// Display title honoring the user's temperature unit. The plain `title` stays metric
+    /// (Celsius) for tests and metric-default callers; confirmation dialogs pass the
+    /// selected unit so a Fahrenheit user never sees a Celsius setpoint.
+    func title(temperatureUnit: TemperatureUnit) -> String {
+        if case .startClimate(let temperature, _, _, _, _, _) = self, temperature > 0 {
+            let whole = temperature.truncatingRemainder(dividingBy: 1) == 0
+            let converted = temperatureUnit.convert(celsius: Double(temperature))
+            switch temperatureUnit {
+            case .celsius:
+                return whole ? L10n.format("Start climate at %.0f °C", converted)
+                             : L10n.format("Start climate at %.1f °C", converted)
+            case .fahrenheit:
+                return whole ? L10n.format("Start climate at %.0f °F", converted)
+                             : L10n.format("Start climate at %.1f °F", converted)
+            }
+        }
+        return title
+    }
+
     var title: String {
         switch self {
         case .startClimate(let temperature, _, _, _, _, _):
             if temperature > 0 {
-                return temperature.truncatingRemainder(dividingBy: 1) == 0
-                    ? L10n.format("Start climate at %.0f °C", temperature)
-                    : L10n.format("Start climate at %.1f °C", temperature)
+                return title(temperatureUnit: .celsius)
             }
             return L10n.text("Start climate (automatic)")
         case .stopClimate: return L10n.text("Stop climate")

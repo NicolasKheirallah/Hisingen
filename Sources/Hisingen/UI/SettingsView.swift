@@ -38,6 +38,39 @@ struct SettingsView: View {
     @State private var registrationBadgePosition: RegistrationNumberBadgePosition = .belowGreeting
     @State private var vehicleLabelFormat: VehicleLabelFormat = .modelAndYear
     @State private var menuBarStyle = MenuBarStyle.battery
+    @State private var panelCloseBehavior = PanelCloseBehavior.keepOpen
+    @State private var panelSize = PanelSize.standard
+    @State private var contentDensity = ContentDensity.standard
+    @State private var customSizeEnabled = false
+    @State private var customWidth: Double = 0
+    @State private var customHeight: Double = 0
+    @State private var wideCardLayout = WideCardLayout.fullWidth
+
+    /// What the panel currently resolves to with these draft settings — drives the
+    /// proportion preview and dimension readout live, including slider drags.
+    private var resolvedLayout: PanelLayout {
+        PanelLayout.resolve(
+            panelSizeRaw: panelSize.rawValue,
+            densityRaw: contentDensity.rawValue,
+            customEnabled: customSizeEnabled,
+            customWidth: customWidth,
+            customHeight: customHeight
+        )
+    }
+
+    private func resetPanelGeometry() {
+        panelSize = .standard
+        contentDensity = .standard
+        customSizeEnabled = false
+        customWidth = Double(PanelSize.standard.width)
+        customHeight = Double(PanelSize.standard.idealHeight)
+        preferences.panelSize = .standard
+        preferences.contentDensity = .standard
+        preferences.customPanelSizeEnabled = false
+        preferences.customPanelWidth = customWidth
+        preferences.customPanelHeight = customHeight
+        onSettingsChanged(.presentation)
+    }
     @State private var distanceUnit = DistanceUnit.kilometers
     @State private var temperatureUnit = TemperatureUnit.celsius
     @State private var pressureUnit = PressureUnit.kilopascals
@@ -60,6 +93,14 @@ struct SettingsView: View {
     @State private var notifyStaleTelemetry = true
     @State private var notifySlowCharging = true
     @State private var notifyPlugInReminder = true
+    @State private var notifyChargerConnection = true
+    @State private var notifyClimateChanges = true
+    @State private var notifySounds = true
+    @State private var quietHoursEnabled = false
+    @State private var quietHoursStartHour = 22
+    @State private var quietHoursEndHour = 7
+    @State private var showWarningBadge = false
+    @State private var muteActiveVehicle = false
     @State private var lowBatteryThreshold = 20
     @State private var notifyRainWithWindows = true
     @State private var notifyEveningUnlocked = true
@@ -108,7 +149,7 @@ struct SettingsView: View {
             }
             .padding(HisingenTheme.sectionSpacing)
         }
-        .frame(width: HisingenTheme.popoverWidth)
+        .frame(width: HisingenTheme.layoutWidth)
         .onAppear {
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
@@ -122,6 +163,13 @@ struct SettingsView: View {
             registrationBadgePosition = preferences.registrationBadgePosition
             vehicleLabelFormat = preferences.vehicleLabelFormat
             menuBarStyle = preferences.menuBarStyle
+            panelCloseBehavior = preferences.panelCloseBehavior
+            panelSize = preferences.panelSize
+            contentDensity = preferences.contentDensity
+            customSizeEnabled = preferences.customPanelSizeEnabled
+            customWidth = preferences.customPanelWidth > 0 ? preferences.customPanelWidth : Double(PanelSize.standard.width)
+            customHeight = preferences.customPanelHeight > 0 ? preferences.customPanelHeight : Double(PanelSize.standard.idealHeight)
+            wideCardLayout = preferences.wideCardLayout
             distanceUnit = preferences.distanceUnit
             temperatureUnit = preferences.temperatureUnit
             pressureUnit = preferences.pressureUnit
@@ -143,6 +191,14 @@ struct SettingsView: View {
             notifyStaleTelemetry = preferences.notifyStaleTelemetry
             notifySlowCharging = preferences.notifySlowCharging
             notifyPlugInReminder = preferences.notifyPlugInReminder
+            notifyChargerConnection = preferences.notifyChargerConnection
+            notifyClimateChanges = preferences.notifyClimateChanges
+            notifySounds = preferences.notifySounds
+            quietHoursEnabled = preferences.quietHoursEnabled
+            quietHoursStartHour = preferences.quietHoursStartHour
+            quietHoursEndHour = preferences.quietHoursEndHour
+            showWarningBadge = preferences.showWarningBadge
+            muteActiveVehicle = preferences.isMuted(vin: state?.vin ?? preferences.vin)
             privacyRedactionEnabled = preferences.privacyRedactionEnabled
             chargingStatOrder = preferences.chargingStatOrder
             floatingPanelEnabled = preferences.floatingChargingPanelEnabled
@@ -728,6 +784,206 @@ struct SettingsView: View {
                         Spacer()
                     }
                     .padding(.vertical, 2)
+
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Panel auto-close"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(panelCloseBehavior.subtitle)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: $panelCloseBehavior) {
+                            ForEach(PanelCloseBehavior.allCases, id: \.self) { behavior in
+                                Text(behavior.title).tag(behavior)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: 220)
+                        .onChange(of: panelCloseBehavior) { _, newBehavior in
+                            preferences.panelCloseBehavior = newBehavior
+                            onSettingsChanged(.presentation)
+                        }
+                    }
+
+                    Divider().opacity(0.4)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 5) {
+                                    Text(L10n.text("Panel Size"))
+                                        .font(.system(size: 12, weight: .medium))
+                                    if customSizeEnabled {
+                                        Text(L10n.text("Custom"))
+                                            .font(.system(size: 9, weight: .bold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 1.5)
+                                            .background(HisingenTheme.accent.opacity(0.14), in: Capsule())
+                                            .foregroundStyle(HisingenTheme.accent)
+                                    }
+                                }
+                                Text(L10n.text("Dropdown panel preset — applies instantly"))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $panelSize) {
+                                ForEach(PanelSize.allCases, id: \.self) { size in
+                                    Text(size.title).tag(size)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 160)
+                            .onChange(of: panelSize) { _, newSize in
+                                preferences.panelSize = newSize
+                                // A picked preset replaces any custom override.
+                                customSizeEnabled = false
+                            }
+                        }
+
+                        SegmentedPresetRow(options: PanelSize.allCases, selection: $panelSize)
+                            .onChange(of: panelSize) { _, newSize in
+                                preferences.panelSize = newSize
+                                customSizeEnabled = false
+                                onSettingsChanged(.presentation)
+                            }
+
+                        PanelCustomSizeControls(
+                            isEnabled: $customSizeEnabled,
+                            width: $customWidth,
+                            height: $customHeight,
+                            seedValues: { [panelSize] in
+                                (Double(panelSize.width), Double(panelSize.idealHeight))
+                            },
+                            onCommit: {
+                                preferences.customPanelSizeEnabled = customSizeEnabled
+                                preferences.customPanelWidth = customWidth
+                                preferences.customPanelHeight = customHeight
+                                onSettingsChanged(.presentation)
+                            }
+                        )
+
+                        HStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Text(L10n.text("Current:"))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "ruler")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(HisingenTheme.accent)
+                                Text(resolvedLayout.dimensionsLabel)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .monospacedDigit()
+                            }
+                            Spacer(minLength: 8)
+                            PanelProportionPreview(layout: resolvedLayout)
+                            Button {
+                                resetPanelGeometry()
+                            } label: {
+                                Text(L10n.text("Reset Sizes"))
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .help(L10n.text("Back to Standard panel and density"))
+                        }
+                        .padding(.vertical, 2)
+                    }
+
+                    Divider().opacity(0.4)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.text("Content Density"))
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(L10n.text("Zoom content independently of panel size — compact shows more before scrolling"))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $contentDensity) {
+                                ForEach(ContentDensity.allCases, id: \.self) { density in
+                                    Text(density.title).tag(density)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 160)
+                            .onChange(of: contentDensity) { _, newDensity in
+                                preferences.contentDensity = newDensity
+                                onSettingsChanged(.presentation)
+                            }
+                        }
+
+                        SegmentedPresetRow(options: ContentDensity.allCases, selection: $contentDensity)
+                            .onChange(of: contentDensity) { _, newDensity in
+                                preferences.contentDensity = newDensity
+                                onSettingsChanged(.presentation)
+                            }
+
+                        HStack(spacing: 6) {
+                            Text(L10n.text("Current:"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(HisingenTheme.accent)
+                                Text(String(format: "%.0f%%", contentDensity.scale * 100))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .monospacedDigit()
+                                Text("· " + contentDensity.subtitle)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                            Spacer()
+                        }
+                        .padding(.vertical, 2)
+                    }
+
+                    Divider().opacity(0.4)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.text("Card Layout"))
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(L10n.text("How mid-size cards flow on wide panels"))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $wideCardLayout) {
+                                ForEach(WideCardLayout.allCases, id: \.self) { layout in
+                                    Text(layout.title).tag(layout)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 160)
+                            .onChange(of: wideCardLayout) { _, newLayout in
+                                preferences.wideCardLayout = newLayout
+                                onSettingsChanged(.presentation)
+                            }
+                        }
+
+                        SegmentedPresetRow(options: WideCardLayout.allCases, selection: $wideCardLayout)
+                            .onChange(of: wideCardLayout) { _, newLayout in
+                                preferences.wideCardLayout = newLayout
+                                onSettingsChanged(.presentation)
+                            }
+                    }
 
                     Divider().opacity(0.4)
 
@@ -1482,6 +1738,13 @@ struct SettingsView: View {
                 }
 
                 VStack(spacing: 4) {
+                    featureToggleRow(
+                        .notifications,
+                        symbol: "bell.badge.fill",
+                        title: "Notifications",
+                        detail: "Master switch for every local alert below"
+                    )
+
                     notificationRow(
                         symbol: "bolt.badge.clock.fill",
                         title: "Charging Started",
@@ -1567,6 +1830,22 @@ struct SettingsView: View {
                         persist: { preferences.notifyPlugInReminder = $0 }
                     )
 
+                    notificationRow(
+                        symbol: "cable.connector",
+                        title: "Cable Connect / Disconnect",
+                        detail: "Confirm when a charge cable is plugged in or unplugged",
+                        isOn: $notifyChargerConnection,
+                        persist: { preferences.notifyChargerConnection = $0 }
+                    )
+
+                    notificationRow(
+                        symbol: "windshield.front.and.heat.waves",
+                        title: "Climate Start / Stop",
+                        detail: "Alert when cabin preconditioning starts or stops",
+                        isOn: $notifyClimateChanges,
+                        persist: { preferences.notifyClimateChanges = $0 }
+                    )
+
                     if notifyLowBattery {
                         HStack(spacing: 8) {
                             Image(systemName: "slider.horizontal.below.rectangle")
@@ -1612,6 +1891,98 @@ struct SettingsView: View {
                         isOn: $notifyEveningUnlocked,
                         persist: { preferences.notifyEveningUnlocked = $0 }
                     )
+
+                    Divider().opacity(0.4)
+                        .padding(.vertical, 2)
+
+                    notificationRow(
+                        symbol: "speaker.wave.2.fill",
+                        title: "Notification Sounds",
+                        detail: "Play a sound on urgent alerts — alarms, warnings and charging problems",
+                        isOn: $notifySounds,
+                        persist: { preferences.notifySounds = $0 }
+                    )
+
+                    notificationRow(
+                        symbol: "moon.zzz.fill",
+                        title: "Quiet Hours",
+                        detail: "Hold non-urgent alerts until the morning; security alerts always come through",
+                        isOn: $quietHoursEnabled,
+                        persist: { preferences.quietHoursEnabled = $0 }
+                    )
+                    if quietHoursEnabled {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16)
+                            Text(L10n.text("Window"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Picker("", selection: $quietHoursStartHour) {
+                                ForEach(0..<24, id: \.self) { h in
+                                    Text(String(format: "%02d:00", h)).tag(h)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 76)
+                            Text(L10n.text("to"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Picker("", selection: $quietHoursEndHour) {
+                                ForEach(0..<24, id: \.self) { h in
+                                    Text(String(format: "%02d:00", h)).tag(h)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 76)
+                        }
+                        .padding(.leading, 12)
+                        .padding(.vertical, 2)
+                        .onChange(of: quietHoursStartHour) { _, value in
+                            preferences.quietHoursStartHour = value
+                            onSettingsChanged(.notifications)
+                        }
+                        .onChange(of: quietHoursEndHour) { _, value in
+                            preferences.quietHoursEndHour = value
+                            onSettingsChanged(.notifications)
+                        }
+                    }
+
+                    notificationRow(
+                        symbol: "app.badge.fill",
+                        title: "Warning Badge",
+                        detail: "Show a dock badge while any vehicle reports warnings or an alarm",
+                        isOn: $showWarningBadge,
+                        persist: { preferences.showWarningBadge = $0 }
+                    )
+
+                    if !settingsVehicleVIN.isEmpty {
+                        let nickname = preferences.vehicleNickname(for: settingsVehicleVIN)
+                        let carLabel = nickname.isEmpty ? String(settingsVehicleVIN.suffix(6)) : String(nickname.prefix(24))
+                        notificationRow(
+                            symbol: "bell.slash.fill",
+                            title: "Mute This Vehicle",
+                            detail: "Silence banners for \(carLabel) while telemetry keeps updating",
+                            isOn: $muteActiveVehicle,
+                            persist: { enabled in
+                                preferences.setMuted(enabled, for: settingsVehicleVIN)
+                                Notifier.shared?.vehicleMuteDidChange(vin: settingsVehicleVIN)
+                            }
+                        )
+                    }
+
+                    Button {
+                        Notifier.shared?.sendTestNotification()
+                    } label: {
+                        Label(L10n.text("Send Test Notification"), systemImage: "bell.and.waves.left.and.right")
+                            .font(.system(size: 10.5, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
 
                     Divider().opacity(0.4)
                         .padding(.vertical, 2)

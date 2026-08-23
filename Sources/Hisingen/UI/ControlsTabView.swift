@@ -410,7 +410,7 @@ struct ControlsTabView: View {
                                 ? "Stop Air Cleaning" : "Clean Cabin Air (PM2.5 Pre-Clean)"))
                                 .font(.system(size: 11, weight: .medium))
                         }
-                        .frame(maxWidth: .infinity, minHeight: 26)
+                        .frame(maxWidth: .infinity, minHeight: 30)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

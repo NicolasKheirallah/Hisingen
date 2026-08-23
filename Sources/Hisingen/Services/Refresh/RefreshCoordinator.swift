@@ -25,6 +25,13 @@ struct DiagnosticsSnapshot: Sendable {
     var refreshAttempts: Int = 0
     var refreshSuccesses: Int = 0
     var refreshFailures: Int = 0
+
+    /// A vehicle selection has been requested but not yet confirmed (in flight, or waiting
+    /// for an automatic retry after a raced provider-side flip). During this window
+    /// `refreshInProgress` is often false — without this flag a support bundle cannot tell
+    /// a pending switch apart from an idle app, which is precisely where same-brand
+    /// multi-vehicle failures live.
+    var vehicleSwitchPending: Bool = false
 }
 
 /// Process-wide handoff of the newest refresh diagnostics. The diagnostic-bundle
@@ -93,6 +100,8 @@ final class RefreshCoordinator {
     /// Computes the delay before the next attempt. Injectable so tests can collapse the
     /// production exponential backoff (which legitimately stretches to minutes) to zero.
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
+    /// Delay between automatic retries of a raced vehicle selection. Injectable for tests.
+    private let selectionRetryDelay: TimeInterval
     private let logger = AppLog.logger("refresh")
     /// Interval instrumentation for Instruments' os_signpost tool — free refresh-latency
     /// timelines without touching the unified log.
@@ -115,6 +124,16 @@ final class RefreshCoordinator {
     private var pendingEmail = ""
     private var pendingPassword: String?
     private var pendingSessionToken: String?
+    /// The selection this coordinator last started and has not yet resolved. Set when a
+    /// switch begins, cleared only when it completes (or the session re-resolves the VIN).
+    /// Because `preferences.vin` is written optimistically at switch start, this marker is
+    /// what distinguishes "already settled on car X" from "car X failed mid-switch and the
+    /// user is retrying" — without it a failed switch was unrecoverable.
+    private var requestedSelectionVIN: String?
+    /// Automatic retries consumed for the current selection attempt. A raced provider-side
+    /// selection flip surfaces as `.notConfigured`, which is otherwise terminal; bounded
+    /// retries recover it without letting a genuinely broken state loop forever.
+    private var selectionRetryCount = 0
     private var observerTokens: [NSObjectProtocol] = []
 
     // Since-launch counters, published through DiagnosticsSnapshot so a support bundle
@@ -158,7 +177,8 @@ final class RefreshCoordinator {
          clearPasswordAfterSession: @escaping () -> Void = { try? Keychain.deletePassword() },
          readStoredSessionToken: @escaping () -> String? = { (try? Keychain.readSessionToken()) ?? nil },
          readStoredPassword: @escaping () -> String? = { (try? Keychain.readPassword()) ?? nil },
-         retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay) {
+         retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay,
+         selectionRetryDelay: TimeInterval = 2) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
@@ -167,6 +187,7 @@ final class RefreshCoordinator {
         self.readStoredSessionToken = readStoredSessionToken
         self.readStoredPassword = readStoredPassword
         self.retryDelay = retryDelay
+        self.selectionRetryDelay = selectionRetryDelay
         guard observesEnvironment else { return }
         installSystemObservers()
         monitor.pathUpdateHandler = { [weak self] path in
@@ -193,6 +214,8 @@ final class RefreshCoordinator {
         let newAccount = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let accountChanged = !oldAccount.isEmpty && oldAccount != newAccount
         cancelCurrentWork()
+        requestedSelectionVIN = nil
+        selectionRetryCount = 0
         failureCount = 0
         rateLimitedUntil = nil
         sessionReady = false
@@ -281,9 +304,36 @@ final class RefreshCoordinator {
         if Date().timeIntervalSince(latest.fetchedAt) >= interval { refreshNow() }
     }
 
+    /// Switches the active vehicle. Idempotence is decided HERE and nowhere else.
+    ///
+    /// A switch is skipped only when it is a genuine no-op: the car is already selected,
+    /// its state is live, and no earlier attempt is unresolved. Everything else runs —
+    /// including a repeat click for a car whose previous switch failed, which is the only
+    /// way the user can recover. The old pair of independent guards (the UI compared its
+    /// stale `activeVin` copy while this method compared `preferences.vin`) disagreed after
+    /// any same-brand switch: clicking the previously-active car was vetoed by the UI guard,
+    /// re-clicking the new car was vetoed here, and the switcher locked up entirely until
+    /// relaunch — invisible with one car, fatal with two on the same account.
     func selectCar(vin: String) {
-        guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else { return }
-        guard vin != preferences.vin else { return }
+        guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else {
+            // A silent drop reads as a frozen app; surface why switching is paused instead.
+            onError?(.rateLimited(retryAfter: rateLimitedUntil?.timeIntervalSinceNow))
+            return
+        }
+        // Already switching to exactly this car: let that attempt finish rather than
+        // restarting it (a double-click must not cancel its own in-flight work).
+        if vin == requestedSelectionVIN, task != nil { return }
+        // Every user-initiated attempt starts with a full automatic-retry budget; only the
+        // automatic retries themselves consume it. Tying the reset to "VIN changed" instead
+        // meant a re-click of a car whose earlier switch had failed inherited an exhausted
+        // budget and surfaced transient failures as terminal immediately.
+        selectionRetryCount = 0
+        // Fully settled on this car: nothing to do.
+        if vin == preferences.vin, requestedSelectionVIN == nil, latest?.vin == vin { return }
+        beginSelection(vin: vin)
+    }
+
+    private func beginSelection(vin: String) {
         generation &+= 1
         failureCount = 0
         task?.cancel()
@@ -293,22 +343,54 @@ final class RefreshCoordinator {
         liveStreamConnected = false
         timer?.invalidate()
         preferences.vin = vin
+        requestedSelectionVIN = vin
         latest = stateStore.snapshot(for: vin)
         if let latest { onState?(latest) } else { onLoading?() }
+        onSelectionChanged?(vin)
+        publishDiagnostics()
+        runSelection(vin: vin)
+    }
+
+    private func runSelection(vin: String) {
         let requestGeneration = generation
         task = Task {
             do {
                 try await api.selectCar(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
+                requestedSelectionVIN = nil
+                selectionRetryCount = 0
+                cars = await api.cars
+                onCars?(cars, vin)
                 refresh(trigger: .vehicleChanged)
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                handle(ServiceErrorPolicy.decision(error, provider: api.brand).error, retrySession: false)
+                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
+                // Polestar models a concurrently flipped shared selection (e.g. the garage
+                // scan restoring the car it had captured at scan start) as `.notConfigured`.
+                // `handle` treats that error as permanent — invalidating the refresh loop
+                // and parking signed-in users on "Open Settings to sign in." until relaunch
+                // — so retry the selection briefly before declaring failure.
+                if case .notConfigured = mapped, selectionRetryCount < 2 {
+                    selectionRetryCount += 1
+                    scheduleSelectionRetry(vin: vin, after: selectionRetryDelay)
+                    return
+                }
+                handle(mapped, retrySession: false)
             }
         }
-        publishDiagnostics()
+    }
+
+    private func scheduleSelectionRetry(vin: String, after seconds: TimeInterval) {
+        let requestGeneration = generation
+        Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            guard requestGeneration == self.generation else { return }
+            self.publishDiagnostics()
+            self.runSelection(vin: vin)
+        }
     }
 
     func stop() {
@@ -334,6 +416,8 @@ final class RefreshCoordinator {
         pendingEmail = ""
         pendingPassword = nil
         pendingSessionToken = nil
+        requestedSelectionVIN = nil
+        selectionRetryCount = 0
         rateLimitedUntil = nil
         preferences.email = ""
         preferences.vin = ""
@@ -354,8 +438,19 @@ final class RefreshCoordinator {
         }
     }
 
-    private func beginSession(preferredVIN: String?) {
-        guard task == nil, !sleeping else { return }
+    private func beginSession(preferredVIN: String?, deferIfBusy: Bool = false) {
+        guard !sleeping else { return }
+        if task != nil {
+            // Direct triggers (launch, wake, network restore, manual refresh) can safely
+            // stand down here: the in-flight operation owns subsequent scheduling and will
+            // rearm itself. A one-shot retry TIMER cannot — if it bailed silently nothing
+            // would ever reschedule, parking the app on a stale cache until a manual poke.
+            // Re-arm briefly instead; each tick is cheap and stops as soon as the queue
+            // clears (network operations are timeout-bounded).
+            guard deferIfBusy else { return }
+            schedule(after: 5, retrySession: true)
+            return
+        }
         guard networkAvailable else {
             handle(.network(URLError(.notConnectedToInternet)), retrySession: true)
             return
@@ -400,6 +495,11 @@ final class RefreshCoordinator {
                     throw VehicleServiceError.notConfigured
                 }
                 preferences.vin = vin
+                // The session just re-resolved the selection; any in-flight switch attempt
+                // is superseded and its retry budget resets.
+                requestedSelectionVIN = nil
+                selectionRetryCount = 0
+                onSelectionChanged?(vin)
                 cars = await api.cars
                 onCars?(cars, vin)
                 sessionReady = true
@@ -547,7 +647,7 @@ final class RefreshCoordinator {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if retrySession || !self.sessionReady {
-                    self.beginSession(preferredVIN: preferences.vin.nilIfEmpty)
+                    self.beginSession(preferredVIN: preferences.vin.nilIfEmpty, deferIfBusy: true)
                 } else {
                     self.refresh(trigger: .timer)
                 }
@@ -628,7 +728,8 @@ final class RefreshCoordinator {
             liveStreamRetryAt: liveStreamRetryAt,
             refreshAttempts: refreshAttempts,
             refreshSuccesses: refreshSuccesses,
-            refreshFailures: refreshFailures
+            refreshFailures: refreshFailures,
+            vehicleSwitchPending: requestedSelectionVIN != nil
         ))
     }
 

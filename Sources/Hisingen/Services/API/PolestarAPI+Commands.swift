@@ -2,7 +2,11 @@ import Foundation
 
 extension PolestarAPI {
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
-        guard selectedVIN == vin, cars.contains(where: { $0.vin == vin }) else {
+        // Membership, not selection equality: the background garage scan re-points
+        // `selectedVIN` while fetching other vehicles, and a strict equality check here
+        // made a perfectly valid command for the user's car fail with "missing context"
+        // mid-scan. Commands address their vehicle explicitly by VIN anyway.
+        guard cars.contains(where: { $0.vin == vin }) else {
             throw RemoteCommandError.missingContext
         }
         guard !remoteCommandsInFlight.contains(vin) else { throw RemoteCommandError.busy }

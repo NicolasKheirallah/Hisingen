@@ -29,7 +29,7 @@ struct InfoTabView: View {
                 DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked)
             }
             if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
-                TireStatusCardView(tyres: tyres, hasWarning: tyres.contains(where: { $0.warning.needsAttention }))
+                TireStatusCardView(tyres: tyres)
             }
             if state.location?.latitude != nil {
                 parkingLocationCard
@@ -361,7 +361,6 @@ struct InfoTabView: View {
                     CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: .blue)
                     Spacer()
                     Button {
-                        let query = "\(lat),\(lon)"
                         if let url = MapLinks.appleMapsSearch(
                             query: modelTitle.isEmpty ? "Car" : modelTitle,
                             latitude: state.location?.latitude,
@@ -701,10 +700,10 @@ struct InfoTabView: View {
 
             if !health.tyres.isEmpty {
                 let hasTyreWarning = health.tyres.contains { $0.warning.needsAttention }
-                let allReported = health.tyres.count == 4 && health.tyres.allSatisfy { $0.warning != .unknown || $0.kilopascals != nil }
+                let allReported = health.tyres.count == 4 && health.tyres.allSatisfy { $0.kilopascals != nil || $0.warning != .unknown }
                 let tyreStatus = hasTyreWarning
                     ? L10n.text("Pressure Warning")
-                    : (allReported ? L10n.text("No warning reported") : L10n.text("Unavailable"))
+                    : (allReported ? L10n.text("Everything looks good") : (health.tyres.contains { $0.warning != .unknown || $0.kilopascals != nil } ? L10n.text("No warnings reported") : L10n.text("Data unavailable")))
                 rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyreStatus, symbol: "circle.dashed", valueWarning: hasTyreWarning, info: L10n.text("Some providers expose warning status without a numeric tyre-pressure measurement.")))
             }
         } else {
@@ -841,10 +840,10 @@ struct InfoTabView: View {
             rows.append(KVRow(L10n.text("Fuel Type"), fuel, symbol: "fuelpump.fill"))
         }
         if let liters = state.fuelAmountLiters, liters > 0 {
-            rows.append(KVRow(L10n.text("Fuel Level"), String(format: "%.1f L", liters), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
+            rows.append(KVRow(L10n.text("Fuel Level"), Format.fuelVolume(liters: liters, unit: preferences.fuelVolumeUnit), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
         }
         if let avgFuel = state.averageFuelConsumptionLPer100Km, avgFuel > 0 {
-            rows.append(KVRow(L10n.text("Avg Consumption"), String(format: "%.1f L/100km", avgFuel), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
+            rows.append(KVRow(L10n.text("Avg Consumption"), Format.fuelEconomy(lPer100Km: avgFuel, unit: preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
         }
 
         return Card {

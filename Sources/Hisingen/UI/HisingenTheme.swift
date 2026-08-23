@@ -3,7 +3,7 @@ import AppKit
 
 @MainActor
 enum HisingenTheme {
-    static var theme: AppTheme { PreferencesStore().appTheme }
+    static var theme: AppTheme { PreferencesStore.shared.appTheme }
     static var isPolestar: Bool { theme == .polestar }
 
 
@@ -26,7 +26,20 @@ enum HisingenTheme {
     }
     static let sectionSpacing: CGFloat = 12
     static let smallSpacing: CGFloat = 8
-    static let popoverWidth: CGFloat = 430
+    /// Live panel geometry from the selected size preset / custom overrides /
+    /// density zoom, resolved through PanelLayout so every consumer agrees.
+    /// Re-evaluated on each layout pass: changing any of the three in Settings
+    /// resizes the open dropdown immediately.
+    static var panelLayout: PanelLayout { .resolve(from: .shared) }
+    static var popoverWidth: CGFloat { panelLayout.width }
+    static var popoverIdealHeight: CGFloat { panelLayout.height }
+    /// Content zoom factor from the density preset; <1 shows more content in the same
+    /// panel, >1 enlarges it.
+    static var contentScale: CGFloat { panelLayout.contentScale }
+    /// Width that fixed-width views must lay out at *inside* the zoom wrapper: the tree
+    /// is laid out at panelWidth / scale and then scaled by `contentScale`, so this —
+    /// not `popoverWidth` — keeps those views exactly filling the visible panel.
+    static var layoutWidth: CGFloat { panelLayout.logicalWidth }
 
 
     // MARK: - Brand Core Colors
@@ -204,6 +217,30 @@ enum HisingenTheme {
         }
     }
 
+    /// Full-bleed popover surface. The Hisingen glass theme layers Apple's translucent
+    /// material with a specular light wash and a soft vignette so the window reads as
+    /// clear Liquid Glass over the desktop (the popover backing itself is cleared in
+    /// StatusItemController.showPopover). Other themes keep their opaque canvas.
+    @ViewBuilder
+    static var popoverSurface: some View {
+        if theme == .hisingen {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(light: NSColor(white: 1.0, alpha: 0.50), dark: NSColor(white: 1.0, alpha: 0.07)), location: 0.0),
+                        .init(color: .clear, location: 0.45),
+                        .init(color: Color(light: NSColor(red: 1.0, green: 0.55, blue: 0.25, alpha: 0.05), dark: NSColor(white: 0.0, alpha: 0.16)), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            Rectangle().fill(popoverBackground)
+        }
+    }
+
     static var headingWeight: Font.Weight {
         switch theme {
         case .polestar: return .regular
@@ -263,6 +300,17 @@ enum HisingenTheme {
     static let semanticActive = Color.blue
     static let semanticWarning = Color.orange
     static let semanticCritical = Color.red
+
+    /// UI severity color for a tyre's reported warning level: green when explicitly OK,
+    /// red for critically low, orange for low/high, muted gray when nothing was reported.
+    static func tyreWarningColor(_ warning: TyrePressureWarning) -> Color {
+        switch warning {
+        case .none: return semanticGood
+        case .veryLow: return semanticCritical
+        case .low, .high: return semanticWarning
+        case .unknown: return Color.secondary
+        }
+    }
 
     static func batteryColor(percentage: Double, charging: Bool) -> Color {
         if percentage <= 15 { return semanticCritical }

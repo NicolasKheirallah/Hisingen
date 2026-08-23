@@ -654,7 +654,7 @@ struct HistoryDashboardView: View {
                     HStack(spacing: 12) {
                         curveStat(L10n.text("Longest Trip"), Format.distance(km: longest.distanceKm, decimals: 1, unit: preferences.distanceUnit))
                         if let speed = HistoryInsights.averageSpeedKmh(longest) {
-                            curveStat(L10n.text("Longest Trip Avg Speed"), String(format: "%.0f km/h", speed))
+                            curveStat(L10n.text("Longest Trip Avg Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit))
                         }
                         if let bestDay {
                             curveStat(L10n.text("Best Day"), Format.distance(km: bestDay.distanceKm, decimals: 1, unit: preferences.distanceUnit))
@@ -684,7 +684,7 @@ struct HistoryDashboardView: View {
                             HStack(spacing: 5) {
                                 Text(Format.shortDuration(minutes: max(1, Int(trip.duration / 60))))
                                 if let speed = HistoryInsights.averageSpeedKmh(trip) {
-                                    Text("· " + String(format: "%.0f km/h", speed))
+                                    Text("· " + Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit))
                                 }
                                 if let temperature = trip.ambientTemperatureCelsius {
                                     Text("· " + Format.temperature(celsius: temperature, unit: preferences.temperatureUnit))
@@ -845,15 +845,23 @@ struct HistoryDashboardView: View {
                         .foregroundStyle(.secondary)
                 }
                 if seasonal.coldAverage != nil || seasonal.warmAverage != nil {
+                    // Bucket bounds are Celsius internally (5/15 °C = 41/59 °F exactly);
+                    // labels follow the selected temperature unit.
+                    let coldLabel = preferences.temperatureUnit == .celsius
+                        ? L10n.text("Cold (<5°C)") : L10n.text("Cold (<41°F)")
+                    let mildLabel = preferences.temperatureUnit == .celsius
+                        ? L10n.text("Mild (5–15°C)") : L10n.text("Mild (41–59°F)")
+                    let warmLabel = preferences.temperatureUnit == .celsius
+                        ? L10n.text("Warm (>15°C)") : L10n.text("Warm (>59°F)")
                     HStack(spacing: 12) {
                         if let cold = seasonal.coldAverage {
-                            curveStat(L10n.text("Cold (<5°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: cold))
+                            curveStat(coldLabel, preferences.energyConsumptionUnit.format(kwhPer100Km: cold))
                         }
                         if let mild = seasonal.mildAverage {
-                            curveStat(L10n.text("Mild (5–15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: mild))
+                            curveStat(mildLabel, preferences.energyConsumptionUnit.format(kwhPer100Km: mild))
                         }
                         if let warm = seasonal.warmAverage {
-                            curveStat(L10n.text("Warm (>15°C)"), preferences.energyConsumptionUnit.format(kwhPer100Km: warm))
+                            curveStat(warmLabel, preferences.energyConsumptionUnit.format(kwhPer100Km: warm))
                         }
                     }
                 }
@@ -1274,7 +1282,7 @@ struct HistoryDashboardView: View {
                 Chart(chronological) { record in
                     LineMark(
                         x: .value(L10n.text("Date"), record.timestamp),
-                        y: .value(L10n.text("Interior"), record.interiorCelsius ?? 0)
+                        y: .value(L10n.text("Interior"), preferences.temperatureUnit.convert(celsius: record.interiorCelsius ?? 0))
                     )
                     .foregroundStyle(HisingenTheme.chartAttention)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
@@ -1282,12 +1290,13 @@ struct HistoryDashboardView: View {
                     if let requested = record.requestedCelsius {
                         LineMark(
                             x: .value(L10n.text("Date"), record.timestamp),
-                            y: .value(L10n.text("Setpoint"), requested)
+                            y: .value(L10n.text("Setpoint"), preferences.temperatureUnit.convert(celsius: requested))
                         )
                         .foregroundStyle(HisingenTheme.accent.opacity(0.45))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     }
                 }
+                .chartYAxisLabel(preferences.temperatureUnit.suffix)
                 .frame(height: 100)
                 .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
                 Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))

@@ -150,6 +150,25 @@ final class PreferencesStore {
     }
 
     var menuBarStyle: MenuBarStyle { get { let raw = d.string(forKey: "statusbar_display_option") ?? ""; if let value = MenuBarStyle(rawValue: raw) { return value }; switch raw { case "Range", "Range (km)": return .range; case "Charge Time": return .chargingAware; case "Battery and Range": return .batteryAndRange; case "Compact Charging": return .compactCharging; case "Battery and Power": return .batteryAndPower; default: return .battery } } set { d.set(newValue.rawValue, forKey: "statusbar_display_option") } }
+    /// Size preset of the menu bar dropdown panel; applied live while the panel is open.
+    var panelSize: PanelSize { get { PanelSize(rawValue: d.string(forKey: "panel_size") ?? "") ?? .standard } set { d.set(newValue.rawValue, forKey: "panel_size") } }
+    /// Independent content zoom inside the dropdown; decoupled from the window size so
+    /// a larger panel can show more content rather than the same content enlarged.
+    var contentDensity: ContentDensity { get { ContentDensity(rawValue: d.string(forKey: "content_density") ?? "") ?? .standard } set { d.set(newValue.rawValue, forKey: "content_density") } }
+    /// When on, the dropdown uses the independent width/height overrides below instead
+    /// of the selected PanelSize preset's dimensions (the preset stays remembered).
+    var customPanelSizeEnabled: Bool { get { d.bool(forKey: "custom_panel_size_enabled") } set { d.set(newValue, forKey: "custom_panel_size_enabled") } }
+    var customPanelWidth: Double { get { d.double(forKey: "custom_panel_width") } set { d.set(newValue, forKey: "custom_panel_width") } }
+    var customPanelHeight: Double { get { d.double(forKey: "custom_panel_height") } set { d.set(newValue, forKey: "custom_panel_height") } }
+    /// Flow of mid-size dashboard cards on wide panels: stacked full width or
+    /// side by side in two columns. Defaults to full width.
+    var wideCardLayout: WideCardLayout { get { WideCardLayout(rawValue: d.string(forKey: "wide_card_layout") ?? "") ?? .fullWidth } set { d.set(newValue.rawValue, forKey: "wide_card_layout") } }
+    /// Whether the dropdown closes automatically when another app takes focus, or stays
+    /// open until the status item is clicked again. Default keeps the historical behavior.
+    var panelCloseBehavior: PanelCloseBehavior {
+        get { PanelCloseBehavior(rawValue: d.string(forKey: "panel_close_behavior") ?? "") ?? .keepOpen }
+        set { d.set(newValue.rawValue, forKey: "panel_close_behavior") }
+    }
     var carRenderAngle: CarRenderAngle { get { CarRenderAngle(rawValue: d.object(forKey: "car_render_angle") as? Int ?? 0) ?? .frontThreeQuarter } set { d.set(newValue.rawValue, forKey: "car_render_angle") } }
     var vehicleModelBadgePosition: VehicleModelBadgePosition { get { VehicleModelBadgePosition(rawValue: d.string(forKey: "vehicle_model_badge_position") ?? "") ?? .inlineHeader } set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") } }
     var registrationBadgePosition: RegistrationNumberBadgePosition { get { RegistrationNumberBadgePosition(rawValue: d.string(forKey: "registration_badge_position") ?? "") ?? .belowGreeting } set { d.set(newValue.rawValue, forKey: "registration_badge_position") } }
@@ -259,11 +278,46 @@ final class PreferencesStore {
     var notifySlowCharging: Bool { get { boolDefaultTrue("notify_slow_charging") } set { d.set(newValue, forKey: "notify_slow_charging") } }
     var notifyRainWithWindowsOpen: Bool { get { boolDefaultTrue("notify_rain_with_windows") } set { d.set(newValue, forKey: "notify_rain_with_windows") } }
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
+    var notifyChargerConnection: Bool { get { boolDefaultTrue("notify_charger_connection") } set { d.set(newValue, forKey: "notify_charger_connection") } }
+    var notifyClimateChanges: Bool { get { boolDefaultTrue("notify_climate_changes") } set { d.set(newValue, forKey: "notify_climate_changes") } }
+
+    /// Audible cue on urgent notifications (security, warnings, charging problems).
+    /// Routine informational banners stay silent regardless.
+    var notifySounds: Bool { get { boolDefaultTrue("notify_sounds") } set { d.set(newValue, forKey: "notify_sounds") } }
+
+    /// Hold non-urgent notifications during the configured window; urgent security
+    /// banners bypass it. Hours are wall-clock, start == end disables the window.
+    var quietHoursEnabled: Bool { get { d.bool(forKey: "notify_quiet_hours_enabled") } set { d.set(newValue, forKey: "notify_quiet_hours_enabled") } }
+    var quietHoursStartHour: Int { get { let value = d.object(forKey: "notify_quiet_hours_start") as? Int; return min(max(value ?? 22, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "notify_quiet_hours_start") } }
+    var quietHoursEndHour: Int { get { let value = d.object(forKey: "notify_quiet_hours_end") as? Int; return min(max(value ?? 7, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "notify_quiet_hours_end") } }
+
+    /// Per-VIN notification mute: baselines keep advancing while muted so un-muting
+    /// never replays a burst of stale edge events.
+    func isMuted(vin: String) -> Bool {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return false }
+        return (d.array(forKey: "muted_vehicle_vins_v1") as? [String])?.contains(key) ?? false
+    }
+    func setMuted(_ muted: Bool, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var values = d.array(forKey: "muted_vehicle_vins_v1") as? [String] ?? []
+        if muted { if !values.contains(key) { values.append(key) } }
+        else { values.removeAll { $0 == key } }
+        d.set(values, forKey: "muted_vehicle_vins_v1")
+    }
+
+    /// Optional dock-tile badge with the number of vehicles that currently report
+    /// active warnings or a triggered alarm. Off by default; the app runs as a menu-bar
+    /// agent for most users, so the badge only shows when the dock icon does.
+    var showWarningBadge: Bool { get { d.bool(forKey: "show_warning_badge") } set { d.set(newValue, forKey: "show_warning_badge") } }
 
     var features: FeatureSelection {
         get {
             if let values = d.array(forKey: "enabled_features_v2") as? [String] { var set = Set(values.compactMap(AppFeature.init)).intersection(AppFeature.permittedFeatures); set.formUnion([.vehicleLocation, .vehicleWeather, .ownerGreeting]); return FeatureSelection(enabled: set) }
-            if let values = d.array(forKey: "enabled_features_v1") as? [String] { var set = Set(values.compactMap(AppFeature.init)); set.formUnion([.exteriorStatus, .tyreAndWarnings, .softwareUpdates, .chargingSchedule, .climateStatus, .tripMeters]); let result = FeatureSelection(enabled: set.intersection(AppFeature.permittedFeatures)); d.set(result.enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2"); return result }
+            // v1 installs predate the .notifications case; it shipped default-on, so the
+            // migration must carry it forward or upgraders silently lose every alert.
+            if let values = d.array(forKey: "enabled_features_v1") as? [String] { var set = Set(values.compactMap(AppFeature.init)); set.formUnion([.exteriorStatus, .tyreAndWarnings, .softwareUpdates, .chargingSchedule, .climateStatus, .tripMeters, .notifications]); let result = FeatureSelection(enabled: set.intersection(AppFeature.permittedFeatures)); d.set(result.enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2"); return result }
             var result = FeatureSelection.default; if d.bool(forKey: "show_vehicle_image") { result.set(.vehicleImage, enabled: true) }; return result
         }
         set { d.set(newValue.enabled.intersection(AppFeature.permittedFeatures).map(\.rawValue).sorted(), forKey: "enabled_features_v2"); d.removeObject(forKey: "enabled_features_v1"); d.removeObject(forKey: "show_vehicle_image") }

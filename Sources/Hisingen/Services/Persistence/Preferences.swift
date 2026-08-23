@@ -66,6 +66,173 @@ enum InterfaceLanguage: String, CaseIterable {
     }
 }
 
+/// Selectable size presets for the menu bar dropdown panel. Width and height are
+/// applied live: the popover's contentSize and every SwiftUI frame read through
+/// `PreferencesStore.panelSize`, so switching presets resizes an open panel instantly.
+enum PanelSize: String, CaseIterable, Codable, Sendable {
+    case compact
+    case standard
+    case large
+    case wide
+    case grand
+
+    var title: String {
+        switch self {
+        case .compact: return L10n.text("Compact")
+        case .standard: return L10n.text("Standard")
+        case .large: return L10n.text("Large (Tall)")
+        case .wide: return L10n.text("Wide")
+        case .grand: return L10n.text("Grand (Wide & Tall)")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .compact: return L10n.text("Minimal footprint")
+        case .standard: return L10n.text("Balanced default layout")
+        case .large: return L10n.text("Taller panel, more visible history")
+        case .wide: return L10n.text("Extra horizontal room for cards")
+        case .grand: return L10n.text("Maximum space in both directions")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .compact: return "arrow.down.right.and.arrow.up.left"
+        case .standard: return "rectangle"
+        case .large: return "rectangle.portrait.arrow.up.and.down"
+        case .wide: return "rectangle.landscape.rotate"
+        case .grand: return "arrow.up.left.and.arrow.down.right"
+        }
+    }
+
+    var width: CGFloat {
+        switch self {
+        case .compact: return 350
+        case .standard: return 430
+        case .large: return 430
+        case .wide: return 540
+        case .grand: return 600
+        }
+    }
+
+    var idealHeight: CGFloat {
+        switch self {
+        case .compact: return 500
+        case .standard: return 580
+        case .large: return 700
+        case .wide: return 580
+        case .grand: return 760
+        }
+    }
+
+    var dimensionsLabel: String {
+        "\(Int(width)) × \(Int(idealHeight))"
+    }
+}
+
+/// Independent content-zoom for inside the menu bar dropdown, separate from the
+/// window's PanelSize preset. Values below 1 lay the view tree out larger and then
+/// scale it down, so a fixed panel shows more rows before scrolling; values above
+/// 1 do the opposite. Applied in HisingenContentView via an inverse-layout
+/// scaleEffect wrapper.
+enum ContentDensity: String, CaseIterable, Codable, Sendable {
+    case compact
+    case standard
+    case relaxed
+
+    var title: String {
+        switch self {
+        case .compact: return L10n.text("Compact (85%)")
+        case .standard: return L10n.text("Standard (100%)")
+        case .relaxed: return L10n.text("Relaxed (115%)")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .compact: return L10n.text("Smallest text, most content per screen")
+        case .standard: return L10n.text("Default sizing")
+        case .relaxed: return L10n.text("Larger text and controls")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .compact: return "textformat.size.smaller"
+        case .standard: return "textformat.size"
+        case .relaxed: return "textformat.size.larger"
+        }
+    }
+
+    var scale: CGFloat {
+        switch self {
+        case .compact: return 0.85
+        case .standard: return 1.0
+        case .relaxed: return 1.15
+        }
+    }
+}
+
+/// How the menu bar dropdown reacts when focus moves elsewhere. `closeOnFocusLoss`
+/// mirrors standard macOS popover behavior (any click outside — including another app —
+/// dismisses it); `keepOpen` holds the panel until the status item is clicked again.
+enum PanelCloseBehavior: String, CaseIterable, Codable, Sendable {
+    case keepOpen = "keep-open"
+    case closeOnFocusLoss = "close-on-focus-loss"
+
+    var title: String {
+        switch self {
+        case .keepOpen: return L10n.text("Keep Open Until Dismissed")
+        case .closeOnFocusLoss: return L10n.text("Close When Switching Apps")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .keepOpen: return L10n.text("Stays open until you click the menu bar icon again")
+        case .closeOnFocusLoss: return L10n.text("Closes automatically when another app takes focus")
+        }
+    }
+
+    var popoverBehavior: NSPopover.Behavior {
+        switch self {
+        case .keepOpen: return .semitransient
+        case .closeOnFocusLoss: return .transient
+        }
+    }
+}
+
+/// How mid-size dashboard cards (tires/TPMS, vehicle location, fuel & engine,
+/// doors & openings) flow when the dropdown is wide enough to fit two columns.
+/// Full Width keeps every card stretched across the panel; Two Columns places
+/// them side by side so more content is visible before scrolling.
+enum WideCardLayout: String, CaseIterable, Codable, Sendable {
+    case fullWidth
+    case twoColumns
+
+    var title: String {
+        switch self {
+        case .fullWidth: return L10n.text("Full Width")
+        case .twoColumns: return L10n.text("Two Columns")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .fullWidth: return L10n.text("Every card uses the entire panel width")
+        case .twoColumns: return L10n.text("Cards flow side by side in two columns")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .fullWidth: return "rectangle.expand.vertical"
+        case .twoColumns: return "rectangle.split.2x1"
+        }
+    }
+}
+
 enum MenuBarStyle: String, CaseIterable, Codable {
     case battery = "battery"
     case batteryAndRange = "battery-and-range"

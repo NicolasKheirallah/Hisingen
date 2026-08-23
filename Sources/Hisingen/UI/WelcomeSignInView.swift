@@ -23,7 +23,7 @@ struct WelcomeSignInView: View {
             }
             .padding(HisingenTheme.sectionSpacing)
         }
-        .frame(width: HisingenTheme.popoverWidth)
+        .frame(width: HisingenTheme.layoutWidth)
     }
 
     private var header: some View {

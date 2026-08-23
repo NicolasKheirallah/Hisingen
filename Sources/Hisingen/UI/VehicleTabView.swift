@@ -69,10 +69,8 @@ struct VehicleTabView: View {
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
             if let card = chargingCard { card.transition(cardTransition) }
-            if let card = fuelAndEngineCard { card.transition(cardTransition) }
-            if let card = openingsCard { card.transition(cardTransition) }
-            if let card = tireSchematicCard { card.transition(cardTransition) }
-            if let card = locationCard { card.transition(cardTransition) }
+            adaptiveCardsRow(fuelAndEngineCard, openingsCard)
+            adaptiveCardsRow(tireSchematicCard, locationCard)
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
@@ -94,7 +92,38 @@ struct VehicleTabView: View {
     }
 
     /// Labels optimistic post-command values as unconfirmed instead of presenting them as
-    /// vehicle-reported truth. Disappears when the follow-up refresh lands.
+    /// vehicle-reported truth. Disappears when the follow-up refresh lands.    /// Wide panels can flow two mid-size cards per row instead of stretching
+    /// each card full-width — but only when the user picked Two Columns in
+    /// Settings → General → Card Layout (the default is Full Width).
+    private static let twoColumnThreshold: CGFloat = 500
+
+    private var usesTwoColumnCards: Bool {
+        preferences.wideCardLayout == .twoColumns
+            && HisingenTheme.layoutWidth >= Self.twoColumnThreshold
+    }
+
+    @ViewBuilder
+    private func adaptiveCardsRow(_ primary: AnyView?, _ secondary: AnyView?) -> some View {
+        switch (primary, secondary) {
+        case (.some(let first), .some(let second)) where usesTwoColumnCards:
+            HStack(alignment: .top, spacing: HisingenTheme.sectionSpacing) {
+                first.frame(maxWidth: .infinity)
+                second.frame(maxWidth: .infinity)
+            }
+            .transition(cardTransition)
+        case (.some(let first), .some(let second)):
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                first
+                second
+            }
+            .transition(cardTransition)
+        case (.some(let only), _):
+            only.transition(cardTransition)
+        default:
+            EmptyView()
+        }
+    }
+
     private var pendingCommandChip: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "clock.arrow.circlepath")
@@ -1221,8 +1250,7 @@ struct VehicleTabView: View {
                                    title: L10n.text("Tire Status (iTPMS)"), color: .blue,
                                    badge: AppFeature.tyreAndWarnings.title)
         }
-        let hasWarning = tyres.contains(where: { $0.warning.needsAttention })
-        return AnyView(TireStatusCardView(tyres: tyres, hasWarning: hasWarning))
+        return AnyView(TireStatusCardView(tyres: tyres))
     }
 
     private var locationCard: AnyView? {

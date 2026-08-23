@@ -605,6 +605,15 @@ extension PolestarGRPC {
     static func parseHealth(_ data: Data) -> GrpcHealthReport {
         let fields = Protobuf.fields(data)
         let warningFields = [9, 10, 11, 12]
+        // The backend omits proto3 zero/unset values, and a healthy car proves it live: every
+        // other category arrives as an explicit 1 (fluids 6–8/13, lights 14–35, battery 38)
+        // while the tyre-warning quadruple (9–12) is left out entirely. Within a payload that
+        // substantive, that omission means "nothing to report" — mapping it to `.unknown`
+        // pinned a healthy Polestar 2's tyre card at "Unknown" forever. An empty or truncated
+        // payload (no other category present) still stays unknown; see
+        // `testHealthDoesNotConvertAbsentFieldsIntoHealthyReadings`.
+        let substantivePayload = [6, 7, 8, 13, 38].contains { varint(fields, $0) != nil }
+            || (14...35).contains { varint(fields, $0) != nil }
         // The documented positions are FL/FR/RL/RR at fields 39–42 (verified against
         // Polestar 3-era captures). The reference Polestar 2 capture returned warning level
         // only — but that is a backend/firmware fact for ONE car, not a platform law. Before
@@ -617,7 +626,12 @@ extension PolestarGRPC {
         var tyres: [TyrePressure] = []
         for index in positions.indices {
             let warningRaw = varint(fields, warningFields[index])
-            let warning = tyreWarning(warningRaw)
+            let warning: TyrePressureWarning
+            if let warningRaw {
+                warning = tyreWarning(warningRaw) ?? .unknown
+            } else {
+                warning = substantivePayload ? .none : .unknown
+            }
             let pressure = pressureFields.flatMap { pFields in
                 numeric(fields, pFields[index]).flatMap { $0 > 0 ? $0 : nil }
             }
@@ -1155,8 +1169,16 @@ extension PolestarGRPC {
     private static func openState(_ value: UInt64) -> OpeningState {
         switch value { case 1: return .open; case 2: return .closed; case 3: return .ajar; default: return .unknown }
     }
-    private static func tyreWarning(_ value: UInt64?) -> TyrePressureWarning {
-        switch value { case 1: return .none; case 2: return .veryLow; case 3: return .low; case 4: return .high; default: return .unknown }
+    /// Maps a wire value to the domain warning. Returns nil for an *absent* field so the
+    /// caller decides whether omission means "all clear" (substantive payload) or "unknown".
+    private static func tyreWarning(_ value: UInt64?) -> TyrePressureWarning? {
+        switch value {
+        case 1: return TyrePressureWarning.none
+        case 2: return .veryLow
+        case 3: return .low
+        case 4: return .high
+        default: return .unknown
+        }
     }
 
     /// Finds four consecutive numeric fields inside `window` whose values all sit in the

@@ -50,6 +50,10 @@ final class StatusItemController: NSObject {
 
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
+    /// When the popover last closed. In transient ("Close When Switching Apps") mode the
+    /// system closes the panel *before* the click on the status item reaches this class,
+    /// so a naive toggle would immediately reopen it — the guard swallows that same click.
+    private var lastPopoverCloseDate: Date?
 
     @MainActor
     init(onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
@@ -70,6 +74,8 @@ final class StatusItemController: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
+        let layout = PanelLayout.resolve(from: preferences)
+        popover.contentSize = NSSize(width: layout.width, height: layout.height)
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "bolt.car", accessibilityDescription: L10n.text("Hisingen"))
             button.imagePosition = .imageLeft
@@ -78,10 +84,10 @@ final class StatusItemController: NSObject {
             button.action = #selector(togglePopover(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        popover.behavior = .semitransient
+        popover.behavior = preferences.panelCloseBehavior.popoverBehavior
         popover.delegate = self
          popover.appearance = preferences.appearanceMode.nsAppearance
-        popover.contentSize = NSSize(width: HisingenTheme.popoverWidth, height: 560)
+        popover.contentSize = NSSize(width: layout.width, height: layout.height)
         installGlobalHotKey()
     }
 
@@ -159,26 +165,36 @@ final class StatusItemController: NSObject {
         }
     }
 
+    /// True when the popover was already closed by the *current* status-item click
+    /// (transient auto-close fires before this action runs); treating that click as a
+    /// toggle would instantly reopen the panel the user just dismissed. Only the button
+    /// path consults this — the hot-key never triggers an outside-click auto-close.
+    private var popoverJustClosedByThisClick: Bool {
+        guard let closed = lastPopoverCloseDate else { return false }
+        return Date().timeIntervalSince(closed) < 0.3
+    }
+
     private func toggleFromHotKey() {
         togglePopover()
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
         guard let event = NSApp.currentEvent else {
-            showPopover()
+            if !popoverJustClosedByThisClick { showPopover() }
             return
         }
         if event.type == .rightMouseUp {
             showContextMenu(from: sender)
         } else if popover.isShown {
             popover.performClose(nil)
-        } else {
+        } else if !popoverJustClosedByThisClick {
             showPopover()
         }
     }
 
     private func showContextMenu(from button: NSStatusBarButton) {
         if popover.isShown { popover.performClose(nil) }
+        lastPopoverCloseDate = nil
         let menu = NSMenu()
 
         if let state = latestState {
@@ -405,6 +421,39 @@ final class StatusItemController: NSObject {
             }
         }
 
+        // Quick panel geometry switching without a trip into Settings → General.
+        // Mirrors the Settings writes exactly (preset clears any custom override);
+        // applyPopoverRefresh resizes an open dropdown on the next runloop tick.
+        let sizeMenu = NSMenu()
+        for size in PanelSize.allCases {
+            let item = NSMenuItem(
+                title: "\(size.title)  (\(size.dimensionsLabel))",
+                action: #selector(contextSetPanelSize(_:)),
+                keyEquivalent: ""
+            )
+            item.representedObject = size.rawValue
+            item.state = (!preferences.customPanelSizeEnabled && preferences.panelSize == size) ? .on : .off
+            item.target = self
+            sizeMenu.addItem(item)
+        }
+        let sizeItem = menu.addItem(withTitle: L10n.text("Panel Size"), action: nil, keyEquivalent: "")
+        sizeItem.submenu = sizeMenu
+
+        let densityMenu = NSMenu()
+        for density in ContentDensity.allCases {
+            let item = NSMenuItem(
+                title: density.title,
+                action: #selector(contextSetContentDensity(_:)),
+                keyEquivalent: ""
+            )
+            item.representedObject = density.rawValue
+            item.state = preferences.contentDensity == density ? .on : .off
+            item.target = self
+            densityMenu.addItem(item)
+        }
+        let densityItem = menu.addItem(withTitle: L10n.text("Content Density"), action: nil, keyEquivalent: "")
+        densityItem.submenu = densityMenu
+
         menu.addItem(.separator())
         let settingsItem = menu.addItem(
             withTitle: L10n.text("Preferences…"),
@@ -451,6 +500,20 @@ final class StatusItemController: NSObject {
     @objc private func contextSwitchBrand(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let brand = VehicleBrand(rawValue: raw) else { return }
         onSettingsChanged(.switchToBrand(brand))
+    }
+
+    @objc private func contextSetPanelSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let size = PanelSize(rawValue: raw) else { return }
+        preferences.panelSize = size
+        // A picked preset replaces any custom override, matching Settings behavior.
+        preferences.customPanelSizeEnabled = false
+        refreshPopoverIfNeeded()
+    }
+
+    @objc private func contextSetContentDensity(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let density = ContentDensity(rawValue: raw) else { return }
+        preferences.contentDensity = density
+        refreshPopoverIfNeeded()
     }
 
     @objc private func contextSettings() {
@@ -556,10 +619,21 @@ final class StatusItemController: NSObject {
     private func showPopover() {
         guard !popover.isShown else { return }
          popover.appearance = preferences.appearanceMode.nsAppearance
+        // Resolve fresh every open: close behavior, preset/density/custom overrides may
+        // have changed since init or since the last refresh while shown.
+        popover.behavior = preferences.panelCloseBehavior.popoverBehavior
+        let layout = PanelLayout.resolve(from: preferences)
+        popover.contentSize = NSSize(width: layout.width, height: layout.height)
         let hosting = NSHostingController(rootView: makeRootView())
         popover.contentViewController = hosting
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+        // Apple Liquid Glass: clear the popover's opaque backing so SwiftUI materials
+        // sample the real content behind the window (same pattern as ChargingMiniPanel).
+        if let window = hosting.view.window {
+            window.isOpaque = false
+            window.backgroundColor = .clear
         }
     }
 
@@ -568,7 +642,13 @@ final class StatusItemController: NSObject {
     }
 
     private func selectCar(_ vin: String) {
-        guard vin != activeVin else { return }
+        // Follow user intent immediately instead of vetoing on this stale copy: waiting
+        // for the coordinator round trip left `activeVin` on the launch vehicle forever
+        // (`onCars` fires only from session-level events, never from a switch), so this
+        // guard blocked switching BACK while the coordinator's own settled-check blocked
+        // repeating the forward switch — together the switcher locked up after one use.
+        // Whether work is actually needed is decided by RefreshCoordinator.selectCar.
+        activeVin = vin
         onSelectCar?(vin)
     }
 
@@ -710,6 +790,16 @@ final class StatusItemController: NSObject {
     private func applyPopoverRefresh() {
         guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
          popover.appearance = preferences.appearanceMode.nsAppearance
+        // Live-apply the close behavior so switching modes in Settings takes effect on
+        // the open panel without closing it first.
+        popover.behavior = preferences.panelCloseBehavior.popoverBehavior
+        // Re-apply the resolved panel geometry so an open dropdown resizes live when
+        // the user switches presets, drags a custom slider, or changes density.
+        // (The SwiftUI frames react via @AppStorage on their own; this keeps the
+        // NSPopover window itself in sync.)
+        let layout = PanelLayout.resolve(from: preferences)
+        popover.contentSize = NSSize(width: layout.width, height: layout.height)
+        hosting.preferredContentSize = NSSize(width: layout.width, height: layout.height)
         hosting.rootView = makeRootView()
     }
 
@@ -737,6 +827,7 @@ final class StatusItemController: NSObject {
 
 extension StatusItemController: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
+        lastPopoverCloseDate = Date()
         settingsMode = false
         // Tear the SwiftUI tree down with the popover: hidden views kept running geocode
         // tasks and pulse animations, and the copied snapshot dictionaries stayed alive

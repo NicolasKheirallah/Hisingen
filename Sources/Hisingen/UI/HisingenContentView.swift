@@ -103,8 +103,29 @@ struct HisingenContentView: View {
         self.tabSelection = selectedTab
     }
 
+    // Panel geometry mirrors. Reading the raw defaults through @AppStorage means a
+    // preset / density / custom-slider change invalidates this view natively — the
+    // frames below animate without needing the rootView replacement dance, which
+    // also keeps scroll positions and disclosure state intact across resizes.
+    @AppStorage("panel_size") private var storedPanelSizeRaw: String = PanelSize.standard.rawValue
+    @AppStorage("content_density") private var storedDensityRaw: String = ContentDensity.standard.rawValue
+    @AppStorage("custom_panel_size_enabled") private var storedCustomSizeEnabled = false
+    @AppStorage("custom_panel_width") private var storedCustomWidth = 0.0
+    @AppStorage("custom_panel_height") private var storedCustomHeight = 0.0
+
+    private var panelLayout: PanelLayout {
+        PanelLayout.resolve(
+            panelSizeRaw: storedPanelSizeRaw,
+            densityRaw: storedDensityRaw,
+            customEnabled: storedCustomSizeEnabled,
+            customWidth: storedCustomWidth,
+            customHeight: storedCustomHeight
+        )
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        let layout = panelLayout
+        return VStack(spacing: 0) {
             if settingsMode || (!authenticated && selectedTab == .settings) {
                 SettingsView(notificationPermission: notificationPermission,
                              state: state,
@@ -169,9 +190,19 @@ struct HisingenContentView: View {
             Divider().opacity(0.4)
             footerBar
         }
-        .frame(width: HisingenTheme.popoverWidth)
-        .frame(minHeight: 500, idealHeight: 580)
-        .background(HisingenTheme.popoverBackground)
+        // Content-density zoom: lay out at panelSize/scale, then scale into the physical
+        // panel — so Compact fits more content and Relaxed enlarges it, independently of
+        // the window preset. Transforms are ignored by layout, hence the inverse frames.
+        // Height comes pre-clamped by PanelLayout to what fits below the menu bar.
+        .frame(width: layout.logicalWidth)
+        .frame(height: layout.logicalHeight)
+        .scaleEffect(layout.contentScale, anchor: .topLeading)
+        .frame(width: layout.width, height: layout.height, alignment: .topLeading)
+        // Clips the transformed tree to the physical panel; without it, scaled
+        // overflow would draw outside the transparent popover window.
+        .clipped()
+        .background { HisingenTheme.popoverSurface }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: panelLayout)
         .tint(HisingenTheme.accent)
         .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: appTheme)

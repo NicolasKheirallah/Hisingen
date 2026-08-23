@@ -16,13 +16,27 @@ enum VehicleRenderLayout {
     /// be sized to. A studio render is far wider than it is tall, so it is the
     /// content height that limits the fit, and the drawn size follows from the
     /// source's aspect ratio without needing to wait for layout.
-    static func drawnSize(sourcePixelSize: CGSize) -> CGSize {
+    static func drawnSize(sourcePixelSize: CGSize, contentHeight drawHeight: CGFloat = VehicleRenderLayout.contentHeight) -> CGSize {
         guard sourcePixelSize.width > 0, sourcePixelSize.height > 0 else { return .zero }
-        let height = contentHeight * zoom
+        let height = drawHeight * zoom
         let aspect = sourcePixelSize.width / sourcePixelSize.height
         // Clamped so a freak aspect ratio cannot ask for an enormous decode; the
         // card is far narrower than this in every theme.
         return CGSize(width: min(height * aspect, 900), height: height)
+    }
+
+    /// Base geometry is tuned for the Standard 430 pt panel; wider panels scale
+    /// the hero render up (bounded to +35%) instead of centering it in dead
+    /// space. Compact/narrow panels keep the tuned baseline exactly.
+    static func scaledContentHeight(for availableWidth: CGFloat) -> CGFloat {
+        guard availableWidth > 0 else { return contentHeight }
+        let growth = min(max((availableWidth - 430) / 430, 0), 0.35)
+        return contentHeight * (1 + growth)
+    }
+
+    /// Container height matching a given available width (container = content + inset band).
+    static func containerHeight(for availableWidth: CGFloat) -> CGFloat {
+        containerHeight - contentHeight + scaledContentHeight(for: availableWidth)
     }
 }
 
@@ -80,7 +94,9 @@ struct VehiclePresentationView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: VehicleRenderLayout.containerHeight)
+        // Grows with the panel width (bounded) so Wide/Grand presets use the
+        // horizontal room for a larger render rather than dead margins.
+        .frame(height: VehicleRenderLayout.containerHeight(for: HisingenTheme.layoutWidth))
         .animation(transition.animation, value: shown)
         // Keyed on the request, so the several telemetry refreshes a minute that
         // re-evaluate this body with the same picture do not restart anything.
@@ -120,7 +136,7 @@ struct VehiclePresentationView: View {
             .aspectRatio(artwork.sourcePixelSize, contentMode: .fit)
             .scaleEffect(VehicleRenderLayout.zoom, anchor: .center)
             .frame(maxWidth: .infinity)
-            .frame(height: VehicleRenderLayout.contentHeight)
+            .frame(height: VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth))
             .padding(.horizontal, VehicleRenderLayout.horizontalInset)
     }
 
@@ -149,7 +165,12 @@ struct VehiclePresentationView: View {
         guard let request else { return }
         guard let sourcePixelSize = VehicleArtworkStore.sourcePixelSize(of: request.data) else { return }
 
-        let drawn = VehicleRenderLayout.drawnSize(sourcePixelSize: sourcePixelSize)
+        // Decode for the height the render is actually displayed at, so wider
+        // panels get a proportionally larger decode instead of an upscale.
+        let drawn = VehicleRenderLayout.drawnSize(
+            sourcePixelSize: sourcePixelSize,
+            contentHeight: VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth)
+        )
         let budget = VehicleArtworkStore.pixelBudget(pointSize: drawn, scale: displayScale)
         let source = VehicleArtworkStore.source(vin: identity.vin, angle: identity.angle)
 

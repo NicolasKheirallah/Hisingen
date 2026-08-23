@@ -212,6 +212,7 @@ enum DiagnosticLogExporter {
             "refreshAttempts": snapshot.refreshAttempts,
             "refreshSuccesses": snapshot.refreshSuccesses,
             "refreshFailures": snapshot.refreshFailures,
+            "vehicleSwitchPending": snapshot.vehicleSwitchPending,
         ]
     }
 

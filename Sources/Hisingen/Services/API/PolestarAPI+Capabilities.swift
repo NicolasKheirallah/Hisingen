@@ -3,7 +3,8 @@ import Foundation
 extension PolestarAPI {
     /// Returns the model-derived capability profile used by command and telemetry gates.
     func capabilityProfile(for vin: String? = nil) -> VehicleCapabilityProfile {
-        VehicleCapabilityProfile(modelName: modelName, vin: vin ?? selectedVIN)
+        let resolved = vin ?? selectedVIN
+        return VehicleCapabilityProfile(modelName: identity(for: resolved).modelName, vin: resolved)
     }
 
     func optionalBattery(enabled: Bool, vin: String, token: String) async throws -> GrpcBatteryExtras? {

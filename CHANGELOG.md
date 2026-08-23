@@ -3,9 +3,57 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.2] - 2026-08-23
 
 ### Added
+
+- Selectable panel sizes for the menu bar dropdown (Settings → General →
+  Panel Size): Compact, Standard, Large (tall), Wide, and Grand (wide & tall)
+  presets control both the width and height of the popover. The choice is
+  persisted, applied live while the panel is open — switching a preset
+  resizes the dropdown instantly — and every view (dashboard, settings,
+  sign-in) follows the selected width automatically.
+- Content Density control beside Panel Size: zooms everything inside the
+  dropdown independently of the window preset (Compact 85%, Standard 100%,
+  Relaxed 115%). Because the content tree is laid out at the inverse scale
+  and then scaled into place, a Grand panel at Compact density shows
+  substantially more rows before scrolling instead of just stretching the
+  same content larger.
+- Custom Size overrides with independent width and height sliders (bounded,
+  snapped to 10/20 pt steps), a Reset Sizes button, a proportional size
+  preview against the Standard panel, and VoiceOver labels plus selected
+  traits on every preset tile. All panel/density strings are localized in
+  all sixteen languages.
+- Quick switching without opening Settings: the status icon's right-click
+  menu gained Panel Size and Content Density submenus with checkmarks on the
+  active options; picking a preset there also clears any custom override.
+- Responsive Wide/Grand layouts: mid-size vehicle cards flow two per row
+  above a 500 pt width instead of stretching full-width one by one, and the
+  hero car render grows up to +35 % with the extra width — including its
+  decode budget, so larger renders stay sharp rather than upscaled.
+- Card Layout setting (Settings → General) decides how those mid-size cards —
+  tires/TPMS, vehicle location, fuel & engine, doors & openings — flow on
+  wide panels: Full Width (default, every card spans the panel) or Two
+  Columns (side by side). Applies live and is localized in all languages.
+- Panel auto-close setting (Settings → General → Panel auto-close) chooses
+  how the dropdown behaves when focus moves elsewhere: Keep Open Until
+  Dismissed (the previous behavior — the panel stays until the menu bar icon
+  is clicked again) or Close When Switching Apps (standard macOS popover
+  behavior — any click outside, including another app taking focus, closes
+  it). The choice applies live to an open panel, persists across launches,
+  and defaults to Keep Open so upgrades change nothing; a click guard keeps
+  the icon toggle from instantly reopening a panel macOS just auto-closed.
+- Two new PanelCloseBehavior unit tests covering the default mapping and the
+  transient/semitransient popover-behavior translation.
+- Twelve new PanelLayout unit tests covering persistence round trips,
+  fallbacks for corrupt values, custom-override clamping, the
+  logical-times-scale = physical-width invariant, whole-point rounding, the
+  screen-fit clamp with injected visible-frame heights, and the Card Layout
+  default/round-trip.
+
+- Regression coverage for same-account multi-vehicle selection, reproducing
+  the original two-car switch lockup across vehicle chips, the switcher menu,
+  keyboard cycling, and context-menu paths.
 
 - Diagnostic log export (Settings → SQLite Storage & Data → Export Diagnostic
   Logs): bundles app/system metadata, the last 24 hours of Hisingen's own
@@ -16,8 +64,59 @@ All notable changes to Hisingen are documented in this file. The project follows
   UUIDs, and credential-bearing substrings are replaced with placeholders before
   the file is written; only this process's logs are read, never other apps'.
 
+- Every vehicle notification now names the car it is about: the vehicle's
+  nickname (or brand fallback) appears in the banner subtitle across all
+  alerts — charging events, warnings, security, software, service, and
+  reminders — so multi-car households can tell banners apart at a glance.
+- Notification sounds: urgent alerts (alarm triggered, vehicle warnings,
+  rain with windows open, evening unlocked, openings left open) and charging
+  problems now play a sound; routine informational banners stay silent. A
+  "Notification Sounds" toggle in Settings → Notifications controls all of it.
+- Quiet Hours (Settings → Notifications): hold non-urgent notifications
+  during a configurable window (default 22:00–07:00) and deliver them when
+  the window ends instead of dropping them; security-class alerts always
+  break through.
+- Per-vehicle muting ("Mute This Vehicle" for the active car): silenced
+  vehicles keep their baselines advancing so un-muting never replays a burst
+  of stale edge events, and lingering sustained timers are cleared on mute.
+- New event types: charge-cable connect/disconnect confirmations and cabin
+  climate start/stop notices, each with its own toggle.
+- Tapping a notification banner now opens Hisingen focused on the tapped
+  vehicle — switching brands first when the VIN belongs to the dormant
+  account — instead of just bringing the app forward wherever it left off.
+- Optional dock warning badge ("Warning Badge"): shows the number of vehicles
+  currently reporting warnings or a triggered alarm while enabled.
+- "Send Test Notification" button in Settings → Notifications renders a real
+  sample banner honoring privacy mode, sounds, quiet hours, and the subtitle.
+- A master "Notifications" feature toggle now sits at the top of the
+  notification settings card; previously the flag was only reachable by
+  re-picking a feature preset.
+- All new notification copy is localized in Swedish and German; other
+  languages fall back to English until translated.
+- Notification posting logic is now unit-testable: the notifier talks to
+  UserNotifications through an injectable dispatcher, and ten new tests cover
+  posting paths that previously had no coverage — subtitle inclusion,
+  privacy-mode bodies, service-due and sustained-latch persistence across
+  relaunches, muted vehicles still advancing baselines, quiet-hours deferral
+  with urgent bypass, warning-count callbacks, quiet-hour edge cases,
+  frontmost-app presentation, thread-to-VIN parsing, and the fingerprint
+  history including legacy-baseline migration.
+
 ### Changed
 
+- Panel geometry now resolves through a single PanelLayout source: preset,
+  custom override, density zoom, whole-point rounding, and the screen-fit
+  clamp live in one testable place, so the popover window, the SwiftUI
+  frames, and readouts can never disagree. Heights are clamped to what fits
+  below the menu bar, which stops silent bottom-edge clipping of tall panels
+  on small displays.
+- The dropdown's SwiftUI tree reads panel settings via AppStorage, so preset,
+  custom-slider, and density changes invalidate natively and resize with a
+  short animation instead of waiting for the refresh round trip — scroll
+  positions and disclosure state survive resizes.
+- The floating charging mini-panel follows the dropdown's Content Density
+  choice, and reopening it applies the scaled width.
+- Cabin-air button row height raised to match the other remote-command rows.
 - Logging overhaul: every logger is now created through a single AppLog factory
   (CI-guarded), Polestar's category renamed `api` → `polestar-api`, remote-command
   execution and all previously-silent failure paths (command failures, sign-out
@@ -35,6 +134,129 @@ All notable changes to Hisingen are documented in this file. The project follows
   fetches and Apple geocoding are deliberately excluded and documented as such.
 - The old payload-only "Export Redacted API Data" button was replaced by the
   full diagnostic bundle export; the export UI is localized in all app languages.
+- The default Hisingen Glass theme now renders as a true Apple Liquid Glass
+  surface: the popover's opaque backing is cleared so its translucent material
+  samples the real desktop and windows behind it rather than a solid panel,
+  layered with a specular top-light wash and a soft amber-tinted vignette
+  (a neutral dark falloff in dark mode). Frosted-material cards now read as
+  raised glass layers floating over the see-through window. All other themes
+  keep their opaque canvas.
+- Tyre status presentation reworked to be honest about what the provider
+  reported. The summary pill now distinguishes "Check Pressure", "Everything
+  looks good", partial "No warnings reported", and "Data unavailable"; per-tyre
+  pills combine a direct pressure reading with any warning level ("35.0 psi ·
+  High"); colors follow the reported severity (red critically low, orange
+  low/high, green explicitly OK, muted when unreported) instead of a binary
+  warning flag; the vehicle outline rolls each axle up to the worst reported
+  level rather than treating unknown as healthy; and the card title reflects
+  whether the vehicle reports numeric pressures ("Tire Pressure") or only
+  warning levels ("Tire Status (iTPMS)").
+- README rebuilt around reader tasks: table of contents, FAQ, troubleshooting,
+  known limitations, roadmap and non-goals, plus contribution and support
+  sections, alongside an expanded Units list documenting every selectable unit.
+
+- Urgency model for every notification: urgent banners post with the
+  time-sensitive interruption level (and bypass Quiet Hours), background
+  chatter such as stale telemetry, service due, slow charging, and software
+  updates posts passively and silently, and charging problems get an audible
+  active-level banner.
+- While Hisingen is the frontmost app, routine banners now drop silently into
+  the notification list instead of popping over the window; time-sensitive
+  alerts still surface.
+- Remote-command result notifications: successes still self-dismiss after
+  five seconds, but failures persist until dismissed — and carry the active
+  vehicle's name as their subtitle.
+- Private notification mode keeps bodies anonymous now that subtitles identify
+  the car: charging banners read "Started charging." / "Finished charging."
+  instead of repeating the vehicle name, and low-battery/unlocked/plug-in
+  copy follows suit.
+- Software-update failure and installing banners include the version string
+  when the provider reports one.
+- The resume-schedule quick action on charging-interrupted banners now
+  requires device unlock, matching the lock action's gate on write commands.
+- Sustained conditions (openings left open, slow charging) are re-evaluated
+  by a lightweight timer, so a car parked open still escalates even if the
+  telemetry polling loop stalls.
+
+### Fixed
+
+- Opening the dropdown no longer uses a stale size after the panel preset was
+  changed externally while the popover was closed: geometry is re-resolved on
+  every open.
+- Switching between two vehicles on the same brand account no longer locks the
+  switcher after one use. The visible active-car marker synced only from
+  session-level events while the coordinator compared its own stored VIN, so
+  the two guards vetoed every follow-up switch in opposite directions;
+  selection idempotence now lives in one place, the marker follows user intent
+  immediately, a failed or raced selection retries briefly instead of parking a
+  signed-in user on "Open Settings to sign in.", each user-initiated attempt
+  gets a fresh retry budget rather than inheriting an exhausted one, and an
+  unresolved switch is reported as `vehicleSwitchPending` in exported
+  diagnostic bundles so support data can distinguish a pending switch from an
+  idle app.
+- Polestar vehicle identity is now stored per VIN instead of on the shared
+  "currently selected car" slot. Model name, model year, registration number,
+  paint, upholstery, wheels, packages, and render images are keyed by VIN, so
+  telemetry for one car can no longer pick up another car's details while the
+  background garage scan cycles through the account's vehicles. The race-prone
+  selected-car post-check and its cached-discovery recovery shim became
+  unnecessary and were removed with it.
+- Polestar remote commands no longer require the target vehicle to be the
+  currently selected one. The background garage scan temporarily re-points the
+  shared selection while refreshing other vehicles, which could make a valid
+  lock or climate command fail with "missing context" mid-scan; commands
+  address their vehicle explicitly by VIN and now only check that it belongs
+  to the signed-in account.
+- A scheduled session-retry timer that fired while another request was still
+  in flight no longer disappears silently. Direct triggers (launch, wake,
+  network restore, manual refresh) keep yielding to in-flight work, which
+  rearms itself; the timer path now retries shortly instead of dropping the
+  attempt, where previously one busy request could stop all automatic session
+  recovery until the next manual interaction.
+- The background garage scan no longer races manual vehicle switching: it
+  stands down if the user changes cars mid-scan (previously flipping the shared
+  provider selection under an in-flight switch), restores the pre-scan
+  selection only when it is still current, and skips scanning entirely while a
+  refresh or rate-limit pause is active so interactive requests are never
+  starved.
+- North American units are now applied across the board. The start-climate
+  confirmation and biometric prompts show the setpoint in the selected
+  temperature unit (°F instead of a hardcoded °C), the History dashboard's
+  seasonal efficiency buckets relabel to °F thresholds, the cabin temperature
+  trend chart converts plotted values and labels its axis, average trip speeds
+  show mph when miles is selected, and the Info tab's Fuel Level and Average
+  Consumption rows honor the gallon and MPG selections. README's Units list
+  documents every selectable unit including Fahrenheit and PSI.
+- Polestar 2 tyre status no longer sticks on "Unknown" while the car is
+  healthy. The backend omits proto3 zero/unset values, so an all-clear health
+  report carries explicit 1s for every other category (fluids, lights, 12 V)
+  while the tyre-warning quadruple is absent entirely — which parsed as
+  unknown and kept the tyre card at "Unknown" forever. Within such a
+  substantive payload, missing tyre fields now read as "no warning", verified
+  against a live vehicle; empty or truncated payloads still stay unknown,
+  guarded by a regression test built from the live capture.
+- Enabling only some notification toggles no longer skips requesting system
+  permission: five toggles (openings left open, service due, stale telemetry,
+  slow charging, plug-in reminder) were missing from the authorization check,
+  leaving users who picked just those with silent, never-delivered alerts.
+- The service-due banner no longer refires after every relaunch while the
+  condition persists: the was-due state is persisted per VIN rather than kept
+  only in memory.
+- "Vehicle left open" and stale-telemetry latches survive relaunches, so a
+  restart mid-condition no longer duplicates the banner.
+- Charging-transition deduplication keeps a short fingerprint history instead
+  of a single slot: two events emitted by one evaluation (e.g. fault plus
+  low battery) previously overwrote each other's fingerprint, letting a
+  replayed sample double-post the first event. Existing persisted baselines
+  migrate losslessly.
+- The account sign-in-required notice no longer suppresses the other brand's
+  notice (the latch is per brand), always names the account that failed, and
+  groups under its own thread.
+- The charging-anomaly banner respects private notification mode: location
+  names were previously posted in plain text regardless of the setting.
+- v1→v2 preference migration carries the `.notifications` feature flag
+  forward; upgrading installs could silently lose all alerts otherwise.
+- Battery-percentage text in banners formats through the selected locale.
 
 ## [1.2.1] - 2026-08-22
 
@@ -267,7 +489,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Charging-session energy is now labeled as estimated when derived from SOC and
   model-reference capacity.
 - Capability inspection now distinguishes `not reported` from `not supported`.
-- Software fields from undocumented Polestar responses are labeled as
+- Software fields from Polestar responses are labeled as
   backend-reported and unverified instead of authoritative installed versions.
 - Updated the product website, design documentation, screenshots, and gallery
   asset names to match the current interface.
