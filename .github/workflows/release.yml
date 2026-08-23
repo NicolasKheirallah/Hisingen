@@ -226,3 +226,62 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/hisingen-signing.p12" notarize-app.zip
           security delete-keychain "$RUNNER_TEMP/hisingen-signing.keychain-db" 2>/dev/null || true
+
+  homebrew-tap:
+    name: Update Homebrew tap
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-and-release
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Bump hisingen cask in NicolasKheirallah/homebrew-tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN secret is not configured — skipping Homebrew tap update."
+            echo "Create a fine-grained personal access token with Contents read/write access to"
+            echo "NicolasKheirallah/homebrew-tap and add it as the HOMEBREW_TAP_TOKEN repository"
+            echo "secret to enable automatic cask bumps."
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_URL="https://github.com/NicolasKheirallah/Hisingen/releases/download/v${VERSION}/Hisingen.dmg"
+          WORK_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-tap.XXXXXX")
+          trap 'rm -rf "$WORK_DIR"' EXIT
+
+          echo "==> Downloading published artifact to hash exactly what users will install"
+          curl --fail --silent --location --retry 3 -o "$WORK_DIR/Hisingen.dmg" "$DMG_URL"
+          SHA256=$(sha256sum "$WORK_DIR/Hisingen.dmg" | cut -d' ' -f1)
+          echo "sha256(Hisingen.dmg @ v${VERSION}) = $SHA256"
+
+          echo "==> Cross-checking against published SHA256SUMS"
+          SUMS_URL="https://github.com/NicolasKheirallah/Hisingen/releases/download/v${VERSION}/SHA256SUMS"
+          curl --fail --silent --location --retry 3 -o "$WORK_DIR/SHA256SUMS" "$SUMS_URL"
+          grep -Fq "$SHA256  Hisingen.dmg" "$WORK_DIR/SHA256SUMS" || {
+            echo "Published Hisingen.dmg does not match SHA256SUMS — aborting tap update"; exit 1;
+          }
+
+          echo "==> Updating tap"
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_TOKEN}@github.com/NicolasKheirallah/homebrew-tap.git" \
+            "$WORK_DIR/homebrew-tap"
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          sh Scripts/update-homebrew-cask.sh "$VERSION" "$SHA256" "$WORK_DIR/homebrew-tap"
+
+          cd "$WORK_DIR/homebrew-tap"
+          if git diff --quiet; then
+            echo "Cask already at ${VERSION} with this sha256 — nothing to commit."
+            exit 0
+          fi
+          git add Casks/hisingen.rb
+          git commit -m "hisingen ${VERSION}"
+          git push

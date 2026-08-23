@@ -790,7 +790,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         let interruptionLevel = notification.request.content.interruptionLevel
-        let appIsActive = await MainActor.run { NSApp.isActive }
+        let appIsActive = await MainActor.run {
+            guard Bundle.main.bundleURL.pathExtension == "app" else { return false }
+            return NSApp?.isActive ?? false
+        }
         return Self.presentationOptions(
             appIsActive: appIsActive,
             interruptionLevel: interruptionLevel

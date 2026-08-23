@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import Testing
 @testable import Hisingen
 
@@ -434,7 +435,14 @@ struct VehiclePresentationAnimationTests {
     }
 
     private static func pngData(width: Int, height: Int) -> Data {
-        let representation = NSBitmapImageRep(cgImage: solidImage(width: width, height: height))
-        return representation.representation(using: .png, properties: [:]) ?? Data()
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil) else {
+            return Data()
+        }
+        CGImageDestinationAddImage(destination, solidImage(width: width, height: height), nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return Data()
+        }
+        return data as Data
     }
 }

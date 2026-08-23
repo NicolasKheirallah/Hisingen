@@ -113,13 +113,13 @@ The Polestar integration therefore uses interfaces based on the services used by
 </td>
 <td width="50%" align="center">
 <strong>Vehicle health and climate</strong><br><br>
-<img src="website/public/assets/product/polestar-identity-health.png" width="420" loading="lazy" alt="Hisingen vehicle health and climate information">
+<img src="website/public/assets/product/polestar-identity-health.png" width="420" loading="lazy" alt="Hisingen showing vehicle identity, health and climate information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle software</strong><br><br>
-<img src="website/public/assets/product/polestar-climate-software.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle software information">
+<img src="website/public/assets/product/polestar-climate-software.png" width="420" loading="lazy" alt="Hisingen showing climate timers and Polestar vehicle software update information">
 </td>
 <td width="50%" align="center">
 <strong>Detailed openings and tyre view</strong><br><br>
@@ -142,7 +142,7 @@ If you prefer, you can use your own Volvo Cars Developer application and credent
 </td>
 <td width="50%" align="center">
 <strong>Energy and powertrain telemetry</strong><br><br>
-<img src="website/public/assets/product/volvo-charging-fuel.png" width="420" loading="lazy" alt="Hisingen Volvo energy and powertrain telemetry">
+<img src="website/public/assets/product/volvo-charging-fuel.png" width="420" loading="lazy" alt="Hisingen showing Volvo charging details alongside fuel and engine information">
 </td>
 </tr>
 <tr>
@@ -152,13 +152,13 @@ If you prefer, you can use your own Volvo Cars Developer application and credent
 </td>
 <td width="50%" align="center">
 <strong>Powertrain, health and service</strong><br><br>
-<img src="website/public/assets/product/volvo-battery-health.png" width="420" loading="lazy" alt="Hisingen Volvo powertrain, vehicle health and service information">
+<img src="website/public/assets/product/volvo-battery-health.png" width="420" loading="lazy" alt="Hisingen showing Volvo powertrain specifications and battery health information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle identity and ownership information</strong><br><br>
-<img src="website/public/assets/product/volvo-service-warranty.png" width="420" loading="lazy" alt="Hisingen Volvo vehicle identity information">
+<img src="website/public/assets/product/volvo-service-warranty.png" width="420" loading="lazy" alt="Hisingen showing Volvo service schedule, warranty and vehicle identity information">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle controls</strong><br><br>
@@ -438,18 +438,18 @@ The screenshots below show more of Hisingen in detail, grouped by the part of th
 <tr>
 <td width="50%" align="center">
 <strong>Local data</strong><br><br>
-<img src="website/public/assets/product/settings-storage.png" width="420" loading="lazy" alt="Hisingen settings for locally stored vehicle and application data">
+<img src="website/public/assets/product/polestar-location-cleanzone.png" width="420" loading="lazy" alt="Hisingen showing tyre status, parking location and CleanZone air quality for a Polestar">
 </td>
 <td width="50%" align="center">
-<strong>Features & telemetry</strong><br><br>
-<img src="website/public/assets/product/settings-telemetry.png" width="420" loading="lazy" alt="Hisingen settings for vehicle data, telemetry and optional functionality">
+<strong>Trip & diagnostics</strong><br><br>
+<img src="website/public/assets/product/polestar-trip-diagnostics.png" width="420" loading="lazy" alt="Hisingen trip computer and fluids and lighting diagnostics for a Polestar">
 </td>
 </tr>
 </table>
 
 <p align="center">
-<strong>Storage details</strong><br><br>
-<img src="website/public/assets/product/settings-storage-detail.png" width="560" loading="lazy" alt="Hisingen showing additional details about local vehicle and application storage">
+<strong>Storage & export details</strong><br><br>
+<img src="website/public/assets/product/settings-storage.png" width="560" loading="lazy" alt="Hisingen storage settings with local SQLite data, export controls and account sign-out">
 </p>
 
 A more detailed look at locally stored Hisingen data and storage-related controls.
@@ -464,12 +464,12 @@ A more detailed look at locally stored Hisingen data and storage-related control
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle information</strong><br><br>
-<img src="website/public/assets/product/polestar-vehicle-views.png" width="420" loading="lazy" alt="Hisingen showing detailed information about the selected Polestar">
+<strong>Vehicle views & openings</strong><br><br>
+<img src="website/public/assets/product/polestar-vehicle-views.png" width="420" loading="lazy" alt="Hisingen showing Polestar vehicle render views with the doors and openings status">
 </td>
 <td width="50%" align="center">
-<strong>Location & cabin environment</strong><br><br>
-<img src="website/public/assets/product/polestar-tyres-location.png" width="420" loading="lazy" alt="Hisingen showing vehicle location and cabin-environment information for a Polestar">
+<strong>Tyres, location & weather</strong><br><br>
+<img src="website/public/assets/product/polestar-tyres-location.png" width="420" loading="lazy" alt="Hisingen showing tyre status, reported vehicle location and ambient weather for a Polestar">
 </td>
 </tr>
 <tr>
@@ -539,7 +539,7 @@ Trends built from locally recorded history — odometer, battery health and cabi
 <tr>
 <td width="50%" align="center">
 <strong>Charging controls</strong><br><br>
-<img src="website/public/assets/product/polestar-controls-climate.png" width="420" loading="lazy" alt="Hisingen showing charging controls and charging settings for a Polestar">
+<img src="website/public/assets/product/polestar-controls-climate.png" width="420" loading="lazy" alt="Hisingen showing Polestar climate controls and charging settings">
 </td>
 <td width="50%" align="center">
 <strong>When a control isn't available</strong><br><br>
@@ -812,6 +812,16 @@ Releases are universal and support both:
 Published releases are Developer ID signed, hardened-runtime enabled, notarized by Apple and distributed with SHA-256 checksums and GitHub build provenance.
 
 ### Install
+
+**Option 1 — Homebrew:**
+
+```bash
+brew install --cask nicolaskheirallah/tap/hisingen
+```
+
+Updates are picked up with `brew upgrade --cask hisingen`. The cask is updated automatically on every release.
+
+**Option 2 — Manual download:**
 
 1. [Download the latest `Hisingen.dmg`](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg).
 2. Open the disk image.
