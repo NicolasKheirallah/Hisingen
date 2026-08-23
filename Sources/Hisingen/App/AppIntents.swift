@@ -291,7 +291,8 @@ struct WhereIsMyCarIntent: AppIntent {
         let nick = preferences.vehicleNickname(for: state.vin)
         let name = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
         let response = "\(name): \(String(format: "%.5f, %.5f", lat, lon)), reported \(when)."
-        return .result(value: "\(response) Map: https://maps.apple.com/?ll=\(lat),\(lon)",
+        let mapsURL = MapLinks.appleMapsPin(latitude: lat, longitude: lon)?.absoluteString ?? ""
+        return .result(value: "\(response) Map: \(mapsURL)",
                        dialog: IntentDialog(stringLiteral: response))
     }
 }

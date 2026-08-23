@@ -362,7 +362,10 @@ struct InfoTabView: View {
                     Spacer()
                     Button {
                         let query = "\(lat),\(lon)"
-                        if let url = URL(string: "https://maps.apple.com/?q=\(modelTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Car")&ll=\(query)") {
+                        if let url = MapLinks.appleMapsSearch(
+                            query: modelTitle.isEmpty ? "Car" : modelTitle,
+                            latitude: state.location?.latitude,
+                            longitude: state.location?.longitude) {
                             NSWorkspace.shared.open(url)
                         }
                     } label: {

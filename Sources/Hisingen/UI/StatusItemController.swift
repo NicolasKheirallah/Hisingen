@@ -434,15 +434,7 @@ final class StatusItemController: NSObject {
     }
 
     static func appleMapsURL(latitude: Double, longitude: Double, label: String) -> URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "maps.apple.com"
-        components.path = "/"
-        components.queryItems = [
-            URLQueryItem(name: "q", value: label),
-            URLQueryItem(name: "ll", value: "\(latitude),\(longitude)")
-        ]
-        return components.url
+        MapLinks.appleMapsPin(latitude: latitude, longitude: longitude, label: label)
     }
 
     @objc private func contextCopyVIN() {
