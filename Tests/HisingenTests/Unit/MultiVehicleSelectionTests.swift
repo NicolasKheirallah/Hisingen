@@ -44,7 +44,7 @@ struct MultiVehicleSelectionTests {
     }
 
     /// One-shot continuation helper: resumes exactly once, on the first matching event.
-    private final class OnceBox<T>: @unchecked Sendable {
+    private final class OnceBox<T: Sendable>: @unchecked Sendable {
         private let lock = NSLock()
         private var continuation: CheckedContinuation<T, Never>?
         init(_ continuation: CheckedContinuation<T, Never>) { self.continuation = continuation }

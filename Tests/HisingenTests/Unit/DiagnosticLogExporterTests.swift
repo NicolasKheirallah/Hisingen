@@ -111,7 +111,7 @@ struct DiagnosticLogExporterTests {
             refreshAttempts: 12, refreshSuccesses: 10, refreshFailures: 2)
         let audits: [[String: Any]] = [
             ["timestamp": "2023-11-14T22:00:00Z", "command": "lock",
-             "status": "completed", "durationMilliseconds": 1200 as Any?,
+             "status": "completed", "durationMilliseconds": 1200,
              "error": NSNull()]
         ]
         let data = try DiagnosticLogExporter.makeReport(
