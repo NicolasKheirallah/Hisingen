@@ -127,12 +127,20 @@ struct DoorsAndOpeningsCardView: View {
                     isLocked: isLocked,
                     hoveredOpening: hoveredOpening
                 )
-                .padding(.horizontal, 4)
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 5) {
-                    ForEach(displayOrder, id: \.self) { op in
-                        if let r = reading(for: op) {
-                            openingChip(reading: r)
+                let readings = displayOrder.compactMap { reading(for: $0) }
+                let pairs = stride(from: 0, to: readings.count, by: 2).map {
+                    Array(readings[$0..<min($0 + 2, readings.count)])
+                }
+                VStack(spacing: 5) {
+                    ForEach(0..<pairs.count, id: \.self) { idx in
+                        let pair = pairs[idx]
+                        HStack(spacing: 6) {
+                            ForEach(pair, id: \.opening) { r in
+                                openingChip(reading: r)
+                            }
+                            if pair.count == 1 {
+                                Spacer().frame(maxWidth: .infinity)
+                            }
                         }
                     }
                 }
@@ -224,11 +232,15 @@ struct TireStatusCardView: View {
                 VehicleSideProfileTiresView(tyres: tyres, hoveredPosition: hoveredPosition)
                     .padding(.horizontal, 4)
 
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible())], spacing: 6) {
-                    tirePill(title: L10n.text("Front Left"), position: .frontLeft)
-                    tirePill(title: L10n.text("Front Right"), position: .frontRight)
-                    tirePill(title: L10n.text("Rear Left"), position: .rearLeft)
-                    tirePill(title: L10n.text("Rear Right"), position: .rearRight)
+                VStack(spacing: 6) {
+                    HStack(spacing: 6) {
+                        tirePill(title: L10n.text("Front Left"), position: .frontLeft)
+                        tirePill(title: L10n.text("Front Right"), position: .frontRight)
+                    }
+                    HStack(spacing: 6) {
+                        tirePill(title: L10n.text("Rear Left"), position: .rearLeft)
+                        tirePill(title: L10n.text("Rear Right"), position: .rearRight)
+                    }
                 }
             }
         }
