@@ -2613,3 +2613,18 @@ html.js .reveal-late.is-in {
   .hero-actions { width: 100%; }
   .hero-actions .button-primary { flex: 1; }
 }
+
+/* ---------- GSAP Scroll Progress Indicator ---------- */
+.scroll-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  z-index: 10000;
+  pointer-events: none;
+}
+

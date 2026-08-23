@@ -1,3 +1,5 @@
+import { GsapMotionManager } from '../utils/gsapMotion';
+
 export class ChargeCalc {
   private container: HTMLElement;
   private slider: HTMLInputElement | null;
@@ -53,12 +55,32 @@ export class ChargeCalc {
     const dcMinutes = Math.max(8, Math.round((energyAddedKwh / 115.0) * 60 + 5));
 
     // Home electricity estimated cost (€0.22/kWh average)
-    const costEur = (energyAddedKwh * 0.22).toFixed(2);
+    const costEur = Number((energyAddedKwh * 0.22).toFixed(2));
 
     if (this.socReadout) this.socReadout.textContent = `${targetSoc}%`;
     if (this.acDurationEl) this.acDurationEl.textContent = `${acH}h ${acM.toString().padStart(2, '0')}m`;
-    if (this.dcDurationEl) this.dcDurationEl.textContent = `${dcMinutes} min`;
-    if (this.energyEl) this.energyEl.textContent = `+${energyAddedKwh.toFixed(1)} kWh`;
-    if (this.costEl) this.costEl.textContent = `~€${costEur}`;
+    if (this.dcDurationEl) {
+      GsapMotionManager.animateNumber(this.dcDurationEl, dcMinutes, {
+        duration: 0.35,
+        decimals: 0,
+        suffix: ' min',
+      });
+    }
+    if (this.energyEl) {
+      GsapMotionManager.animateNumber(this.energyEl, energyAddedKwh, {
+        duration: 0.35,
+        decimals: 1,
+        prefix: '+',
+        suffix: ' kWh',
+      });
+    }
+    if (this.costEl) {
+      GsapMotionManager.animateNumber(this.costEl, costEur, {
+        duration: 0.35,
+        decimals: 2,
+        prefix: '~€',
+      });
+    }
   }
 }
+

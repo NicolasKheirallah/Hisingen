@@ -46,6 +46,10 @@ export class SmoothScrollManager {
     }
   }
 
+  public getLenis(): Lenis | null {
+    return this.lenis;
+  }
+
   public destroy(): void {
     if (this.animId) cancelAnimationFrame(this.animId);
     this.lenis?.destroy();

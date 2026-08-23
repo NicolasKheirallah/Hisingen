@@ -2,12 +2,16 @@ import './styles.css';
 import { ChargeCalc } from './components/ChargeCalc';
 import { ChargingCurve } from './components/ChargingCurve';
 import { SmoothScrollManager } from './utils/smoothScroll';
+import { GsapMotionManager } from './utils/gsapMotion';
 import { VehicleViewer } from './components/VehicleViewer';
 
 document.documentElement.classList.add('js');
 
 // Initialize Luxury Inertial Smooth Scrolling (Lenis)
-new SmoothScrollManager();
+const smoothScroll = new SmoothScrollManager();
+
+// Initialize GSAP Motion & ScrollTrigger Choreography
+const gsapMotion = new GsapMotionManager(smoothScroll.getLenis());
 
 // Initialize Interactive Charge Simulator & Power Curve
 new ChargeCalc('charge-calc');
@@ -282,6 +286,9 @@ const openLightbox = (index: number, opener: HTMLElement): void => {
   lightboxOpener = opener;
   setLightbox(index);
   lightbox.showModal();
+  if (lightboxImg) {
+    GsapMotionManager.animateLightboxOpen(lightboxImg);
+  }
 };
 
 const closeLightbox = (): void => {
@@ -321,6 +328,7 @@ galleryFilterBtns.forEach((btn) => {
     });
 
     activeGalleryItems = allGalleryItems.filter((i) => !i.hasAttribute('hidden'));
+    gsapMotion.animateGalleryFilterChange(activeGalleryItems);
     if (gallery) {
       gallery.scrollTo({ left: 0, behavior: 'smooth' });
     }
