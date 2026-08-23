@@ -38,24 +38,36 @@ if (document.getElementById('vehicle-showcase')) {
 }
 
 // Lazy-load Three.js Automotive Studio Suite
-let threeStudio: any = null;
+import type { StudioMode, ThreeVehicleStudio } from './components/ThreeVehicleStudio';
+
+let threeStudio: ThreeVehicleStudio | null = null;
 const initThreeStudio = async (): Promise<void> => {
   const stage = document.getElementById('three-studio-stage');
   const wrap = document.getElementById('showcase-art-wrap');
   if (!stage || !wrap) return;
 
   try {
-    const { ThreeVehicleStudio } = await import('./components/ThreeVehicleStudio');
-    threeStudio = new ThreeVehicleStudio('three-studio-stage');
+    const { ThreeVehicleStudio: Studio } = await import('./components/ThreeVehicleStudio');
+    threeStudio = new Studio('three-studio-stage');
     wrap.classList.add('has-three');
 
-    // Studio Mode Pills
+    const showcase = document.getElementById('vehicle-showcase');
     const modePills = document.querySelectorAll<HTMLButtonElement>('.studio-mode-pill');
     const captionEl = document.querySelector<HTMLElement>('[data-viewer-caption]');
+    const tunnelControl = document.querySelector<HTMLElement>('[data-tunnel-control]');
     const captions: Record<string, string> = {
       orbit: '360° Studio Orbit · Drag horizontally to rotate with momentum · Midnight finish with Pixel LED headlights',
       parallax: '2.5D Optical Parallax · Move cursor to explore geometric depth and glossy clearcoat reflection sheen',
       windtunnel: 'Aerodynamic Wind Tunnel · 0.278 Cd streamline airflow simulation across the fastback silhouette',
+    };
+
+    const setMode = (mode: StudioMode): void => {
+      showcase?.setAttribute('data-studio-mode', mode);
+      if (tunnelControl) tunnelControl.hidden = mode !== 'windtunnel';
+      threeStudio?.setMode(mode);
+      if (captionEl && captions[mode]) {
+        captionEl.textContent = captions[mode];
+      }
     };
 
     modePills.forEach((pill) => {
@@ -66,19 +78,24 @@ const initThreeStudio = async (): Promise<void> => {
         });
         pill.classList.add('is-active');
         pill.setAttribute('aria-pressed', 'true');
-        const mode = (pill.dataset.studioMode || 'orbit') as any;
-        threeStudio?.setMode(mode);
-        if (captionEl && captions[mode]) {
-          captionEl.textContent = captions[mode];
-        }
+        setMode((pill.dataset.studioMode || 'orbit') as StudioMode);
       });
+    });
+
+    // Wind tunnel speed control
+    const tunnelSlider = document.querySelector<HTMLInputElement>('[data-tunnel-slider]');
+    const tunnelReadout = document.querySelector<HTMLElement>('[data-tunnel-readout]');
+    tunnelSlider?.addEventListener('input', () => {
+      const kmh = Number(tunnelSlider.value);
+      threeStudio?.setWindSpeed(kmh / 100);
+      if (tunnelReadout) tunnelReadout.textContent = `${kmh} km/h`;
     });
 
     // Angle Tabs connection with 3D studio
     const angleTabs = document.querySelectorAll<HTMLButtonElement>('[data-angle-tab]');
-    angleTabs.forEach((tab, index) => {
+    angleTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
-        threeStudio?.setAngleIndex(index);
+        threeStudio?.setAngleIndex(Number(tab.dataset.angleTab));
       });
     });
   } catch (err) {
@@ -125,7 +142,6 @@ const applyThemeMeta = (theme: Theme): void => {
   const dark = isDark(theme);
   themeMeta?.setAttribute('content', dark ? '#101113' : '#f7f6f3');
   chargingCurve?.setTheme(dark);
-  threeStudio?.setTheme(dark);
   metricsField?.setTheme?.(dark);
 };
 

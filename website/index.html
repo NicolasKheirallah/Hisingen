@@ -1317,6 +1317,11 @@
               <button type="button" class="studio-mode-pill is-active" data-studio-mode="orbit" aria-pressed="true">360° Orbit</button>
               <button type="button" class="studio-mode-pill" data-studio-mode="parallax" aria-pressed="false">2.5D Clearcoat</button>
               <button type="button" class="studio-mode-pill" data-studio-mode="windtunnel" aria-pressed="false">Wind Tunnel 0.278 Cd</button>
+              <div class="tunnel-control" data-tunnel-control hidden>
+                <label class="tunnel-label" for="tunnel-speed">Tunnel speed</label>
+                <input type="range" id="tunnel-speed" class="tunnel-slider" data-tunnel-slider min="0" max="250" step="10" value="140" aria-label="Wind tunnel speed in kilometres per hour" />
+                <output class="tunnel-readout" data-tunnel-readout for="tunnel-speed">140 km/h</output>
+              </div>
             </div>
             <div class="showcase-tabs" role="tablist" aria-label="Vehicle camera angles">
               <button type="button" class="showcase-tab is-active" role="tab" aria-selected="true" data-angle-tab="0" id="tab-front34" aria-controls="showcase-stage">3/4 Front</button>

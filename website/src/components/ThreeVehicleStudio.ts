@@ -120,12 +120,12 @@ export class ThreeVehicleStudio {
   private callouts: Array<{ def: CalloutDef; el: HTMLElement; anchor: TurntableFrame | undefined }> = [];
   private projected = new THREE.Vector3();
 
-  // Nose anchor per frame for the headlight glow (UV space of that frame)
+  // Nose anchor per frame for the headlight glow (UV space, bottom-origin)
   private noseAnchors: Record<string, { u: number; v: number }> = {
-    front34: { u: 0.24, v: 0.56 },
-    front: { u: 0.5, v: 0.66 },
-    side: { u: 0.86, v: 0.52 },
-    side2: { u: 0.14, v: 0.52 },
+    front34: { u: 0.24, v: 0.44 },
+    front: { u: 0.5, v: 0.34 },
+    side: { u: 0.86, v: 0.48 },
+    side2: { u: 0.14, v: 0.48 },
   };
 
   private resizeObserver: ResizeObserver | null = null;
@@ -451,6 +451,7 @@ export class ThreeVehicleStudio {
       uniform float uWindSpeed;
       uniform float uActive;
       uniform float uPixelRatio;
+      uniform float uIsDark;
       attribute float aSpeed;
       attribute float aOffset;
       attribute float aLayer;
@@ -482,12 +483,12 @@ export class ThreeVehicleStudio {
         }
 
         float edgeFade = smoothstep(2.2, 1.8, pos.x) * smoothstep(-2.2, -1.8, pos.x);
-        vAlpha = edgeFade * (0.35 + aLayer * 0.4) * uActive;
+        vAlpha = edgeFade * (0.5 + aLayer * 0.42) * uActive;
 
-        // Graphite white free-stream → amber boundary layer
-        vec3 paper = uIsDark > 0.5 ? vec3(0.92, 0.91, 0.88) : vec3(0.72, 0.71, 0.68);
-        vec3 graphite = uIsDark > 0.5 ? vec3(0.66, 0.65, 0.62) : vec3(0.45, 0.44, 0.42);
-        vec3 amber = vec3(0.85, 0.60, 0.32);
+        // Graphite free-stream → amber boundary layer
+        vec3 paper = uIsDark > 0.5 ? vec3(0.90, 0.89, 0.86) : vec3(0.52, 0.51, 0.49);
+        vec3 graphite = uIsDark > 0.5 ? vec3(0.62, 0.61, 0.58) : vec3(0.38, 0.37, 0.36);
+        vec3 amber = vec3(0.82, 0.57, 0.28);
 
         if (aLayer < 0.35) {
           vColor = mix(paper, graphite, aLayer / 0.35);
@@ -512,7 +513,7 @@ export class ThreeVehicleStudio {
         float dist = length(coord);
         if (dist > 0.5) discard;
         float soft = smoothstep(0.5, 0.05, dist);
-        float peak = uIsDark > 0.5 ? 0.7 : 0.55;
+        float peak = uIsDark > 0.5 ? 0.7 : 0.8;
         gl_FragColor = vec4(vColor, vAlpha * soft * peak);
       }
     `;
@@ -528,7 +529,7 @@ export class ThreeVehicleStudio {
         uIsDark: { value: this.isDark ? 1.0 : 0.0 },
       },
       transparent: true,
-      blending: THREE.AdditiveBlending,
+      blending: this.isDark ? THREE.AdditiveBlending : THREE.NormalBlending,
       depthWrite: false,
     });
 
@@ -541,11 +542,11 @@ export class ThreeVehicleStudio {
 
   private createCallouts(): void {
     const defs: CalloutDef[] = [
-      { frameId: 'side', u: 0.5, v: 0.8, label: 'Battery', sub: '78 kWh · floor-mounted', dx: -10, dy: 56 },
-      { frameId: 'side', u: 0.22, v: 0.62, label: 'Rear motor', sub: '150 kW · direct drive', dx: -64, dy: -44 },
-      { frameId: 'side', u: 0.56, v: 0.26, label: 'Drag', sub: '0.278 Cd fastback', dx: 26, dy: -52 },
-      { frameId: 'front34', u: 0.3, v: 0.52, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 30, dy: -40 },
-      { frameId: 'front', u: 0.5, v: 0.42, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 40, dy: -30 },
+      { frameId: 'side', u: 0.5, v: 0.34, label: 'Battery', sub: '78 kWh · floor-mounted', dx: 26, dy: 52 },
+      { frameId: 'side', u: 0.24, v: 0.4, label: 'Rear motor', sub: '150 kW · direct drive', dx: -88, dy: 58 },
+      { frameId: 'side', u: 0.42, v: 0.72, label: 'Drag', sub: '0.278 Cd fastback', dx: 30, dy: -46 },
+      { frameId: 'front34', u: 0.6, v: 0.56, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 34, dy: -36 },
+      { frameId: 'front', u: 0.5, v: 0.54, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 44, dy: -28 },
     ];
 
     for (const def of defs) {
@@ -591,8 +592,11 @@ export class ThreeVehicleStudio {
       );
       this.projected.project(this.camera);
 
-      const px = (this.projected.x * 0.5 + 0.5) * w;
+      let px = (this.projected.x * 0.5 + 0.5) * w;
       const py = (-this.projected.y * 0.5 + 0.5) * h;
+      // Keep the label inside the stage on narrow screens
+      const margin = def.dx >= 0 ? 185 : 20;
+      px = Math.min(Math.max(px, def.dx < 0 ? 185 : 16), w - margin);
       el.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0)`;
       el.style.opacity = (angleFade * 0.96).toFixed(2);
     }
@@ -692,6 +696,8 @@ export class ThreeVehicleStudio {
   private applyTheme(): void {
     this.parallaxMaterial.uniforms.uIsDark.value = this.isDark ? 1.0 : 0.0;
     this.particleMaterial.uniforms.uIsDark.value = this.isDark ? 1.0 : 0.0;
+    this.particleMaterial.blending = this.isDark ? THREE.AdditiveBlending : THREE.NormalBlending;
+    this.particleMaterial.needsUpdate = true;
     (this.shadowPlane.material as THREE.MeshBasicMaterial).opacity = this.isDark ? 0.75 : 0.4;
     this.glowTarget = this.isDark ? 1 : 0;
     this.requestRender();
@@ -707,12 +713,14 @@ export class ThreeVehicleStudio {
       this.targetAngle = Math.PI * 0.5;
       this.currentAngle = Math.PI * 0.5;
       this.leaveSpecial();
+      this.updateTurntable();
     } else {
       this.windActiveTarget = 0;
       if (mode === 'parallax') {
         this.targetAngle = 0;
         this.currentAngle = 0;
         this.leaveSpecial();
+        this.updateTurntable();
       }
     }
     this.requestRender();
@@ -730,6 +738,7 @@ export class ThreeVehicleStudio {
       this.currentAngle = this.targetAngle;
       this.angularVelocity = 0;
       this.leaveSpecial();
+      this.updateTurntable();
       this.requestRender();
       return;
     }
@@ -823,8 +832,9 @@ export class ThreeVehicleStudio {
 
     if (!prev.texture || !next.texture) return;
 
-    // Smoothstep the blend so anchor frames carry visual weight
-    const eased = blend * blend * (3 - 2 * blend);
+    // Double-smoothstep: holds anchor frames longer, moves quickly through the middle
+    const s = blend * blend * (3 - 2 * blend);
+    const eased = s * s * (3 - 2 * s);
     const pair = `${prev.id}>${next.id}`;
 
     if (this.fadeActive) {
