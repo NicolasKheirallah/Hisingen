@@ -89,11 +89,6 @@ export class ThreeVehicleStudio {
   private fadeFrom: THREE.Texture | null = null;
   private fadeTo: THREE.Texture | null = null;
 
-  // Desired turntable pair (deferred while a fade is in flight)
-  private ttA: THREE.Texture | null = null;
-  private ttB: THREE.Texture | null = null;
-  private ttBlend = 0;
-
   // 2.5D parallax + crossfade material
   private carPlaneMesh!: THREE.Mesh;
   private parallaxMaterial!: THREE.ShaderMaterial;
@@ -833,24 +828,16 @@ export class ThreeVehicleStudio {
     const pair = `${prev.id}>${next.id}`;
 
     if (this.fadeActive) {
-      // A crossfade owns the uniforms — only record the desired pair
-      this.ttA = prev.texture;
-      this.ttB = next.texture;
-      this.ttBlend = eased;
       return;
     }
 
     if (pair !== this.activePair) {
       this.activePair = pair;
-      this.ttA = prev.texture;
-      this.ttB = next.texture;
-      this.ttBlend = eased;
       this.parallaxMaterial.uniforms.uTexA.value = prev.texture;
       this.parallaxMaterial.uniforms.uTexB.value = next.texture;
       this.parallaxMaterial.uniforms.uBlend.value = eased;
       this.dirty = true;
     } else if (Math.abs((this.parallaxMaterial.uniforms.uBlend.value as number) - eased) > 0.002) {
-      this.ttBlend = eased;
       this.parallaxMaterial.uniforms.uBlend.value = eased;
       this.dirty = true;
     }
@@ -993,6 +980,17 @@ export class ThreeVehicleStudio {
   }
 
   private updateNightLighting(): void {
+    if (this.specialIndex !== -1 || this.fadeActive) {
+      const glowMat = this.noseGlow.material as THREE.MeshBasicMaterial;
+      const poolMat = this.lightPool.material as THREE.MeshBasicMaterial;
+      if (glowMat.opacity !== 0 || poolMat.opacity !== 0) {
+        glowMat.opacity = 0;
+        poolMat.opacity = 0;
+        this.dirty = true;
+      }
+      return;
+    }
+
     // Anchor the glow to the nose of whichever frame is dominant
     let best: TurntableFrame | null = null;
     let bestDiff = Infinity;
@@ -1018,8 +1016,7 @@ export class ThreeVehicleStudio {
 
     const anchor = this.noseAnchors[best.id]!;
     const angleFade = Math.max(0, 1 - bestDiff / 0.5);
-    const specialFadeOut = this.specialIndex !== -1 ? 1 - this.specialFade : 1;
-    const intensity = this.glowIntensity * angleFade * specialFadeOut;
+    const intensity = this.glowIntensity * angleFade;
 
     this.noseGlow.position.set(
       (anchor.u - 0.5) * PLANE_W + this.carPlaneMesh.position.x,
