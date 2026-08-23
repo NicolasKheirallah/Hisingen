@@ -10,7 +10,11 @@ enum AutomationHandoff {
         return NSWorkspace.shared.open(url)
     }
 
-    static func resolveVIN(from input: String?, preferences: PreferencesStore = .shared) -> String {
+    static func resolveVIN(from input: String?) -> String {
+        resolveVIN(from: input, preferences: .shared)
+    }
+
+    static func resolveVIN(from input: String?, preferences: PreferencesStore) -> String {
         guard let input = input?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty else {
             return preferences.vin
         }
