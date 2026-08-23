@@ -286,8 +286,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
               Self.rainWithWindowsOpenCondition(current),
               !Self.rainWithWindowsOpenCondition(previous) else { return }
 
+        // Titles stay emoji-free across all notification builders for visual consistency;
+        // the charging/security semantics live in the thread identifiers and actions.
         let content = UNMutableNotificationContent()
-        content.title = "🌧️ " + L10n.text("Rain Alert")
+        content.title = L10n.text("Rain Alert")
         content.body = privateBody(L10n.text("Rain detected near your vehicle with windows left open!"))
         content.threadIdentifier = "hisingen.weather.\(current.vin)"
         UNUserNotificationCenter.current().add(
@@ -309,7 +311,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
         let brandName = current.model.brand.displayName
         let content = UNMutableNotificationContent()
-        content.title = "🔒 " + L10n.text("Security Reminder")
+        content.title = L10n.text("Security Reminder")
         content.body = privateBody(L10n.format("Your %@ is parked and currently unlocked.", brandName))
         content.threadIdentifier = "hisingen.security.\(current.vin)"
         content.categoryIdentifier = Self.unlockedCategoryID
@@ -336,7 +338,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             L10n.format("Your %@ is parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", brandTitle, $0)
         } ?? L10n.format("Your %@ is parked and unplugged. Connect to a charger to ensure departure range.", brandTitle)
         let content = UNMutableNotificationContent()
-        content.title = "⚡️ " + L10n.text("Plug-In Reminder")
+        content.title = L10n.text("Plug-In Reminder")
         content.body = privateBody(detailedBody)
         content.threadIdentifier = "hisingen.charging.\(current.vin)"
         UNUserNotificationCenter.current().add(

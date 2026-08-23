@@ -15,10 +15,6 @@ enum SettingsChange {
     case closeSettings
 }
 
-private struct DatabaseStats: Sendable {
-    let counts: (snapshots: Int, chargingSessions: Int, chargingSamples: Int, batteryHealth: Int, telemetry: Int, commands: Int)
-    let sizeBytes: Int64
-}
 
 @MainActor
 struct SettingsView: View {
@@ -82,11 +78,6 @@ struct SettingsView: View {
     @State private var usableBatteryCapacityOverride = ""
     @State private var wltpRangeOverride = ""
     @Environment(\.preferencesStore) private var preferences
-    @State private var databaseVacuumed = false
-    @State private var databasePruned = false
-    @State private var databaseStats = DatabaseStats(
-        counts: (0, 0, 0, 0, 0, 0), sizeBytes: 0
-    )
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var settingsVehicleVIN: String { state?.vin ?? preferences.vin }
@@ -111,7 +102,7 @@ struct SettingsView: View {
                 remoteControlsCard
                 capabilitiesCard
                 notificationsCard
-                databaseStorageCard
+                SettingsDatabaseCard(state: state, database: database)
                 actionsCard
                 versionFooter
             }
@@ -181,18 +172,9 @@ struct SettingsView: View {
             }
         }
         .task {
-            await loadDatabaseStats()
         }
     }
 
-    private func loadDatabaseStats() async {
-        let database = database
-        let stats = await Task.detached(priority: .utility) {
-            DatabaseStats(counts: database.recordCounts(), sizeBytes: database.databaseSizeBytes)
-        }.value
-        guard !Task.isCancelled else { return }
-        databaseStats = stats
-    }
 
     private var headerBar: some View {
         HStack {
@@ -770,20 +752,7 @@ struct SettingsView: View {
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Distance unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $distanceUnit) {
-                            ForEach(DistanceUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: distanceUnit) { _, _ in
-                            preferences.distanceUnit = distanceUnit
+                    unitRow("Distance unit", selection: $distanceUnit, options: DistanceUnit.allCases, label: \.title) { _ in
                             if !preferences.hasExplicitTemperatureUnit {
                                 temperatureUnit = distanceUnit == .miles ? .fahrenheit : .celsius
                             }
@@ -793,109 +762,44 @@ struct SettingsView: View {
                             if !preferences.hasExplicitEnergyConsumptionUnit {
                                 energyConsumptionUnit = distanceUnit == .miles ? .milesPerKwh : .kwhPer100Km
                             }
+                            preferences.distanceUnit = distanceUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Temperature unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $temperatureUnit) {
-                            ForEach(TemperatureUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: temperatureUnit) { _, _ in
+                    unitRow("Temperature unit", selection: $temperatureUnit, options: TemperatureUnit.allCases, label: \.title) { _ in
                             preferences.temperatureUnit = temperatureUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Tyre pressure unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $pressureUnit) {
-                            ForEach(PressureUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: pressureUnit) { _, _ in
+                    unitRow("Tyre pressure unit", selection: $pressureUnit, options: PressureUnit.allCases, label: \.title) { _ in
                             preferences.pressureUnit = pressureUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Fuel volume unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $fuelVolumeUnit) {
-                            ForEach(FuelVolumeUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: fuelVolumeUnit) { _, _ in
+                    unitRow("Fuel volume unit", selection: $fuelVolumeUnit, options: FuelVolumeUnit.allCases, label: \.title) { _ in
                             preferences.fuelVolumeUnit = fuelVolumeUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Fuel economy unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $fuelEconomyUnit) {
-                            ForEach(FuelEconomyUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: fuelEconomyUnit) { _, _ in
+                    unitRow("Fuel economy unit", selection: $fuelEconomyUnit, options: FuelEconomyUnit.allCases, label: \.title) { _ in
                             preferences.fuelEconomyUnit = fuelEconomyUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
-                    HStack {
-                        Text(L10n.text("Electric consumption unit"))
-                            .font(.system(size: 12))
-                        Spacer()
-                        Picker("", selection: $energyConsumptionUnit) {
-                            ForEach(EnergyConsumptionUnit.allCases, id: \.self) { unit in
-                                Text(unit.title).tag(unit)
-                            }
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                        .frame(maxWidth: 160)
-                        .onChange(of: energyConsumptionUnit) { _, value in
-                            preferences.energyConsumptionUnit = value
+                    unitRow("Electric consumption unit", selection: $energyConsumptionUnit, options: EnergyConsumptionUnit.allCases, label: \.title) { _ in
+                            preferences.energyConsumptionUnit = energyConsumptionUnit
                             onSettingsChanged(.presentation)
                         }
-                    }
 
                     Divider().opacity(0.4)
 
@@ -936,7 +840,7 @@ struct SettingsView: View {
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
                                 .onChange(of: electricityPrice) { _, _ in
-                                    if let price = Double(electricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
+                                    if let price = NumberParsing.decimal(from: electricityPrice), price > 0 {
                                         preferences.electricityPricePerKwh = price
                                     }
                                 }
@@ -977,7 +881,7 @@ struct SettingsView: View {
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
                                 .onChange(of: nightElectricityPrice) { _, _ in
-                                    if let price = Double(nightElectricityPrice.replacingOccurrences(of: ",", with: ".")), price > 0 {
+                                    if let price = NumberParsing.decimal(from: nightElectricityPrice), price > 0 {
                                         preferences.nightElectricityPricePerKwh = price
                                     }
                                 }
@@ -1368,7 +1272,7 @@ struct SettingsView: View {
 
     private func saveSpecificationOverride(vin: String) {
         func parsed(_ text: String, range: ClosedRange<Double>) -> Double? {
-            guard let value = Double(text.replacingOccurrences(of: ",", with: ".")),
+            guard let value = NumberParsing.decimal(from: text),
                   range.contains(value) else { return nil }
             return value
         }
@@ -1378,6 +1282,33 @@ struct SettingsView: View {
         )
         preferences.setVehicleSpecificationOverride(value.isEmpty ? nil : value, for: vin)
         onSettingsChanged(.presentation)
+    }
+
+    /// Shared scaffolding for the unit pickers. Each caller keeps its own `onChange` because
+    /// only the distance row cascades into derived defaults.
+    private func unitRow<Unit: Hashable>(
+        _ title: String,
+        selection: Binding<Unit>,
+        options: [Unit],
+        label: @escaping (Unit) -> String,
+        onChange: @escaping (Unit) -> Void
+    ) -> some View {
+        HStack {
+            Text(L10n.text(title))
+                .font(.system(size: 12))
+            Spacer()
+            Picker("", selection: selection) {
+                ForEach(options, id: \.self) { unit in
+                    Text(label(unit)).tag(unit)
+                }
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(maxWidth: 160)
+            .onChange(of: selection.wrappedValue) { _, newValue in
+                onChange(newValue)
+            }
+        }
     }
 
     private func subsectionHeader(_ title: String) -> some View {
@@ -1730,281 +1661,9 @@ struct SettingsView: View {
         .padding(.vertical, 3)
     }
 
-    private var databaseStorageCard: some View {
-        let counts = databaseStats.counts
-        let sizeStr = ByteCountFormatter.string(fromByteCount: databaseStats.sizeBytes, countStyle: .file)
+    // Database storage/maintenance/export UI lives in `SettingsDatabaseCard` so this file
+    // stays focused on preference sections rather than data management.
 
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: .blue)
-
-                VStack(spacing: 6) {
-                    KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
-                    KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
-                    KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
-                    KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
-                    KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
-                    KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
-                    KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
-                }
-
-                Divider().opacity(0.4)
-
-                HStack(spacing: 8) {
-                    Image(systemName: "location.slash.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(L10n.text("Store precise location history"))
-                            .font(.system(size: 11, weight: .medium))
-                        Text(L10n.text("Off by default. Live parking location still works, but coordinates are not written to history."))
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $persistLocationHistory)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .onChange(of: persistLocationHistory) { _, value in
-                            preferences.persistLocationHistory = value
-                            if !value { database.clearStoredLocations(for: state?.vin) }
-                        }
-                }
-
-                Divider().opacity(0.4)
-                    .padding(.vertical, 2)
-
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Button {
-                            // VACUUM rewrites the whole database file; never on the main thread.
-                            let db = database
-                            Task.detached(priority: .utility) { db.vacuum() }
-                            Task { await loadDatabaseStats() }
-                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                databaseVacuumed = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    databaseVacuumed = false
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: databaseVacuumed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                                Text(databaseVacuumed ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(databaseVacuumed ? HisingenTheme.semanticGood : nil)
-
-                        Button {
-                            let db = database
-                            Task.detached(priority: .utility) { db.pruneHistoricalSamples(olderThanDays: 90) }
-                            Task { await loadDatabaseStats() }
-                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                databasePruned = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    databasePruned = false
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: databasePruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
-                                Text(databasePruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(databasePruned ? HisingenTheme.semanticGood : nil)
-                    }
-
-                    HStack(spacing: 8) {
-                        Button {
-                            let vin = state?.vin
-                            let db = database
-                            Task { @MainActor in
-                                let csv = await Task.detached(priority: .userInitiated) {
-                                    db.exportChargingSessionsCSV(for: vin)
-                                }.value
-                                saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text(L10n.text("Export Charging (CSV)"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Button {
-                            let vin = state?.vin
-                            let db = database
-                            Task { @MainActor in
-                                let csv = await Task.detached(priority: .userInitiated) {
-                                    db.exportBatteryHealthCSV(for: vin)
-                                }.value
-                                saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text(L10n.text("Export Health (CSV)"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-
-                    HStack(spacing: 8) {
-                        Button {
-                            guard let vin = state?.vin else { return }
-                            let db = database
-                            Task { @MainActor in
-                                let csv = await Task.detached(priority: .userInitiated) {
-                                    db.exportTelemetryCSV(for: vin)
-                                }.value
-                                saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text(L10n.text("Export Trips (CSV)"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(state == nil)
-
-                        Button {
-                            guard let vin = state?.vin else { return }
-                            let db = database
-                            Task { @MainActor in
-                                let csv = await Task.detached(priority: .userInitiated) {
-                                    db.exportCommandAuditsCSV(for: vin)
-                                }.value
-                                saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text(L10n.text("Export Commands (CSV)"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(state == nil)
-                    }
-
-                    Button {
-                        guard let vin = state?.vin else { return }
-                        let db = database
-                        Task { @MainActor in
-                            let csv = await Task.detached(priority: .userInitiated) {
-                                db.exportAirQualityCSV(for: vin)
-                            }.value
-                            saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L10n.text("Export Air Quality (CSV)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(state == nil)
-
-                    Button {
-                        // Full local-history backup across every stored vehicle.
-                        // Coordinates are included only when location history is opted in,
-                        // mirroring the retention preference elsewhere in this pane.
-                        let includeCoords = preferences.persistLocationHistory
-                        let db = database
-                        Task { @MainActor in
-                            let data: Data? = await Task.detached(priority: .userInitiated) {
-                                try? db.exportBackupJSON(includeCoordinates: includeCoords)
-                            }.value
-                            guard let data else { return }
-                            saveDataWithPanel(
-                                suggestedFilename: "hisingen_backup_\(Int(Date().timeIntervalSince1970)).json",
-                                contentType: .json,
-                                data: data
-                            )
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "archivebox")
-                            Text(L10n.text("Export Full Backup (JSON)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(state == nil)
-
-                    Button {
-                        Task { @MainActor in
-                            guard let data = try? await APIDiagnosticLogStore.shared.exportData() else { return }
-                            saveDataWithPanel(
-                                suggestedFilename: "hisingen_api_diagnostics.json",
-                                contentType: .json,
-                                data: data
-                            )
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "stethoscope")
-                            Text(L10n.text("Export Redacted API Data"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help(L10n.text("Exports only sanitized JSON response bodies. Paths, metadata, vehicle identifiers, credentials, locations, and image URLs are removed."))
-                }
-            }
-        }
-    }
-
-    private func saveCSVWithPanel(suggestedFilename: String, csvContent: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = suggestedFilename
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                try? csvContent.write(to: url, atomically: true, encoding: .utf8)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            }
-        }
-    }
-
-    private func saveDataWithPanel(suggestedFilename: String, contentType: UTType, data: Data) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [contentType]
-        panel.nameFieldStringValue = suggestedFilename
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                try? data.write(to: url, options: .atomic)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            }
-        }
-    }
 
     private var actionsCard: some View {
         Card {

@@ -117,11 +117,11 @@ struct VehicleTabView: View {
         .accessibilityElement(children: .combine)
     }
 
+    @ViewBuilder
     private var multiCarChips: some View {
-        guard cars.count > 1 else { return AnyView(EmptyView()) }
+        if cars.count > 1 {
         let currentVin = activeVin ?? cars.first?.vin ?? ""
-        return AnyView(
-            ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(cars, id: \.vin) { car in
                         let isSelected = car.vin == currentVin
@@ -150,20 +150,26 @@ struct VehicleTabView: View {
                 }
                 .padding(.horizontal, 2)
             }
-        )
+        }
     }
 
 
     private var moreDetailsSection: some View {
-        let cards: [AnyView] = [
-            vehicleIdentityCard, lightingAndFluidCard,
-            climateCard, softwareCard, diagnosticsCard, errorsCard
-        ].compactMap { $0 }
+        // Stable string identities: index-based identity re-attributed card state whenever a
+        // card appears/disappears ahead of another (disclosure state, hover, animations).
+        let cards = [
+            (id: "identity", view: vehicleIdentityCard), (id: "lighting", view: lightingAndFluidCard),
+            (id: "climate", view: climateCard), (id: "software", view: softwareCard),
+            (id: "diagnostics", view: diagnosticsCard), (id: "errors", view: errorsCard)
+        ].compactMap { (entry: (id: String, view: AnyView?)) -> (id: String, view: AnyView)? in
+            guard let view = entry.view else { return nil }
+            return (id: entry.id, view: view)
+        }
         guard !cards.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
             DisclosureGroup(isExpanded: $moreExpanded) {
                 VStack(spacing: HisingenTheme.sectionSpacing) {
-                    ForEach(cards.indices, id: \.self) { cards[$0] }
+                    ForEach(cards, id: \.id) { $0.view }
                 }
                 .padding(.top, HisingenTheme.sectionSpacing)
             } label: {

@@ -73,8 +73,7 @@ shapes cross-checked against kildahldev/unofficial-polestar-api:
 optimised-charging mode (0 unavailable / 1 intelligent timer / 2 price-optimised). The
 Controls section only renders after a fetch returns locations — unverified platforms show
 nothing rather than controls that may not exist. Per-location charge timers and departure
-times are still read-only; their write RPCs are unverified (see
-[research/api-investigation-backlog.md](../research/api-investigation-backlog.md)).
+times are still read-only; their write RPCs are unverified (see `docs/research/api-investigation-backlog.md`).
 
 ## Charging anomaly detection (failing-cable hint)
 

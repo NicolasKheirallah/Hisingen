@@ -8,6 +8,7 @@ already surfaces dead external links via its own link-checking on render).
 """
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -15,10 +16,22 @@ LINK_RE = re.compile(r'\]\(([^)]+)\)')
 FENCE_RE = re.compile(r'^\s*```')
 
 
+def is_gitignored(path: pathlib.Path) -> bool:
+    try:
+        res = subprocess.run(
+            ["git", "check-ignore", "-q", str(path.relative_to(ROOT))],
+            cwd=ROOT,
+            capture_output=True
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
 def markdown_files():
     candidates = sorted(ROOT.glob("*.md"))
     candidates += sorted((ROOT / "docs").rglob("*.md"))
-    return [path for path in candidates if path.is_file()]
+    return [path for path in candidates if path.is_file() and not is_gitignored(path)]
 
 
 def check_fences(path, text):
@@ -48,7 +61,7 @@ def check_links(path, text):
             if not file_part:
                 continue
             resolved = (path.parent / file_part).resolve()
-            if not resolved.exists():
+            if not resolved.exists() or is_gitignored(resolved):
                 errors.append(f"{path}:{lineno}: broken link -> {target}")
     return errors
 
