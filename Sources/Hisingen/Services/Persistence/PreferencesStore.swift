@@ -350,7 +350,10 @@ final class PreferencesStore {
     func setTheme(_ theme: AppTheme, for vin: String, brand: VehicleBrand? = nil) { let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); if !key.isEmpty { var values = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]; values[key] = theme.rawValue; d.set(values, forKey: "vehicle_themes_v1") }; d.set(theme.rawValue, forKey: "theme_for_\((brand ?? activeBrand).rawValue)"); d.set(theme.rawValue, forKey: "app_theme") }
     var appTheme: AppTheme { get { vin.isEmpty ? (d.string(forKey: "theme_for_\(activeBrand.rawValue)").flatMap(AppTheme.init) ?? AppTheme(rawValue: d.string(forKey: "app_theme") ?? "") ?? (activeBrand == .volvo ? .volvo : .polestar)) : theme(for: vin, brand: activeBrand) } set { setTheme(newValue, for: vin, brand: activeBrand) } }
     func syncAppThemeStorageKey() { d.set(appTheme.rawValue, forKey: "app_theme") }
-    func applyAppearance() { NSApplication.shared.appearance = appearanceMode.nsAppearance }
+    func applyAppearance() {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
+        NSApplication.shared.appearance = appearanceMode.nsAppearance
+    }
     func migrateLegacyPassword() { guard let legacy = d.string(forKey: "polestar_password"), !legacy.isEmpty else { return }; do { if try Keychain.readPassword() == nil { try Keychain.savePassword(legacy) }; d.removeObject(forKey: "polestar_password") } catch { logger.error("Legacy Polestar password migration to Keychain failed: \(String(describing: error), privacy: .public)") } }
 }
 

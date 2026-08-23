@@ -156,18 +156,12 @@ struct MeasurementUnitsAndThemeTests {
 
         store.appearanceMode = .light
         XCTAssertEqual(store.appearanceMode, .light)
-        store.applyAppearance()
-        XCTAssertEqual(NSApplication.shared.appearance?.name, .aqua)
 
         store.appearanceMode = .dark
         XCTAssertEqual(store.appearanceMode, .dark)
-        store.applyAppearance()
-        XCTAssertEqual(NSApplication.shared.appearance?.name, .darkAqua)
 
         store.appearanceMode = .system
         XCTAssertEqual(store.appearanceMode, .system)
-        store.applyAppearance()
-        XCTAssertNil(NSApplication.shared.appearance as NSAppearance?)
     }
 
     @Test

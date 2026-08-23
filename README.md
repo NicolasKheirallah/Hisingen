@@ -17,7 +17,7 @@ No Electron. No Hisingen cloud account. No analytics platform sitting between yo
 [**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Troubleshooting](#troubleshooting) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
-  <img src="website/public/assets/product/menu-bar-overview.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
+  <img src="website/public/assets/product/menu-bar-panel.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
 </p>
 
 > [!IMPORTANT]
@@ -103,27 +103,27 @@ The Polestar integration therefore uses interfaces based on the services used by
 </td>
 <td width="50%" align="center">
 <strong>Charging history</strong><br><br>
-<img src="website/public/assets/product/polestar-charging-history.png" width="420" loading="lazy" alt="Hisingen charging history with session information">
+<img src="website/public/assets/product/polestar-charging-session.png" width="420" loading="lazy" alt="Hisingen charging history with session information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Openings and tyre state</strong><br><br>
-<img src="website/public/assets/product/polestar-openings-tyres.png" width="420" loading="lazy" alt="Hisingen vehicle openings and tyre status">
+<img src="website/public/assets/product/polestar-doors-openings.png" width="420" loading="lazy" alt="Hisingen vehicle openings and tyre status">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle health and climate</strong><br><br>
-<img src="website/public/assets/product/polestar-health-climate.png" width="420" loading="lazy" alt="Hisingen vehicle health and climate information">
+<img src="website/public/assets/product/polestar-identity-health.png" width="420" loading="lazy" alt="Hisingen vehicle health and climate information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle software</strong><br><br>
-<img src="website/public/assets/product/polestar-software.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle software information">
+<img src="website/public/assets/product/polestar-climate-software.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle software information">
 </td>
 <td width="50%" align="center">
 <strong>Detailed openings and tyre view</strong><br><br>
-<img src="website/public/assets/product/polestar-openings-tyres-detail.png" width="420" loading="lazy" alt="Hisingen detailed doors, windows, charge lid and tyre status">
+<img src="website/public/assets/product/polestar-doors-tyres.png" width="420" loading="lazy" alt="Hisingen detailed doors, windows, charge lid and tyre status">
 </td>
 </tr>
 </table>
@@ -142,7 +142,7 @@ If you prefer, you can use your own Volvo Cars Developer application and credent
 </td>
 <td width="50%" align="center">
 <strong>Energy and powertrain telemetry</strong><br><br>
-<img src="website/public/assets/product/volvo-energy-powertrain.png" width="420" loading="lazy" alt="Hisingen Volvo energy and powertrain telemetry">
+<img src="website/public/assets/product/volvo-charging-fuel.png" width="420" loading="lazy" alt="Hisingen Volvo energy and powertrain telemetry">
 </td>
 </tr>
 <tr>
@@ -152,13 +152,13 @@ If you prefer, you can use your own Volvo Cars Developer application and credent
 </td>
 <td width="50%" align="center">
 <strong>Powertrain, health and service</strong><br><br>
-<img src="website/public/assets/product/volvo-health-service.png" width="420" loading="lazy" alt="Hisingen Volvo powertrain, vehicle health and service information">
+<img src="website/public/assets/product/volvo-battery-health.png" width="420" loading="lazy" alt="Hisingen Volvo powertrain, vehicle health and service information">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle identity and ownership information</strong><br><br>
-<img src="website/public/assets/product/volvo-identity.png" width="420" loading="lazy" alt="Hisingen Volvo vehicle identity information">
+<img src="website/public/assets/product/volvo-service-warranty.png" width="420" loading="lazy" alt="Hisingen Volvo vehicle identity information">
 </td>
 <td width="50%" align="center">
 <strong>Vehicle controls</strong><br><br>
@@ -465,28 +465,28 @@ A more detailed look at locally stored Hisingen data and storage-related control
 <tr>
 <td width="50%" align="center">
 <strong>Vehicle information</strong><br><br>
-<img src="website/public/assets/product/polestar-info-overview.png" width="420" loading="lazy" alt="Hisingen showing detailed information about the selected Polestar">
+<img src="website/public/assets/product/polestar-vehicle-views.png" width="420" loading="lazy" alt="Hisingen showing detailed information about the selected Polestar">
 </td>
 <td width="50%" align="center">
 <strong>Location & cabin environment</strong><br><br>
-<img src="website/public/assets/product/polestar-location-environment.png" width="420" loading="lazy" alt="Hisingen showing vehicle location and cabin-environment information for a Polestar">
+<img src="website/public/assets/product/polestar-tyres-location.png" width="420" loading="lazy" alt="Hisingen showing vehicle location and cabin-environment information for a Polestar">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
 <strong>Diagnostics</strong><br><br>
-<img src="website/public/assets/product/polestar-diagnostics.png" width="420" loading="lazy" alt="Hisingen showing diagnostic and vehicle-status information for a Polestar">
+<img src="website/public/assets/product/polestar-trip-diagnostics.png" width="420" loading="lazy" alt="Hisingen showing diagnostic and vehicle-status information for a Polestar">
 </td>
 <td width="50%" align="center">
 <strong>Battery & powertrain health</strong><br><br>
-<img src="website/public/assets/product/polestar-powertrain-health.png" width="420" loading="lazy" alt="Hisingen showing battery, powertrain and vehicle-health information for a Polestar">
+<img src="website/public/assets/product/polestar-battery-health.png" width="420" loading="lazy" alt="Hisingen showing battery, powertrain and vehicle-health information for a Polestar">
 </td>
 </tr>
 </table>
 
 <p align="center">
 <strong>Vehicle identity & ownership details</strong><br><br>
-<img src="website/public/assets/product/polestar-identity-warranty.png" width="560" loading="lazy" alt="Hisingen showing vehicle identity and other detailed information for a Polestar">
+<img src="website/public/assets/product/polestar-service-warranty.png" width="560" loading="lazy" alt="Hisingen showing vehicle identity and other detailed information for a Polestar">
 </p>
 
 Detailed information tied to the selected vehicle and the data made available for it.
@@ -539,7 +539,7 @@ Trends built from locally recorded history — odometer, battery health and cabi
 <tr>
 <td width="50%" align="center">
 <strong>Charging controls</strong><br><br>
-<img src="website/public/assets/product/polestar-charging-controls.png" width="420" loading="lazy" alt="Hisingen showing charging controls and charging settings for a Polestar">
+<img src="website/public/assets/product/polestar-controls-climate.png" width="420" loading="lazy" alt="Hisingen showing charging controls and charging settings for a Polestar">
 </td>
 <td width="50%" align="center">
 <strong>When a control isn't available</strong><br><br>
@@ -549,11 +549,11 @@ Trends built from locally recorded history — odometer, battery health and cabi
 <tr>
 <td width="50%" align="center">
 <strong>Capability overview</strong><br><br>
-<img src="website/public/assets/product/capability-matrix-overview.png" width="420" loading="lazy" alt="Hisingen capability inspector overview">
+<img src="website/public/assets/product/capability-inspector-top.png" width="420" loading="lazy" alt="Hisingen capability inspector overview">
 </td>
 <td width="50%" align="center">
 <strong>Capability detail</strong><br><br>
-<img src="website/public/assets/product/capability-matrix-detail.png" width="420" loading="lazy" alt="Hisingen detailed capability inspector">
+<img src="website/public/assets/product/capability-inspector-detail.png" width="420" loading="lazy" alt="Hisingen detailed capability inspector">
 </td>
 </tr>
 </table>
