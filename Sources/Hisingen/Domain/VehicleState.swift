@@ -22,8 +22,11 @@ struct CarSummary: Codable, Equatable, Sendable {
     }
 
     @MainActor
-    func displayTitle(format: VehicleLabelFormat? = nil, preferences: PreferencesStore = PreferencesStore()) -> String {
-        preferences.formattedVehicleTitle(
+    func displayTitle(format: VehicleLabelFormat? = nil, preferences: PreferencesStore? = nil) -> String {
+        // The store is created inside the isolated body: Swift 6 rejects actor-isolated
+        // default-argument expressions, which are evaluated in the caller's context.
+        let resolvedPreferences = preferences ?? PreferencesStore()
+        return resolvedPreferences.formattedVehicleTitle(
             vin: vin,
             modelName: modelName ?? (title.contains(" · ") ? title.components(separatedBy: " · ").first : title),
             modelYear: modelYear ?? (title.contains(" · ") ? title.components(separatedBy: " · ").last : nil),

@@ -161,6 +161,59 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         }
     }
 
+    /// Past-tense summary of what the command did, for result banners — e.g.
+    /// "AC turned on at 22 °C", "Vehicle locked". Distinct from `title`, which is an
+    /// imperative ("Lock vehicle") suited to buttons and confirmations.
+    var outcomeDescription: String {
+        switch self {
+        case .startClimate(let temperature, _, _, _, _, _):
+            if temperature > 0 {
+                let whole = temperature.truncatingRemainder(dividingBy: 1) == 0
+                return whole ? L10n.format("AC turned on at %.0f °C", Double(temperature))
+                             : L10n.format("AC turned on at %.1f °C", Double(temperature))
+            }
+            return L10n.text("AC (climate) turned on")
+        case .stopClimate: return L10n.text("AC (climate) turned off")
+        case .startEngine(let minutes): return L10n.format("Engine started (%d min)", minutes)
+        case .stopEngine: return L10n.text("Engine stopped")
+        case .startPreCleaning: return L10n.text("Cabin cleaning started")
+        case .stopPreCleaning: return L10n.text("Cabin cleaning stopped")
+        case .lock, .lockReducedGuard: return L10n.text("Vehicle locked")
+        case .unlock: return L10n.text("Vehicle unlocked")
+        case .unlockTrunk: return L10n.text("Trunk unlocked")
+        case .openTailgate: return L10n.text("Tailgate opened")
+        case .closeTailgate: return L10n.text("Tailgate closed")
+        case .openWindows: return L10n.text("All windows opened")
+        case .closeWindows: return L10n.text("All windows closed")
+        case .flashLights: return L10n.text("Lights flashed")
+        case .honkAndFlash: return L10n.text("Horn and lights activated")
+        case .honkHorn: return L10n.text("Horn honked")
+        case .setChargeTarget(let target): return L10n.format("Charge target set to %d%%", target)
+        case .setAmpLimit(let amps): return L10n.format("Charging current set to %d A", amps)
+        case .startChargingOverride: return L10n.text("Charging started (schedule overridden)")
+        case .stopChargingOverride: return L10n.text("Charging schedule resumed")
+        case .setGlobalChargeTimer: return L10n.text("Charging schedule saved")
+        case .setClimateTimer: return L10n.text("Climate timer saved")
+        case .deleteClimateTimer: return L10n.text("Climate timer deleted")
+        case .scheduleOTA(let minutes): return L10n.format("Software installation scheduled in %d minutes", minutes)
+        case .installOTANow: return L10n.text("Vehicle software installation started")
+        case .cancelOTA: return L10n.text("Software installation cancelled")
+        case .createChargeLocationAtCar(let alias, _, _, _):
+            return L10n.format("Charge location \"%@\" saved", alias)
+        case .updateChargeLocationAlias(_, let alias):
+            return L10n.format("Charge location renamed to \"%@\"", alias)
+        case .updateChargeLocationAmpLimit(_, let amps):
+            return L10n.format("Location charging current set to %d A", amps)
+        case .updateChargeLocationMinimumSoc(_, let soc):
+            return L10n.format("Location minimum charge level set to %d%%", soc)
+        case .setChargeLocationOptimisedCharging(_, let enabled):
+            return enabled ? L10n.text("Optimised charging enabled at location")
+                           : L10n.text("Optimised charging disabled at location")
+        case .deleteChargeLocation:
+            return L10n.text("Saved charge location deleted")
+        }
+    }
+
     var identifier: String {
         switch self {
         case .startClimate: return "start-climate"

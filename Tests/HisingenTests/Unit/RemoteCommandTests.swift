@@ -12,6 +12,21 @@ struct RemoteCommandTests {
     }
 
     @Test
+    func testOutcomeDescriptionStatesWhatTheCommandDid() {
+        XCTAssertEqual(RemoteCommand.lock.outcomeDescription, L10n.text("Vehicle locked"))
+        XCTAssertEqual(RemoteCommand.unlock.outcomeDescription, L10n.text("Vehicle unlocked"))
+        XCTAssertEqual(RemoteCommand.stopClimate.outcomeDescription, L10n.text("AC (climate) turned off"))
+        XCTAssertEqual(
+            RemoteCommand.startClimate(temperatureCelsius: 22, frontLeftSeat: .off,
+                                       frontRightSeat: .off, rearLeftSeat: .off,
+                                       rearRightSeat: .off, steeringWheel: .off).outcomeDescription,
+            "AC turned on at 22 °C")
+        XCTAssertEqual(
+            RemoteCommand.setChargeTarget(80).outcomeDescription,
+            L10n.format("Charge target set to %d%%", 80))
+    }
+
+    @Test
     func testRemoteCommandRequiresContextAndAuthentication() async {
         do {
             _ = try await PolestarAPI().executeRemoteCommand(.lock, vin: "YSMTEST")

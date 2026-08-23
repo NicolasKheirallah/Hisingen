@@ -123,17 +123,23 @@ final class CommandCoordinator {
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             applyOptimisticPatch(for: command, outcome: result.outcome)
-            let message: String
+            // The banner must say *what* ran, not just that something did — a bare
+            // "Command sent" while two cars are in range reads as noise.
+            let detail: String
             if let backendMessage = result.message, !backendMessage.isEmpty {
-                message = backendMessage
+                detail = backendMessage
             } else {
                 switch result.outcome {
-                case .accepted: message = L10n.text("The vehicle service accepted the command.")
-                case .delivered: message = L10n.text("The command was delivered to the vehicle.")
-                case .completed: message = L10n.text("The vehicle completed the command.")
+                case .accepted: detail = L10n.text("The vehicle service accepted the command.")
+                case .delivered: detail = L10n.text("The command was delivered to the vehicle.")
+                case .completed: detail = L10n.text("The vehicle completed the command.")
                 }
             }
-            context.presentResult(title: L10n.text("Command sent"), message: message, success: true)
+            context.presentResult(
+                title: L10n.text("Command sent"),
+                message: L10n.format("%@ — %@", command.outcomeDescription, detail),
+                success: true
+            )
             scheduleFollowUpRefresh(vin: vin)
         } catch {
             let mapped = error as? LocalizedError
@@ -147,7 +153,9 @@ final class CommandCoordinator {
             )
             context.presentResult(
                 title: L10n.text("Command failed"),
-                message: mapped?.errorDescription ?? error.localizedDescription,
+                message: L10n.format("%@ failed. %@",
+                                     command.title,
+                                     mapped?.errorDescription ?? error.localizedDescription),
                 success: false
             )
         }

@@ -6,65 +6,76 @@ This document covers the Hisingen **website only**. It does not describe native 
 
 Hisingen is an independent, Swedish-made native Mac utility for supported Polestar and Volvo vehicles. The website should feel precise, calm and technically honest. Product screenshots carry the visual story; typography, rules and spacing provide the structure.
 
-Polestar contributes architectural composition, restraint, strong alignment and product-first imagery. Volvo contributes clarity, readable hierarchy, inclusive behavior and functional simplicity. Hisingen owns the mineral-green palette, system typography, direct voice and menu-bar context. Vehicle manufacturers are supported ecosystems, never the site's visual owners.
+Polestar contributes architectural composition, restraint, strong alignment and product-first imagery. Volvo contributes clarity, readable hierarchy, inclusive behavior and functional simplicity. Hisingen owns the warm graphite palette with Scandinavian Swedish Gold / Warm Amber accents, system typography, direct voice and menu-bar context. Vehicle manufacturers are supported ecosystems, never the site's visual owners.
 
 ## Grid and spacing
 
-- Content width: `1200px` maximum.
-- Wide media may fill the content width; prose is limited to roughly `55–75ch`.
-- Gutters: 28px desktop, 20px below 600px, 24px at tablet widths.
+- Content width: `1264px` maximum (`--shell`), with wide media shell at `1520px` (`--shell-wide`).
+- Wide media may fill the content width; prose is limited to roughly `55–75ch` (`30em–36em`).
+- Gutters: `clamp(20px, 4.5vw, 44px)` (`--gutter`).
 - Narrative layouts use asymmetric 7/5 or 5/7 columns. Centering is reserved for focused actions.
-- Breakpoints: 600px mobile, 1000px tablet, 1200px wide desktop.
+- Breakpoints: 460px small mobile, 720px tablet/mobile boundary, 1024px tablet landscape, 1180px desktop.
 - Spacing scale: `4, 8, 12, 16, 24, 32, 48, 64, 96, 128`.
-- Inline spacing is 4–16px; component internals 12–24px; section spacing 86–128px.
+- Section padding: `clamp(6.5rem, 13vh, 11rem)` (`--section-pad`).
 
 ## Typography
 
-The site uses the macOS system stack: `-apple-system, BlinkMacSystemFont, SF Pro Display, Segoe UI, Arial, sans-serif`. No remote font is loaded, so the site is fast, legally uncomplicated and native to the audience's platform. System mono is reserved for technical labels and section numbering.
+The site uses the macOS system stack: `-apple-system, BlinkMacSystemFont, SF Pro Display, SF Pro Text, Helvetica Neue, Segoe UI, Arial, sans-serif`. No remote font is loaded, so the site is fast, legally uncomplicated and native to the audience's platform. System mono (`ui-monospace, "SF Mono", "JetBrains Mono"`) is reserved for technical labels and section numbering.
 
 | Style | Guidance |
 | --- | --- |
-| Display / H1 | `clamp(3.25rem, 6vw, 6rem)`, tight leading; mention the product context |
-| H2 | `clamp(2.5rem, 4.6vw, 4.5rem)`, use for narrative turns |
-| H3 | 1.55–2.2rem, 1.02 leading |
-| Body large | 1.1–1.15rem, 1.6 leading |
-| Body | 1rem, 1.6 leading |
-| Small | .75–.875rem |
-| Label | .68rem mono, uppercase, letter spacing |
-| Button | .84rem, bold, minimum 50px high |
+| Display / H1 | `clamp(3.4rem, 9vw, 8rem)`, tight leading (0.97); mention the product context |
+| H2 | `clamp(2.25rem, 4.6vw, 4.125rem)`, use for narrative turns (1.02 leading) |
+| H3 | `clamp(1.625rem, 2.6vw, 2.25rem)`, 1.1 leading |
+| Body large / Lede | `clamp(1.0625rem, 1.4vw, 1.1875rem)`, 1.6 leading |
+| Body | `1rem` (16px), 1.65 leading |
+| Small / Footnote | `0.8125rem` (13px) |
+| Label | `0.6875rem` mono, uppercase, +0.17em letter spacing |
+| Button | `0.9375rem`, medium (530 weight), 48px high |
 
-Use tabular numerals when displaying vehicle metrics. Do not use oversized headlines merely to create drama.
+Use tabular numerals (`font-variant-numeric: tabular-nums`) when displaying vehicle metrics. Do not use oversized headlines merely to create drama.
 
-## Colour tokens
+## Colour tokens (WCAG 2.2 AA Verified)
 
-Light mode uses warm porcelain, mineral mist and deep slate. Dark mode uses layered blue-green neutrals, not black or neon.
+Light mode uses warm porcelain, mineral mist and deep slate. Dark mode uses deep automotive graphite neutrals.
 
 ```css
---surface-primary: #f4f5f1;
---surface-secondary: #e7ebe5;
---surface-raised: #fbfcf9;
---text-primary: #17221f;
---text-secondary: #53645d;
---text-muted: #74827b;
---border-subtle: #ccd5ce;
---border-strong: #6c7b73;
---accent: #b9d2bd;
---accent-hover: #d2e5d4;
---success: #47765b;
---warning: #9b6c2d;
---danger: #a5514c;
---info: #587d93;
+/* Light Mode */
+--bg: #f7f6f3;
+--bg-raised: #fdfcfa;
+--bg-sunken: #efeeea;
+--ink: #16181a;
+--ink-2: #484b4e;
+--ink-3: #5e6266;
+--line: rgb(22 24 26 / 12%);
+--line-faint: rgb(22 24 26 / 7%);
+--line-strong: rgb(22 24 26 / 78%);
+--accent: #955d26;
+--accent-strong: #784717;
+
+/* Dark Mode */
+--bg: #101113;
+--bg-raised: #17181b;
+--bg-sunken: #0c0d0f;
+--ink: #eceae5;
+--ink-2: #b2b0aa;
+--ink-3: #9b9993;
+--line: rgb(236 234 229 / 13%);
+--line-faint: rgb(236 234 229 / 7%);
+--line-strong: rgb(236 234 229 / 82%);
+--accent: #d89f5f;
+--accent-strong: #e5b780;
 ```
 
 Dark equivalents are defined in `src/styles.css` under `data-theme` and the system preference media query. Semantic colours communicate state only. Polestar and Volvo identifiers are small neutral marks, never dominant brand colour fields.
 
 ## Controls, links and radii
 
-- Primary: mineral-green fill for download and the main decision.
+- Primary: deep slate or soft porcelain fill for download and the main decision.
 - Secondary: outlined control on dark surfaces or an underlined text link.
 - Tertiary: underlined inline/standalone link with an arrow for direction.
-- All controls have at least a 44px target and a visible keyboard focus ring.
-- Radius scale: 2px for buttons and screenshot frames, 8px only for independent raised objects, full radius only for genuine status dots/chips.
+- All controls have at least a 44px target and a visible keyboard focus ring (`1.5px solid var(--accent)`).
+- Radius scale: 2px for buttons, chips and technical tags; 4px for menu bar indicator pills; 6px for interactive mockups; 10px for authentic macOS screenshot window frames.
 - Hover changes colour or border; it does not make controls jump.
 - Disabled controls must be visibly muted and retain readable text.
 

@@ -1,33 +1,54 @@
 # Hisingen
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple\&logoColor=white)](https://www.apple.com/macos/)
-[![CI](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml/badge.svg)](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/NicolasKheirallah/Hisingen)](https://github.com/NicolasKheirallah/Hisingen/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/NicolasKheirallah/Hisingen/total)](https://github.com/NicolasKheirallah/Hisingen/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000.svg?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
+[![Website](https://img.shields.io/badge/website-nicolaskheirallah.github.io%2FHisingen-2563eb.svg?style=flat-square)](https://nicolaskheirallah.github.io/Hisingen/)
+[![Homebrew Cask](https://img.shields.io/badge/homebrew-hisingen-f59e0b.svg?style=flat-square&logo=homebrew&logoColor=white)](https://github.com/nicolaskheirallah/homebrew-tap)
+[![CI](https://img.shields.io/github/actions/workflow/status/NicolasKheirallah/Hisingen/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/NicolasKheirallah/Hisingen?style=flat-square)](https://github.com/NicolasKheirallah/Hisingen/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-34d399.svg?style=flat-square)](LICENSE)
 
-**Your Polestar or Volvo, right in the macOS menu bar.**
+**Polestar and Volvo vehicle telemetry and remote controls, native in the macOS menu bar.**
 
-Hisingen is a native macOS app that puts the things you normally open your phone to check directly on your Mac.
+Hisingen brings battery state of charge, range, charging speeds, latch states, climate preconditioning, and diagnostic history to your Mac.
 
-Battery, range, charging, locks, climate, vehicle health, location and more are only a click away. On supported vehicles, Hisingen can also control things like climate, locks, charging and other remote functions.
+Built with AppKit and SwiftUI. No Electron, no telemetry middlemen, and no third-party cloud database sitting between you and your vehicle.
 
-No Electron. No Hisingen cloud account. No analytics platform sitting between you and your car.
-
-[**Download latest release**](https://github.com/NicolasKheirallah/Hisingen/releases/latest) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Troubleshooting](#troubleshooting) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Website](https://nicolaskheirallah.github.io/Hisingen/) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
-  <img src="website/public/assets/product/menu-bar-panel.png" width="460" alt="Hisingen menu-bar vehicle overview on macOS">
+  <img src="assets/status-menubar-main-dashboard.png" width="460" alt="Hisingen menu bar vehicle overview on macOS">
 </p>
 
 > [!IMPORTANT]
-> Hisingen is an independent open-source project. It is **not affiliated with, endorsed by or
-> sponsored by Polestar or Volvo Car Corporation**. The Volvo integration uses Volvo's official,
-> documented developer APIs. The Polestar integration is built on interfaces that are **not** a
-> supported public third-party API, so it may change or break without notice, and using it could
-> be considered a violation of Polestar's terms of service. Use at your own discretion.
+> Hisingen is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by Polestar or Volvo Car Corporation**. Volvo connectivity uses official developer APIs. Polestar integration communicates directly with mobile endpoints, which may change without notice.
+
+---
+
+## Quick start
+
+### Install via Homebrew
+
+```bash
+brew install --cask nicolaskheirallah/tap/hisingen
+```
+
+To update: `brew upgrade --cask hisingen`
+
+### Manual installation
+
+Download the latest universal DMG: [**Hisingen.dmg**](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) (supports Apple Silicon & Intel).
+
+1. Open `Hisingen.dmg` and drag **Hisingen.app** to your `/Applications` folder.
+2. Launch Hisingen and open **Settings** (`⌘,`).
+3. Connect your car:
+   - **Polestar**: Sign in with your Polestar account.
+   - **Volvo**: Select **Sign In with Volvo ID** for direct OAuth2 PKCE login.
+
+---
 
 ## Table of contents
+
+**Quick links:** [Quick start](#quick-start) · [Installation](#installation) · [Official website](https://nicolaskheirallah.github.io/Hisingen/) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg)
 
 **Features:** [Why Hisingen?](#why-hisingen) · [Polestar and Volvo](#polestar-and-volvo) · [What Hisingen can show](#what-hisingen-can-show) · [Remote controls](#remote-controls) · [Vehicle support](#vehicle-support) · [Product tour](#product-tour)
 
@@ -98,32 +119,32 @@ The Polestar integration therefore uses interfaces based on the services used by
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle overview</strong><br><br>
-<img src="website/public/assets/product/polestar-vehicle-overview.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle overview">
+<strong>Vehicle status dashboard</strong><br><br>
+<img src="assets/status-menubar-main-dashboard.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle status dashboard">
 </td>
 <td width="50%" align="center">
-<strong>Charging history</strong><br><br>
-<img src="website/public/assets/product/polestar-charging-session.png" width="420" loading="lazy" alt="Hisingen charging history with session information">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Openings and tyre state</strong><br><br>
-<img src="website/public/assets/product/polestar-doors-openings.png" width="420" loading="lazy" alt="Hisingen vehicle openings and tyre status">
-</td>
-<td width="50%" align="center">
-<strong>Vehicle health and climate</strong><br><br>
-<img src="website/public/assets/product/polestar-identity-health.png" width="420" loading="lazy" alt="Hisingen showing vehicle identity, health and climate information">
+<strong>Active 11 kW AC charging</strong><br><br>
+<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active 11 kW AC charging telemetry">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle software</strong><br><br>
-<img src="website/public/assets/product/polestar-climate-software.png" width="420" loading="lazy" alt="Hisingen showing climate timers and Polestar vehicle software update information">
+<strong>Exterior views & latch geometry</strong><br><br>
+<img src="assets/status-exterior-angles-door-latches.png" width="420" loading="lazy" alt="Hisingen vehicle exterior views and door/window latches">
 </td>
 <td width="50%" align="center">
-<strong>Detailed openings and tyre view</strong><br><br>
-<img src="website/public/assets/product/polestar-doors-tyres.png" width="420" loading="lazy" alt="Hisingen detailed doors, windows, charge lid and tyre status">
+<strong>TPMS pressures & parking GPS</strong><br><br>
+<img src="assets/status-tpms-tyre-pressures-parking-gps.png" width="420" loading="lazy" alt="Hisingen tyre pressures and live GPS parking coordinates">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Fluids, 12V battery & weather</strong><br><br>
+<img src="assets/status-fluids-12v-airpurifier-weather.png" width="420" loading="lazy" alt="Hisingen fluid levels, 12V auxiliary health and ambient weather">
+</td>
+<td width="50%" align="center">
+<strong>Offline cache recovery</strong><br><br>
+<img src="assets/status-offline-cached-banner.png" width="420" loading="lazy" alt="Hisingen graceful offline telemetry cache recovery">
 </td>
 </tr>
 </table>
@@ -137,32 +158,32 @@ If you prefer, you can use your own Volvo Cars Developer application and credent
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle overview</strong><br><br>
-<img src="website/public/assets/product/volvo-vehicle-overview.png" width="420" loading="lazy" alt="Hisingen Volvo vehicle overview">
+<strong>Hybrid & combustion telemetry</strong><br><br>
+<img src="assets/status-hybrid-fuel-engine.png" width="420" loading="lazy" alt="Hisingen showing Volvo hybrid fuel tank and engine telemetry">
 </td>
 <td width="50%" align="center">
-<strong>Energy and powertrain telemetry</strong><br><br>
-<img src="website/public/assets/product/volvo-charging-fuel.png" width="420" loading="lazy" alt="Hisingen showing Volvo charging details alongside fuel and engine information">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Trip and diagnostic information</strong><br><br>
-<img src="website/public/assets/product/volvo-trip-diagnostics.png" width="420" loading="lazy" alt="Hisingen Volvo trip and diagnostic information">
-</td>
-<td width="50%" align="center">
-<strong>Powertrain, health and service</strong><br><br>
-<img src="website/public/assets/product/volvo-battery-health.png" width="420" loading="lazy" alt="Hisingen showing Volvo powertrain specifications and battery health information">
+<strong>Live charging & powertrain</strong><br><br>
+<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active charging rates and power levels">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle identity and ownership information</strong><br><br>
-<img src="website/public/assets/product/volvo-service-warranty.png" width="420" loading="lazy" alt="Hisingen showing Volvo service schedule, warranty and vehicle identity information">
+<strong>Trip & diagnostic information</strong><br><br>
+<img src="assets/info-trip-computer-fluids-lighting.png" width="420" loading="lazy" alt="Hisingen trip computer, fluid levels and exterior lighting check">
 </td>
 <td width="50%" align="center">
-<strong>Vehicle controls</strong><br><br>
-<img src="website/public/assets/product/volvo-controls.png" width="420" loading="lazy" alt="Hisingen Volvo capability-aware vehicle controls">
+<strong>Powertrain, health & battery SoH</strong><br><br>
+<img src="assets/info-battery-pack-soh-longevity.png" width="420" loading="lazy" alt="Hisingen powertrain specifications and battery health information">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Vehicle build spec & ownership</strong><br><br>
+<img src="assets/info-factory-build-spec-vin-capabilities.png" width="420" loading="lazy" alt="Hisingen factory build specification and vehicle identity">
+</td>
+<td width="50%" align="center">
+<strong>Remote climate & controls</strong><br><br>
+<img src="assets/controls-climate-preconditioning-airclean.png" width="420" loading="lazy" alt="Hisingen capability-aware vehicle controls and climate preconditioning">
 </td>
 </tr>
 </table>
@@ -417,148 +438,205 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 
 ## Product tour
 
-The screenshots below show more of Hisingen in detail, grouped by the part of the app they show.
+The screenshots below show each view within the app:
 
-<details>
-<summary><strong>Settings & personalization</strong></summary>
+<details open>
+<summary><strong>Status & Telemetry</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Accounts & vehicle providers</strong><br><br>
-<img src="website/public/assets/product/settings-account.png" width="420" loading="lazy" alt="Hisingen settings for vehicle accounts and provider configuration">
+<strong>Menu bar dashboard</strong><br><br>
+<img src="assets/status-menubar-main-dashboard.png" width="420" loading="lazy" alt="Hisingen menu bar dashboard">
 </td>
 <td width="50%" align="center">
-<strong>Appearance</strong><br><br>
-<img src="website/public/assets/product/settings-appearance.png" width="420" loading="lazy" alt="Hisingen appearance settings showing the available application themes">
+<strong>Active 11 kW AC charging</strong><br><br>
+<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active 11 kW AC charging">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Local data</strong><br><br>
-<img src="website/public/assets/product/polestar-location-cleanzone.png" width="420" loading="lazy" alt="Hisingen showing tyre status, parking location and CleanZone air quality for a Polestar">
+<strong>TPMS pressures & GPS parking</strong><br><br>
+<img src="assets/status-tpms-tyre-pressures-parking-gps.png" width="420" loading="lazy" alt="Hisingen tyre pressures and live GPS parking coordinates">
 </td>
 <td width="50%" align="center">
-<strong>Trip & diagnostics</strong><br><br>
-<img src="website/public/assets/product/polestar-trip-diagnostics.png" width="420" loading="lazy" alt="Hisingen trip computer and fluids and lighting diagnostics for a Polestar">
+<strong>4-Corner TPMS & street address</strong><br><br>
+<img src="assets/status-tpms-location-address.png" width="420" loading="lazy" alt="Hisingen detailed tyre status and reverse-geocoded address">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Exterior views & latch geometry</strong><br><br>
+<img src="assets/status-exterior-angles-door-latches.png" width="420" loading="lazy" alt="Hisingen vehicle exterior views and door/window latches">
+</td>
+<td width="50%" align="center">
+<strong>Fluids, 12V battery & weather</strong><br><br>
+<img src="assets/status-fluids-12v-airpurifier-weather.png" width="420" loading="lazy" alt="Hisingen fluid levels, 12V auxiliary health and ambient weather">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Combustion & hybrid telemetry</strong><br><br>
+<img src="assets/status-hybrid-fuel-engine.png" width="420" loading="lazy" alt="Hisingen hybrid fuel tank and engine state">
+</td>
+<td width="50%" align="center">
+<strong>Offline cache recovery</strong><br><br>
+<img src="assets/status-offline-cached-banner.png" width="420" loading="lazy" alt="Hisingen graceful offline telemetry cache recovery">
 </td>
 </tr>
 </table>
-
-<p align="center">
-<strong>Storage & export details</strong><br><br>
-<img src="website/public/assets/product/settings-storage.png" width="560" loading="lazy" alt="Hisingen storage settings with local SQLite data, export controls and account sign-out">
-</p>
-
-A more detailed look at locally stored Hisingen data and storage-related controls.
 
 </details>
 
 <details>
-<summary><strong>Detailed vehicle information (Polestar)</strong></summary>
+<summary><strong>Remote Controls & Capability Probing</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle views & openings</strong><br><br>
-<img src="website/public/assets/product/polestar-vehicle-views.png" width="420" loading="lazy" alt="Hisingen showing Polestar vehicle render views with the doors and openings status">
+<strong>Climate & CleanZone air purifier</strong><br><br>
+<img src="assets/controls-climate-preconditioning-airclean.png" width="420" loading="lazy" alt="Hisingen remote climate preconditioning and air purifier">
 </td>
 <td width="50%" align="center">
-<strong>Tyres, location & weather</strong><br><br>
-<img src="website/public/assets/product/polestar-tyres-location.png" width="420" loading="lazy" alt="Hisingen showing tyre status, reported vehicle location and ambient weather for a Polestar">
+<strong>Charging limits & current selector</strong><br><br>
+<img src="assets/controls-charging-limits-amperage.png" width="420" loading="lazy" alt="Hisingen charging target limits and 6A-32A current selector">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Diagnostics</strong><br><br>
-<img src="website/public/assets/product/polestar-trip-diagnostics.png" width="420" loading="lazy" alt="Hisingen showing diagnostic and vehicle-status information for a Polestar">
+<strong>Capability matrix inspector</strong><br><br>
+<img src="assets/settings-capability-matrix-inspector.png" width="420" loading="lazy" alt="Hisingen built-in capability matrix inspector">
 </td>
 <td width="50%" align="center">
-<strong>Battery & powertrain health</strong><br><br>
-<img src="website/public/assets/product/polestar-battery-health.png" width="420" loading="lazy" alt="Hisingen showing battery, powertrain and vehicle-health information for a Polestar">
+<strong>Direct OAuth PKCE flow</strong><br><br>
+<img src="assets/settings-remote-commands-oauth.png" width="420" loading="lazy" alt="Hisingen direct browser OAuth PKCE authentication">
 </td>
 </tr>
 </table>
-
-<p align="center">
-<strong>Vehicle identity & ownership details</strong><br><br>
-<img src="website/public/assets/product/polestar-service-warranty.png" width="560" loading="lazy" alt="Hisingen showing vehicle identity and other detailed information for a Polestar">
-</p>
-
-Detailed information tied to the selected vehicle and the data made available for it.
 
 </details>
 
 <details>
-<summary><strong>History dashboard</strong></summary>
+<summary><strong>History & Energy Analytics</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Trip, energy and cost overview</strong><br><br>
-<img src="assets/hisingen-history-2.png" width="420" loading="lazy" alt="Hisingen history overview with distance, driving time, charge sessions, estimated energy and cost">
+<strong>Analytics dashboard & export</strong><br><br>
+<img src="assets/history-analytics-dashboard-overview.png" width="420" loading="lazy" alt="Hisingen history overview with distance, energy and CSV/JSON export">
 </td>
 <td width="50%" align="center">
-<strong>Odometer and battery health trends</strong><br><br>
-<img src="assets/hisingen-history-3.png" width="420" loading="lazy" alt="Hisingen detected trips, odometer history chart and battery health trend">
+<strong>Distance & speed Swift Charts</strong><br><br>
+<img src="assets/history-distance-speed-charts.png" width="420" loading="lazy" alt="Hisingen Swift Charts distance and trip speed trends">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Odometer accumulation curve</strong><br><br>
+<img src="assets/history-odometer-mileage-chart.png" width="420" loading="lazy" alt="Hisingen historical odometer accumulation chart">
+</td>
+<td width="50%" align="center">
+<strong>Battery degradation & AQI trends</strong><br><br>
+<img src="assets/history-battery-degradation-aqi-charts.png" width="420" loading="lazy" alt="Hisingen battery degradation curve and interior air AQI trend">
 </td>
 </tr>
 </table>
-
-<p align="center">
-<strong>Cabin air quality and command statistics</strong><br><br>
-<img src="assets/hisingen-history-4.png" width="420" loading="lazy" alt="Hisingen battery health trend, cabin air quality trend and automation command statistics">
-</p>
-
-Trends built from locally recorded history — odometer, battery health and cabin air quality are labelled as calculated estimates whenever the data behind them is limited.
 
 </details>
 
 <details>
-<summary><strong>Remote controls & capabilities</strong></summary>
+<summary><strong>Diagnostics & Build Specifications</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Extended vehicle controls</strong><br><br>
-<img src="website/public/assets/product/polestar-controls-extended.png" width="420" loading="lazy" alt="Hisingen extended capability-aware vehicle controls">
+<strong>Battery pack SoH calculation (82.4%)</strong><br><br>
+<img src="assets/info-battery-pack-soh-longevity.png" width="420" loading="lazy" alt="Hisingen 78 kWh battery pack degradation and State of Health calculation">
 </td>
 <td width="50%" align="center">
-<strong>Vehicle identity & health</strong><br><br>
-<img src="website/public/assets/product/polestar-identity-health.png" width="420" loading="lazy" alt="Hisingen vehicle identity and health information">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Charging controls</strong><br><br>
-<img src="website/public/assets/product/polestar-controls-climate.png" width="420" loading="lazy" alt="Hisingen showing Polestar climate controls and charging settings">
-</td>
-<td width="50%" align="center">
-<strong>When a control isn't available</strong><br><br>
-<img src="website/public/assets/product/controls-unavailable.png" width="420" loading="lazy" alt="Hisingen showing a vehicle control that is unavailable for the selected vehicle">
+<strong>Factory build sheet & OTA flags</strong><br><br>
+<img src="assets/info-factory-build-spec-vin-capabilities.png" width="420" loading="lazy" alt="Hisingen factory build sheet decoder and OTA capabilities">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Capability overview</strong><br><br>
-<img src="website/public/assets/product/capability-inspector-top.png" width="420" loading="lazy" alt="Hisingen capability inspector overview">
+<strong>Trip computer & diagnostics</strong><br><br>
+<img src="assets/info-trip-computer-fluids-lighting.png" width="420" loading="lazy" alt="Hisingen trip computer, fluid levels and exterior lighting check">
 </td>
 <td width="50%" align="center">
-<strong>Capability detail</strong><br><br>
-<img src="website/public/assets/product/capability-inspector-detail.png" width="420" loading="lazy" alt="Hisingen detailed capability inspector">
+<strong>Identity & cloud connectivity</strong><br><br>
+<img src="assets/info-vehicle-identity-connectivity.png" width="420" loading="lazy" alt="Hisingen vehicle identity, VIN parameters and cloud status">
 </td>
 </tr>
 </table>
 
-Additional controls appear when Hisingen knows the selected vehicle can expose them — and when a feature isn't available, Hisingen explains why instead of leaving behind a control that looks like it should work.
+</details>
+
+<details>
+<summary><strong>Preferences & Customization</strong></summary>
+
+<br>
+
+<table>
+<tr>
+<td width="50%" align="center">
+<strong>Multi-brand garage accounts</strong><br><br>
+<img src="assets/settings-garage-accounts.png" width="420" loading="lazy" alt="Hisingen multi-brand garage connected accounts">
+</td>
+<td width="50%" align="center">
+<strong>Themes & floating HUD</strong><br><br>
+<img src="assets/settings-appearance-privacy-hud.png" width="420" loading="lazy" alt="Hisingen screenshot privacy mode and floating charging HUD">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>9-Theme palette picker</strong><br><br>
+<img src="assets/settings-theme-selector.png" width="420" loading="lazy" alt="Hisingen 9 per-vehicle theme color palettes">
+</td>
+<td width="50%" align="center">
+<strong>16 Native languages & layout</strong><br><br>
+<img src="assets/settings-general-localization-layout.png" width="420" loading="lazy" alt="Hisingen 16 native translations and badge layout">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Window geometry & 85% density</strong><br><br>
+<img src="assets/settings-geometry-content-density.png" width="420" loading="lazy" alt="Hisingen window dimensions and compact content density">
+</td>
+<td width="50%" align="center">
+<strong>Electricity tariffs & Touch ID</strong><br><br>
+<img src="assets/settings-tariffs-biometric-auth.png" width="420" loading="lazy" alt="Hisingen day/night peak tariffs and Touch ID authentication">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Warranty & battery spec overrides</strong><br><br>
+<img src="assets/settings-warranty-battery-spec-overrides.png" width="420" loading="lazy" alt="Hisingen in-service warranty and battery spec overrides">
+</td>
+<td width="50%" align="center">
+<strong>Granular telemetry toggles</strong><br><br>
+<img src="assets/settings-telemetry-toggles.png" width="420" loading="lazy" alt="Hisingen granular charging, schedule and battery toggles">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Smart notification triggers</strong><br><br>
+<img src="assets/settings-smart-notifications-toggles.png" width="420" loading="lazy" alt="Hisingen smart notification switches">
+</td>
+<td width="50%" align="center">
+<strong>Quiet hours & SQLite storage stats</strong><br><br>
+<img src="assets/settings-quiet-hours-sqlite-storage.png" width="420" loading="lazy" alt="Hisingen night quiet hours and local SQLite storage stats">
+</td>
+</tr>
+</table>
 
 </details>
 
@@ -604,7 +682,7 @@ Depending on the vehicle and the features you've enabled, notifications can incl
   from an interrupted-charging alert
 
 <p align="center">
-<img src="assets/hisingen-notifications.png" width="420" loading="lazy" alt="Hisingen macOS notifications for plug-in reminders, security reminders and stale vehicle data">
+<img src="assets/settings-smart-notifications-toggles.png" width="420" loading="lazy" alt="Hisingen macOS smart notifications triggers and customization">
 </p>
 
 Notification behaviour can be configured in Settings.

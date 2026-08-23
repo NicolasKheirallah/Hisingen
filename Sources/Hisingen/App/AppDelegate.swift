@@ -358,10 +358,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let authorizeURL = try await polestarAPI.beginCommandAuthorization()
                 let callbackURL = try await polestarCommandSignInPresenter.signIn(authorizeURL: authorizeURL)
                 try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
-                showRemoteResult(
+                // Persistent banner through the Notifier pipeline — the transient
+                // `showRemoteResult` variant self-cleans after 5 s, which reads as
+                // "did it actually go through?" for a step this easy to miss.
+                notifier.notifyCommandNotice(
                     title: L10n.text("Remote commands authorized"),
-                    message: L10n.text("Polestar remote commands are now available."),
-                    success: true
+                    body: L10n.text("Polestar remote commands are now available."),
+                    subtitle: L10n.text("Polestar")
                 )
             } catch {
                 let mapped = error as? LocalizedError
