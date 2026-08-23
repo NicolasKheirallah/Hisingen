@@ -30,6 +30,29 @@ struct HistoryDashboardView: View {
     @State private var customRangeEnd: Date = Date()
     @State private var showCustomRangeEditor = false
 
+    struct MonthComparison: Sendable {
+        let distanceKm: Double
+        let energyKwh: Double
+        let averageConsumption: Double?
+    }
+
+    struct HistoryDataSnapshot: Sendable {
+        var trips: [TripHistoryEntry] = []
+        var chargingSessions: [HistoricalChargingSession] = []
+        var commands: [RemoteCommandAuditRecord] = []
+        var batteryHealthRecords: [BatteryHealthRecord] = []
+        var airQualityRecords: [AirQualityRecord] = []
+        var telemetryRecords: [HistoricalTelemetryRecord] = []
+        var allTimeTelemetryRecords: [HistoricalTelemetryRecord] = []
+        var fuelEntries: [VehicleDatabase.FuelEntry] = []
+        var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] = []
+        var thisMonth: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
+        var lastMonth: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
+    }
+
+    @State private var snapshot = HistoryDataSnapshot()
+    @State private var selectedSessionSamples: [HistoricalChargingSample] = []
+
     private var cutoff: Date? {
         if period == .custom {
             return customRangeStart
@@ -37,41 +60,15 @@ struct HistoryDashboardView: View {
         return period.days.flatMap { Calendar.current.date(byAdding: .day, value: -$0, to: Date()) }
     }
 
-    private var trips: [TripHistoryEntry] {
-        database.derivedTrips(for: state.vin, limit: 1_000).filter { trip in
-            cutoff.map { trip.endedAt >= $0 } ?? true
-        }
-    }
-
-    private var chargingSessions: [HistoricalChargingSession] {
-        database.recentChargingSessions(for: state.vin, limit: 1_000).filter { session in
-            cutoff.map { session.startedAt >= $0 } ?? true
-        }
-    }
-
-    private var commands: [RemoteCommandAuditRecord] {
-        database.recentCommandAudits(for: state.vin, limit: 250).filter { command in
-            cutoff.map { command.executedAt >= $0 } ?? true
-        }
-    }
-
-    /// Battery-health milestones deliberately ignore the period picker: state of health moves
-    /// over months, so a "7 days" window would usually show a single point and read as broken.
-    private var batteryHealthRecords: [BatteryHealthRecord] {
-        database.batteryHealthHistory(for: state.vin, limit: 200)
-    }
-
-    private var airQualityRecords: [AirQualityRecord] {
-        database.recentAirQuality(for: state.vin, limit: 500).filter { record in
-            cutoff.map { record.timestamp >= $0 } ?? true
-        }
-    }
-
-    private var telemetryRecords: [HistoricalTelemetryRecord] {
-        database.recentTelemetry(for: state.vin, limit: 2_000).filter { record in
-            cutoff.map { record.timestamp >= $0 } ?? true
-        }
-    }
+    private var trips: [TripHistoryEntry] { snapshot.trips }
+    private var chargingSessions: [HistoricalChargingSession] { snapshot.chargingSessions }
+    private var commands: [RemoteCommandAuditRecord] { snapshot.commands }
+    private var batteryHealthRecords: [BatteryHealthRecord] { snapshot.batteryHealthRecords }
+    private var airQualityRecords: [AirQualityRecord] { snapshot.airQualityRecords }
+    private var telemetryRecords: [HistoricalTelemetryRecord] { snapshot.telemetryRecords }
+    private var allTimeTelemetryRecords: [HistoricalTelemetryRecord] { snapshot.allTimeTelemetryRecords }
+    private var fuelEntries: [VehicleDatabase.FuelEntry] { snapshot.fuelEntries }
+    private var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] { snapshot.cabinClimateRecords }
 
     private var efficiencyPoints: [HistoryInsights.EfficiencyPoint] {
         guard state.powertrain.hasElectricRange else { return [] }
@@ -89,34 +86,13 @@ struct HistoryDashboardView: View {
     }
 
     private var selectedSessionCurve: [HistoryInsights.ChargingCurvePoint] {
-        guard let session = selectedSession else { return [] }
-        return HistoryInsights.chargingCurve(from: database.chargingSamples(for: session.id))
-    }
-
-    private var selectedSessionSamples: [HistoricalChargingSample] {
-        guard let session = selectedSession else { return [] }
-        return database.chargingSamples(for: session.id)
+        HistoryInsights.chargingCurve(from: selectedSessionSamples)
     }
 
     private var filteredSessionsForPicker: [HistoricalChargingSession] {
         let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return Array(chargingSessions.prefix(500)) }
         return chargingSessions.filter { sessionLabel($0).localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    /// Odometer/telemetry history ignoring the period picker — mirrors `batteryHealthRecords`:
-    /// monthly mileage and the km/day rate are only meaningful over a long span, so a "7 days"
-    /// window would usually collapse them to noise or nothing at all.
-    private var allTimeTelemetryRecords: [HistoricalTelemetryRecord] {
-        database.recentTelemetry(for: state.vin, limit: 2_000)
-    }
-
-    private var fuelEntries: [VehicleDatabase.FuelEntry] {
-        state.powertrain.hasCombustionEngine ? database.recentFuelEntries(for: state.vin, limit: 50) : []
-    }
-
-    private var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] {
-        database.recentCabinClimate(for: state.vin, limit: 200)
     }
 
     private var allTimeOdometerPoints: [HistoryInsights.OdometerPoint] {
@@ -127,40 +103,10 @@ struct HistoryDashboardView: View {
         HistoryInsights.commandStatistics(from: commands)
     }
 
-    private struct MonthComparison {
-        let distanceKm: Double
-        let energyKwh: Double
-        let averageConsumption: Double?
-    }
-
     private struct SmoothedPoint: Identifiable {
         let id: Int64
         let timestamp: Date
         let value: Double
-    }
-
-    /// Current-vs-previous calendar month, independent of the period picker (which the user
-    /// might have set to "7 Days") so this comparison always has something to compare.
-    private func monthComparison(monthsAgo: Int, calendar: Calendar = .current) -> MonthComparison {
-        guard let monthStart = calendar.date(byAdding: .month, value: -monthsAgo, to: HistoryInsights.monthBucket(Date(), calendar: calendar)),
-              let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
-            return MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
-        }
-        let monthTrips = database.derivedTrips(for: state.vin, limit: 2_000).filter {
-            $0.endedAt >= monthStart && $0.endedAt < monthEnd
-        }
-        let monthSessions = database.recentChargingSessions(for: state.vin, limit: 2_000).filter {
-            $0.startedAt >= monthStart && $0.startedAt < monthEnd
-        }
-        let consumptionValues = monthTrips.compactMap { trip -> Double? in
-            guard let value = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(value) else { return nil }
-            return value
-        }
-        return MonthComparison(
-            distanceKm: monthTrips.reduce(0) { $0 + $1.distanceKm },
-            energyKwh: monthSessions.reduce(0) { $0 + $1.energyDeliveredKwh },
-            averageConsumption: consumptionValues.isEmpty ? nil : consumptionValues.reduce(0, +) / Double(consumptionValues.count)
-        )
     }
 
     var body: some View {
@@ -185,6 +131,81 @@ struct HistoryDashboardView: View {
                 && batteryHealthRecords.isEmpty && airQualityRecords.count < 2 { emptyCard }
         }
         .sheet(isPresented: $showFuelSheet) { fuelEntrySheet }
+        .task(id: "\(state.vin)_\(period.rawValue)_\(customRangeStart.timeIntervalSince1970)_\(customRangeEnd.timeIntervalSince1970)") {
+            let vin = state.vin
+            let db = database
+            let hasCombustion = state.powertrain.hasCombustionEngine
+            let currentCutoff = cutoff
+            let loaded = await Task.detached(priority: .userInitiated) { () -> HistoryDataSnapshot in
+                var snap = HistoryDataSnapshot()
+                let rawTrips = db.derivedTrips(for: vin, limit: 1_000)
+                snap.trips = rawTrips.filter { trip in currentCutoff.map { trip.endedAt >= $0 } ?? true }
+
+                let rawSessions = db.recentChargingSessions(for: vin, limit: 1_000)
+                snap.chargingSessions = rawSessions.filter { session in currentCutoff.map { session.startedAt >= $0 } ?? true }
+
+                let rawCommands = db.recentCommandAudits(for: vin, limit: 250)
+                snap.commands = rawCommands.filter { cmd in currentCutoff.map { cmd.executedAt >= $0 } ?? true }
+
+                snap.batteryHealthRecords = db.batteryHealthHistory(for: vin, limit: 200)
+
+                let rawAir = db.recentAirQuality(for: vin, limit: 500)
+                snap.airQualityRecords = rawAir.filter { r in currentCutoff.map { r.timestamp >= $0 } ?? true }
+
+                let rawTelemetry = db.recentTelemetry(for: vin, limit: 2_000)
+                snap.allTimeTelemetryRecords = rawTelemetry
+                snap.telemetryRecords = rawTelemetry.filter { r in currentCutoff.map { r.timestamp >= $0 } ?? true }
+
+                snap.fuelEntries = hasCombustion ? db.recentFuelEntries(for: vin, limit: 50) : []
+                snap.cabinClimateRecords = db.recentCabinClimate(for: vin, limit: 200)
+
+                let calendar = Calendar.current
+                let now = Date()
+                let thisMonthStart = HistoryInsights.monthBucket(now, calendar: calendar)
+                if let thisMonthEnd = calendar.date(byAdding: .month, value: 1, to: thisMonthStart),
+                   let prevMonthStart = calendar.date(byAdding: .month, value: -1, to: thisMonthStart) {
+                    let m0Trips = rawTrips.filter { $0.endedAt >= thisMonthStart && $0.endedAt < thisMonthEnd }
+                    let m0Sessions = rawSessions.filter { $0.startedAt >= thisMonthStart && $0.startedAt < thisMonthEnd }
+                    let m0Cons = m0Trips.compactMap { trip -> Double? in
+                        guard let v = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(v) else { return nil }
+                        return v
+                    }
+                    snap.thisMonth = MonthComparison(
+                        distanceKm: m0Trips.reduce(0) { $0 + $1.distanceKm },
+                        energyKwh: m0Sessions.reduce(0) { $0 + $1.energyDeliveredKwh },
+                        averageConsumption: m0Cons.isEmpty ? nil : m0Cons.reduce(0, +) / Double(m0Cons.count)
+                    )
+
+                    let m1Trips = rawTrips.filter { $0.endedAt >= prevMonthStart && $0.endedAt < thisMonthStart }
+                    let m1Sessions = rawSessions.filter { $0.startedAt >= prevMonthStart && $0.startedAt < thisMonthStart }
+                    let m1Cons = m1Trips.compactMap { trip -> Double? in
+                        guard let v = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(v) else { return nil }
+                        return v
+                    }
+                    snap.lastMonth = MonthComparison(
+                        distanceKm: m1Trips.reduce(0) { $0 + $1.distanceKm },
+                        energyKwh: m1Sessions.reduce(0) { $0 + $1.energyDeliveredKwh },
+                        averageConsumption: m1Cons.isEmpty ? nil : m1Cons.reduce(0, +) / Double(m1Cons.count)
+                    )
+                }
+                return snap
+            }.value
+
+            guard !Task.isCancelled else { return }
+            snapshot = loaded
+        }
+        .task(id: selectedSession?.id) {
+            guard let sessionID = selectedSession?.id else {
+                selectedSessionSamples = []
+                return
+            }
+            let db = database
+            let samples = await Task.detached(priority: .userInitiated) {
+                db.chargingSamples(for: sessionID)
+            }.value
+            guard !Task.isCancelled else { return }
+            selectedSessionSamples = samples
+        }
     }
 
     private var periodPicker: some View {
@@ -353,8 +374,8 @@ struct HistoryDashboardView: View {
     }
 
     private var monthComparisonCard: some View {
-        let thisMonth = monthComparison(monthsAgo: 0)
-        let lastMonth = monthComparison(monthsAgo: 1)
+        let thisMonth = snapshot.thisMonth
+        let lastMonth = snapshot.lastMonth
         guard thisMonth.distanceKm > 0 || thisMonth.energyKwh > 0 || lastMonth.distanceKm > 0 || lastMonth.energyKwh > 0 else {
             return AnyView(EmptyView())
         }

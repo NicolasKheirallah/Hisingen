@@ -40,7 +40,7 @@ struct AccountCredentialsForm: View {
 
             accountStatusBanner
 
-            if style == .welcoming || !isCurrentlyConnected || showUpdateFields {
+            if style == .welcoming || !isBrandConnected || showUpdateFields {
                 if selectedBrand == .polestar {
                     polestarFields
                 } else {
@@ -123,30 +123,36 @@ struct AccountCredentialsForm: View {
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
-    private var isCurrentlyConnected: Bool {
-        preferences.activeBrand == selectedBrand && preferences.hasResumableSession(for: selectedBrand)
+    private var isBrandConnected: Bool {
+        preferences.hasResumableSession(for: selectedBrand)
+    }
+
+    private var isActiveBrand: Bool {
+        preferences.activeBrand == selectedBrand
     }
 
     @ViewBuilder
     private var accountStatusBanner: some View {
-        let isBrandConnected = isCurrentlyConnected
         let brandName = selectedBrand.displayName
         let activeLabel = preferences.lastVehicleLabel(for: selectedBrand)
+        let statusColor: Color = isActiveBrand ? .green : (isBrandConnected ? .blue : .orange)
 
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Circle()
-                    .fill(isBrandConnected ? Color.green : Color.orange.opacity(0.6))
+                    .fill(statusColor)
                     .frame(width: 8, height: 8)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isBrandConnected
-                         ? L10n.format("Connected to %@ Account", brandName)
-                         : L10n.format("Not Connected to %@", brandName))
+                    Text(isActiveBrand
+                         ? L10n.format("Connected · Active Account (%@)", brandName)
+                         : (isBrandConnected
+                            ? L10n.format("Connected · Inactive Account (%@)", brandName)
+                            : L10n.format("Not Connected to %@", brandName)))
                         .font(.system(size: 12, weight: .semibold))
 
                     if isBrandConnected {
-                        Text(L10n.format("Active Vehicle: %@", activeLabel))
+                        Text(L10n.format("Vehicle: %@", activeLabel))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     } else {
@@ -156,6 +162,20 @@ struct AccountCredentialsForm: View {
                     }
                 }
                 Spacer()
+
+                if isBrandConnected && !isActiveBrand {
+                    Button {
+                        onSettingsChanged(.switchToBrand(selectedBrand))
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(L10n.text("Set Active"))
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                }
 
                 if isBrandConnected && style != .welcoming {
                     HStack(spacing: 6) {
@@ -203,12 +223,12 @@ struct AccountCredentialsForm: View {
         }
         .padding(10)
         .background(
-            (isBrandConnected ? Color.green : Color.orange).opacity(0.08),
+            statusColor.opacity(0.08),
             in: RoundedRectangle(cornerRadius: 8)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke((isBrandConnected ? Color.green : Color.orange).opacity(0.25), lineWidth: 0.5)
+                .stroke(statusColor.opacity(0.25), lineWidth: 0.5)
         )
     }
 

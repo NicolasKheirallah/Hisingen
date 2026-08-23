@@ -59,9 +59,21 @@ final class CarImageCache: @unchecked Sendable {
             return mem
         }
 
+        // Try SQLite database storage first
+        if let parts = parseKey(key) {
+            if let dbImage = VehicleDatabase.shared.loadVehicleImage(for: parts.vin, angle: parts.angle) {
+                memoryCache[key] = dbImage.data
+                return dbImage.data
+            }
+        }
+
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
         if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
             memoryCache[key] = data
+            // Populate database cache if read from disk
+            if let parts = parseKey(key) {
+                VehicleDatabase.shared.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
+            }
             return data
         }
 
@@ -75,11 +87,31 @@ final class CarImageCache: @unchecked Sendable {
         defer { lock.unlock() }
         memoryCache[key] = data
 
+        if let parts = parseKey(key) {
+            VehicleDatabase.shared.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
+        }
+
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
         do {
             try data.write(to: fileURL, options: .atomic)
         } catch {
             logger.error("Could not write cached vehicle image: \(error, privacy: .public)")
+        }
+    }
+
+    private func parseKey(_ key: String) -> (vin: String, angle: Int)? {
+        if key.hasSuffix("_interior") {
+            let vin = String(key.dropLast("_interior".count))
+            return (vin, -1)
+        } else if let range = key.range(of: "_angle") {
+            let vin = String(key[..<range.lowerBound])
+            let angleStr = String(key[range.upperBound...])
+            if let angle = Int(angleStr) {
+                return (vin, angle)
+            }
+            return (vin, 0)
+        } else {
+            return (key, 0)
         }
     }
 

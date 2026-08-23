@@ -12,6 +12,7 @@ enum SettingsChange {
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case switchToBrand(VehicleBrand)
+    case selectVehicle(String)
     case closeSettings
 }
 
@@ -20,8 +21,9 @@ enum SettingsChange {
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
     var state: VehicleState? = nil
-    var database: VehicleDatabase = VehicleDatabase()
-    var imageCache: CarImageCache = CarImageCache()
+    var cachedSnapshots: [String: VehicleState] = [:]
+    var database: VehicleDatabase = VehicleDatabase.shared
+    var imageCache: CarImageCache = CarImageCache.shared
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
     var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
@@ -131,9 +133,10 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: HisingenTheme.sectionSpacing) {
+            LazyVStack(spacing: HisingenTheme.sectionSpacing) {
                 headerBar
                 accountCard
+                fleetVehiclesCard
                 appearanceCard
                 displayCard
                 featureQuickActions
@@ -279,6 +282,298 @@ struct SettingsView: View {
         }
     }
 
+    private var fleetVehiclesCard: some View {
+        let activeVin = preferences.vin
+        var allVins: [String] = []
+        for brand in VehicleBrand.allCases {
+            let bVin = preferences.vin(for: brand)
+            if !bVin.isEmpty && !allVins.contains(bVin) { allVins.append(bVin) }
+        }
+        if !activeVin.isEmpty && !allVins.contains(activeVin) { allVins.append(activeVin) }
+        if let stateVin = state?.vin, !allVins.contains(stateVin) { allVins.append(stateVin) }
+
+        return Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    CardHeader(symbol: "car.2.fill", title: L10n.text("Garage & Fleet"), color: HisingenTheme.accent)
+                    Spacer()
+                    Text(L10n.format("%d Vehicles", allVins.count))
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(HisingenTheme.accent)
+                }
+
+                if allVins.isEmpty {
+                    Text(L10n.text("No vehicles discovered yet. Sign in to Polestar or Volvo above to connect your cars."))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                } else {
+                    if allVins.count > 1 {
+                        fleetSummaryBanner(vins: allVins)
+                    }
+
+                    ForEach(allVins, id: \.self) { vin in
+                        fleetVehicleRow(vin: vin, isActive: vin == activeVin)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fleetSummaryBanner(vins: [String]) -> some View {
+        let allStates: [VehicleState] = vins.compactMap { vin in
+            (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
+        }
+
+        let totalRange = allStates.compactMap(\.primaryRangeKm).reduce(0, +)
+        let chargingCars = allStates.filter(\.isCharging)
+        let totalChargingWatts = chargingCars.compactMap(\.chargingPowerWatts).reduce(0, +)
+        let totalOdometer = allStates.compactMap(\.odometerKm).reduce(0, +)
+
+        return HStack(spacing: 8) {
+            // Combined Range
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "gauge.with.needle.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(HisingenTheme.accent)
+                    Text(L10n.text("Fleet Range"))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Text(totalRange > 0 ? Format.distance(km: totalRange, unit: preferences.distanceUnit) : "--")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(7)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+
+            // Charging Activity
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: chargingCars.isEmpty ? "bolt.slash" : "bolt.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(chargingCars.isEmpty ? Color.secondary : Color.green)
+                    Text(L10n.text("Charging"))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                if chargingCars.isEmpty {
+                    Text(L10n.text("All Idle"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                } else {
+                    HStack(spacing: 3) {
+                        Text(L10n.format("%d active", chargingCars.count))
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.green)
+                        if totalChargingWatts > 0 {
+                            Text("(\(Format.kilowatts(watts: totalChargingWatts)))")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(7)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+
+            // Fleet Odometer
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "road.lanes")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(HisingenTheme.accent)
+                    Text(L10n.text("Fleet Mileage"))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Text(totalOdometer > 0 ? Format.distance(km: totalOdometer, unit: preferences.distanceUnit) : "--")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(7)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(.bottom, 2)
+    }
+
+    private func fleetVehicleRow(vin: String, isActive: Bool) -> some View {
+        let vehicleState = (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
+        let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
+        let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
+        let displayTitle = preferences.formattedVehicleTitle(
+            vin: vin,
+            modelName: vehicleState?.modelName,
+            modelYear: vehicleState?.modelYear,
+            registrationNo: vehicleState?.registrationNo,
+            fallbackBrand: brand
+        )
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                // Vehicle Thumbnail or Icon
+                if let imageBytes = imageCache.image(for: vin), let nsImg = NSImage(data: imageBytes) {
+                    Image(nsImage: nsImg)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 44, height: 26)
+                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: brandIcon)
+                            .font(.system(size: 12))
+                            .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 1.5) {
+                    HStack(spacing: 6) {
+                        Text(displayTitle)
+                            .font(.system(size: 11, weight: .semibold))
+                        if isActive {
+                            Text(L10n.text("ACTIVE"))
+                                .font(.system(size: 8, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text("VIN: \(vin)")
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        if let vehicleState {
+                            Text("· " + vehicleState.freshnessDescription)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                if !isActive {
+                    Button {
+                        onSettingsChanged(.selectVehicle(vin))
+                    } label: {
+                        Text(L10n.text("Switch To"))
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .controlSize(.small)
+                }
+            }
+
+            if let vehicleState {
+                HStack(spacing: 12) {
+                    if let battery = vehicleState.batteryPercentage {
+                        HStack(spacing: 4) {
+                            Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
+                            Text(String(format: "%.0f%%", battery))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            if vehicleState.isCharging, let power = vehicleState.chargingPowerWatts, power > 0 {
+                                Text(Format.kilowatts(watts: power))
+                                    .font(.system(size: 8.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else if let fuel = vehicleState.fuelLevelPercent {
+                        HStack(spacing: 4) {
+                            Image(systemName: "fuelpump.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Color.secondary)
+                            Text(String(format: "%.0f%%", fuel))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        }
+                    }
+
+                    if let range = vehicleState.primaryRangeKm {
+                        HStack(spacing: 3) {
+                            Image(systemName: "gauge.with.needle.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                            Text(Format.distance(km: range, unit: preferences.distanceUnit))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let isLocked = vehicleState.exteriorStatus?.isLocked {
+                        HStack(spacing: 3) {
+                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                            Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(.leading, 6)
+            }
+
+            // Nickname & Theme Controls
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Text(L10n.text("Nickname:"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+
+                    TextField(L10n.text("Nickname"), text: Binding(
+                        get: { preferences.vehicleNickname(for: vin) },
+                        set: { preferences.setVehicleNickname($0, for: vin) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.mini)
+                    .frame(maxWidth: 110)
+                }
+
+                HStack(spacing: 4) {
+                    Text(L10n.text("Theme:"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: Binding(
+                        get: { preferences.theme(for: vin, brand: brand) },
+                        set: { newTheme in
+                            preferences.setTheme(newTheme, for: vin, brand: brand)
+                            if isActive {
+                                appTheme = newTheme
+                                preferences.appTheme = newTheme
+                                preferences.syncAppThemeStorageKey()
+                            }
+                            onSettingsChanged(.presentation)
+                        }
+                    )) {
+                        ForEach(AppTheme.allCases, id: \.self) { t in
+                            Text(t.title).tag(t)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .frame(maxWidth: 130)
+                }
+            }
+            .padding(.leading, 6)
+        }
+        .padding(9)
+        .background(Color.primary.opacity(isActive ? 0.05 : 0.025), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
+        )
+    }
+
 
     private var filteredThemes: [AppTheme] {
         if selectedThemeCategory == .all {
@@ -405,24 +700,12 @@ struct SettingsView: View {
                         }
                     }
 
-                    // Live Studio Render Preview
-                    let previewData = supportsMultipleAngles
-                        ? imageCache.image(for: settingsVehicleVIN, angle: carRenderAngle.rawValue)
-                        : (availableAngles.first.flatMap { imageCache.image(for: settingsVehicleVIN, angle: $0.rawValue) }
-                            ?? imageCache.image(for: settingsVehicleVIN))
-                    if let previewData, let nsImg = NSImage(data: previewData) {
-                        Image(nsImage: nsImg)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity, maxHeight: 110)
-                            .padding(6)
-                            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                            )
-                            .transition(.opacity)
-                    }
+                    // Live Studio Render Preview (Async Decoded & Cached)
+                    SettingsStudioRenderPreview(
+                        vin: settingsVehicleVIN,
+                        angle: supportsMultipleAngles ? carRenderAngle.rawValue : (availableAngles.first?.rawValue ?? 0),
+                        imageCache: imageCache
+                    )
 
                     if supportsMultipleAngles {
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
@@ -2118,5 +2401,52 @@ struct SettingsView: View {
                 .fill(HisingenTheme.canvas.opacity(0.5))
         }
     }
+}
 
+@MainActor
+struct SettingsStudioRenderPreview: View {
+    let vin: String
+    let angle: Int
+    let imageCache: CarImageCache
+    @State private var artwork: VehicleArtworkStore.Artwork?
+
+    var body: some View {
+        ZStack {
+            RadialGradient(
+                colors: [Color.primary.opacity(0.05), Color.clear],
+                center: .center,
+                startRadius: 30,
+                endRadius: 140
+            )
+
+            if let cgImage = artwork?.image {
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(1.22, anchor: .center)
+                    .padding(.horizontal, 4)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 165)
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .task(id: "\(vin)#\(angle)") {
+            let store = VehicleArtworkStore.shared
+            let budget = 600
+            let source = VehicleArtworkStore.source(vin: vin, angle: angle)
+            if let data = imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin) {
+                if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
+                    artwork = cached
+                } else {
+                    artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
+                }
+            }
+        }
+    }
 }

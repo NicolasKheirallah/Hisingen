@@ -299,6 +299,17 @@ final class VehicleDatabase: @unchecked Sendable {
             filter_remaining_percent REAL
         );
         CREATE INDEX IF NOT EXISTS idx_air_quality_vin ON air_quality_history(vin, timestamp DESC);
+
+        CREATE TABLE IF NOT EXISTS vehicle_images (
+            vin TEXT NOT NULL,
+            angle INTEGER NOT NULL,
+            image_data BLOB NOT NULL,
+            thumbnail_data BLOB,
+            pixel_budget INTEGER,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (vin, angle)
+        );
+        CREATE INDEX IF NOT EXISTS idx_vehicle_images_vin ON vehicle_images(vin);
         """
         do {
             try db.execute(sql: sql)
@@ -339,6 +350,63 @@ final class VehicleDatabase: @unchecked Sendable {
         if applied {
             try? db.query(sql: "PRAGMA user_version = 1;") { _ in } process: { _ in }
         }
+    }
+
+    // MARK: - Vehicle Artwork & Images
+
+    func saveVehicleImage(vin: String, angle: Int, data: Data, thumbnailData: Data? = nil, pixelBudget: Int? = nil) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty, !data.isEmpty else { return }
+        let sql = """
+        INSERT INTO vehicle_images (vin, angle, image_data, thumbnail_data, pixel_budget, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(vin, angle) DO UPDATE SET
+            image_data=excluded.image_data,
+            thumbnail_data=excluded.thumbnail_data,
+            pixel_budget=excluded.pixel_budget,
+            updated_at=excluded.updated_at;
+        """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(cleanVIN, at: 1)
+            try stmt.bindInt64(Int64(angle), at: 2)
+            try stmt.bindBlob(data, at: 3)
+            try stmt.bindBlob(thumbnailData, at: 4)
+            try stmt.bindInt64(pixelBudget.map(Int64.init), at: 5)
+            try stmt.bindDate(Date(), at: 6)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func loadVehicleImage(for vin: String, angle: Int) -> (data: Data, thumbnailData: Data?)? {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return nil }
+        let sql = "SELECT image_data, thumbnail_data FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;"
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(cleanVIN, at: 1)
+            try stmt.bindInt64(Int64(angle), at: 2)
+        } process: { stmt -> (data: Data, thumbnailData: Data?)? in
+            guard stmt.step(), let data = stmt.columnBlob(at: 0) else { return nil }
+            let thumb = stmt.columnBlob(at: 1)
+            return (data: data, thumbnailData: thumb)
+        }
+    }
+
+    func cachedImageAngles(for vin: String) -> [Int] {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return [] }
+        let sql = "SELECT angle FROM vehicle_images WHERE vin = ?;"
+        let result = try? db.query(sql: sql) { stmt in
+            try stmt.bindText(cleanVIN, at: 1)
+        } process: { stmt -> [Int] in
+            var angles: [Int] = []
+            while stmt.step() {
+                if let angle = stmt.columnInt64(at: 0).map(Int.init) {
+                    angles.append(angle)
+                }
+            }
+            return angles
+        }
+        return result ?? []
     }
 
     // MARK: - Vehicle Snapshots

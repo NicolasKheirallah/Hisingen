@@ -148,6 +148,15 @@ final class RefreshCoordinator {
     private(set) var nextRefresh: Date?
     private(set) var lastLatency: TimeInterval?
 
+    /// Fired once per successful session establishment — not on vehicle switches. The shell
+    /// uses it to schedule the background garage scan: hooking that to `onCars` instead made
+    /// every switch trigger a full scan ~8 s later (two extra discoveries plus a complete
+    /// telemetry fan-out), tripping provider rate limits right after switching.
+    var onSessionEstablished: (() -> Void)?
+    /// A vehicle switch was requested but is paused by an active provider rate limit.
+    /// Separate from `onError` because refreshes hit the same error on their normal
+    /// schedule — only this one means the user just tapped a switch and got nothing.
+    var onSwitchPaused: (() -> Void)?
     var onState: ((VehicleState) -> Void)?
     var onCars: (([CarSummary], String) -> Void)?
     /// Fired whenever the active-vehicle selection changes or resolves — optimistically when
@@ -174,18 +183,27 @@ final class RefreshCoordinator {
          observesEnvironment: Bool = true,
          imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore,
-         clearPasswordAfterSession: @escaping () -> Void = { try? Keychain.deletePassword() },
-         readStoredSessionToken: @escaping () -> String? = { (try? Keychain.readSessionToken()) ?? nil },
-         readStoredPassword: @escaping () -> String? = { (try? Keychain.readPassword()) ?? nil },
+         clearPasswordAfterSession: (() -> Void)? = nil,
+         readStoredSessionToken: (() -> String?)? = nil,
+         readStoredPassword: (() -> String?)? = nil,
          retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay,
          selectionRetryDelay: TimeInterval = 2) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
         self.preferences = preferences
-        self.clearPasswordAfterSession = clearPasswordAfterSession
-        self.readStoredSessionToken = readStoredSessionToken
-        self.readStoredPassword = readStoredPassword
+        let brand = api.brand
+        self.clearPasswordAfterSession = clearPasswordAfterSession ?? {
+            if brand == .polestar { try? Keychain.deletePassword() }
+        }
+        self.readStoredSessionToken = readStoredSessionToken ?? {
+            brand == .volvo
+                ? ((try? Keychain.readVolvoSessionToken()) ?? nil)
+                : ((try? Keychain.readSessionToken()) ?? nil)
+        }
+        self.readStoredPassword = readStoredPassword ?? {
+            brand == .volvo ? nil : ((try? Keychain.readPassword()) ?? nil)
+        }
         self.retryDelay = retryDelay
         self.selectionRetryDelay = selectionRetryDelay
         guard observesEnvironment else { return }
@@ -223,7 +241,12 @@ final class RefreshCoordinator {
         pendingPassword = password?.isEmpty == false ? password : nil
         pendingSessionToken = nil
         if accountChanged {
-            stateStore.clear()
+            for car in cars {
+                stateStore.clear(vin: car.vin)
+            }
+            if cars.isEmpty, !preferences.vin.isEmpty {
+                stateStore.clear(vin: preferences.vin)
+            }
             latest = nil
             cars = []
             lastError = nil
@@ -317,6 +340,9 @@ final class RefreshCoordinator {
     func selectCar(vin: String) {
         guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else {
             // A silent drop reads as a frozen app; surface why switching is paused instead.
+            // Multi-vehicle accounts double the request volume and hit this window far
+            // more often than the single-car case.
+            onSwitchPaused?()
             onError?(.rateLimited(retryAfter: rateLimitedUntil?.timeIntervalSinceNow))
             return
         }
@@ -361,7 +387,12 @@ final class RefreshCoordinator {
                 requestedSelectionVIN = nil
                 selectionRetryCount = 0
                 cars = await api.cars
-                onCars?(cars, vin)
+                onSelectionChanged?(vin)
+                // Deliberately NOT firing `onCars` here: it is a session-level event, and
+                // its shell-side handler schedules the garage scan — which after a switch
+                // meant two extra provider discoveries plus a full telemetry fan-out for
+                // the other car ~8 s later, tripping rate limits right when the user
+                // started interacting with the freshly selected vehicle.
                 refresh(trigger: .vehicleChanged)
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
@@ -411,6 +442,7 @@ final class RefreshCoordinator {
         let requestGeneration = generation
         sessionReady = false
         latest = nil
+        let carsToClear = cars.map(\.vin)
         cars = []
         lastError = nil
         pendingEmail = ""
@@ -419,9 +451,22 @@ final class RefreshCoordinator {
         requestedSelectionVIN = nil
         selectionRetryCount = 0
         rateLimitedUntil = nil
-        preferences.email = ""
-        preferences.vin = ""
-        stateStore.clear()
+        if api.brand == .polestar {
+            preferences.email = ""
+        }
+        let currentVin = preferences.vin
+        preferences.setVin("", for: api.brand)
+        if carsToClear.isEmpty {
+            if !currentVin.isEmpty {
+                stateStore.clear(vin: currentVin)
+            } else {
+                stateStore.clear()
+            }
+        } else {
+            for vin in carsToClear {
+                stateStore.clear(vin: vin)
+            }
+        }
         task = Task {
             do {
                 try await api.signOut()
@@ -502,6 +547,7 @@ final class RefreshCoordinator {
                 onSelectionChanged?(vin)
                 cars = await api.cars
                 onCars?(cars, vin)
+                onSessionEstablished?()
                 sessionReady = true
                 pendingSessionToken = nil
 

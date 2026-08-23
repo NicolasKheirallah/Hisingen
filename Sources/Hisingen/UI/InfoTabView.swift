@@ -14,6 +14,8 @@ struct InfoTabView: View {
     @State private var addressResolved = false
     @Environment(\.preferencesStore) private var preferences
     @State private var vinCopied = false
+    @State private var recentTelemetry: [HistoricalTelemetryRecord] = []
+    @State private var recentCommands: [RemoteCommandAuditRecord] = []
 
     private var availableExteriorAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter { angle in
@@ -58,11 +60,21 @@ struct InfoTabView: View {
                 ? preferred.rawValue
                 : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
         }
+        .task(id: state.vin) {
+            let vin = state.vin
+            let db = database
+            let (t, c) = await Task.detached(priority: .userInitiated) {
+                (db.recentTelemetry(for: vin, limit: 30), db.recentCommandAudits(for: vin, limit: 5))
+            }.value
+            guard !Task.isCancelled else { return }
+            recentTelemetry = t
+            recentCommands = c
+        }
     }
 
     private var activityHistoryCard: some View {
-        let telemetry = database.recentTelemetry(for: state.vin, limit: 30)
-        let commands = database.recentCommandAudits(for: state.vin, limit: 5)
+        let telemetry = recentTelemetry
+        let commands = recentCommands
         guard !telemetry.isEmpty || !commands.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {

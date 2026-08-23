@@ -56,7 +56,6 @@ extension VolvoAPI {
         do {
             try await refreshAccessToken(force: true)
         } catch let error as VolvoError where error.requiresAuthentication {
-            try? keychain.deleteVolvoSessionToken()
             refreshToken = nil
             throw error
         }

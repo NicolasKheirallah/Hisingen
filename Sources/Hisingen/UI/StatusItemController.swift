@@ -19,6 +19,9 @@ final class StatusItemController: NSObject {
 
     var updateVersion: String?
     var checkingForUpdates = false
+    /// Whether the popover is currently on screen. Callers outside AppKit view code use
+    /// this to decide between in-panel feedback (banners) and system notifications.
+    var isPopoverVisible: Bool { popover.isShown }
     var cars: [CarSummary] = []
     var activeVin: String?
     var diagnostics: DiagnosticsSnapshot?
@@ -56,13 +59,14 @@ final class StatusItemController: NSObject {
     private var lastPopoverCloseDate: Date?
 
     @MainActor
-    init(onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
-         onCheckForUpdates: @escaping () -> Void,
-          onRemoteCommand: @escaping (RemoteCommand) -> Void,
-          database: VehicleDatabase = VehicleDatabase(),
-          reverseGeocoder: ReverseGeocoder = ReverseGeocoder(),
-          imageCache: CarImageCache = CarImageCache(),
-          preferences: PreferencesStore) {
+    init(onRefresh: @escaping () -> Void = {},
+         onSettings: @escaping () -> Void = {},
+         onCheckForUpdates: @escaping () -> Void = {},
+         onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
+         database: VehicleDatabase = VehicleDatabase(),
+         reverseGeocoder: ReverseGeocoder = ReverseGeocoder(),
+         imageCache: CarImageCache = CarImageCache(),
+         preferences: PreferencesStore) {
         self.onRefresh = onRefresh
         self.onSettings = onSettings
         self.onCheckForUpdates = onCheckForUpdates
@@ -259,24 +263,36 @@ final class StatusItemController: NSObject {
 
         let otherBrand: VehicleBrand = preferences.activeBrand == .polestar ? .volvo : .polestar
         let otherBrandResumable = preferences.hasResumableSession(for: otherBrand)
+        let vins = availableVehicleVINs
 
-        if cars.count > 1 || otherBrandResumable {
+        if vins.count > 1 || otherBrandResumable {
             let switchMenu = NSMenu()
-            for (index, car) in cars.enumerated() {
-                let name = car.displayTitle()
-                let battery = cachedSnapshots[car.vin]?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
+            for (index, vin) in vins.enumerated() {
+                let snapshot = cachedSnapshots[vin] ?? (vin == latestState?.vin ? latestState : nil)
+                let name: String = {
+                    if let snapshot {
+                        return preferences.formattedVehicleTitle(
+                            vin: snapshot.vin, modelName: snapshot.modelName, modelYear: snapshot.modelYear, registrationNo: snapshot.registrationNo, fallbackBrand: snapshot.model.brand
+                        )
+                    }
+                    if let car = cars.first(where: { $0.vin == vin }) {
+                        return car.displayTitle()
+                    }
+                    return vin
+                }()
+                let battery = snapshot?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌃⌥\(index + 1)" : ""
                 let title = shortcut.isEmpty
-                    ? "\(name)\(battery) (\(car.vin.prefix(8))...)"
-                    : "\(name)\(battery) (\(car.vin.prefix(8))...)   [\(shortcut)]"
+                    ? "\(name)\(battery) (\(vin.prefix(8))...)"
+                    : "\(name)\(battery) (\(vin.prefix(8))...)   [\(shortcut)]"
                 let item = NSMenuItem(title: title, action: #selector(contextSwitchCar(_:)), keyEquivalent: "")
-                item.representedObject = car.vin
-                item.state = car.vin == activeVin ? .on : .off
+                item.representedObject = vin
+                item.state = vin == activeVin ? .on : .off
                 item.target = self
                 switchMenu.addItem(item)
             }
-            if otherBrandResumable {
-                if !cars.isEmpty { switchMenu.addItem(.separator()) }
+            if otherBrandResumable, !vins.contains(where: { cachedSnapshots[$0]?.model.brand == otherBrand }) {
+                if !vins.isEmpty { switchMenu.addItem(.separator()) }
                 let label = preferences.lastVehicleLabel(for: otherBrand)
                 let item = NSMenuItem(
                     title: L10n.format("Switch to %@ (%@)…", otherBrand.displayName, label),
@@ -641,29 +657,41 @@ final class StatusItemController: NSObject {
         showPopover()
     }
 
+    var availableVehicleVINs: [String] {
+        var set = Set<String>()
+        var list: [String] = []
+        for car in cars {
+            if set.insert(car.vin).inserted {
+                list.append(car.vin)
+            }
+        }
+        for (vin, _) in cachedSnapshots {
+            if set.insert(vin).inserted {
+                list.append(vin)
+            }
+        }
+        return list
+    }
+
     private func selectCar(_ vin: String) {
-        // Follow user intent immediately instead of vetoing on this stale copy: waiting
-        // for the coordinator round trip left `activeVin` on the launch vehicle forever
-        // (`onCars` fires only from session-level events, never from a switch), so this
-        // guard blocked switching BACK while the coordinator's own settled-check blocked
-        // repeating the forward switch — together the switcher locked up after one use.
-        // Whether work is actually needed is decided by RefreshCoordinator.selectCar.
         activeVin = vin
         onSelectCar?(vin)
     }
 
     func cycleVehicle(forward: Bool) {
-        guard cars.count > 1 else { return }
-        let currentIndex = cars.firstIndex { $0.vin == (activeVin ?? cars.first?.vin) } ?? 0
+        let vins = availableVehicleVINs
+        guard vins.count > 1 else { return }
+        let currentIndex = vins.firstIndex(of: activeVin ?? vins.first ?? "") ?? 0
         let nextIndex = forward
-            ? (currentIndex + 1) % cars.count
-            : (currentIndex - 1 + cars.count) % cars.count
-        selectCar(cars[nextIndex].vin)
+            ? (currentIndex + 1) % vins.count
+            : (currentIndex - 1 + vins.count) % vins.count
+        selectCar(vins[nextIndex])
     }
 
     func selectVehicleByIndex(_ index: Int) {
-        guard index >= 0 && index < cars.count else { return }
-        selectCar(cars[index].vin)
+        let vins = availableVehicleVINs
+        guard index >= 0 && index < vins.count else { return }
+        selectCar(vins[index])
     }
 
     func showLoading() {
@@ -695,7 +723,44 @@ final class StatusItemController: NSObject {
         statusItem.button?.image = icon
         setStatusBarTitle(title, for: data)
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
+        updateFleetToolTip(activeState: data)
         refreshPopoverIfNeeded()
+    }
+
+    private func updateFleetToolTip(activeState: VehicleState?) {
+        var lines: [String] = []
+        let currentVin = activeState?.vin ?? activeVin ?? preferences.vin
+        let vins = availableVehicleVINs
+        for vin in vins {
+            let state = (vin == activeState?.vin ? activeState : nil) ?? cachedSnapshots[vin]
+            let name = preferences.formattedVehicleTitle(
+                vin: vin,
+                modelName: state?.modelName,
+                modelYear: state?.modelYear,
+                registrationNo: state?.registrationNo,
+                fallbackBrand: state?.model.brand
+            )
+            var parts: [String] = [name]
+            if let battery = state?.batteryPercentage {
+                var batStr = String(format: "%.0f%%", battery)
+                if state?.isCharging == true {
+                    batStr += " ⚡"
+                }
+                parts.append(batStr)
+            } else if let fuel = state?.fuelLevelPercent {
+                parts.append(String(format: "%.0f%% fuel", fuel))
+            }
+            if let range = state?.primaryRangeKm {
+                parts.append(Format.distance(km: range, unit: preferences.distanceUnit))
+            }
+            if let locked = state?.exteriorStatus?.isLocked {
+                parts.append(locked ? "Locked" : "Unlocked ⚠️")
+            }
+            let isCurrent = (vin == currentVin)
+            let prefix = isCurrent ? "● " : "○ "
+            lines.append(prefix + parts.joined(separator: " · "))
+        }
+        statusItem.button?.toolTip = lines.isEmpty ? "Hisingen" : lines.joined(separator: "\n")
     }
 
     private func setStatusBarTitle(_ title: String, for data: VehicleState?) {

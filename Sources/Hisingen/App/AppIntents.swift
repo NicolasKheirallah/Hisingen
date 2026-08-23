@@ -4,16 +4,39 @@ import Foundation
 
 @available(macOS 13.0, *)
 @MainActor
-private enum AutomationHandoff {
+enum AutomationHandoff {
     static func dispatch(_ route: String) -> Bool {
         guard let url = URL(string: "hisingen://\(route)") else { return false }
         return NSWorkspace.shared.open(url)
     }
 
-    static func canSendVolvoCommand(requiresRestrictedScopes: Bool = false) -> String? {
+    static func resolveVIN(from input: String?, preferences: PreferencesStore = .shared) -> String {
+        guard let input = input?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty else {
+            return preferences.vin
+        }
+        let upper = input.uppercased()
+        let store = VehicleStateStore(database: VehicleDatabase.shared)
+        if store.snapshot(for: upper) != nil {
+            return upper
+        }
+        for vin in [preferences.vin(for: .polestar), preferences.vin(for: .volvo)] where !vin.isEmpty {
+            let nick = preferences.vehicleNickname(for: vin)
+            if nick.localizedCaseInsensitiveContains(input) || vin.localizedCaseInsensitiveContains(input) {
+                return vin
+            }
+            if let snap = store.snapshot(for: vin), snap.modelName?.localizedCaseInsensitiveContains(input) == true {
+                return vin
+            }
+        }
+        return upper
+    }
+
+    static func canSendVolvoCommand(for input: String? = nil, requiresRestrictedScopes: Bool = false) -> String? {
         let preferences = PreferencesStore.shared
-        guard !preferences.vin.isEmpty else { return "No vehicle is configured in Hisingen." }
-        guard preferences.activeBrand == .volvo else {
+        let targetVin = resolveVIN(from: input)
+        guard !targetVin.isEmpty else { return "No vehicle is configured in Hisingen." }
+        let isVolvo = targetVin.hasPrefix("YV") || preferences.activeBrand == .volvo
+        guard isVolvo else {
             return "This shortcut is available only for Volvo commands exposed by the official public API."
         }
         if requiresRestrictedScopes && !preferences.volvoRestrictedScopesEnabled {
@@ -23,20 +46,25 @@ private enum AutomationHandoff {
     }
 
     static func dispatchAndWait(
-        _ route: String, command: String, timeout: TimeInterval = 45
+        _ route: String, command: String, vin: String? = nil, timeout: TimeInterval = 45
     ) async -> String {
+        let targetVin = resolveVIN(from: vin)
         let preferences = PreferencesStore.shared
-        let vin = preferences.vin
+        let effectiveVin = targetVin.isEmpty ? preferences.vin : targetVin
+        let routeWithVin: String
+        if !targetVin.isEmpty {
+            routeWithVin = route.contains("?") ? "\(route)&vin=\(targetVin)" : "\(route)?vin=\(targetVin)"
+        } else {
+            routeWithVin = route
+        }
         let startedAt = Date().addingTimeInterval(-1)
-        guard dispatch(route) else { return "Hisingen could not be opened to send the request." }
+        guard dispatch(routeWithVin) else { return "Hisingen could not be opened to send the request." }
 
-        // Shared database handle — a fresh SQLite connection per Shortcut invocation
-        // previously ran the full schema DDL on every run.
         let database = VehicleDatabase.shared
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
-            if let result = database.recentCommandAudits(for: vin, limit: 10).first(where: {
+            if let result = database.recentCommandAudits(for: effectiveVin, limit: 10).first(where: {
                 $0.command == command && $0.executedAt >= startedAt
             }) {
                 if result.status == "failed" {
@@ -48,10 +76,11 @@ private enum AutomationHandoff {
         return "The request was handed to Hisingen, but no provider result arrived before the shortcut timed out. Check Command History in Hisingen."
     }
 
-    static func snapshot() -> (VehicleState, PreferencesStore)? {
+    static func snapshot(for input: String? = nil) -> (VehicleState, PreferencesStore)? {
         let preferences = PreferencesStore.shared
-        guard !preferences.vin.isEmpty,
-              let state = VehicleStateStore(database: VehicleDatabase.shared).snapshot(for: preferences.vin)
+        let vin = resolveVIN(from: input)
+        guard !vin.isEmpty,
+              let state = VehicleStateStore(database: VehicleDatabase.shared).snapshot(for: vin)
         else { return nil }
         return (state, preferences)
     }
@@ -60,13 +89,16 @@ private enum AutomationHandoff {
 @available(macOS 13.0, *)
 struct GetVehicleBatteryIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Vehicle Battery"
-    static let description = IntentDescription("Returns the battery level, range, and charging status of the active vehicle.")
+    static let description = IntentDescription("Returns the battery level, range, and charging status of a vehicle.")
     static let openAppWhenRun: Bool = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
 
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         let preferences = PreferencesStore.shared
-        let vin = preferences.vin
+        let vin = AutomationHandoff.resolveVIN(from: vehicle)
         let store = VehicleStateStore(database: VehicleDatabase.shared)
         guard let state = store.snapshot(for: vin) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
@@ -74,6 +106,8 @@ struct GetVehicleBatteryIntent: AppIntent {
         var parts: [String] = []
         if let battery = state.batteryPercentage {
             parts.append(String(format: "%.0f%% battery", battery))
+        } else if let fuel = state.fuelLevelPercent {
+            parts.append(String(format: "%.0f%% fuel", fuel))
         }
         if let range = state.primaryRangeKm {
             parts.append(String(format: "%d %@ range", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
@@ -94,17 +128,64 @@ struct GetVehicleBatteryIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
+struct GetGarageStatusIntent: AppIntent {
+    static let title: LocalizedStringResource = "Get Garage Status"
+    static let description = IntentDescription("Returns the status of all vehicles in your garage.")
+    static let openAppWhenRun: Bool = false
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
+        let preferences = PreferencesStore.shared
+        let store = VehicleStateStore(database: VehicleDatabase.shared)
+        var knownVINs: [String] = []
+        for brand in VehicleBrand.allCases {
+            let vin = preferences.vin(for: brand)
+            if !vin.isEmpty && !knownVINs.contains(vin) { knownVINs.append(vin) }
+        }
+        if knownVINs.isEmpty && !preferences.vin.isEmpty { knownVINs.append(preferences.vin) }
+
+        var lines: [String] = []
+        for vin in knownVINs {
+            guard let state = store.snapshot(for: vin) else { continue }
+            let nick = preferences.vehicleNickname(for: vin)
+            let name = nick.isEmpty ? (state.modelName ?? state.model.brand.displayName) : nick
+            var parts: [String] = []
+            if let battery = state.batteryPercentage {
+                parts.append(String(format: "%.0f%%", battery))
+            } else if let fuel = state.fuelLevelPercent {
+                parts.append(String(format: "%.0f%% fuel", fuel))
+            }
+            if let range = state.primaryRangeKm {
+                parts.append(Format.distance(km: range, unit: preferences.distanceUnit))
+            }
+            if state.isCharging { parts.append("⚡ charging") }
+            if let locked = state.exteriorStatus?.isLocked { parts.append(locked ? "locked" : "unlocked") }
+            lines.append("\(name): \(parts.joined(separator: ", "))")
+        }
+
+        if lines.isEmpty {
+            return .result(value: "--", dialog: "No vehicles or telemetry found in your garage.")
+        }
+        let response = lines.joined(separator: ". ") + "."
+        return .result(value: response, dialog: IntentDialog(stringLiteral: response))
+    }
+}
+
+@available(macOS 13.0, *)
 struct LockVehicleIntent: AppIntent {
     static let title: LocalizedStringResource = "Lock Vehicle"
     static let description = IntentDescription("Locks the vehicle doors.")
     static let openAppWhenRun: Bool = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(requiresRestrictedScopes: true) {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("lock", command: "lock")
+        let result = await AutomationHandoff.dispatchAndWait("lock", command: "lock", vin: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -115,12 +196,15 @@ struct UnlockVehicleIntent: AppIntent {
     static let description = IntentDescription("Unlocks the vehicle doors.")
     static let openAppWhenRun: Bool = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(requiresRestrictedScopes: true) {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("unlock", command: "unlock", timeout: 60)
+        let result = await AutomationHandoff.dispatchAndWait("unlock", command: "unlock", vin: vehicle, timeout: 60)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -131,12 +215,15 @@ struct StartClimateIntent: AppIntent {
     static let description = IntentDescription("Starts cabin climate preconditioning.")
     static let openAppWhenRun: Bool = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand() {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("climate/start", command: "start-climate")
+        let result = await AutomationHandoff.dispatchAndWait("climate/start", command: "start-climate", vin: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -147,12 +234,15 @@ struct StopClimateIntent: AppIntent {
     static let description = IntentDescription("Stops cabin climate preconditioning.")
     static let openAppWhenRun: Bool = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand() {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("climate/stop", command: "stop-climate")
+        let result = await AutomationHandoff.dispatchAndWait("climate/stop", command: "stop-climate", vin: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -163,9 +253,12 @@ struct GetVehicleStatusIntent: AppIntent {
     static let description = IntentDescription("Returns lock, opening, and attention status from the latest Hisingen snapshot.")
     static let openAppWhenRun = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        guard let (state, preferences) = AutomationHandoff.snapshot() else {
+        guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
         var details: [String] = []
@@ -187,9 +280,12 @@ struct GetChargingStatusIntent: AppIntent {
     static let description = IntentDescription("Returns charging state, power, target, and time remaining.")
     static let openAppWhenRun = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        guard let (state, _) = AutomationHandoff.snapshot() else {
+        guard let (state, _) = AutomationHandoff.snapshot(for: vehicle) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
         var parts = [state.chargingState.displayName]
@@ -209,9 +305,12 @@ struct GetRecentTripsIntent: AppIntent {
     static let description = IntentDescription("Returns locally derived trip distance and driving time for the last seven days.")
     static let openAppWhenRun = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        guard let (state, preferences) = AutomationHandoff.snapshot() else {
+        guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
         // Push the 7-day bound into SQL instead of decoding up to 20k telemetry rows per run.
@@ -228,11 +327,15 @@ struct GetRecentTripsIntent: AppIntent {
 struct FlashLightsIntent: AppIntent {
     static let title: LocalizedStringResource = "Flash Vehicle Lights"
     static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(requiresRestrictedScopes: true) {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("flash-lights", command: "flash-lights")
+        let result = await AutomationHandoff.dispatchAndWait("flash-lights", command: "flash-lights", vin: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -241,11 +344,15 @@ struct FlashLightsIntent: AppIntent {
 struct HonkAndFlashIntent: AppIntent {
     static let title: LocalizedStringResource = "Honk and Flash Vehicle"
     static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(requiresRestrictedScopes: true) {
+        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
             return .result(dialog: IntentDialog(stringLiteral: reason))
         }
-        let result = await AutomationHandoff.dispatchAndWait("honk-flash", command: "honk-flash")
+        let result = await AutomationHandoff.dispatchAndWait("honk-flash", command: "honk-flash", vin: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -262,10 +369,13 @@ struct SetChargeTargetIntent: AppIntent {
     @Parameter(title: "Charge Target (%)", default: 80, inclusiveRange: (40, 100))
     var percent: Int
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog {
         let result = await AutomationHandoff.dispatchAndWait(
-            "charge-target/\(percent)", command: "set-charge-target", timeout: 60
+            "charge-target/\(percent)", command: "set-charge-target", vin: vehicle, timeout: 60
         )
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
@@ -280,9 +390,12 @@ struct WhereIsMyCarIntent: AppIntent {
     static let description = IntentDescription("Returns the last reported parking position of the active vehicle.")
     static let openAppWhenRun = false
 
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
-        guard let (state, preferences) = AutomationHandoff.snapshot(),
+        guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle),
               let lat = state.location?.latitude, let lon = state.location?.longitude else {
             return .result(value: "unknown",
                            dialog: "No location has been reported for this vehicle yet.")

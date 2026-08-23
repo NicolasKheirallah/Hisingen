@@ -11,9 +11,11 @@ import ImageIO
 /// decode land in the render pass of whichever telemetry refresh got there first.
 @MainActor
 final class VehicleArtworkStore {
+    static let shared = VehicleArtworkStore()
+
     private let imageCache: CarImageCache
 
-    init(imageCache: CarImageCache = CarImageCache()) {
+    init(imageCache: CarImageCache = CarImageCache.shared) {
         self.imageCache = imageCache
     }
 

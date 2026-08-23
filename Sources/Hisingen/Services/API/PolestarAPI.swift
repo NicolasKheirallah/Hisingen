@@ -633,9 +633,17 @@ actor PolestarAPI {
         guard accessToken != nil else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
-        let requestEpoch = sessionEpoch
+        // A VIN we already hold discovery metadata for needs no round trip: selecting it is
+        // just a pointer move. Full discovery runs only the first time a vehicle is seen
+        // (and after sign-out clears identity state). This matters because discovery is two
+        // provider requests and switching used to pay it repeatedly — once for the switch,
+        // again for the garage scan's other-car fetch, and again for its re-select — enough
+        // sustained volume to trip rate limits right after the user switched cars.
+        if identities[vin] != nil, cars.contains(where: { $0.vin == vin }) {
+            selectedVIN = vin
+            return
+        }
         try await fetchCarInfo(preferredVIN: vin)
-        guard requestEpoch == sessionEpoch else { return }
         // No selection-equality post-check here, by design: identity reads are per-VIN now,
         // so a concurrent caller re-pointing `selectedVIN` after our discovery cannot
         // corrupt this car's telemetry. The only genuine failure is the VIN having left

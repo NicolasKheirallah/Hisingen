@@ -85,7 +85,6 @@ extension PolestarAPI {
         do {
             try await refreshAccessToken(force: true)
         } catch let error as PolestarError where error.requiresAuthentication {
-            try? keychain.deleteSessionToken()
             refreshToken = nil
             throw error
         }

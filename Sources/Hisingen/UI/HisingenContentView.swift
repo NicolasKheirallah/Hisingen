@@ -129,6 +129,7 @@ struct HisingenContentView: View {
             if settingsMode || (!authenticated && selectedTab == .settings) {
                 SettingsView(notificationPermission: notificationPermission,
                              state: state,
+                             cachedSnapshots: cachedSnapshots,
                              database: database, imageCache: imageCache,
                              onSettingsChanged: { change in
                                  if case .closeSettings = change {
@@ -145,9 +146,6 @@ struct HisingenContentView: View {
                 Divider().opacity(0.4)
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: HisingenTheme.sectionSpacing) {
-                        if selectedTab == .vehicle, garageStates.count > 1 {
-                            garageOverview
-                        }
                         if !state.retainedDataCategories.isEmpty {
                             retainedDataNotice(state)
                         }
@@ -171,7 +169,8 @@ struct HisingenContentView: View {
                         case .settings:
                             SettingsView(notificationPermission: notificationPermission,
                                          state: state,
-                                          database: database, imageCache: imageCache,
+                                         cachedSnapshots: cachedSnapshots,
+                                         database: database, imageCache: imageCache,
                                          onSettingsChanged: { change in
                                              if case .closeSettings = change {
                                                   withAnimation { selectedTab = .vehicle }
@@ -216,55 +215,6 @@ struct HisingenContentView: View {
         return values.values.sorted {
             if $0.model.brand != $1.model.brand { return $0.model.brand.rawValue < $1.model.brand.rawValue }
             return ($0.modelName ?? $0.vin) < ($1.modelName ?? $1.vin)
-        }
-    }
-
-    private var garageOverview: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "car.2.fill", title: L10n.text("Garage"), color: HisingenTheme.accent)
-                ForEach(garageStates, id: \.vin) { vehicle in
-                    Button {
-                        if vehicle.model.brand == preferences.activeBrand {
-                            onSelectCar(vehicle.vin)
-                        } else {
-                            onSettingsChanged(.switchToBrand(vehicle.model.brand))
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: vehicle.vin == state?.vin ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(vehicle.vin == state?.vin ? HisingenTheme.accent : Color.secondary)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(preferences.formattedVehicleTitle(
-                                    vin: vehicle.vin, modelName: vehicle.modelName,
-                                    modelYear: vehicle.modelYear, registrationNo: vehicle.registrationNo,
-                                    fallbackBrand: vehicle.model.brand
-                                ))
-                                .font(.system(size: 10.5, weight: .semibold))
-                                Text(vehicle.model.brand.displayName + " · " + vehicle.freshnessDescription)
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if let battery = vehicle.batteryPercentage {
-                                Text(String(format: "%.0f%%", battery))
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                            } else if let fuel = vehicle.fuelLevelPercent {
-                                Text(String(format: "%.0f%%", fuel))
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                            }
-                            if let range = vehicle.primaryRangeKm {
-                                Text(Format.distance(km: range, unit: preferences.distanceUnit))
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.format("Switch to %@", vehicle.modelName ?? vehicle.model.brand.displayName))
-                }
-            }
         }
     }
 
@@ -386,6 +336,8 @@ struct HisingenContentView: View {
         if let battery = snapshot.batteryPercentage {
             label += " · \(Int(battery))%"
             if snapshot.isCharging { label += "⚡" }
+        } else if let fuel = snapshot.fuelLevelPercent {
+            label += " · \(Int(fuel))%"
         }
         let summary = snapshot.stateSummary
         if summary.severity != .good {
@@ -397,8 +349,39 @@ struct HisingenContentView: View {
         return label
     }
 
+    private func vehicleMenuLabel(state: VehicleState) -> String {
+        let isActive = state.vin == activeVin
+        let baseTitle = preferences.formattedVehicleTitle(
+            vin: state.vin,
+            modelName: state.modelName,
+            modelYear: state.modelYear,
+            registrationNo: state.registrationNo,
+            fallbackBrand: state.model.brand
+        )
+        var label = baseTitle
+        if let battery = state.batteryPercentage {
+            label += " · \(Int(battery))%"
+            if state.isCharging { label += "⚡" }
+        } else if let fuel = state.fuelLevelPercent {
+            label += " · \(Int(fuel))%"
+        }
+        let summary = state.stateSummary
+        if summary.severity != .good {
+            label += " · \(summary.message)"
+        }
+        if !isActive {
+            label += " · \(Format.relativeAge(since: state.dataTimestamp))"
+        }
+        return label
+    }
+
     private func vehicleMenuAccessibilityLabel(_ car: CarSummary, isSelected: Bool) -> String {
         let base = vehicleMenuLabel(car)
+        return isSelected ? L10n.format("%@, selected", base) : base
+    }
+
+    private func vehicleMenuAccessibilityLabel(_ vehicle: VehicleState, isSelected: Bool) -> String {
+        let base = vehicleMenuLabel(state: vehicle)
         return isSelected ? L10n.format("%@, selected", base) : base
     }
 
@@ -437,11 +420,31 @@ struct HisingenContentView: View {
             return preferences.activeBrand.displayName
         }()
         let brandIcon = preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill"
+        let fleetStates = garageStates
+        let hasMultipleVehicles = fleetStates.count > 1 || cars.count > 1
 
         return Menu {
-            if cars.count > 1 {
-
-
+            if fleetStates.count > 1 {
+                ForEach(Array(fleetStates.enumerated().prefix(9)), id: \.element.vin) { index, vehicle in
+                    let isSelected = vehicle.vin == currentVin
+                    Button {
+                        onSelectCar(vehicle.vin)
+                    } label: {
+                        Label(vehicleMenuLabel(state: vehicle), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                    }
+                    .accessibilityLabel(vehicleMenuAccessibilityLabel(vehicle, isSelected: isSelected))
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.option, .control])
+                }
+                ForEach(Array(fleetStates.enumerated().dropFirst(9)), id: \.element.vin) { _, vehicle in
+                    let isSelected = vehicle.vin == currentVin
+                    Button {
+                        onSelectCar(vehicle.vin)
+                    } label: {
+                        Label(vehicleMenuLabel(state: vehicle), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                    }
+                    .accessibilityLabel(vehicleMenuAccessibilityLabel(vehicle, isSelected: isSelected))
+                }
+            } else if cars.count > 1 {
                 ForEach(Array(cars.enumerated().prefix(9)), id: \.element.vin) { index, car in
                     let isSelected = car.vin == currentVin
                     Button {
@@ -462,8 +465,8 @@ struct HisingenContentView: View {
                     .accessibilityLabel(vehicleMenuAccessibilityLabel(car, isSelected: isSelected))
                 }
             }
-            if otherBrandResumable {
-                if cars.count > 1 { Divider() }
+            if otherBrandResumable, !fleetStates.contains(where: { $0.model.brand == otherBrand }) {
+                if hasMultipleVehicles { Divider() }
                 Button {
                     onSettingsChanged(.switchToBrand(otherBrand))
                 } label: {
@@ -500,7 +503,7 @@ struct HisingenContentView: View {
 
     private var footerBar: some View {
         HStack(spacing: 8) {
-            if cars.count > 1 || otherBrandResumable {
+            if garageStates.count > 1 || cars.count > 1 || otherBrandResumable {
                 vehicleSwitcher
             }
             // Data freshness indicator

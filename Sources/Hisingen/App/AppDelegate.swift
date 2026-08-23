@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
              reverseGeocoder: reverseGeocoder, imageCache: imageCache,
              preferences: preferences
         )
-        statusController.onSelectCar = { [weak self] vin in self?.refreshCoordinator.selectCar(vin: vin) }
+        statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
         statusController.onOpenUpdate = { [weak self] in
             NSWorkspace.shared.open(UpdateChecker.releasePage(for: self?.statusController.updateVersion))
         }
@@ -70,10 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notifier.onQuickAction = { [weak self] action, vin in
             guard let self else { return }
-            // Act only on the currently selected vehicle: switching accounts from a
-            // notification tap would bypass the deliberate friction of vehicle switching.
-            guard vin == self.preferences.vin(for: .volvo) || vin == self.preferences.vin(for: .polestar),
-                  vin == self.preferences.vin(for: self.preferences.activeBrand) else { return }
+            let targetBrand = self.resolvedBrand(for: vin)
+            guard self.preferences.hasResumableSession(for: targetBrand) else { return }
+            if self.preferences.activeBrand != targetBrand || self.preferences.vin(for: targetBrand) != vin {
+                self.selectVehicle(vin: vin)
+            }
             switch action {
             case .lockVehicle:
                 self.performRemoteCommand(.lock)
@@ -111,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyLaunchAtLogin(userInitiated: false)
         checkForUpdatesIfEnabled()
         resumeStoredSession()
-        cacheDormantBrandSnapshot()
+        preloadFleetSnapshots()
         startGarageRefreshLoop()
         setupURLEventHandling()
         if !initialAuthenticated {
@@ -128,16 +129,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func cacheDormantBrandSnapshot() {
-        let dormantBrand: VehicleBrand = preferences.activeBrand == .polestar ? .volvo : .polestar
-        let dormantVIN = preferences.vin(for: dormantBrand)
-        guard !dormantVIN.isEmpty, statusController.cachedSnapshots[dormantVIN] == nil,
-              let snapshot = stateStore.snapshot(for: dormantVIN) else { return }
-        statusController.cachedSnapshots[dormantVIN] = snapshot
+    private func preloadFleetSnapshots() {
+        for brand in VehicleBrand.allCases {
+            let vin = preferences.vin(for: brand)
+            if !vin.isEmpty, statusController.cachedSnapshots[vin] == nil,
+               let snapshot = stateStore.snapshot(for: vin) {
+                statusController.cachedSnapshots[vin] = snapshot
+            }
+        }
     }
 
+    private func cacheDormantBrandSnapshot() {
+        preloadFleetSnapshots()
+    }
 
-    private func resumeStoredSession() {
+    func resolvedBrand(for vin: String) -> VehicleBrand {
+        let upper = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if let snapshot = statusController?.cachedSnapshots[upper] {
+            return snapshot.model.brand
+        }
+        if let snapshot = stateStore.snapshot(for: upper) {
+            return snapshot.model.brand
+        }
+        if !preferences.vin(for: .volvo).isEmpty && upper == preferences.vin(for: .volvo).uppercased() {
+            return .volvo
+        }
+        if !preferences.vin(for: .polestar).isEmpty && upper == preferences.vin(for: .polestar).uppercased() {
+            return .polestar
+        }
+        if upper.hasPrefix("YV") {
+            return .volvo
+        }
+        if upper.hasPrefix("YS") || upper.hasPrefix("LP") {
+            return .polestar
+        }
+        return preferences.activeBrand
+    }
+
+    func selectVehicle(vin: String) {
+        let trimmedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !trimmedVIN.isEmpty else { return }
+        let targetBrand = resolvedBrand(for: trimmedVIN)
+        if preferences.activeBrand == targetBrand {
+            preferences.setVin(trimmedVIN, for: targetBrand)
+            refreshCoordinator.selectCar(vin: trimmedVIN)
+        } else {
+            preferences.setVin(trimmedVIN, for: targetBrand)
+            switchActiveBrand(to: targetBrand, targetVin: trimmedVIN)
+            resumeStoredSession(targetVin: trimmedVIN)
+        }
+    }
+
+    private func resumeStoredSession(targetVin: String? = nil) {
+        let vinToUse = targetVin ?? (preferences.vin.isEmpty ? nil : preferences.vin)
         switch preferences.activeBrand {
         case .polestar:
             guard !preferences.email.isEmpty else { return }
@@ -145,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard sessionToken != nil || password != nil else { return }
             refreshCoordinator.start(
                 email: preferences.email, password: password, sessionToken: sessionToken,
-                preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
+                preferredVIN: vinToUse
             )
         case .volvo:
             guard let credentials = sessionManager.volvoCredentials(preferences: preferences) else { return }
@@ -158,17 +202,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard preferences.activeBrand == .volvo else { return }
                 refreshCoordinator.start(
                     email: "", password: nil, sessionToken: credentials.sessionToken,
-                    preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
+                    preferredVIN: vinToUse
                 )
             }
         }
     }
 
-
-    private func switchActiveBrand(to brand: VehicleBrand, force: Bool = false) {
-        if !force && preferences.activeBrand == brand { return }
+    private func switchActiveBrand(to brand: VehicleBrand, targetVin: String? = nil, force: Bool = false) {
+        if !force && preferences.activeBrand == brand && (targetVin == nil || targetVin == preferences.vin(for: brand)) { return }
         refreshCoordinator?.stop()
         preferences.activeBrand = brand
+        if let targetVin, !targetVin.isEmpty {
+            preferences.setVin(targetVin, for: brand)
+        }
         preferences.syncAppThemeStorageKey()
         let hasSession = preferences.hasResumableSession(for: brand)
         sessionValid = hasSession
@@ -190,12 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openVehicleFromNotification(vin: String) {
         guard !vin.isEmpty else { return }
         NSApp.activate(ignoringOtherApps: true)
-        if vin == preferences.vin(for: .volvo), preferences.activeBrand != .volvo {
-            switchActiveBrand(to: .volvo)
-        } else if vin == preferences.vin(for: .polestar), preferences.activeBrand != .polestar {
-            switchActiveBrand(to: .polestar)
-        }
-        refreshCoordinator.selectCar(vin: vin)
+        selectVehicle(vin: vin)
         statusController.openPopover()
     }
 
@@ -388,7 +429,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let snapshot = stateStore.snapshot(for: car.vin) { snapshots[car.vin] = snapshot }
             }
             statusController.cachedSnapshots = snapshots
-            self.scheduleGarageScan(after: 8)
+        }
+        // The garage scan belongs to session establishment only. It previously hung off
+        // `onCars`, which vehicle switches also fired — so every switch scheduled a full
+        // scan ~8 s later and the doubled request volume tripped provider rate limits
+        // right after switching.
+        refreshCoordinator.onSessionEstablished = { [weak self] in
+            self?.scheduleGarageScan(after: 8)
         }
         refreshCoordinator.onState = { [weak self] state in
             self?.miniPanel.update(state: state)
@@ -399,6 +446,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastError = nil
             statusController.cachedSnapshots[state.vin] = state
             render()
+        }
+        // A switch attempt during a rate-limit pause otherwise vanishes without a trace
+        // when the popover is closed: the menu closes, nothing changes on screen, and the
+        // only record was an in-panel error banner nobody saw. Post a notification for
+        // exactly that case; when the panel IS open, the banner suffices.
+        refreshCoordinator.onSwitchPaused = { [weak self] in
+            guard let self, !statusController.isPopoverVisible else { return }
+            notifier.notifyCommandNotice(
+                title: L10n.text("Vehicle Switch Paused"),
+                body: L10n.text("The vehicle service asked Hisingen to slow down. Switching vehicles will resume automatically."))
         }
         refreshCoordinator.onError = { [weak self] error in
             guard let self else { return }
@@ -546,10 +603,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard !Task.isCancelled, preferences.activeBrand == originalBrand,
                           !commandCoordinator.isInProgress, !refreshCoordinator.isBusy else { return }
                     // If the user switched vehicles mid-scan, stand down at once: the
-                    // coordinator owns provider selection from that moment, and racing it
-                    // flipped the shared selection under an in-flight switch — surfacing as
-                    // a bogus "not configured" failure and cross-contaminating per-car
-                    // identity data between the two vehicles.
+                    // coordinator owns provider selection from that moment.
                     if preferences.vin(for: brand) != selectedVIN { return }
                     if brand == originalBrand && car.vin == selectedVIN { continue }
                     try await provider.selectCar(vin: car.vin, features: preferences.features)
@@ -561,11 +615,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     statusController.cachedSnapshots[state.vin] = state
                     notifier.vehicleStateDidUpdate(state)
                 }
-                // Restore the pre-scan selection only while it is still ours to restore;
-                // after a user switch the coordinator has already selected the new car.
-                if !selectedVIN.isEmpty, preferences.vin(for: brand) == selectedVIN {
-                    try? await provider.selectCar(vin: selectedVIN, features: preferences.features)
-                }
+                // No re-selection of the previously selected car at the end: telemetry and
+                // commands address vehicles explicitly by VIN, so the shared selection
+                // pointer carries no behavioral weight anymore — and re-selecting cost a
+                // full Polestar discovery round trip on every single scan.
             } catch {
                 logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
@@ -689,6 +742,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     beginVolvoSignIn(clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
                 }
             }
+        case .selectVehicle(let vin):
+            selectVehicle(vin: vin)
+            statusController.dismissSettings()
         case .closeSettings:
             statusController.dismissSettings()
         case .features:
@@ -834,8 +890,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let command = host.isEmpty ? path : (path.isEmpty ? host : "\(host)/\(path)")
+        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+
+        if let targetVin = queryItems?.first(where: { $0.name == "vin" })?.value, !targetVin.isEmpty {
+            selectVehicle(vin: targetVin)
+        }
 
         switch command {
+        case "select-car", "switch-car", "switch-vehicle":
+            if let vin = queryItems?.first(where: { $0.name == "vin" })?.value, !vin.isEmpty {
+                selectVehicle(vin: vin)
+            } else if let indexStr = queryItems?.first(where: { $0.name == "index" })?.value, let index = Int(indexStr) {
+                statusController.selectVehicleByIndex(index)
+            }
+
         case "refresh":
             refreshCoordinator.refreshNow()
 

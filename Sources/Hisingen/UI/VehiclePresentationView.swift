@@ -65,7 +65,7 @@ struct VehicleEntranceFrame: Equatable {
 struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
     let imageData: Data?
-    private let artworkStore = VehicleArtworkStore()
+    private let artworkStore = VehicleArtworkStore.shared
     private let entranceLedger = VehicleEntranceLedger.shared
 
     @Environment(\.displayScale) private var displayScale

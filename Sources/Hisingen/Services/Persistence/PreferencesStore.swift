@@ -19,6 +19,13 @@ final class PreferencesStore {
         d = defaults
         self.keychain = keychain
     }
+    private var cachedEmail: String?
+    private var cachedHasResumableSession: [VehicleBrand: Bool] = [:]
+
+    func invalidateSessionCache() {
+        cachedEmail = nil
+        cachedHasResumableSession.removeAll()
+    }
 
     struct AccountDraft {
         var polestarEmail = ""
@@ -36,21 +43,26 @@ final class PreferencesStore {
 
     var email: String {
         get {
+            if let cached = cachedEmail { return cached }
+            let value: String
             if let secure = (try? keychain.readEmail()) ?? nil, !secure.isEmpty {
                 d.removeObject(forKey: "polestar_email")
-                return secure
+                value = secure
+            } else if let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty {
+                do {
+                    try keychain.saveEmail(legacy)
+                    d.removeObject(forKey: "polestar_email")
+                } catch {}
+                value = legacy
+            } else {
+                value = ""
             }
-            guard let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty else { return "" }
-            do {
-                try keychain.saveEmail(legacy)
-                d.removeObject(forKey: "polestar_email")
-            } catch {
-                // Keep the legacy value until Keychain becomes available so an
-                // upgrade never silently loses the account identifier.
-            }
-            return legacy
+            cachedEmail = value
+            return value
         }
         set {
+            cachedEmail = newValue
+            cachedHasResumableSession[.polestar] = nil
             if newValue.isEmpty {
                 try? keychain.deleteEmail()
                 d.removeObject(forKey: "polestar_email")
@@ -70,7 +82,7 @@ final class PreferencesStore {
     }
     var volvoClientID: String {
         get { d.string(forKey: "volvo_client_id").flatMap { $0.isEmpty ? nil : $0 } ?? BuiltinVolvoSecrets.clientID }
-        set { d.set(newValue, forKey: "volvo_client_id") }
+        set { d.set(newValue, forKey: "volvo_client_id"); cachedHasResumableSession[.volvo] = nil }
     }
     var volvoRestrictedScopesEnabled: Bool {
         get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
@@ -86,15 +98,26 @@ final class PreferencesStore {
         let nick = vehicleNickname(for: value); return nick.isEmpty ? value : nick
     }
     func hasResumableSession(for brand: VehicleBrand) -> Bool {
+        if let cached = cachedHasResumableSession[brand] { return cached }
+        let result: Bool
         switch brand {
         case .polestar:
-            if ((try? Keychain.readSessionToken()) ?? nil)?.isEmpty == false { return true }
-            return !email.isEmpty && ((try? Keychain.readPassword()) ?? nil)?.isEmpty == false
+            if ((try? Keychain.readSessionToken()) ?? nil)?.isEmpty == false {
+                result = true
+            } else {
+                result = !email.isEmpty && ((try? Keychain.readPassword()) ?? nil)?.isEmpty == false
+            }
         case .volvo:
-            guard !volvoClientID.isEmpty else { return false }
-            return ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
+            guard !volvoClientID.isEmpty else {
+                result = false
+                break
+            }
+            result = ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
         }
+        cachedHasResumableSession[brand] = result
+        return result
     }
+
     /// Preferred display order of the Charging card's detail rows. Identifiers not present
     /// keep their natural position after the ordered ones — so a partial list is safe.
     var chargingStatOrder: [String] {

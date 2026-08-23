@@ -625,14 +625,23 @@ func vehicle(
     connection: ChargerConnection = .disconnected,
     target: Int? = 80,
     fetchedAt: Date = Date(),
-    reportedAt: Date? = Date()
+    reportedAt: Date? = Date(),
+    brand: VehicleBrand? = nil
 ) -> VehicleState {
-    VehicleState(
+    // `VehicleState.model` derives its family from the model name, so an explicit brand
+    // request maps to a representative model name rather than forcing a field that does
+    // not exist on the state.
+    let modelName: String
+    switch brand {
+    case .volvo: modelName = "XC40"
+    case .polestar, nil: modelName = "Polestar 2"
+    }
+    return VehicleState(
         batteryPercentage: battery, rangeKm: 200, chargingState: state,
         estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: target,
         chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
         chargingType: .unknown, chargerConnection: connection, availability: .available,
-         modelName: "Polestar 2", modelYear: "2023", registrationNo: nil, vin: vin,
+         modelName: modelName, modelYear: "2023", registrationNo: nil, vin: vin,
         ownerFirstName: nil, odometerKm: nil, daysToService: nil,
         distanceToServiceKm: nil, serviceWarning: false, fluidWarnings: [], imageData: nil,
         fetchedAt: fetchedAt, vehicleReportedAt: reportedAt, dataWarnings: []

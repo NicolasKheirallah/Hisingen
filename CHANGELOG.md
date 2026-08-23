@@ -51,6 +51,51 @@ All notable changes to Hisingen are documented in this file. The project follows
   screen-fit clamp with injected visible-frame heights, and the Card Layout
   default/round-trip.
 
+- Full Fleet Multi-Car & Cross-Brand Switching:
+  - 1-click switching to any vehicle in your fleet from the top header dropdown
+    menu, hotkeys (⌃⌥1..9), and status bar context menu, supporting multiple
+    Polestars, multiple Volvos, and mixed fleets.
+  - Enriched Garage & Fleet manager in Settings (Settings → Garage & Fleet):
+    - **Fleet Summary Banner**: aggregate overview of total combined fleet driving
+      range, live charging count with aggregated charging power (kW), and combined
+      fleet odometer mileage.
+    - **Vehicle Render Thumbnails**: dynamic 3D exterior render thumbnails from
+      cached vehicle studio assets for each vehicle.
+    - **Per-Vehicle Theme Linking**: assign individual app themes per vehicle
+      (e.g., Swedish Gold for Polestar, Volvo Iron for Volvo); switching active cars
+      automatically updates the app's visual accent theme.
+    - **Rich Telemetry Status**: displays live battery/fuel percentage, charging
+      status and wattage, driving range, lock state, and relative data freshness.
+    - **Custom Nicknames & 1-Click Switching**: inline nickname editing and
+      instant active vehicle switching.
+  - Multi-account connection status in Settings (Settings → Account):
+    displays true background connection states for both Polestar and Volvo
+    (Connected · Active Account vs Connected · Inactive Account), with a
+    1-click "Set Active" button to fast-switch accounts without re-entering
+    credentials.
+  - Fleet-wide menu bar tooltip: hovering over the status bar icon displays
+    live multi-line readouts for every vehicle in your fleet (e.g.
+    `● Polestar 2: 78% · 310 km · Locked` and `○ Volvo EX30: 94% ⚡ · 412 km · Locked`).
+  - Multi-vehicle support in macOS Shortcuts & App Intents: Get Vehicle Battery,
+    Get Vehicle Status, Get Charging Status, Get Recent Trips, Where Is My Car,
+    Lock Vehicle, Unlock Vehicle, Start Cabin Climate, Stop Cabin Climate,
+    Flash Vehicle Lights, Honk and Flash Vehicle, and Set Charge Target all
+    accept an optional `vehicle` parameter (matching by vehicle nickname or
+    full/partial VIN).
+  - New `Get Garage Status` (`GetGarageStatusIntent`) macOS Shortcut intent
+    returning a combined battery, range, charging, and lock summary for all
+    vehicles across your fleet.
+  - Deep-link URL vehicle routing (`hisingen://select-car?vin=...` and
+    `hisingen://select-car?index=...`); command routes (`hisingen://lock?vin=...`,
+    `hisingen://climate/start?vin=...`) automatically switch to and target the
+    designated vehicle before executing.
+  - Instant fleet discovery: preloads all cached snapshots across all accounts
+    on app launch and runs an immediate fleet sync upon completing account
+    sign-in.
+  - Comprehensive unit test suite (`MultiCarFleetSwitchingTests.swift`)
+    covering brand-aware token resolution, non-destructive session
+    restoration, fleet VIN aggregation, and AppIntents multi-vehicle resolution.
+
 - Regression coverage for same-account multi-vehicle selection, reproducing
   the original two-car switch lockup across vehicle chips, the switcher menu,
   keyboard cycling, and context-menu paths.
@@ -180,6 +225,21 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- Switching vehicles or brands no longer logs the user out of their Volvo
+  account. `RefreshCoordinator` default credential reader closures were
+  previously hardcoded to Polestar Keychain accounts, passing the Polestar
+  refresh token to `volvoAPI.restoreSession()` on subsequent token refreshes or
+  car selections, which was rejected with `invalid_grant` / HTTP 401.
+- Session restoration failures in `VolvoAPI.restoreSession` and
+  `PolestarAPI.restoreSession` no longer destroy stored Keychain credentials.
+  Tokens are safely preserved across transient authentication errors or
+  mismatches, and are only removed upon an explicit user sign-out.
+- `RefreshCoordinator` default token readers and password clearing now
+  dynamically evaluate `api.brand`, reading `readVolvoSessionToken()` for
+  Volvo and `readSessionToken()`/`readPassword()` for Polestar.
+- Provider sign-out and account credential changes now scope local state
+  clearing strictly to vehicles belonging to that provider rather than wiping
+  the entire multi-brand SQLite database.
 - Opening the dropdown no longer uses a stale size after the panel preset was
   changed externally while the popover was closed: geometry is re-resolved on
   every open.
@@ -201,6 +261,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   background garage scan cycles through the account's vehicles. The race-prone
   selected-car post-check and its cached-discovery recovery shim became
   unnecessary and were removed with it.
+- Switching vehicles no longer risks tripping provider rate limits immediately
+  afterwards, which read as the app losing connection until re-signing-in.
+  Selecting an already-discovered vehicle no longer repeats a discovery round
+  trip (it is a local pointer move), the background garage scan no longer runs
+  right after a switch or burns a further discovery re-selecting the previous
+  car, and a switch attempted during an active rate-limit pause posts a
+  notification instead of vanishing silently when the panel is closed.
 - Polestar remote commands no longer require the target vehicle to be the
   currently selected one. The background garage scan temporarily re-points the
   shared selection while refreshing other vehicles, which could make a valid
