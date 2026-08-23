@@ -174,8 +174,11 @@ struct LivePolestarReadOnlyIntegrationTests {
         print("========================================================\n")
 
         if let exportPath = ProcessInfo.processInfo.environment["HISINGEN_TEST_EXPORT_API_LOG"] {
-            let exportData = try await APIDiagnosticLogStore.shared.exportData()
-            try exportData.write(to: URL(fileURLWithPath: exportPath), options: .atomic)
+            let entries = await APIDiagnosticLogStore.shared.snapshot()
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(entries).write(to: URL(fileURLWithPath: exportPath), options: .atomic)
         }
 
         try? await api.signOut()

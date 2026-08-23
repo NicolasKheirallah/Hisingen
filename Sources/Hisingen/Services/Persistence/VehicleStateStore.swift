@@ -12,7 +12,7 @@ final class VehicleStateStore {
     private let baselinesKey = "charging_baselines_v1"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "state-store")
+    private let logger = AppLog.logger("state-store")
 
     let database: VehicleDatabase
     private let preferences: PreferencesStore

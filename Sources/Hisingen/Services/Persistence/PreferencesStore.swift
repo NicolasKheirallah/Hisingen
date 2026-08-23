@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /// The single source of preference state for an application composition.
@@ -12,6 +13,7 @@ final class PreferencesStore {
 
     nonisolated(unsafe) private let d: UserDefaults
     private let keychain: KeychainStore
+    private let logger = AppLog.logger("preferences")
 
     nonisolated init(defaults: UserDefaults = .standard, keychain: KeychainStore = .app) {
         d = defaults
@@ -272,7 +274,7 @@ final class PreferencesStore {
     var appTheme: AppTheme { get { vin.isEmpty ? (d.string(forKey: "theme_for_\(activeBrand.rawValue)").flatMap(AppTheme.init) ?? AppTheme(rawValue: d.string(forKey: "app_theme") ?? "") ?? (activeBrand == .volvo ? .volvo : .polestar)) : theme(for: vin, brand: activeBrand) } set { setTheme(newValue, for: vin, brand: activeBrand) } }
     func syncAppThemeStorageKey() { d.set(appTheme.rawValue, forKey: "app_theme") }
     func applyAppearance() { NSApplication.shared.appearance = appearanceMode.nsAppearance }
-    func migrateLegacyPassword() { guard let legacy = d.string(forKey: "polestar_password"), !legacy.isEmpty else { return }; do { if try Keychain.readPassword() == nil { try Keychain.savePassword(legacy) }; d.removeObject(forKey: "polestar_password") } catch {} }
+    func migrateLegacyPassword() { guard let legacy = d.string(forKey: "polestar_password"), !legacy.isEmpty else { return }; do { if try Keychain.readPassword() == nil { try Keychain.savePassword(legacy) }; d.removeObject(forKey: "polestar_password") } catch { logger.error("Legacy Polestar password migration to Keychain failed: \(String(describing: error), privacy: .public)") } }
 }
 
 private struct PreferencesStoreKey: EnvironmentKey {

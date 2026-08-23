@@ -334,52 +334,90 @@ actor PolestarGRPC {
         request.httpBody = Protobuf.grpcFrame(message)
 
         let startedAt = Date()
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw PolestarError.invalidResponse(operation: "gRPC")
-        }
-        await APIDiagnosticLogStore.shared.record(
-            provider: .polestar, request: request, operation: "gRPC \(path)",
-            statusCode: http.statusCode, startedAt: startedAt
-        )
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw PolestarError.authenticationRequired(.expiredSession)
-        }
-        guard http.statusCode == 200 else {
-            throw PolestarError.server(statusCode: http.statusCode)
-        }
-        if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            throw PolestarError.invalidResponse(operation: "gRPC status \(status)")
-        }
-
-        var header = [UInt8]()
-        var body = Data()
-        var expected = -1
-        for try await byte in bytes {
-            if header.count < 5 {
-                header.append(byte)
-                if header.count == 5 {
-                    guard header[0] == 0 else {
-                        throw PolestarError.incompatibleAPI(operation: "compressed gRPC frame")
-                    }
-                    expected = Int(header[1]) << 24 | Int(header[2]) << 16
-                        | Int(header[3]) << 8 | Int(header[4])
-                    guard expected >= 0, expected <= 2_000_000 else {
-                        throw PolestarError.invalidResponse(operation: "oversized gRPC frame")
-                    }
-                    if expected == 0 { break }
-                }
-                continue
+        var httpStatus: Int?
+        var grpcStatus: String?
+        var grpcMessage: String?
+        do {
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw PolestarError.invalidResponse(operation: "gRPC")
             }
-            body.append(byte)
-            if body.count == expected { break }
+            httpStatus = http.statusCode
+            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
+            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
+
+            // Status checks come before frame parsing: a Trailers-Only rejection carries
+            // its real status in headers with no body, and reporting it as "truncated
+            // frame" would hide the one piece of information that explains the failure.
+            if http.statusCode == 401 || http.statusCode == 403 {
+                throw PolestarError.authenticationRequired(.expiredSession)
+            }
+            guard http.statusCode == 200 else {
+                throw PolestarError.server(statusCode: http.statusCode)
+            }
+            if let grpcStatus, grpcStatus != "0" {
+                throw PolestarError.invalidResponse(operation: "gRPC status \(grpcStatus)")
+            }
+
+            var header = [UInt8]()
+            var body = Data()
+            var expected = -1
+            for try await byte in bytes {
+                if header.count < 5 {
+                    header.append(byte)
+                    if header.count == 5 {
+                        guard header[0] == 0 else {
+                            throw PolestarError.incompatibleAPI(operation: "compressed gRPC frame")
+                        }
+                        expected = Int(header[1]) << 24 | Int(header[2]) << 16
+                            | Int(header[3]) << 8 | Int(header[4])
+                        guard expected >= 0, expected <= 2_000_000 else {
+                            throw PolestarError.invalidResponse(operation: "oversized gRPC frame")
+                        }
+                        if expected == 0 { break }
+                    }
+                    continue
+                }
+                body.append(byte)
+                if body.count == expected { break }
+            }
+            guard expected >= 0, body.count == expected else {
+                throw PolestarError.invalidResponse(operation: "truncated gRPC frame")
+            }
+
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                statusCode: http.statusCode, responseBytes: body.count,
+                responseData: body, startedAt: startedAt
+            )
+            return body
+        } catch {
+            // Exactly one record per attempt: failures carry whatever HTTP/gRPC status
+            // made it back before the failure. The success-path record above returns
+            // immediately, so nothing reaches here twice.
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                statusCode: httpStatus, startedAt: startedAt, error: error
+            )
+            throw error
         }
-        guard expected >= 0, body.count == expected else {
-            throw PolestarError.invalidResponse(operation: "truncated gRPC frame")
-        }
-        return body
     }
 
+
+    /// Enriches a diagnostic-store operation label with the gRPC status and
+    /// percent-decoded server message, so exported bundles explain *why* a call failed
+    /// instead of only that it returned HTTP 200.
+    static func diagnosticOperation(_ base: String, grpcStatus: String?, grpcMessage: String?) -> String {
+        var parts: [String] = []
+        if let grpcStatus, !grpcStatus.isEmpty { parts.append("grpc-status=\(grpcStatus)") }
+        if let grpcMessage, !grpcMessage.isEmpty {
+            let decoded = grpcMessage.removingPercentEncoding ?? grpcMessage
+            parts.append("grpc-message=\(decoded.prefix(120))")
+        }
+        return parts.isEmpty ? base : "\(base) (\(parts.joined(separator: ", ")))"
+    }
 
     /// Turns a non-zero gRPC status on a write RPC into something the user can act on.
     /// Previously every status except 12 and 16 collapsed into "returned an unexpected
@@ -423,79 +461,95 @@ actor PolestarGRPC {
         request.httpBody = Protobuf.grpcFrame(message)
 
         let startedAt = Date()
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw PolestarError.invalidResponse(operation: "gRPC command")
-        }
-        await APIDiagnosticLogStore.shared.record(
-            provider: .polestar, request: request, operation: "gRPC \(path)",
-            statusCode: http.statusCode, startedAt: startedAt
-        )
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw PolestarError.authenticationRequired(.expiredSession)
-        }
-        guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
-        if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            throw Self.commandError(status: status,
-                                    message: http.value(forHTTPHeaderField: "grpc-message"),
-                                    path: path)
-        }
-
-        var header = [UInt8]()
-        var body = Data()
-        var expected: Int?
-        var latest: Data?
-        var frameCount = 0
-        var endedByTimeout = false
+        var httpStatus: Int?
+        var grpcStatus: String?
+        var grpcMessage: String?
         do {
-            for try await byte in bytes {
-                if expected == nil {
-                    header.append(byte)
-                    guard header.count == 5 else { continue }
-                    guard header[0] == 0 else {
-                        throw PolestarError.incompatibleAPI(operation: "compressed gRPC command frame")
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw PolestarError.invalidResponse(operation: "gRPC command")
+            }
+            httpStatus = http.statusCode
+            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
+            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
+
+            if http.statusCode == 401 || http.statusCode == 403 {
+                throw PolestarError.authenticationRequired(.expiredSession)
+            }
+            guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
+            if let grpcStatus, grpcStatus != "0" {
+                throw Self.commandError(status: grpcStatus,
+                                        message: grpcMessage,
+                                        path: path)
+            }
+
+            var header = [UInt8]()
+            var body = Data()
+            var expected: Int?
+            var latest: Data?
+            var frameCount = 0
+            var endedByTimeout = false
+            do {
+                for try await byte in bytes {
+                    if expected == nil {
+                        header.append(byte)
+                        guard header.count == 5 else { continue }
+                        guard header[0] == 0 else {
+                            throw PolestarError.incompatibleAPI(operation: "compressed gRPC command frame")
+                        }
+                        let size = Int(header[1]) << 24 | Int(header[2]) << 16
+                            | Int(header[3]) << 8 | Int(header[4])
+                        guard size >= 0, size <= 2_000_000 else {
+                            throw PolestarError.invalidResponse(operation: "oversized gRPC command frame")
+                        }
+                        expected = size
+                        body.removeAll(keepingCapacity: true)
+                        if size == 0 {
+                            latest = Data()
+                            expected = nil
+                            header.removeAll(keepingCapacity: true)
+                        }
+                        continue
                     }
-                    let size = Int(header[1]) << 24 | Int(header[2]) << 16
-                        | Int(header[3]) << 8 | Int(header[4])
-                    guard size >= 0, size <= 2_000_000 else {
-                        throw PolestarError.invalidResponse(operation: "oversized gRPC command frame")
-                    }
-                    expected = size
-                    body.removeAll(keepingCapacity: true)
-                    if size == 0 {
-                        latest = Data()
+                    body.append(byte)
+                    if let frameSize = expected, body.count == frameSize {
+                        latest = body
+                        frameCount += 1
+                        guard frameCount < 32 else { break }
                         expected = nil
                         header.removeAll(keepingCapacity: true)
+                        body.removeAll(keepingCapacity: true)
                     }
-                    continue
                 }
-                body.append(byte)
-                if let frameSize = expected, body.count == frameSize {
-                    latest = body
-                    frameCount += 1
-                    guard frameCount < 32 else { break }
-                    expected = nil
-                    header.removeAll(keepingCapacity: true)
-                    body.removeAll(keepingCapacity: true)
-                }
+            } catch let error as URLError where error.code == .timedOut && latest != nil {
+                endedByTimeout = true
             }
-        } catch let error as URLError where error.code == .timedOut && latest != nil {
-
-
-            endedByTimeout = true
-        }
-        guard let latest, expected == nil || endedByTimeout else {
-            // 200 OK with no message frame is how a *late* gRPC rejection reaches us: the
-            // server opened the response, then put its real status in HTTP/2 trailers, which
-            // URLSession does not expose. An immediate rejection arrives as Trailers-Only and
-            // is caught above by the `grpc-status` header, so reaching here means the command
-            // was refused for a reason the transport is hiding. Say that, rather than
-            // reporting a generic malformed-response error.
-            throw RemoteCommandError.rejected(
-                L10n.text("The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.")
+            guard let latest, expected == nil || endedByTimeout else {
+                // 200 OK with no message frame is how a *late* gRPC rejection reaches us: the
+                // server opened the response, then put its real status in HTTP/2 trailers, which
+                // URLSession does not expose. An immediate rejection arrives as Trailers-Only and
+                // is caught above by the `grpc-status` header, so reaching here means the command
+                // was refused for a reason the transport is hiding. Say that, rather than
+                // reporting a generic malformed-response error.
+                throw RemoteCommandError.rejected(
+                    L10n.text("The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.")
+                )
+            }
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                statusCode: http.statusCode, responseBytes: latest.count,
+                responseData: latest, startedAt: startedAt
             )
+            return latest
+        } catch {
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                statusCode: httpStatus, startedAt: startedAt, error: error
+            )
+            throw error
         }
-        return latest
     }
 
 

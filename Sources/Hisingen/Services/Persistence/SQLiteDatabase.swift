@@ -29,7 +29,7 @@ final class SQLiteDatabase: @unchecked Sendable {
     // Hold the lock across transaction bodies while allowing nested query calls.
     private let lock = NSRecursiveLock()
     let path: String
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "sqlite")
+    private let logger = AppLog.logger("sqlite")
 
     var isOpen: Bool {
         lock.lock()

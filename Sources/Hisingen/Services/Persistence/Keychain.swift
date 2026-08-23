@@ -62,7 +62,7 @@ private struct VolvoSecretBundle: Codable {
 
 struct KeychainStore: Sendable {
     static let app = KeychainStore(service: "io.kheirallah.hisingen")
-    private static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "keychain")
+    private static let logger = AppLog.logger("keychain")
 
     let service: String
     private let memoryCache: InMemorySecretCache

@@ -19,6 +19,29 @@ struct DiagnosticsSnapshot: Sendable {
     var servingCachedSnapshot: Bool = false
     var liveStreamConnected: Bool = false
     var liveStreamRetryAt: Date? = nil
+
+    /// Since-launch counters. Distinguishing "never refreshed" from "stopped
+    /// refreshing" is the first fork in most refresh investigations.
+    var refreshAttempts: Int = 0
+    var refreshSuccesses: Int = 0
+    var refreshFailures: Int = 0
+}
+
+/// Process-wide handoff of the newest refresh diagnostics. The diagnostic-bundle
+/// exporter reads this so exports contain the exact state the troubleshooting runbook
+/// asks about first (`lastSuccess`, `rateLimitedUntil`, …) without threading the
+/// coordinator through every view.
+actor LatestDiagnosticsStore {
+    static let shared = LatestDiagnosticsStore()
+    private(set) var latest: DiagnosticsSnapshot?
+
+    func update(_ snapshot: DiagnosticsSnapshot) {
+        latest = snapshot
+    }
+
+    func current() -> DiagnosticsSnapshot? {
+        latest
+    }
 }
 
 enum RefreshPolicy {
@@ -70,7 +93,10 @@ final class RefreshCoordinator {
     /// Computes the delay before the next attempt. Injectable so tests can collapse the
     /// production exponential backoff (which legitimately stretches to minutes) to zero.
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "refresh")
+    private let logger = AppLog.logger("refresh")
+    /// Interval instrumentation for Instruments' os_signpost tool — free refresh-latency
+    /// timelines without touching the unified log.
+    private static let signposter = OSSignposter(subsystem: AppLog.subsystem, category: "refresh")
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "io.kheirallah.hisingen.network")
 
@@ -91,6 +117,12 @@ final class RefreshCoordinator {
     private var pendingSessionToken: String?
     private var observerTokens: [NSObjectProtocol] = []
 
+    // Since-launch counters, published through DiagnosticsSnapshot so a support bundle
+    // can distinguish "never refreshed" from "stopped refreshing".
+    private(set) var refreshAttempts = 0
+    private(set) var refreshSuccesses = 0
+    private(set) var refreshFailures = 0
+
     private(set) var latest: VehicleState?
     private(set) var cars: [CarSummary] = []
     private(set) var lastError: VehicleServiceError?
@@ -99,11 +131,25 @@ final class RefreshCoordinator {
 
     var onState: ((VehicleState) -> Void)?
     var onCars: (([CarSummary], String) -> Void)?
+    /// Fired whenever the active-vehicle selection changes or resolves — optimistically when
+    /// a switch begins and again once the provider-side swap completed. The shell syncs its
+    /// visible "active car" marker from here; without it the marker stayed on the launch
+    /// vehicle forever (only `beginSession` fired `onCars`), which let two disagreeing
+    /// idempotence guards veto every further switch.
+    var onSelectionChanged: ((String) -> Void)?
     var onError: ((VehicleServiceError) -> Void)?
     var onLoading: (() -> Void)?
     var onDiagnostics: ((DiagnosticsSnapshot) -> Void)?
     var onSignedOut: (() -> Void)?
     var onCleared: (() -> Void)?
+
+    /// True while a network operation owned by this coordinator is in flight. The background
+    /// garage scan checks this so it never competes with (or flips shared provider state
+    /// underneath) an interactive refresh or vehicle switch.
+    var isBusy: Bool { task != nil }
+    /// True inside a provider rate-limit pause. The garage scan also checks this: hammering
+    /// through the window extends the backoff and starves the interactive paths.
+    var isRateLimited: Bool { rateLimitedUntil.map({ $0 > Date() }) ?? false }
 
     init(api: any VehicleProviding, stateStore: VehicleStateStore,
          observesEnvironment: Bool = true,
@@ -297,6 +343,7 @@ final class RefreshCoordinator {
                 try await api.signOut()
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
+                logger.error("Remote session revocation failed: \(String(describing: error), privacy: .public)")
                 self.lastError = .secureStorage
             }
             guard requestGeneration == generation, !Task.isCancelled else { return }
@@ -316,6 +363,7 @@ final class RefreshCoordinator {
         onLoading?()
         let requestGeneration = generation
         let started = Date()
+        refreshAttempts += 1
         task = Task {
             do {
                 do {
@@ -360,10 +408,17 @@ final class RefreshCoordinator {
 
                 if pendingPassword != nil { clearPasswordAfterSession() }
                 pendingPassword = nil
-                let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
-                guard requestGeneration == generation, !Task.isCancelled else { return }
-                task = nil
-                apply(state, latency: Date().timeIntervalSince(started))
+                let intervalState = Self.signposter.beginInterval("fetchVehicleState")
+                do {
+                    let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
+                    Self.signposter.endInterval("fetchVehicleState", intervalState)
+                    guard requestGeneration == generation, !Task.isCancelled else { return }
+                    task = nil
+                    apply(state, latency: Date().timeIntervalSince(started))
+                } catch {
+                    Self.signposter.endInterval("fetchVehicleState", intervalState)
+                    throw error
+                }
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
@@ -387,13 +442,19 @@ final class RefreshCoordinator {
         nextRefresh = nil
         let requestGeneration = generation
         let started = Date()
+        refreshAttempts += 1
         task = Task {
+            // Signpost spans the network round trip so Instruments shows per-refresh
+            // latency without any log volume.
+            let intervalState = Self.signposter.beginInterval("fetchVehicleState")
             do {
                 let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
+                Self.signposter.endInterval("fetchVehicleState", intervalState)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 apply(state, latency: Date().timeIntervalSince(started))
             } catch {
+                Self.signposter.endInterval("fetchVehicleState", intervalState)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
@@ -429,6 +490,7 @@ final class RefreshCoordinator {
         lastError = nil
         lastLatency = latency
         failureCount = 0
+        refreshSuccesses += 1
         rateLimitedUntil = nil
         stateStore.save(state)
         SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.vin))
@@ -451,7 +513,10 @@ final class RefreshCoordinator {
     private func handle(_ error: VehicleServiceError, retrySession: Bool) {
         lastError = error
         failureCount += 1
-        logger.error("Refresh failed: \(error.localizedDescription, privacy: .public)")
+        refreshFailures += 1
+        // `String(describing:)` keeps enum payloads and NSError codes that
+        // `localizedDescription` flattens away.
+        logger.error("Refresh failed (attempt \(self.failureCount, privacy: .public) consecutive): \(String(describing: error), privacy: .public)")
         onError?(error)
         guard error.allowsAutomaticRetry else {
             timer?.invalidate()
@@ -463,7 +528,10 @@ final class RefreshCoordinator {
         if case .rateLimited(let value) = error { retryAfter = value } else { retryAfter = nil }
         let needsSession = retrySession || error.requiresNewSession
         let delay = retryDelay(failureCount, retryAfter, needsSession)
-        if case .rateLimited = error { rateLimitedUntil = Date().addingTimeInterval(delay) }
+        if case .rateLimited = error {
+            rateLimitedUntil = Date().addingTimeInterval(delay)
+            logger.warning("Rate limited; pausing refreshes until \(self.rateLimitedUntil.map { "\($0)" } ?? "?", privacy: .public)")
+        }
         schedule(after: delay, retrySession: needsSession)
         publishDiagnostics()
     }
@@ -557,7 +625,10 @@ final class RefreshCoordinator {
             unavailableFeatures: latest?.unavailableFeatures ?? [],
             servingCachedSnapshot: latest?.isCachedSnapshot ?? false,
             liveStreamConnected: liveStreamConnected,
-            liveStreamRetryAt: liveStreamRetryAt
+            liveStreamRetryAt: liveStreamRetryAt,
+            refreshAttempts: refreshAttempts,
+            refreshSuccesses: refreshSuccesses,
+            refreshFailures: refreshFailures
         ))
     }
 
@@ -603,6 +674,7 @@ final class RefreshCoordinator {
                     failure += 1
                     let delay = min(5 * pow(2, Double(min(failure - 1, 4))), 60)
                     self.liveStreamRetryAt = Date().addingTimeInterval(delay)
+                    self.logger.warning("Live stream dropped; retrying in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
                     self.publishDiagnostics()
                     do { try await Task.sleep(for: .seconds(delay)) }
                     catch { return }

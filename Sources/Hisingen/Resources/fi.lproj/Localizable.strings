@@ -386,6 +386,8 @@
 "Export History (.csv)" = "Export History (.csv)";
 "Export as CSV..." = "Vie CSV-muodossa...";
 "Export as JSON..." = "Vie JSON-muodossa...";
+"Export Diagnostic Logs" = "Vie diagnostiikkalokit";
+"Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report." = "Koostaa tuoreet sovelluslokimerkinnät, päivitysdiagnostiikan ja poistetut API-metatiedot yhteen tiedostoon, joka voidaan liittää virheraporttiin.";
 "Exterior" = "Ulkopuoli";
 "Exterior & Styling" = "Exterior & Styling";
 "Exterior Doors & Windows" = "Ovet ja ikkunat";

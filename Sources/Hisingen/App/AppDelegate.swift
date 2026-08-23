@@ -5,7 +5,7 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "application")
+    private let logger = AppLog.logger("application")
     private let preferences = PreferencesStore()
     private let vehicleDatabase = VehicleDatabase()
     private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
@@ -252,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             } catch {
                 let mapped = error as? LocalizedError
+                logger.error("Volvo sign-in failed: \(String(describing: error), privacy: .public)")
                 showRemoteResult(
                     title: L10n.text("Volvo sign-in failed"),
                     message: mapped?.errorDescription ?? error.localizedDescription, success: false
@@ -287,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             } catch {
                 let mapped = error as? LocalizedError
+                logger.error("Polestar command authorization failed: \(String(describing: error), privacy: .public)")
                 showRemoteResult(
                     title: L10n.text("Authorization failed"),
                     message: mapped?.errorDescription ?? error.localizedDescription, success: false
@@ -299,6 +301,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commandCoordinator.cancelPendingWork()
         garageRefreshTask?.cancel()
         refreshCoordinator.stop()
+
+        // The diagnostic store persists on a debounce; bridge one final flush onto a
+        // semaphore so records from the last few seconds survive a normal quit. Bounded
+        // wait: a hung write must not delay termination.
+        let flushed = DispatchSemaphore(value: 0)
+        Task {
+            await APIDiagnosticLogStore.shared.flushPendingWrites()
+            flushed.signal()
+        }
+        _ = flushed.wait(timeout: .now() + 2)
     }
 
     private func signOut() {
@@ -360,6 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let hasStored = preferences.hasResumableSession(for: preferences.activeBrand)
             sessionValid = diagnostics.sessionValid || hasStored
             lastDiagnostics = diagnostics
+            Task { await LatestDiagnosticsStore.shared.update(diagnostics) }
             if (diagnostics.sessionValid || hasStored) && preferences.features.contains(.notifications) {
                 notifier.authenticationSucceeded()
             }
@@ -451,6 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (true, L10n.format("Connection active & verified (%d ms)", elapsedMs))
         } catch {
             let mapped = VehicleServiceError.map(error, provider: brand)
+            logger.error("Connection test for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             return (false, mapped.errorDescription ?? error.localizedDescription)
         }
     }
@@ -497,7 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try? await provider.selectCar(vin: selectedVIN, features: preferences.features)
                 }
             } catch {
-                logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
         guard preferences.activeBrand == originalBrand else { return }
@@ -726,7 +740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             preferences.launchAtLogin = service.status == .enabled || service.status == .requiresApproval
-            logger.error("Launch-at-login update failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Launch-at-login update failed: \(String(describing: error), privacy: .public)")
         }
     }
 

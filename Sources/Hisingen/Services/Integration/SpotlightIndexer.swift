@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 @MainActor
 enum SpotlightIndexer {
     // Logger is Sendable, so completion closures outside the actor may use it.
-    private nonisolated static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "spotlight")
+    private nonisolated static let logger = AppLog.logger("spotlight")
     private static let domainIdentifier = "io.kheirallah.hisingen.vehicle"
 
     /// Re-indexes (or replaces) the entry for this VIN.
@@ -22,7 +22,7 @@ enum SpotlightIndexer {
         )
         CSSearchableIndex.default().indexSearchableItems([item]) { error in
             if let error {
-                logger.error("Spotlight indexing failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Spotlight indexing failed: \(String(describing: error), privacy: .public)")
             }
         }
     }

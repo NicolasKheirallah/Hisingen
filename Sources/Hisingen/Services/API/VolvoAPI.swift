@@ -4,7 +4,7 @@ import OSLog
 
 actor VolvoAPI {
     nonisolated let brand: VehicleBrand = .volvo
-    let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "volvo-api")
+    let logger = AppLog.logger("volvo-api")
 
 
     private let identityHost = URL(string: "https://volvoid.eu.volvocars.com")!
@@ -367,7 +367,7 @@ actor VolvoAPI {
             // Keep the underlying decode error in the (private) log: `DecodingError` names
             // the exact missing/mismatched key, which is the difference between a five-minute
             // diagnosis and a guessing game when Volvo changes a payload shape.
-            logger.error("Volvo response for \(path, privacy: .public) matched neither envelope nor direct decoding")
+            logger.error("Volvo response for \(DiagnosticRedaction.redact(path), privacy: .public) matched neither envelope nor direct decoding")
             throw VolvoError.decoding(operation: path)
         }
         return direct

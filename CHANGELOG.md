@@ -3,6 +3,39 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Diagnostic log export (Settings → SQLite Storage & Data → Export Diagnostic
+  Logs): bundles app/system metadata, the last 24 hours of Hisingen's own
+  unified-log entries, the redacted API request history (now including gRPC
+  status/message detail), refresh diagnostics with since-launch
+  attempt/success/failure counters, recent remote-command audits, and database
+  stats into a single versioned JSON file for bug reports. Vehicle identifiers,
+  UUIDs, and credential-bearing substrings are replaced with placeholders before
+  the file is written; only this process's logs are read, never other apps'.
+
+### Changed
+
+- Logging overhaul: every logger is now created through a single AppLog factory
+  (CI-guarded), Polestar's category renamed `api` → `polestar-api`, remote-command
+  execution and all previously-silent failure paths (command failures, sign-out
+  revocation, live-stream drops, preference migration) now log with structured
+  error detail instead of localizedDescription, and unrecoverable database
+  failures use the `.fault` level. Server-supplied error strings are scrubbed
+  before public logging. Refresh round trips — including initial session
+  establishment — emit os_signpost intervals for Instruments.
+- API diagnostic store: entries retained for 24 h / 2,000 records with a 32 MB
+  cumulative payload budget so the archive stays bounded, persisted across
+  relaunches (redacted data only, flushed on quit), timestamped at request start
+  so exports correlate with the unified log, and error types now carry enum
+  payloads and codes (`server(statusCode: 503)`) rather than bare type names.
+  Update checks are recorded as first-party `.hisingen` traffic; CDN image
+  fetches and Apple geocoding are deliberately excluded and documented as such.
+- The old payload-only "Export Redacted API Data" button was replaced by the
+  full diagnostic bundle export; the export UI is localized in all app languages.
+
 ## [1.2.1] - 2026-08-22
 
 ### Added

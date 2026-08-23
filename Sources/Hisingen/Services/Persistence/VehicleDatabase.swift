@@ -138,7 +138,7 @@ final class VehicleDatabase: @unchecked Sendable {
     static let shared = VehicleDatabase()
 
     let db: SQLiteDatabase
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "database")
+    private let logger = AppLog.logger("database")
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     /// ISO-8601 rendering shared by every backup/exporter path (previously one
@@ -164,7 +164,9 @@ final class VehicleDatabase: @unchecked Sendable {
             do {
                 self.db = try SQLiteDatabase(path: dbURL.path)
             } catch {
-                logger.error("Could not open database at \(dbURL.path, privacy: .private): \(error, privacy: .public)")
+                // .fault: the app keeps running against an unavailable database, so every
+                // history/telemetry write silently degrades — this must stand out in Console.
+                logger.fault("Could not open database at \(dbURL.path, privacy: .private): \(error, privacy: .public)")
                 self.db = .unavailable(path: dbURL.path)
             }
         }
@@ -302,7 +304,8 @@ final class VehicleDatabase: @unchecked Sendable {
             try db.execute(sql: sql)
             runMigrations()
         } catch {
-            logger.error("Could not initialize database schema: \(error, privacy: .public)")
+            // .fault: without a schema every persistence path degrades silently.
+            logger.fault("Could not initialize database schema: \(error, privacy: .public)")
         }
     }
 
@@ -941,14 +944,16 @@ final class VehicleDatabase: @unchecked Sendable {
         } process: { _ in }
     }
 
-    func recentCommandAudits(for vin: String, limit: Int = 20) -> [RemoteCommandAuditRecord] {
+    func recentCommandAudits(for vin: String?, limit: Int = 20) -> [RemoteCommandAuditRecord] {
+        let filterClause = vin != nil ? "WHERE vin = ? " : ""
         let sql = """
         SELECT id, vin, command_name, status, executed_at, duration_ms, error_message
-        FROM remote_commands_log WHERE vin = ? ORDER BY executed_at DESC LIMIT ?;
+        FROM remote_commands_log \(filterClause)ORDER BY executed_at DESC LIMIT ?;
         """
         return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(max(1, limit)), at: 2)
+            var bindIndex: Int32 = 1
+            if let vin { try stmt.bindText(vin, at: bindIndex); bindIndex += 1 }
+            try stmt.bindInt64(Int64(max(1, limit)), at: bindIndex)
         } process: { stmt -> [RemoteCommandAuditRecord] in
             var records: [RemoteCommandAuditRecord] = []
             while stmt.step() {

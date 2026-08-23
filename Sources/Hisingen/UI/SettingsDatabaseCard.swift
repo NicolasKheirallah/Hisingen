@@ -254,24 +254,28 @@ struct SettingsDatabaseCard: View {
                 .disabled(state == nil)
 
                 Button {
+                    let db = database
                     Task { @MainActor in
-                        guard let data = try? await APIDiagnosticLogStore.shared.exportData() else { return }
+                        let data = await Task.detached(priority: .userInitiated) {
+                            try? await DiagnosticLogExporter.buildReport(database: db)
+                        }.value
+                        guard let data else { return }
                         saveDataWithPanel(
-                            suggestedFilename: "hisingen_api_diagnostics.json",
+                            suggestedFilename: "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json",
                             contentType: .json,
                             data: data
                         )
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "stethoscope")
-                        Text(L10n.text("Export Redacted API Data"))
+                        Image(systemName: "doc.badge.clock")
+                        Text(L10n.text("Export Diagnostic Logs"))
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help(L10n.text("Exports only sanitized JSON response bodies. Paths, metadata, vehicle identifiers, credentials, locations, and image URLs are removed."))
+                .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
             }
         }
     }

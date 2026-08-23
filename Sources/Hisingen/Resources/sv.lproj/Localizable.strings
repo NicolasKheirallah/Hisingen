@@ -386,6 +386,8 @@
 "Export History (.csv)" = "Exportera historik (.csv)";
 "Export as CSV..." = "Exportera som CSV...";
 "Export as JSON..." = "Exportera som JSON...";
+"Export Diagnostic Logs" = "Exportera diagnostikloggar";
+"Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report." = "Samlar senaste apploggposter, uppdateringsdiagnostik och redigerad API-metadata i en fil du kan bifoga till en felrapport.";
 "Exterior" = "Exteriör";
 "Exterior & Styling" = "Exteriör & styling";
 "Exterior Doors & Windows" = "Dörrar och rutor";

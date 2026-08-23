@@ -4,10 +4,14 @@ import OSLog
 final class CarImageCache: @unchecked Sendable {
     static let shared = CarImageCache()
 
+    // Deliberately NOT recorded in APIDiagnosticLogStore: CDN image fetches are
+    // high-volume, low-diagnostic-value traffic, and failures already surface as a
+    // missing render plus a unified-log entry here.
+
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     private let lock = NSLock()
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "image-cache")
+    private let logger = AppLog.logger("image-cache")
     private var memoryCache: [String: Data] = [:]
 
     init() {

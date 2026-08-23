@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import UserNotifications
 
 /// Context the coordinator needs from the app shell. Kept narrow on purpose: everything else
@@ -30,6 +31,7 @@ protocol CommandExecutionContext: AnyObject {
 /// being the lifecycle owner, URL router, and garage scanner.
 @MainActor
 final class CommandCoordinator {
+    private let logger = AppLog.logger("commands")
     private let preferences: PreferencesStore
     private let database: VehicleDatabase
     private let authorizer: RemoteActionAuthorizer
@@ -111,6 +113,7 @@ final class CommandCoordinator {
             context.commandInProgressDidChange()
         }
         do {
+            logger.info("Remote command \(command.identifier, privacy: .public) sent for \(vin, privacy: .private)")
             let result = try await context.currentProvider().executeRemoteCommand(command, vin: vin)
             database.recordCommandAudit(
                 vin: vin,
@@ -118,6 +121,7 @@ final class CommandCoordinator {
                 status: result.outcome.rawValue,
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000)
             )
+            logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             applyOptimisticPatch(for: command, outcome: result.outcome)
             let message: String
             if let backendMessage = result.message, !backendMessage.isEmpty {
@@ -133,6 +137,7 @@ final class CommandCoordinator {
             scheduleFollowUpRefresh(vin: vin)
         } catch {
             let mapped = error as? LocalizedError
+            logger.error("Remote command \(command.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             database.recordCommandAudit(
                 vin: vin,
                 command: command.identifier,

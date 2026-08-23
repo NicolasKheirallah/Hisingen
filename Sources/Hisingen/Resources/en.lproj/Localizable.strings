@@ -1261,6 +1261,8 @@
 "Electric consumption unit" = "Electric consumption unit";
 "Export Commands (CSV)" = "Export Commands (CSV)";
 "Export Trips (CSV)" = "Export Trips (CSV)";
+"Export Diagnostic Logs" = "Export Diagnostic Logs";
+"Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report." = "Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report.";
 "Lock with reduced guard" = "Lock with reduced guard";
 "Locks the vehicle with reduced alarm guard sensitivity, when supported." = "Locks the vehicle with reduced alarm guard sensitivity, when supported.";
 "Off by default. Live parking location still works, but coordinates are not written to history." = "Off by default. Live parking location still works, but coordinates are not written to history.";

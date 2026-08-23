@@ -9,7 +9,7 @@ enum UpdateCheckResult: Equatable {
 
 @MainActor
 final class UpdateChecker {
-    private static let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "updates")
+    private static let logger = AppLog.logger("updates")
     private static let releasesListAPI = URL(string: "https://api.github.com/repos/NicolasKheirallah/hisingen/releases?per_page=30")!
     // Not /releases/latest: that page (like the API endpoint above) resolves to whichever
     // release GitHub most recently published, which is the CI's unsigned rolling "latest"
@@ -65,17 +65,29 @@ final class UpdateChecker {
             request.timeoutInterval = 10
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.setValue("Hisingen/\(current)", forHTTPHeaderField: "User-Agent")
+            let startedAt = Date()
             do {
-                // This call isn't a vehicle provider, and the catch below never inspects the
-                // error type — `.polestar` is an arbitrary pick to satisfy `HTTPBodyReader`'s
-                // signature, not a meaningful choice.
+                // This call isn't a vehicle provider; HTTPBodyReader needs a VehicleBrand
+                // for its error mapping (`.polestar` is arbitrary here), but the diagnostic
+                // record is tagged `.hisingen` so update checks stay first-party traffic.
                 let (data, response) = try await HTTPBodyReader.data(
-                    for: request, using: session, limit: 512_000, operation: "update check", provider: .polestar
+                    for: request, using: session, limit: 512_000,
+                    operation: "update check", provider: .polestar
                 )
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                guard let http = response as? HTTPURLResponse else {
                     finish(with: result)
                     return
                 }
+                if http.statusCode != 200 {
+                    await APIDiagnosticLogStore.shared.record(
+                        provider: .hisingen, request: request, operation: "update check",
+                        statusCode: http.statusCode, startedAt: startedAt
+                    )
+                    finish(with: result)
+                    return
+                }
+                // All throwing work happens before the success record so every attempt
+                // produces exactly one store entry.
                 result = try Self.evaluateRelease(data: data, currentVersion: current)
                 defaults.set(Date(), forKey: "last_successful_update_check")
                 if case .updateAvailable(let version) = result {
@@ -83,10 +95,19 @@ final class UpdateChecker {
                 } else {
                     defaults.removeObject(forKey: "available_update_version")
                 }
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .hisingen, request: request, operation: "update check",
+                    statusCode: http.statusCode, responseBytes: data.count,
+                    responseData: data, startedAt: startedAt
+                )
             } catch {
                 // A failed check is non-fatal (the cached version, if any, still applies),
                 // but it should not vanish without a trace.
-                Self.logger.info("Update check failed: \(error.localizedDescription, privacy: .public)")
+                Self.logger.info("Update check failed: \(String(describing: error), privacy: .public)")
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .hisingen, request: request, operation: "update check",
+                    startedAt: startedAt, error: error
+                )
             }
             finish(with: result)
         }

@@ -3,7 +3,10 @@ import CoreLocation
 import OSLog
 
 actor ReverseGeocoder {
-    private let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "geocoder")
+    private let logger = AppLog.logger("geocoder")
+    // Deliberately NOT recorded in APIDiagnosticLogStore: this goes through Apple's
+    // CLGeocoder, not our HTTP transport — there is no request metadata to capture,
+    // and coordinates must never enter a diagnostic artifact.
     private var cache: [String: String] = [:]
     private let geocoder = CLGeocoder()
 

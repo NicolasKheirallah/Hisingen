@@ -2,6 +2,12 @@
 
 Practical, symptom-first. Each entry: symptoms, likely causes, how to investigate, relevant code, possible fixes.
 
+## Getting logs from a user (diagnostic bundle export)
+
+When investigating a user report, ask for a diagnostic bundle: **Settings → SQLite Storage & Data → Export Diagnostic Logs**. The resulting JSON (`schemaVersion: 1`) contains: `meta` (app version/build, macOS version, hardware model, locale/timezone), `unifiedLog` (the last 24 hours of Hisingen's own unified-log entries — the same lines `Console.app` would show under subsystem `io.kheirallah.hisingen`, which users otherwise cannot extract), `apiRequests` (redacted request history from `APIDiagnosticLogStore`, including status codes, durations, gRPC statuses, and payloads), `refreshDiagnostics` (last success/error, rate-limit state, network availability, since-launch attempt/success/failure counters), `commandAudit`, and `databaseStats`.
+
+Redaction runs before the file is written (`DiagnosticRedaction` in `Support/DiagnosticLogExporter.swift`): VIN-shaped tokens become `<vehicle>`, UUIDs become `<identifier>`, and credential-bearing substrings become `<redacted>`; only this process's log entries are read. Reading the bundle: start with `refreshDiagnostics.refreshAttempts` (never worked vs stopped working), then `lastError`, then correlate `apiRequests` timestamps with the matching `unifiedLog` lines. If a report predates the installed version's export button, fall back to `log show --predicate 'subsystem == "io.kheirallah.hisingen"' --last 24h`. See [architecture/logging.md](../architecture/logging.md) for the full conventions.
+
 ## Authentication fails
 
 **Symptoms:** "Sign in failed" on the Welcome/Settings screen; repeated auth-required notifications.

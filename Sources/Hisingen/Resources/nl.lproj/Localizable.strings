@@ -386,6 +386,8 @@
 "Export History (.csv)" = "Exporteer geschiedenis (.csv)";
 "Export as CSV..." = "Exporteren als CSV...";
 "Export as JSON..." = "Exporteren als JSON...";
+"Export Diagnostic Logs" = "Diagnostieklogboeken exporteren";
+"Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report." = "Bundelt recente app-logboekregels, vernieuwingsdiagnostiek en geanonimiseerde API-metadata in één bestand om aan een bugrapport toe te voegen.";
 "Exterior" = "Exterieur";
 "Exterior & Styling" = "Exterieur & styling";
 "Exterior Doors & Windows" = "Deuren en ramen buiten";

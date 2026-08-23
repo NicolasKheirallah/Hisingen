@@ -14,7 +14,7 @@ struct CapabilityCacheEntry {
 
 actor PolestarAPI {
     nonisolated let brand: VehicleBrand = .polestar
-    let logger = Logger(subsystem: "io.kheirallah.hisingen", category: "api")
+    let logger = AppLog.logger("polestar-api")
 
     private let apiBaseURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-v2/")!
     private let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
@@ -453,16 +453,20 @@ actor PolestarAPI {
                     bearerToken = newToken
                     continue
                 }
+                // Server-supplied GraphQL messages are scrubbed before public logging —
+                // they have been known to echo account details on auth failures.
+                let authSummary = DiagnosticRedaction.redact(Self.errorSummary(errors))
                 logger.error("""
                     Polestar \(operation, privacy: .public) returned an authentication error after \
-                    token refresh: \(Self.errorSummary(errors), privacy: .public)
+                    token refresh: \(authSummary, privacy: .public)
                     """)
                 throw PolestarError.authenticationRequired(.expiredSession)
             }
             if decoded.data == nil, let errors = decoded.errors, !errors.isEmpty {
+                let summary = DiagnosticRedaction.redact(Self.errorSummary(errors))
                 logger.error("""
                     Polestar \(operation, privacy: .public) failed: \
-                    \(Self.errorSummary(errors), privacy: .public)
+                    \(summary, privacy: .public)
                     """)
                 throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: false)
             }
@@ -494,7 +498,7 @@ actor PolestarAPI {
             legacyCars = response.data?.getConsumerCarsV2 ?? []
         } catch {
             if Self.isRequestLevelFailure(error) { throw error }
-            logger.warning("Polestar vehicle discovery degraded (provider-specific): \(String(describing: error), privacy: .public)")
+            logger.warning("Polestar vehicle discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             legacyCars = []
         }
         do {
@@ -525,7 +529,7 @@ actor PolestarAPI {
                 if legacyCars.isEmpty { throw error }
                 logger.warning("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
             } else {
-                logger.warning("Polestar VDMS discovery degraded (provider-specific): \(String(describing: error), privacy: .public)")
+                logger.warning("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             }
             accountCars = legacyCars
         }

@@ -27,7 +27,7 @@ extension PolestarAPI {
             )
         } catch {
             if Self.isRequestLevelFailure(error) { throw error }
-            logger.warning("Polestar vehicle telematics degraded (provider-specific): \(String(describing: error), privacy: .public)")
+            logger.warning("Polestar vehicle telematics degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             response = nil
         }
         let telematics = response?.data?.carTelematicsV2
