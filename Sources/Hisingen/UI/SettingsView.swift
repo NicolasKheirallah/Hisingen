@@ -316,7 +316,15 @@ struct SettingsView: View {
                     }
 
                     ForEach(allVins, id: \.self) { vin in
-                        fleetVehicleRow(vin: vin, isActive: vin == activeVin)
+                        FleetVehicleCardRow(
+                            vin: vin,
+                            isActive: vin == activeVin,
+                            state: state,
+                            cachedSnapshots: cachedSnapshots,
+                            database: database,
+                            imageCache: imageCache,
+                            onSettingsChanged: onSettingsChanged
+                        )
                     }
                 }
             }
@@ -400,166 +408,6 @@ struct SettingsView: View {
         }
         .padding(.bottom, 2)
     }
-
-    private func fleetVehicleRow(vin: String, isActive: Bool) -> some View {
-        let vehicleState = (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
-        let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
-        let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
-        let displayTitle = preferences.formattedVehicleTitle(
-            vin: vin,
-            modelName: vehicleState?.modelName,
-            modelYear: vehicleState?.modelYear,
-            registrationNo: vehicleState?.registrationNo,
-            fallbackBrand: brand
-        )
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                // Vehicle Thumbnail or Icon
-                SettingsFleetThumbnailView(vin: vin, brandIcon: brandIcon, isActive: isActive, imageCache: imageCache)
-
-                VStack(alignment: .leading, spacing: 1.5) {
-                    HStack(spacing: 6) {
-                        Text(displayTitle)
-                            .font(.system(size: 11, weight: .semibold))
-                        if isActive {
-                            Text(L10n.text("ACTIVE"))
-                                .font(.system(size: 8, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
-                                .foregroundStyle(HisingenTheme.accent)
-                        }
-                    }
-                    HStack(spacing: 4) {
-                        Text("VIN: \(vin)")
-                            .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                        if let vehicleState {
-                            Text("· " + vehicleState.freshnessDescription)
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                if !isActive {
-                    Button {
-                        onSettingsChanged(.selectVehicle(vin))
-                    } label: {
-                        Text(L10n.text("Switch To"))
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .controlSize(.small)
-                }
-            }
-
-            if let vehicleState {
-                HStack(spacing: 12) {
-                    if let battery = vehicleState.batteryPercentage {
-                        HStack(spacing: 4) {
-                            Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
-                            Text(String(format: "%.0f%%", battery))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            if vehicleState.isCharging, let power = vehicleState.chargingPowerWatts, power > 0 {
-                                Text(Format.kilowatts(watts: power))
-                                    .font(.system(size: 8.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else if let fuel = vehicleState.fuelLevelPercent {
-                        HStack(spacing: 4) {
-                            Image(systemName: "fuelpump.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(Color.secondary)
-                            Text(String(format: "%.0f%%", fuel))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        }
-                    }
-
-                    if let range = vehicleState.primaryRangeKm {
-                        HStack(spacing: 3) {
-                            Image(systemName: "gauge.with.needle.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(.secondary)
-                            Text(Format.distance(km: range, unit: preferences.distanceUnit))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if let isLocked = vehicleState.exteriorStatus?.isLocked {
-                        HStack(spacing: 3) {
-                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
-                            Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding(.leading, 6)
-            }
-
-            // Nickname & Theme Controls
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Text(L10n.text("Nickname:"))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.secondary)
-
-                    TextField(L10n.text("Nickname"), text: Binding(
-                        get: { preferences.vehicleNickname(for: vin) },
-                        set: { preferences.setVehicleNickname($0, for: vin) }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.mini)
-                    .frame(maxWidth: 110)
-                }
-
-                HStack(spacing: 4) {
-                    Text(L10n.text("Theme:"))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.secondary)
-
-                    Picker("", selection: Binding(
-                        get: { preferences.theme(for: vin, brand: brand) },
-                        set: { newTheme in
-                            preferences.setTheme(newTheme, for: vin, brand: brand)
-                            if isActive {
-                                appTheme = newTheme
-                                preferences.appTheme = newTheme
-                                preferences.syncAppThemeStorageKey()
-                            }
-                            onSettingsChanged(.presentation)
-                        }
-                    )) {
-                        ForEach(AppTheme.allCases, id: \.self) { t in
-                            Text(t.title).tag(t)
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.mini)
-                    .frame(maxWidth: 130)
-                }
-            }
-            .padding(.leading, 6)
-        }
-        .padding(9)
-        .background(Color.primary.opacity(isActive ? 0.05 : 0.025), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : Color.clear, lineWidth: 1)
-        )
-    }
-
 
     private var filteredThemes: [AppTheme] {
         if selectedThemeCategory == .all {
@@ -2497,6 +2345,198 @@ struct SettingsFleetThumbnailView: View {
                 } else {
                     artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
                 }
+            }
+        }
+    }
+}
+
+@MainActor
+struct FleetVehicleCardRow: View {
+    let vin: String
+    let isActive: Bool
+    let state: VehicleState?
+    let cachedSnapshots: [String: VehicleState]
+    let database: VehicleDatabase
+    let imageCache: CarImageCache
+    let onSettingsChanged: (SettingsChange) -> Void
+    @Environment(\.preferencesStore) private var preferences
+    @State private var isHovered = false
+
+    var body: some View {
+        let vehicleState = (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
+        let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
+        let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
+        let displayTitle = preferences.formattedVehicleTitle(
+            vin: vin,
+            modelName: vehicleState?.modelName,
+            modelYear: vehicleState?.modelYear,
+            registrationNo: vehicleState?.registrationNo,
+            fallbackBrand: brand
+        )
+
+        VStack(alignment: .leading, spacing: 8) {
+            // Clickable header area
+            HStack(spacing: 8) {
+                // Vehicle Thumbnail or Icon
+                SettingsFleetThumbnailView(vin: vin, brandIcon: brandIcon, isActive: isActive, imageCache: imageCache)
+
+                VStack(alignment: .leading, spacing: 1.5) {
+                    HStack(spacing: 6) {
+                        Text(displayTitle)
+                            .font(.system(size: 11, weight: .semibold))
+                        if isActive {
+                            Text(L10n.text("ACTIVE"))
+                                .font(.system(size: 8, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text("VIN: \(vin)")
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        if let vehicleState {
+                            Text("· " + vehicleState.freshnessDescription)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                if !isActive {
+                    Button {
+                        onSettingsChanged(.selectVehicle(vin))
+                    } label: {
+                        Text(L10n.text("Switch To"))
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .controlSize(.small)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if !isActive {
+                    onSettingsChanged(.selectVehicle(vin))
+                }
+            }
+
+            if let vehicleState {
+                HStack(spacing: 12) {
+                    if let battery = vehicleState.batteryPercentage {
+                        HStack(spacing: 4) {
+                            Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
+                            Text(String(format: "%.0f%%", battery))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            if vehicleState.isCharging, let power = vehicleState.chargingPowerWatts, power > 0 {
+                                Text(Format.kilowatts(watts: power))
+                                    .font(.system(size: 8.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else if let fuel = vehicleState.fuelLevelPercent {
+                        HStack(spacing: 4) {
+                            Image(systemName: "fuelpump.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Color.secondary)
+                            Text(String(format: "%.0f%%", fuel))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        }
+                    }
+
+                    if let range = vehicleState.primaryRangeKm {
+                        HStack(spacing: 3) {
+                            Image(systemName: "gauge.with.needle.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(.secondary)
+                            Text(Format.distance(km: range, unit: preferences.distanceUnit))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let isLocked = vehicleState.exteriorStatus?.isLocked {
+                        HStack(spacing: 3) {
+                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                            Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(.leading, 6)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !isActive {
+                        onSettingsChanged(.selectVehicle(vin))
+                    }
+                }
+            }
+
+            // Nickname & Theme Controls
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Text(L10n.text("Nickname:"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+
+                    TextField(L10n.text("Nickname"), text: Binding(
+                        get: { preferences.vehicleNickname(for: vin) },
+                        set: { preferences.setVehicleNickname($0, for: vin) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.mini)
+                    .frame(maxWidth: 110)
+                }
+
+                HStack(spacing: 4) {
+                    Text(L10n.text("Theme:"))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: Binding(
+                        get: { preferences.theme(for: vin, brand: brand) },
+                        set: { newTheme in
+                            preferences.setTheme(newTheme, for: vin, brand: brand)
+                            if isActive {
+                                preferences.appTheme = newTheme
+                                preferences.syncAppThemeStorageKey()
+                            }
+                            onSettingsChanged(.presentation)
+                        }
+                    )) {
+                        ForEach(AppTheme.allCases, id: \.self) { t in
+                            Text(t.title).tag(t)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .frame(maxWidth: 130)
+                }
+            }
+            .padding(.leading, 6)
+        }
+        .padding(9)
+        .background(
+            Color.primary.opacity(isActive ? 0.05 : (isHovered ? 0.045 : 0.025)),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : (isHovered && !isActive ? HisingenTheme.accent.opacity(0.25) : Color.clear), lineWidth: 1)
+        )
+        .onHover { hovering in
+            if !isActive {
+                isHovered = hovering
             }
         }
     }
