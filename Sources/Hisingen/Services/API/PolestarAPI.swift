@@ -549,9 +549,9 @@ actor PolestarAPI {
                 // query already produced cars, keep those instead of failing the session;
                 // only fail when we would otherwise report an empty garage.
                 if legacyCars.isEmpty { throw error }
-                logger.warning("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
+                logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
             } else {
-                logger.warning("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+                logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             }
             accountCars = legacyCars
         }
@@ -618,8 +618,8 @@ actor PolestarAPI {
         request.setValue("GetVDMSCars", forHTTPHeaderField: "X-APOLLO-OPERATION-NAME")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-APOLLO-REQUEST-UUID")
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
-        request.setValue("5.5.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
-        request.setValue("PolestarApp/5.5.0b1102 Android/14", forHTTPHeaderField: "User-Agent")
+        request.setValue("6.2.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        request.setValue("PolestarApp/6.2.0 Android/15", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
         try validateHTTP(response, operation: "VDMS vehicle discovery")

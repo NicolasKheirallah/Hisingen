@@ -3,6 +3,31 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-08-23
+
+### Fixed
+
+- Removed default macOS blue keyboard focus border/highlight around expandable
+  disclosure buttons (such as "Charging Details", "Charging History",
+  "Calculation Signals") across all tabs and panels.
+- Fixed SQLite database schema migration queries to inspect existing table
+  columns via `PRAGMA table_info` before executing `ALTER TABLE`, and properly
+  set `PRAGMA user_version = 1;`, preventing non-fatal `duplicate column name`
+  exceptions from being logged on launch.
+- Upgraded client app version headers in Polestar secondary GraphQL vehicle
+  discovery to prevent HTTP 426 (Upgrade Required) responses, and lowered
+  fallback logging to informational when primary discovery succeeds.
+- Added system indexing availability checks to macOS CoreSpotlight integration
+  and gracefully handled error code `-1000` (indexing unsupported/disabled)
+  without flooding diagnostic logs.
+- Extended backoff duration from 5 minutes to 1 hour for region-restricted or
+  permission-denied optional Volvo endpoints (such as `/location` when
+  forbidden), avoiding repetitive failing API cycles and lowering log severity
+  to informational.
+- Improved Settings Account connection status indicator to dynamically reflect
+  warning orange when a live connection test fails, providing clear visual
+  feedback between stored local credentials and live server reachability.
+
 ## [1.2.2] - 2026-08-23
 
 ### Added

@@ -243,6 +243,7 @@ final class VehicleDatabase: @unchecked Sendable {
             trip_manual_km REAL,
             trip_auto_km REAL,
             avg_consumption REAL,
+            avg_consumption_unit TEXT,
             ambient_temp_c REAL,
             latitude REAL,
             longitude REAL
@@ -314,10 +315,23 @@ final class VehicleDatabase: @unchecked Sendable {
         do {
             try db.execute(sql: sql)
             runMigrations()
+            try? db.execute(sql: "PRAGMA user_version = 1;")
         } catch {
             // .fault: without a schema every persistence path degrades silently.
             logger.fault("Could not initialize database schema: \(error, privacy: .public)")
         }
+    }
+
+    private func columnExists(table: String, column: String) -> Bool {
+        let sql = "PRAGMA table_info(\(table));"
+        let columns = (try? db.query(sql: sql) { _ in } process: { stmt -> Set<String> in
+            var names = Set<String>()
+            while stmt.step() {
+                if let name = stmt.columnText(at: 1) { names.insert(name.lowercased()) }
+            }
+            return names
+        }) ?? []
+        return columns.contains(column.lowercased())
     }
 
     /// Ordered, version-gated schema migrations tracked by `PRAGMA user_version`.
@@ -331,24 +345,22 @@ final class VehicleDatabase: @unchecked Sendable {
             stmt.step() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
         }) ?? 0
 
-        var applied = false
-
         // v1: quarantine legacy battery-health rows + add the disambiguation columns the
         // baseline now creates for new installs. Idempotent per table.
         if currentVersion < 1 {
-            do {
-                try db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
-            } catch { /* column already exists */ }
-            try? db.execute(sql: "ALTER TABLE telemetry_logs ADD COLUMN avg_consumption_unit TEXT;")
-            try? db.execute(sql: "ALTER TABLE charging_samples ADD COLUMN charging_type TEXT;")
+            if !columnExists(table: "battery_health_history", column: "measurement_source") {
+                try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
+            }
+            if !columnExists(table: "telemetry_logs", column: "avg_consumption_unit") {
+                try? db.execute(sql: "ALTER TABLE telemetry_logs ADD COLUMN avg_consumption_unit TEXT;")
+            }
+            if !columnExists(table: "charging_samples", column: "charging_type") {
+                try? db.execute(sql: "ALTER TABLE charging_samples ADD COLUMN charging_type TEXT;")
+            }
             // Existing installations contain rows produced by the old inferred/Volvo-capacity
             // implementation. Keep them quarantined rather than presenting them as measurements.
             try? db.execute(sql: "UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';")
-            applied = true
-        }
-
-        if applied {
-            try? db.query(sql: "PRAGMA user_version = 1;") { _ in } process: { _ in }
+            try? db.execute(sql: "PRAGMA user_version = 1;")
         }
     }
 

@@ -135,7 +135,8 @@ struct AccountCredentialsForm: View {
     private var accountStatusBanner: some View {
         let brandName = selectedBrand.displayName
         let activeLabel = preferences.lastVehicleLabel(for: selectedBrand)
-        let statusColor: Color = isActiveBrand ? .green : (isBrandConnected ? .blue : .orange)
+        let hasTestFailure = testConnectionResult?.success == false
+        let statusColor: Color = hasTestFailure ? .orange : (isActiveBrand ? .green : (isBrandConnected ? .blue : .orange))
 
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {

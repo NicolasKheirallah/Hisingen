@@ -401,6 +401,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .withoutFocusRing()
 
             if configuration.isExpanded {
                 configuration.content

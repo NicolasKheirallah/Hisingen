@@ -14,7 +14,7 @@ enum SpotlightIndexer {
 
     /// Re-indexes (or replaces) the entry for this VIN.
     static func indexVehicle(_ state: VehicleState, nickname: String) {
-        guard !state.vin.isEmpty else { return }
+        guard !state.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
         let item = CSSearchableItem(
             uniqueIdentifier: state.vin,
             domainIdentifier: domainIdentifier,
@@ -22,7 +22,12 @@ enum SpotlightIndexer {
         )
         CSSearchableIndex.default().indexSearchableItems([item]) { error in
             if let error {
-                logger.error("Spotlight indexing failed: \(String(describing: error), privacy: .public)")
+                let nsError = error as NSError
+                if nsError.domain == CSIndexErrorDomain && nsError.code == -1000 {
+                    logger.debug("Spotlight indexing unsupported on system: \(String(describing: error), privacy: .public)")
+                } else {
+                    logger.warning("Spotlight indexing failed: \(String(describing: error), privacy: .public)")
+                }
             }
         }
     }
@@ -30,6 +35,7 @@ enum SpotlightIndexer {
     /// Removes every Hisingen entry — used on sign-out so a signed-out vehicle never keeps
     /// surfacing stale telemetry in search.
     static func removeAll() {
+        guard CSSearchableIndex.isIndexingAvailable() else { return }
         CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { _ in }
     }
 

@@ -403,11 +403,18 @@ actor VolvoAPI {
             return value
         } catch {
             if Self.isGlobalFailure(error) { throw error }
-            endpointBackoff[backoffKey] = Date().addingTimeInterval(5 * 60)
-            logger.error("""
-                Optional Volvo endpoint unavailable: \(key, privacy: .public) — \
-                \(String(describing: error), privacy: .public)
-                """)
+            let isRestricted: Bool
+            switch error as? VolvoError {
+            case .regionRestricted, .permissionDenied: isRestricted = true
+            default: isRestricted = false
+            }
+            let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)
+            endpointBackoff[backoffKey] = Date().addingTimeInterval(duration)
+            if isRestricted {
+                logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
+            } else {
+                logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) — \(String(describing: error), privacy: .public)")
+            }
             return nil
         }
     }

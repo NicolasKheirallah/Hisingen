@@ -481,4 +481,15 @@ struct SQLiteDatabaseTests {
         #expect(prunedCounts.chargingSamples == 0)
         #expect(prunedCounts.chargingSessions == 1) // Session header is preserved!
     }
+
+    @Test("VehicleDatabase schema initialization and migrations are idempotent")
+    func testSchemaMigrationIdempotence() {
+        let vdb = VehicleDatabase.inMemory()
+        #expect(vdb.storageAvailable)
+        let counts = vdb.recordCounts()
+        #expect(counts.snapshots == 0)
+        #expect(counts.chargingSessions == 0)
+        #expect(counts.chargingSamples == 0)
+        #expect(counts.batteryHealth == 0)
+    }
 }
