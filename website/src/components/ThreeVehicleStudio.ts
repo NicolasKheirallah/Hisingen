@@ -1,9 +1,7 @@
 /**
- * @file ThreeVehicleStudio.ts
- * @description  automotive studio combining authentic factory imagery with:
- * 1. 2.5D Depth Parallax & Clearcoat Specular Reflection Shader
- * 2. GPU Aerodynamic Wind Tunnel Particle Streamlines (0.278 Cd)
- * 3. 360° Multi-Frame Studio Turntable Orbit with Momentum
+ * ThreeVehicleStudio — photographic turntable with shader crossfade,
+ * render-on-demand scheduling, palette-correct wind tunnel, projected
+ * engineering callouts, scroll-linked camera dolly and night-mode lighting.
  */
 
 import * as THREE from 'three';
@@ -12,13 +10,34 @@ const baseUrl = (import.meta.env?.BASE_URL || '/').replace(/\/$/, '') + '/';
 
 export type StudioMode = 'orbit' | 'parallax' | 'windtunnel';
 
-interface TextureFrame {
+interface TurntableFrame {
   id: string;
-  name: string;
   url: string;
-  angle: number; // 0 to 2pi
+  angle: number;
   texture?: THREE.Texture;
 }
+
+interface SpecialView {
+  index: number;
+  url: string;
+  texture?: THREE.Texture;
+}
+
+interface CalloutDef {
+  frameId: string;
+  u: number;
+  v: number;
+  label: string;
+  sub: string;
+  dx: number;
+  dy: number;
+}
+
+const PLANE_W = 3.6;
+const PLANE_H = 2.025;
+const TWO_PI = Math.PI * 2;
+const BASE_FRUSTUM = 2.15;
+const WIDE_FRUSTUM = 2.65;
 
 export class ThreeVehicleStudio {
   private container: HTMLElement;
@@ -27,49 +46,91 @@ export class ThreeVehicleStudio {
   private scene!: THREE.Scene;
   private camera!: THREE.OrthographicCamera;
   private isVisible = false;
-  private animId: number | null = null;
-  private clock = new THREE.Clock();
+  private contextLost = false;
+
+  // Render-on-demand scheduling
+  private rafId: number | null = null;
+  private dirty = true;
+  private lastTick = 0;
 
   // Mode state
   private currentMode: StudioMode = 'orbit';
   private isDark = false;
   private isReducedMotion = false;
+  private ready = false;
 
-  // Turntable Orbit State
-  private frames: TextureFrame[] = [
-    { id: 'front', name: 'Direct Front', url: `${baseUrl}assets/vehicle/polestar2-front.webp`, angle: 0.0 },
-    { id: 'front34', name: '3/4 Front', url: `${baseUrl}assets/vehicle/polestar2-front-threequarter.webp`, angle: 0.785 },
-    { id: 'side', name: 'Side Profile', url: `${baseUrl}assets/vehicle/polestar2-side-profile.webp`, angle: 1.57 },
-    { id: 'rear34', name: '3/4 Rear', url: `${baseUrl}assets/vehicle/polestar2-rear-threequarter.webp`, angle: 2.356 },
-    { id: 'rear', name: 'Direct Rear', url: `${baseUrl}assets/vehicle/polestar2-rear.webp`, angle: 3.141 },
-    { id: 'side2', name: 'Side Profile (Flip)', url: `${baseUrl}assets/vehicle/polestar2-side-profile.webp`, angle: 4.712 },
-    { id: 'front34_return', name: '3/4 Front (Return)', url: `${baseUrl}assets/vehicle/polestar2-front-threequarter.webp`, angle: 5.497 },
-    { id: 'front_loop', name: 'Direct Front (Loop)', url: `${baseUrl}assets/vehicle/polestar2-front.webp`, angle: 6.283 },
+  // Turntable — one shared texture per unique asset
+  private frames: TurntableFrame[] = [
+    { id: 'front34', url: `${baseUrl}assets/vehicle/polestar2-front-threequarter.webp`, angle: 0.0 },
+    { id: 'front', url: `${baseUrl}assets/vehicle/polestar2-front.webp`, angle: Math.PI * 0.25 },
+    { id: 'side', url: `${baseUrl}assets/vehicle/polestar2-side-profile.webp`, angle: Math.PI * 0.5 },
+    { id: 'rear34', url: `${baseUrl}assets/vehicle/polestar2-rear-threequarter.webp`, angle: Math.PI * 0.75 },
+    { id: 'rear', url: `${baseUrl}assets/vehicle/polestar2-rear.webp`, angle: Math.PI },
+    { id: 'side2', url: `${baseUrl}assets/vehicle/polestar2-side-profile.webp`, angle: Math.PI * 1.5 },
+    { id: 'front34r', url: `${baseUrl}assets/vehicle/polestar2-front-threequarter.webp`, angle: Math.PI * 1.75 },
   ];
-  private currentAngle = 0.785; // radians (start on Front 3/4)
-  private targetAngle = 0.785;
+  private specialViews: SpecialView[] = [
+    { index: 5, url: `${baseUrl}assets/vehicle/polestar2-overhead.webp` },
+    { index: 6, url: `${baseUrl}assets/vehicle/polestar2-interior.webp` },
+    { index: 7, url: `${baseUrl}assets/vehicle/polestar_outline.svg` },
+  ];
+
+  private currentAngle = 0;
+  private targetAngle = 0;
   private angularVelocity = 0;
   private isDragging = false;
   private lastPointerX = 0;
-  private isSpecialView = false;
-  private angleTextures: Map<number, THREE.Texture> = new Map();
+  private specialIndex = -1;
+  private specialFade = 1; // 1 = fully on turntable, 0 = fully on special view
+  private specialTexture: THREE.Texture | null = null;
+  private prevTurntableTexture: THREE.Texture | null = null;
 
-  // 2.5D Parallax & Clearcoat Mesh
+  // 2.5D parallax + crossfade material
   private carPlaneMesh!: THREE.Mesh;
   private parallaxMaterial!: THREE.ShaderMaterial;
   private mouseNorm = new THREE.Vector2(0, 0);
   private targetMouseNorm = new THREE.Vector2(0, 0);
+  private activePair = '';
 
-  // Aerodynamic Wind Tunnel Particle System
+  // Wind tunnel
   private particleCount = 1600;
   private particleSystem!: THREE.Points;
-  private particleGeometry!: THREE.BufferGeometry;
   private particleMaterial!: THREE.ShaderMaterial;
-  private windSpeed = 1.0; // 1.0 = 100 km/h, 0.0 = stopped
+  private windSpeed = 1.0;
   private targetWindSpeed = 1.0;
+  private windActive = 0;
+  private windActiveTarget = 0;
 
-  // Ground Shadow Plane
+  // Ground shadow + night lighting
   private shadowPlane!: THREE.Mesh;
+  private noseGlow!: THREE.Mesh;
+  private lightPool!: THREE.Mesh;
+  private glowIntensity = 0;
+  private glowTarget = 0;
+
+  // Scroll-linked camera
+  private currentFrustum = WIDE_FRUSTUM;
+  private targetFrustum = WIDE_FRUSTUM;
+
+  // Projected annotations
+  private callouts: Array<{ def: CalloutDef; el: HTMLElement; anchor: TurntableFrame | undefined }> = [];
+  private projected = new THREE.Vector3();
+
+  // Nose anchor per frame for the headlight glow (UV space of that frame)
+  private noseAnchors: Record<string, { u: number; v: number }> = {
+    front34: { u: 0.24, v: 0.56 },
+    front: { u: 0.5, v: 0.66 },
+    side: { u: 0.86, v: 0.52 },
+    side2: { u: 0.14, v: 0.52 },
+  };
+
+  private resizeObserver: ResizeObserver | null = null;
+  private themeObserver: MutationObserver | null = null;
+  private mediaQuery: MediaQueryList | null = null;
+  private onThemeMedia: (() => void) | null = null;
+  private onScroll: (() => void) | null = null;
+  private onVisChange: (() => void) | null = null;
+  private disposed = false;
 
   constructor(containerId: string) {
     const el = document.getElementById(containerId);
@@ -77,28 +138,34 @@ export class ThreeVehicleStudio {
     this.container = el;
 
     this.isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.isDark = document.documentElement.dataset.theme === 'dark' ||
-      (!document.documentElement.dataset.theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    this.refreshDark();
 
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'three-studio-canvas';
+    this.canvas.setAttribute('aria-hidden', 'true');
     this.container.appendChild(this.canvas);
 
     this.initScene();
-    this.loadTextures();
     this.createCarMesh();
-    this.createWindTunnelParticles();
     this.createGroundShadow();
+    this.createNightLighting();
+    this.createWindTunnelParticles();
+    this.loadTextures();
+    this.createCallouts();
     this.setupEvents();
-    this.setupObserver();
     this.onResize();
+
+    this.container.classList.add('is-loading');
   }
+
+  /* ---------- scene ---------- */
 
   private initScene(): void {
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-2, 2, 1.125, -1.125, 0.1, 100);
     this.camera.position.set(0, 0, 10);
     this.camera.lookAt(0, 0, 0);
+    this.applyFrustum(this.currentFrustum);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
@@ -107,107 +174,143 @@ export class ThreeVehicleStudio {
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.stopLoop();
+      this.container.classList.add('is-fallback');
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.container.classList.remove('is-fallback');
+      this.dirty = true;
+      this.requestRender();
+    });
   }
+
+  private applyFrustum(height: number): void {
+    const aspect = Math.max(0.1, this.container.clientWidth / Math.max(1, this.container.clientHeight));
+    const frustumHeight = height;
+    const frustumWidth = frustumHeight * aspect;
+    this.camera.left = -frustumWidth / 2;
+    this.camera.right = frustumWidth / 2;
+    this.camera.top = frustumHeight / 2;
+    this.camera.bottom = -frustumHeight / 2;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /* ---------- textures (single shared load pass) ---------- */
 
   private loadTextures(): void {
     const loader = new THREE.TextureLoader();
+    const byUrl = new Map<string, THREE.Texture>();
+    let pending = 0;
+    let primaryDone = false;
 
-    // All 8 individual vehicle angle assets
-    const allAngleUrls = [
-      `${baseUrl}assets/vehicle/polestar2-front-threequarter.webp`, // 0: 3/4 Front
-      `${baseUrl}assets/vehicle/polestar2-front.webp`,             // 1: Front
-      `${baseUrl}assets/vehicle/polestar2-side-profile.webp`,      // 2: Side
-      `${baseUrl}assets/vehicle/polestar2-rear-threequarter.webp`,  // 3: 3/4 Rear
-      `${baseUrl}assets/vehicle/polestar2-rear.webp`,              // 4: Rear
-      `${baseUrl}assets/vehicle/polestar2-overhead.webp`,          // 5: Overhead
-      `${baseUrl}assets/vehicle/polestar2-interior.webp`,          // 6: Cockpit
-      `${baseUrl}assets/vehicle/polestar_outline.svg`,             // 7: CAD Wireframe
-    ];
+    const queue = (url: string, onDone: (tex: THREE.Texture) => void): void => {
+      const existing = byUrl.get(url);
+      if (existing) {
+        onDone(existing);
+        return;
+      }
+      pending++;
+      loader.load(
+        url,
+        (tex) => {
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          byUrl.set(url, tex);
+          pending--;
+          onDone(tex);
+          if (pending === 0) this.container.classList.add('is-settled');
+        },
+        undefined,
+        () => {
+          pending--;
+          if (pending === 0) this.container.classList.add('is-settled');
+        },
+      );
+    };
 
-    allAngleUrls.forEach((url, idx) => {
-      loader.load(url, (tex) => {
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        this.angleTextures.set(idx, tex);
-
-        if (idx === 0 && this.parallaxMaterial) {
-          this.parallaxMaterial.uniforms.uTextureA.value = tex;
-        }
-      });
-    });
-
-    this.frames.forEach((frame) => {
-      loader.load(frame.url, (tex) => {
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.colorSpace = THREE.SRGBColorSpace;
+    for (const frame of this.frames) {
+      queue(frame.url, (tex) => {
         frame.texture = tex;
-        if (frame.id === 'front34' && this.parallaxMaterial) {
-          this.parallaxMaterial.uniforms.uTextureA.value = tex;
+        if (frame.id === 'front34' && !primaryDone) {
+          primaryDone = true;
+          this.markReady(tex);
         }
       });
-    });
+    }
+    for (const view of this.specialViews) {
+      queue(view.url, (tex) => {
+        view.texture = tex;
+      });
+    }
   }
 
+  private markReady(tex: THREE.Texture): void {
+    this.ready = true;
+    this.parallaxMaterial.uniforms.uTexA.value = tex;
+    this.parallaxMaterial.uniforms.uTexB.value = tex;
+    this.parallaxMaterial.uniforms.uBlend.value = 0;
+    this.container.classList.remove('is-loading');
+    this.container.classList.add('is-ready');
+    this.requestRender();
+  }
+
+  /* ---------- car plane with crossfade + clearcoat ---------- */
+
   private createCarMesh(): void {
-    const geom = new THREE.PlaneGeometry(3.6, 2.025, 32, 32);
+    const geom = new THREE.PlaneGeometry(PLANE_W, PLANE_H, 32, 32);
 
     const vertexShader = `
       uniform vec2 uMouse;
       uniform float uParallaxStrength;
       varying vec2 vUv;
-      varying vec3 vPosition;
 
       void main() {
         vUv = uv;
         vec3 pos = position;
-
-        // Subtle geometric depth curve (front/rear curve slightly into depth)
         float depthMask = sin(uv.x * 3.14159) * 0.25;
         pos.z += depthMask * 0.3;
-
-        // Parallax shift based on mouse vector and depth
         pos.x += uMouse.x * depthMask * uParallaxStrength * 0.15;
         pos.y += uMouse.y * depthMask * uParallaxStrength * 0.08;
-
-        vPosition = pos;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
     `;
 
     const fragmentShader = `
-      uniform sampler2D uTextureA;
+      uniform sampler2D uTexA;
+      uniform sampler2D uTexB;
+      uniform float uBlend;
       uniform vec2 uMouse;
       uniform float uLightSweep;
       uniform float uIsDark;
       uniform float uSpecularIntensity;
       varying vec2 vUv;
-      varying vec3 vPosition;
 
       void main() {
-        vec4 baseColor = texture2D(uTextureA, vUv);
+        vec4 ca = texture2D(uTexA, vUv);
+        vec4 cb = texture2D(uTexB, vUv);
+        vec4 baseColor = mix(ca, cb, clamp(uBlend, 0.0, 1.0));
+        if (baseColor.a < 0.02) discard;
 
-        if (baseColor.a < 0.02) {
-          discard;
-        }
-
-        // Dynamic Clearcoat Specular Sweep
-        // Simulates an elongated overhead studio light bar passing across the body
+        // Studio light bar follows the pointer
         float lightX = uLightSweep * 1.4 - 0.2;
         float distToLight = abs(vUv.x - lightX);
-        float specularBar = smoothstep(0.35, 0.0, distToLight) * 0.32;
+        float specularBar = smoothstep(0.35, 0.0, distToLight) * 0.30;
 
-        // Moving directional highlight based on mouse offset
         vec2 lightOffset = vUv - (uMouse * 0.3 + 0.5);
-        float mouseSpec = smoothstep(0.4, 0.0, length(lightOffset)) * 0.18;
+        float mouseSpec = smoothstep(0.4, 0.0, length(lightOffset)) * 0.16;
 
-        float totalSheen = (specularBar + mouseSpec) * uSpecularIntensity;
-        
-        // Swedish gold / crisp highlight tint
+        float dim = mix(1.0, 0.82, uIsDark);
+        float totalSheen = (specularBar + mouseSpec) * uSpecularIntensity * mix(0.9, 1.15, uIsDark);
+
         vec3 highlightColor = mix(vec3(1.0, 1.0, 1.0), vec3(0.95, 0.82, 0.65), 0.35);
-        vec3 finalRgb = baseColor.rgb + highlightColor * totalSheen * baseColor.a;
+        vec3 body = baseColor.rgb * dim;
+        vec3 finalRgb = body + highlightColor * totalSheen * baseColor.a;
 
         gl_FragColor = vec4(finalRgb, baseColor.a);
       }
@@ -217,10 +320,12 @@ export class ThreeVehicleStudio {
       vertexShader,
       fragmentShader,
       uniforms: {
-        uTextureA: { value: null },
+        uTexA: { value: null },
+        uTexB: { value: null },
+        uBlend: { value: 1 },
         uMouse: { value: new THREE.Vector2(0, 0) },
         uParallaxStrength: { value: 1.0 },
-        uLightSweep: { value: 0.5 },
+        uLightSweep: { value: this.isReducedMotion ? 0.42 : 0.5 },
         uIsDark: { value: this.isDark ? 1.0 : 0.0 },
         uSpecularIntensity: { value: 0.8 },
       },
@@ -233,12 +338,14 @@ export class ThreeVehicleStudio {
     this.scene.add(this.carPlaneMesh);
   }
 
+  /* ---------- ground shadow + night lighting ---------- */
+
   private createGroundShadow(): void {
     const geom = new THREE.PlaneGeometry(3.4, 0.65);
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d')!;
+    const cv = document.createElement('canvas');
+    cv.width = 256;
+    cv.height = 64;
+    const ctx = cv.getContext('2d')!;
     const grad = ctx.createRadialGradient(128, 32, 10, 128, 32, 120);
     grad.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
     grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.18)');
@@ -246,45 +353,93 @@ export class ThreeVehicleStudio {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 64);
 
-    const shadowTex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.MeshBasicMaterial({
-      map: shadowTex,
+      map: new THREE.CanvasTexture(cv),
       transparent: true,
       opacity: this.isDark ? 0.75 : 0.4,
       depthWrite: false,
     });
-
     this.shadowPlane = new THREE.Mesh(geom, mat);
     this.shadowPlane.position.set(0, -0.68, -0.1);
     this.scene.add(this.shadowPlane);
   }
 
+  private makeGlowTexture(inner: string, outer: string): THREE.CanvasTexture {
+    const cv = document.createElement('canvas');
+    cv.width = 128;
+    cv.height = 128;
+    const ctx = cv.getContext('2d')!;
+    const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 62);
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.4, outer);
+    grad.addColorStop(1, 'rgba(255, 240, 210, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(cv);
+  }
+
+  private createNightLighting(): void {
+    const glowMat = new THREE.MeshBasicMaterial({
+      map: this.makeGlowTexture('rgba(255, 244, 220, 0.9)', 'rgba(255, 230, 180, 0.35)'),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.noseGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.15), glowMat);
+    this.noseGlow.position.set(0, 0.05, 0.4);
+    this.scene.add(this.noseGlow);
+
+    const poolCv = document.createElement('canvas');
+    poolCv.width = 256;
+    poolCv.height = 96;
+    const pctx = poolCv.getContext('2d')!;
+    const poolGrad = pctx.createRadialGradient(128, 48, 4, 128, 48, 120);
+    poolGrad.addColorStop(0, 'rgba(255, 236, 196, 0.55)');
+    poolGrad.addColorStop(1, 'rgba(255, 236, 196, 0)');
+    pctx.fillStyle = poolGrad;
+    pctx.save();
+    pctx.translate(128, 48);
+    pctx.scale(1, 0.375);
+    pctx.translate(-128, -48);
+    pctx.fillRect(0, 0, 256, 96);
+    pctx.restore();
+    const poolMat = new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(poolCv),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.lightPool = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), poolMat);
+    this.lightPool.position.set(0, -0.62, -0.05);
+    this.scene.add(this.lightPool);
+  }
+
+  /* ---------- wind tunnel (palette: graphite white → amber) ---------- */
+
   private createWindTunnelParticles(): void {
-    this.particleCount = 1600;
-    this.particleGeometry = new THREE.BufferGeometry();
+    const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(this.particleCount * 3);
     const speeds = new Float32Array(this.particleCount);
     const offsets = new Float32Array(this.particleCount);
     const layers = new Float32Array(this.particleCount);
 
     for (let i = 0; i < this.particleCount; i++) {
-      // 14 distinct aerodynamic probe streamline bands
       const band = Math.floor(Math.random() * 14);
-      const baseY = -0.58 + band * 0.11; // -0.58 to 0.85
-
-      positions[i * 3 + 0] = -2.2 + Math.random() * 4.4; // X
-      positions[i * 3 + 1] = baseY + (Math.random() - 0.5) * 0.03; // Y
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.3; // Z
-
+      const baseY = -0.58 + band * 0.11;
+      positions[i * 3 + 0] = -2.2 + Math.random() * 4.4;
+      positions[i * 3 + 1] = baseY + (Math.random() - 0.5) * 0.03;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
       speeds[i] = 0.95 + Math.random() * 0.35;
       offsets[i] = Math.random() * 100;
-      layers[i] = band / 13.0; // 0 (underbody) to 1 (high free-stream)
+      layers[i] = band / 13.0;
     }
 
-    this.particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    this.particleGeometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-    this.particleGeometry.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 1));
-    this.particleGeometry.setAttribute('aLayer', new THREE.BufferAttribute(layers, 1));
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+    geometry.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 1));
+    geometry.setAttribute('aLayer', new THREE.BufferAttribute(layers, 1));
 
     const vertexShader = `
       uniform float uTime;
@@ -299,66 +454,50 @@ export class ThreeVehicleStudio {
 
       void main() {
         vec3 pos = position;
-
-        // WIND DIRECTION: Right to Left (from front nose at +1.38 to rear tail at -1.35)
         float flowX = 2.2 - mod((uTime * aSpeed * uWindSpeed * 1.55) + aOffset, 4.4);
         pos.x = flowX;
 
-        // Exact Polestar 2 Silhouette Deflection (Normalized Front 1.38 -> Rear -1.35)
-        float u = (1.38 - pos.x) / 2.73; // 0.0 at front nose, 1.0 at rear tail
+        float u = (1.38 - pos.x) / 2.73;
 
         if (pos.y > -0.38) {
-          // UPPER BODY STREAMLINES
           if (u >= 0.0 && u <= 1.0) {
-            // Front splitter & low hood ramp (u: 0.0 -> 0.30)
             float hoodRamp = smoothstep(0.0, 0.30, u) * 0.20;
-            // Windshield rake & panoramic roof arch (u: 0.25 -> 0.75, apex at u = 0.55)
             float roofPeak = sin(smoothstep(0.20, 0.80, u) * 3.14159) * 0.36;
-            // Fastback taper to rear light blade (u: 0.70 -> 1.0)
             float fastbackTaper = smoothstep(0.70, 1.0, u) * -0.14;
-
-            float upperFlow = (hoodRamp + roofPeak + fastbackTaper);
+            float upperFlow = hoodRamp + roofPeak + fastbackTaper;
             float heightWeight = smoothstep(-0.35, 0.8, pos.y);
             pos.y += upperFlow * (0.35 + aLayer * 0.65) * heightWeight;
           } else if (u > 1.0) {
-            // Downstream low-drag wake detachment
             float wakeDecay = exp(-(u - 1.0) * 1.6) * 0.12;
             float turbulence = sin(uTime * 6.0 + aOffset) * 0.015 * smoothstep(1.0, 1.8, u);
             pos.y += (wakeDecay + turbulence) * smoothstep(-0.35, 0.6, pos.y);
           }
-        } else {
-          // UNDERBODY GROUND EFFECT (Flat floor battery skateboard -> Rear diffuser)
-          if (u >= 0.70 && u <= 1.1) {
-            // Rear diffuser upward expansion
-            float diffuser = smoothstep(0.70, 1.0, u) * 0.06;
-            pos.y += diffuser;
-          }
+        } else if (u >= 0.70 && u <= 1.1) {
+          pos.y += smoothstep(0.70, 1.0, u) * 0.06;
         }
 
-        // Boundary edge opacity fading
         float edgeFade = smoothstep(2.2, 1.8, pos.x) * smoothstep(-2.2, -1.8, pos.x);
-        vAlpha = edgeFade * (0.45 + aLayer * 0.45) * uActive;
+        vAlpha = edgeFade * (0.35 + aLayer * 0.4) * uActive;
 
-        // Color mapping: Aero Cyan (fast stream) to Swedish Gold (boundary skin layer)
-        vec3 aeroCyan = vec3(0.15, 0.85, 1.0);
-        vec3 swedishGold = vec3(0.96, 0.78, 0.48);
-        vec3 coldWhite = vec3(0.85, 0.95, 1.0);
+        // Graphite white free-stream → amber boundary layer
+        vec3 paper = uIsDark > 0.5 ? vec3(0.92, 0.91, 0.88) : vec3(0.72, 0.71, 0.68);
+        vec3 graphite = uIsDark > 0.5 ? vec3(0.66, 0.65, 0.62) : vec3(0.45, 0.44, 0.42);
+        vec3 amber = vec3(0.85, 0.60, 0.32);
 
-        if (aLayer < 0.25) {
-          vColor = mix(coldWhite, aeroCyan, aLayer * 4.0);
-        } else if (aLayer < 0.65) {
-          vColor = aeroCyan;
+        if (aLayer < 0.35) {
+          vColor = mix(paper, graphite, aLayer / 0.35);
         } else {
-          vColor = mix(aeroCyan, swedishGold, (aLayer - 0.65) / 0.35);
+          vColor = mix(graphite, amber, (aLayer - 0.35) / 0.65);
         }
 
         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = (1.9 + aLayer * 1.8) * uPixelRatio * uActive;
+        gl_PointSize = (1.25 + aLayer * 1.05) * uPixelRatio * uActive;
         gl_Position = projectionMatrix * mvPosition;
       }
     `;
 
     const fragmentShader = `
+      uniform float uIsDark;
       varying float vAlpha;
       varying vec3 vColor;
 
@@ -368,7 +507,8 @@ export class ThreeVehicleStudio {
         float dist = length(coord);
         if (dist > 0.5) discard;
         float soft = smoothstep(0.5, 0.05, dist);
-        gl_FragColor = vec4(vColor, vAlpha * soft * 0.75);
+        float peak = uIsDark > 0.5 ? 0.7 : 0.55;
+        gl_FragColor = vec4(vColor, vAlpha * soft * peak);
       }
     `;
 
@@ -380,26 +520,89 @@ export class ThreeVehicleStudio {
         uWindSpeed: { value: 1.0 },
         uActive: { value: 0.0 },
         uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+        uIsDark: { value: this.isDark ? 1.0 : 0.0 },
       },
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
 
-    this.particleSystem = new THREE.Points(this.particleGeometry, this.particleMaterial);
+    this.particleSystem = new THREE.Points(geometry, this.particleMaterial);
     this.particleSystem.position.set(0, 0, 0.2);
     this.scene.add(this.particleSystem);
   }
 
+  /* ---------- projected engineering annotations ---------- */
+
+  private createCallouts(): void {
+    const defs: CalloutDef[] = [
+      { frameId: 'side', u: 0.5, v: 0.8, label: 'Battery', sub: '78 kWh · floor-mounted', dx: -10, dy: 56 },
+      { frameId: 'side', u: 0.22, v: 0.62, label: 'Rear motor', sub: '150 kW · direct drive', dx: -64, dy: -44 },
+      { frameId: 'side', u: 0.56, v: 0.26, label: 'Drag', sub: '0.278 Cd fastback', dx: 26, dy: -52 },
+      { frameId: 'front34', u: 0.3, v: 0.52, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 30, dy: -40 },
+      { frameId: 'front', u: 0.5, v: 0.42, label: 'Pixel LED', sub: 'adaptive headlamps', dx: 40, dy: -30 },
+    ];
+
+    for (const def of defs) {
+      const el = document.createElement('div');
+      el.className = 'studio-callout';
+      el.setAttribute('aria-hidden', 'true');
+      const anchor = this.frames.find((f) => f.id === def.frameId);
+      if (!anchor) continue;
+      el.innerHTML = `<span class="callout-dot"></span><span class="callout-text"><strong>${def.label}</strong><em>${def.sub}</em></span>`;
+      el.style.setProperty('--callout-dx', `${def.dx}px`);
+      el.style.setProperty('--callout-dy', `${def.dy}px`);
+      this.container.appendChild(el);
+      this.callouts.push({ def, el, anchor });
+    }
+  }
+
+  private updateCallouts(): void {
+    const rect = this.container.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w === 0 || h === 0) return;
+
+    for (const callout of this.callouts) {
+      const { def, el, anchor } = callout;
+      if (!anchor?.texture || !this.ready || this.specialIndex !== -1 || this.container.classList.contains('is-fallback')) {
+        el.style.opacity = '0';
+        continue;
+      }
+
+      // Fade with angular distance to the anchored frame
+      let diff = Math.abs(this.currentAngle - anchor.angle) % TWO_PI;
+      if (diff > Math.PI) diff = TWO_PI - diff;
+      const angleFade = Math.max(0, 1 - diff / 0.42);
+      if (angleFade <= 0.01) {
+        el.style.opacity = '0';
+        continue;
+      }
+
+      this.projected.set(
+        (def.u - 0.5) * PLANE_W + this.carPlaneMesh.position.x,
+        (def.v - 0.5) * PLANE_H + this.carPlaneMesh.position.y,
+        0.3,
+      );
+      this.projected.project(this.camera);
+
+      const px = (this.projected.x * 0.5 + 0.5) * w;
+      const py = (-this.projected.y * 0.5 + 0.5) * h;
+      el.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0)`;
+      el.style.opacity = (angleFade * 0.96).toFixed(2);
+    }
+  }
+
+  /* ---------- events ---------- */
+
   private setupEvents(): void {
-    // Pointer drag for 360 orbit
     const onPointerDown = (e: PointerEvent): void => {
+      if (this.contextLost) return;
       this.isDragging = true;
-      this.isSpecialView = false;
-      if (this.shadowPlane) this.shadowPlane.visible = true;
       this.lastPointerX = e.clientX;
       this.angularVelocity = 0;
       this.canvas.setPointerCapture(e.pointerId);
+      this.requestRender();
     };
 
     const onPointerMove = (e: PointerEvent): void => {
@@ -414,6 +617,7 @@ export class ThreeVehicleStudio {
         this.targetAngle += this.angularVelocity;
         this.lastPointerX = e.clientX;
       }
+      this.requestRender();
     };
 
     const onPointerUp = (e: PointerEvent): void => {
@@ -421,8 +625,9 @@ export class ThreeVehicleStudio {
       try {
         this.canvas.releasePointerCapture(e.pointerId);
       } catch {
-        // pointer release safe
+        /* pointer already released */
       }
+      this.requestRender();
     };
 
     this.canvas.addEventListener('pointerdown', onPointerDown);
@@ -430,168 +635,381 @@ export class ThreeVehicleStudio {
     this.canvas.addEventListener('pointerup', onPointerUp);
     this.canvas.addEventListener('pointercancel', onPointerUp);
 
-    window.addEventListener('resize', () => this.onResize(), { passive: true });
+    this.resizeObserver = new ResizeObserver(() => {
+      this.onResize();
+      this.requestRender();
+    });
+    this.resizeObserver.observe(this.container);
+
+    // Scroll-linked camera dolly
+    this.onScroll = () => {
+      if (this.isReducedMotion || !this.isVisible) return;
+      const rect = this.container.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const raw = 1 - (rect.top - vh * 0.22) / (vh * 0.55);
+      const p = Math.min(1, Math.max(0, raw));
+      const eased = 1 - Math.pow(1 - p, 3);
+      this.targetFrustum = WIDE_FRUSTUM + (BASE_FRUSTUM - WIDE_FRUSTUM) * eased;
+      this.requestRender();
+    };
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+
+    // Pause everything when the tab is hidden
+    this.onVisChange = () => {
+      if (document.hidden) {
+        this.stopLoop();
+      } else {
+        this.requestRender();
+      }
+    };
+    document.addEventListener('visibilitychange', this.onVisChange);
+
+    // Theme changes (toggle + system)
+    this.themeObserver = new MutationObserver(() => {
+      this.refreshDark();
+      this.applyTheme();
+    });
+    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this.onThemeMedia = () => {
+      this.refreshDark();
+      this.applyTheme();
+    };
+    this.mediaQuery.addEventListener?.('change', this.onThemeMedia);
   }
+
+  private refreshDark(): void {
+    this.isDark =
+      document.documentElement.dataset.theme === 'dark' ||
+      (!document.documentElement.dataset.theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
+  private applyTheme(): void {
+    this.parallaxMaterial.uniforms.uIsDark.value = this.isDark ? 1.0 : 0.0;
+    this.particleMaterial.uniforms.uIsDark.value = this.isDark ? 1.0 : 0.0;
+    (this.shadowPlane.material as THREE.MeshBasicMaterial).opacity = this.isDark ? 0.75 : 0.4;
+    this.glowTarget = this.isDark ? 1 : 0;
+    this.requestRender();
+  }
+
+  /* ---------- public API ---------- */
 
   public setMode(mode: StudioMode): void {
     this.currentMode = mode;
     if (mode === 'windtunnel') {
-      this.targetWindSpeed = 1.2;
-      this.particleMaterial.uniforms.uActive.value = 1.0;
-      // In wind tunnel mode, switch view to side profile
-      this.targetAngle = 1.57;
-      this.currentAngle = 1.57;
-      this.updateTurntableBlending();
+      this.windActiveTarget = 1;
+      this.targetWindSpeed = Math.max(0.4, this.targetWindSpeed);
+      this.targetAngle = Math.PI * 0.5;
+      this.currentAngle = Math.PI * 0.5;
+      this.specialIndex = -1;
+      this.specialFade = 1;
     } else {
-      this.particleMaterial.uniforms.uActive.value = 0.0;
+      this.windActiveTarget = 0;
       if (mode === 'parallax') {
-        this.targetAngle = 0.785; // 3/4 Front
-        this.currentAngle = 0.785;
-        this.updateTurntableBlending();
+        this.targetAngle = 0;
+        this.currentAngle = 0;
+        this.specialIndex = -1;
+        this.specialFade = 1;
       }
     }
+    this.requestRender();
   }
 
   public setWindSpeed(speed: number): void {
     this.targetWindSpeed = Math.max(0, Math.min(2.5, speed));
+    this.requestRender();
   }
 
   public setAngleIndex(index: number): void {
-    // 0: 3/4 Front, 1: Front, 2: Side, 3: 3/4 Rear, 4: Rear, 5: Overhead, 6: Cockpit, 7: CAD Wireframe
-    if (index === 5 || index === 6 || index === 7) {
-      this.isSpecialView = true;
-      const tex = this.angleTextures.get(index);
-      if (tex && this.parallaxMaterial) {
-        this.parallaxMaterial.uniforms.uTextureA.value = tex;
-      }
-      if (this.shadowPlane) {
-        this.shadowPlane.visible = index === 5;
-      }
+    if (index >= 0 && index < 5) {
+      const angleMap = [0, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.75, Math.PI];
+      this.specialIndex = -1;
+      this.targetAngle = angleMap[index]!;
+      this.currentAngle = this.targetAngle;
+      this.angularVelocity = 0;
+      this.requestRender();
       return;
     }
 
-    this.isSpecialView = false;
-    if (this.shadowPlane) this.shadowPlane.visible = true;
-
-    const angleMap = [0.785, 0.0, 1.57, 2.356, 3.141];
-    if (index >= 0 && index < angleMap.length) {
-      this.targetAngle = angleMap[index];
-      this.currentAngle = angleMap[index];
-      this.angularVelocity = 0;
-      this.updateTurntableBlending();
+    const view = this.specialViews.find((v) => v.index === index);
+    if (!view) return;
+    this.specialIndex = index;
+    this.specialFade = this.specialFade; // animated in step()
+    this.prevTurntableTexture = (this.parallaxMaterial.uniforms.uTexA.value as THREE.Texture) ?? null;
+    if (view.texture) {
+      this.parallaxMaterial.uniforms.uTexB.value = view.texture;
     }
-  }
-
-  public setTheme(isDark: boolean): void {
-    this.isDark = isDark;
-    if (this.parallaxMaterial) {
-      this.parallaxMaterial.uniforms.uIsDark.value = isDark ? 1.0 : 0.0;
-    }
-    if (this.shadowPlane) {
-      (this.shadowPlane.material as THREE.MeshBasicMaterial).opacity = isDark ? 0.75 : 0.4;
-    }
-  }
-
-  private updateTurntableBlending(): void {
-    if (this.isSpecialView) return;
-
-    const twoPi = Math.PI * 2;
-    let normAngle = ((this.currentAngle % twoPi) + twoPi) % twoPi;
-
-    // Find the closest frame
-    let closestFrame = this.frames[0];
-    let minDiff = Infinity;
-
-    for (let i = 0; i < this.frames.length; i++) {
-      let diff = Math.abs(normAngle - this.frames[i].angle);
-      if (diff > Math.PI) diff = twoPi - diff;
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestFrame = this.frames[i];
-      }
-    }
-
-    if (closestFrame.texture && this.parallaxMaterial.uniforms.uTextureA.value !== closestFrame.texture) {
-      this.parallaxMaterial.uniforms.uTextureA.value = closestFrame.texture;
-    }
-  }
-
-  private onResize(): void {
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
-    if (width === 0 || height === 0) return;
-
-    this.renderer.setSize(width, height);
-    const aspect = width / height;
-
-    const frustumHeight = 2.15;
-    const frustumWidth = frustumHeight * aspect;
-
-    this.camera.left = -frustumWidth / 2;
-    this.camera.right = frustumWidth / 2;
-    this.camera.top = frustumHeight / 2;
-    this.camera.bottom = -frustumHeight / 2;
-    this.camera.updateProjectionMatrix();
-  }
-
-  private setupObserver(): void {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          this.isVisible = entry.isIntersecting;
-          if (this.isVisible && !this.animId) {
-            this.start();
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(this.container);
+    this.shadowPlane.visible = index === 5;
+    this.requestRender();
   }
 
   public getMode(): StudioMode {
     return this.currentMode;
   }
 
-  private start(): void {
-    const tick = (): void => {
-      if (!this.isVisible) {
-        this.animId = null;
-        return;
+  /* ---------- turntable crossfade ---------- */
+
+  private updateTurntable(): void {
+    if (this.specialIndex !== -1) return;
+
+    let norm = ((this.currentAngle % TWO_PI) + TWO_PI) % TWO_PI;
+    const first = this.frames[0]!;
+    const base = first.angle;
+    norm = (norm + base) % TWO_PI;
+
+    let prev = this.frames[this.frames.length - 1]!;
+    let next = this.frames[0]!;
+    let blend = 0;
+
+    for (let i = 0; i < this.frames.length; i++) {
+      const a = this.frames[i]!;
+      const b = this.frames[(i + 1) % this.frames.length]!;
+      const aRel = (a.angle - base + TWO_PI) % TWO_PI;
+      let bRel = (b.angle - base + TWO_PI) % TWO_PI;
+      if (bRel === 0) bRel = TWO_PI;
+      if (norm >= aRel && norm < bRel) {
+        prev = a;
+        next = b;
+        blend = (norm - aRel) / (bRel - aRel);
+        break;
       }
+    }
 
-      const elapsed = this.clock.getElapsedTime();
+    if (!prev.texture || !next.texture) return;
 
-      // Smooth mouse interpolation (disable parallax if reduced motion)
-      if (!this.isReducedMotion) {
-        this.mouseNorm.lerp(this.targetMouseNorm, 0.08);
-        this.parallaxMaterial.uniforms.uMouse.value.copy(this.mouseNorm);
-      }
+    // Smoothstep the blend for weight distribution toward anchor frames
+    const eased = blend * blend * (3 - 2 * blend);
+    const pair = `${prev.id}>${next.id}`;
+    if (pair !== this.activePair) {
+      this.activePair = pair;
+      this.parallaxMaterial.uniforms.uTexA.value = prev.texture;
+      this.parallaxMaterial.uniforms.uTexB.value = next.texture;
+      this.dirty = true;
+    }
+    if (Math.abs((this.parallaxMaterial.uniforms.uBlend.value as number) - eased) > 0.002) {
+      this.parallaxMaterial.uniforms.uBlend.value = eased;
+      this.dirty = true;
+    }
+  }
 
-      // Smooth angle inertia
-      if (!this.isDragging) {
-        this.currentAngle += (this.targetAngle - this.currentAngle) * 0.1;
-        this.angularVelocity *= 0.92;
-        this.targetAngle += this.angularVelocity;
-      } else {
-        this.currentAngle = this.targetAngle;
-      }
+  /* ---------- render-on-demand loop ---------- */
 
-      this.updateTurntableBlending();
+  private requestRender(): void {
+    this.dirty = true;
+    if (this.rafId === null && this.isVisible && !this.contextLost && !this.disposed) {
+      this.lastTick = performance.now();
+      this.rafId = requestAnimationFrame(this.tick);
+    }
+  }
 
-      // Clearcoat light sweep oscillation
-      const sweep = this.isReducedMotion ? 0.5 : (Math.sin(elapsed * 0.8) + 1.0) * 0.5;
-      this.parallaxMaterial.uniforms.uLightSweep.value = sweep;
+  private stopLoop(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
 
-      // Wind Tunnel particle updates
-      this.windSpeed += (this.targetWindSpeed - this.windSpeed) * 0.08;
-      this.particleMaterial.uniforms.uTime.value = elapsed;
-      this.particleMaterial.uniforms.uWindSpeed.value = this.windSpeed;
+  private tick = (now: number): void => {
+    this.rafId = null;
+    if (!this.isVisible || this.contextLost) return;
 
+    const dt = Math.min(0.05, (now - this.lastTick) / 1000 || 0.016);
+    this.lastTick = now;
+
+    const animating = this.step(dt);
+
+    if (this.dirty) {
       this.renderer.render(this.scene, this.camera);
-      this.animId = requestAnimationFrame(tick);
-    };
+      this.dirty = false;
+      this.updateCallouts();
+    }
 
-    this.animId = requestAnimationFrame(tick);
+    if (animating) {
+      this.rafId = requestAnimationFrame(this.tick);
+    }
+  };
+
+  /** Advance all interpolations. Returns true while anything is still in motion. */
+  private step(dt: number): boolean {
+    let animating = false;
+
+    // Mouse easing (drives parallax + light sweep)
+    if (!this.mouseNorm.equals(this.targetMouseNorm)) {
+      this.mouseNorm.lerp(this.targetMouseNorm, 0.08);
+      this.parallaxMaterial.uniforms.uMouse.value.copy(this.mouseNorm);
+      if (!this.isReducedMotion) {
+        this.parallaxMaterial.uniforms.uLightSweep.value = 0.5 + this.mouseNorm.x * 0.3;
+      }
+      this.dirty = true;
+      if (this.mouseNorm.distanceTo(this.targetMouseNorm) > 0.002) animating = true;
+    }
+
+    // Turntable inertia
+    if (this.isDragging) {
+      this.currentAngle = this.targetAngle;
+      this.updateTurntable();
+      animating = true;
+    } else {
+      const dAngle = this.targetAngle - this.currentAngle;
+      if (Math.abs(dAngle) > 0.0008 || Math.abs(this.angularVelocity) > 0.0004) {
+        this.currentAngle += dAngle * 0.1;
+        this.angularVelocity *= Math.pow(0.92, dt * 60);
+        this.targetAngle += this.angularVelocity;
+        this.updateTurntable();
+        animating = true;
+      }
+    }
+
+    // Special-view crossfade
+    if (this.specialIndex !== -1 && this.specialFade > 0) {
+      this.specialFade = Math.max(0, this.specialFade - dt * 3);
+      this.parallaxMaterial.uniforms.uBlend.value = 1 - this.specialFade;
+      this.dirty = true;
+      animating = true;
+    } else if (this.specialIndex === -1 && this.specialFade < 1) {
+      this.specialFade = Math.min(1, this.specialFade + dt * 3);
+      this.parallaxMaterial.uniforms.uBlend.value = 1 - this.specialFade;
+      this.dirty = true;
+      animating = true;
+    }
+
+    // Scroll-linked dolly
+    const dFrustum = this.targetFrustum - this.currentFrustum;
+    if (Math.abs(dFrustum) > 0.0008) {
+      this.currentFrustum += dFrustum * Math.min(1, dt * 5);
+      this.applyFrustum(this.currentFrustum);
+      this.dirty = true;
+      animating = true;
+    }
+
+    // Wind tunnel
+    const dActive = this.windActiveTarget - this.windActive;
+    if (Math.abs(dActive) > 0.001) {
+      this.windActive += dActive * Math.min(1, dt * 4);
+      this.particleMaterial.uniforms.uActive.value = this.windActive;
+      this.dirty = true;
+      animating = true;
+    }
+    const dWind = this.targetWindSpeed - this.windSpeed;
+    if (Math.abs(dWind) > 0.001) {
+      this.windSpeed += dWind * Math.min(1, dt * 4);
+      this.dirty = true;
+      animating = true;
+    }
+    if (this.windActive > 0.001) {
+      this.particleMaterial.uniforms.uTime.value += dt;
+      this.particleMaterial.uniforms.uWindSpeed.value = this.windSpeed;
+      this.dirty = true;
+      animating = true;
+    }
+
+    // Night-mode headlight glow
+    const dGlow = this.glowTarget - this.glowIntensity;
+    if (Math.abs(dGlow) > 0.002) {
+      this.glowIntensity += dGlow * Math.min(1, dt * 2.5);
+      this.dirty = true;
+      animating = true;
+    }
+    if (this.glowIntensity > 0.002) {
+      this.updateNightLighting();
+    } else if ((this.noseGlow.material as THREE.MeshBasicMaterial).opacity !== 0) {
+      (this.noseGlow.material as THREE.MeshBasicMaterial).opacity = 0;
+      (this.lightPool.material as THREE.MeshBasicMaterial).opacity = 0;
+      this.dirty = true;
+    }
+
+    return animating;
+  }
+
+  private updateNightLighting(): void {
+    // Anchor the glow to the nose of whichever frame is dominant
+    let best: TurntableFrame | null = null;
+    let bestDiff = Infinity;
+    for (const frame of this.frames) {
+      if (!(frame.id in this.noseAnchors) || !frame.texture) continue;
+      let diff = Math.abs(this.currentAngle - frame.angle) % TWO_PI;
+      if (diff > Math.PI) diff = TWO_PI - diff;
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = frame;
+      }
+    }
+
+    const glowMat = this.noseGlow.material as THREE.MeshBasicMaterial;
+    const poolMat = this.lightPool.material as THREE.MeshBasicMaterial;
+
+    if (!best || bestDiff > 0.5) {
+      glowMat.opacity = 0;
+      poolMat.opacity = 0;
+      this.dirty = true;
+      return;
+    }
+
+    const anchor = this.noseAnchors[best.id]!;
+    const angleFade = Math.max(0, 1 - bestDiff / 0.5);
+    const specialFadeOut = this.specialIndex !== -1 ? 1 - this.specialFade : 1;
+    const intensity = this.glowIntensity * angleFade * specialFadeOut;
+
+    this.noseGlow.position.set(
+      (anchor.u - 0.5) * PLANE_W + this.carPlaneMesh.position.x,
+      (anchor.v - 0.5) * PLANE_H + this.carPlaneMesh.position.y,
+      0.4,
+    );
+    const noseWorldX = (anchor.u - 0.5) * PLANE_W;
+    this.lightPool.position.x = noseWorldX * 0.9;
+
+    glowMat.opacity = 0.42 * intensity;
+    poolMat.opacity = 0.3 * intensity;
+    this.dirty = true;
+  }
+
+  /* ---------- visibility + resize ---------- */
+
+  private setupObserver(): void {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          this.isVisible = entry.isIntersecting;
+          if (this.isVisible) {
+            this.onScroll?.();
+            this.requestRender();
+          } else {
+            this.stopLoop();
+          }
+        });
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(this.container);
+  }
+
+  private onResize(): void {
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    if (width === 0 || height === 0) return;
+    this.renderer.setSize(width, height);
+    this.particleMaterial.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio || 1, 2);
+    this.applyFrustum(this.currentFrustum);
+    this.dirty = true;
+  }
+
+  public dispose(): void {
+    this.disposed = true;
+    this.stopLoop();
+    this.resizeObserver?.disconnect();
+    this.themeObserver?.disconnect();
+    this.mediaQuery?.removeEventListener?.('change', this.onThemeMedia!);
+    if (this.onScroll) window.removeEventListener('scroll', this.onScroll);
+    if (this.onVisChange) document.removeEventListener('visibilitychange', this.onVisChange);
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat?.dispose();
+    });
+    this.renderer.dispose();
+    this.canvas.remove();
+    for (const c of this.callouts) c.el.remove();
   }
 }

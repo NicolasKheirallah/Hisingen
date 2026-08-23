@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 import Foundation
 import ImageIO
 import Testing
@@ -419,27 +419,29 @@ struct VehiclePresentationAnimationTests {
         abs(lhs - rhs) <= tolerance
     }
 
-    private static func solidImage(width: Int, height: Int) -> CGImage {
-        let context = CGContext(
+    private static func solidImage(width: Int, height: Int) -> CGImage? {
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        guard let context = CGContext(
             data: nil,
             width: width,
             height: height,
             bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
+            bytesPerRow: width * 4,
+            space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        context.setFillColor(CGColor(red: 0.2, green: 0.2, blue: 0.25, alpha: 1))
+        ) else { return nil }
+        context.setFillColor(red: 0.2, green: 0.2, blue: 0.25, alpha: 1.0)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        return context.makeImage()!
+        return context.makeImage()
     }
 
     private static func pngData(width: Int, height: Int) -> Data {
+        guard let image = solidImage(width: width, height: height) else { return Data() }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil) else {
             return Data()
         }
-        CGImageDestinationAddImage(destination, solidImage(width: width, height: height), nil)
+        CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else {
             return Data()
         }
