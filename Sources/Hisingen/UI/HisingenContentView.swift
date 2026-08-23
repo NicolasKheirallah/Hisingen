@@ -144,44 +144,48 @@ struct HisingenContentView: View {
             } else if let state {
                 tabBar
                 Divider().opacity(0.4)
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: HisingenTheme.sectionSpacing) {
-                        if !state.retainedDataCategories.isEmpty {
-                            retainedDataNotice(state)
+                if selectedTab == .settings {
+                    SettingsView(notificationPermission: notificationPermission,
+                                 state: state,
+                                 cachedSnapshots: cachedSnapshots,
+                                 database: database, imageCache: imageCache,
+                                 onSettingsChanged: { change in
+                                     if case .closeSettings = change {
+                                          withAnimation { selectedTab = .vehicle }
+                                          tabSelection.wrappedValue = .vehicle
+                                     }
+                                     onSettingsChanged(change)
+                                 }, onSignOut: onSignOut)
+                        .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: HisingenTheme.sectionSpacing) {
+                            if !state.retainedDataCategories.isEmpty {
+                                retainedDataNotice(state)
+                            }
+                            switch selectedTab {
+                            case .vehicle:
+                                VehicleTabView(state: state, cars: cars, activeVin: activeVin,
+                                               onSelectCar: onSelectCar, error: error,
+                                               database: database, reverseGeocoder: reverseGeocoder,
+                                               imageCache: imageCache)
+                                    .id(state.vin)
+                            case .info:
+                                InfoTabView(state: state, database: database, imageCache: imageCache,
+                                            reverseGeocoder: reverseGeocoder)
+                                    .id(state.vin)
+                            case .history:
+                                HistoryDashboardView(state: state, database: database)
+                                    .id(state.vin)
+                            case .controls:
+                                ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
+                                                onRemoteCommand: onRemoteCommand)
+                            case .settings:
+                                EmptyView()
+                            }
                         }
-                        switch selectedTab {
-                        case .vehicle:
-                            VehicleTabView(state: state, cars: cars, activeVin: activeVin,
-                                           onSelectCar: onSelectCar, error: error,
-                                           database: database, reverseGeocoder: reverseGeocoder,
-                                           imageCache: imageCache)
-                                .id(state.vin)
-                        case .info:
-                            InfoTabView(state: state, database: database, imageCache: imageCache,
-                                        reverseGeocoder: reverseGeocoder)
-                                .id(state.vin)
-                        case .history:
-                            HistoryDashboardView(state: state, database: database)
-                                .id(state.vin)
-                        case .controls:
-                            ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
-                                            onRemoteCommand: onRemoteCommand)
-                        case .settings:
-                            SettingsView(notificationPermission: notificationPermission,
-                                         state: state,
-                                         cachedSnapshots: cachedSnapshots,
-                                         database: database, imageCache: imageCache,
-                                         onSettingsChanged: { change in
-                                             if case .closeSettings = change {
-                                                  withAnimation { selectedTab = .vehicle }
-                                                  tabSelection.wrappedValue = .vehicle
-                                             }
-                                             onSettingsChanged(change)
-                                         }, onSignOut: onSignOut)
-                                 .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
-                        }
+                        .padding(HisingenTheme.sectionSpacing)
                     }
-                    .padding(HisingenTheme.sectionSpacing)
                 }
             } else {
                 placeholderView

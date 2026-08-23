@@ -151,8 +151,9 @@ struct SettingsView: View {
                 versionFooter
             }
             .padding(HisingenTheme.sectionSpacing)
+            .frame(maxWidth: .infinity)
         }
-        .frame(width: HisingenTheme.layoutWidth)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
@@ -693,38 +694,49 @@ struct SettingsView: View {
                     )
 
                     if supportsMultipleAngles {
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            ForEach(availableAngles, id: \.self) { angle in
-                                let isAngleSelected = carRenderAngle == angle
-                                Button {
-                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                                        carRenderAngle = angle
-                                        preferences.carRenderAngle = angle
+                        let angleChunks = stride(from: 0, to: availableAngles.count, by: 2).map {
+                            Array(availableAngles[$0..<min($0 + 2, availableAngles.count)])
+                        }
+                        VStack(spacing: 8) {
+                            ForEach(0..<angleChunks.count, id: \.self) { rowIdx in
+                                let row = angleChunks[rowIdx]
+                                HStack(spacing: 8) {
+                                    ForEach(row, id: \.self) { angle in
+                                        let isAngleSelected = carRenderAngle == angle
+                                        Button {
+                                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                                carRenderAngle = angle
+                                                preferences.carRenderAngle = angle
+                                            }
+                                            onSettingsChanged(.presentation)
+                                        } label: {
+                                            HStack(spacing: 5) {
+                                                Image(systemName: angle.symbol)
+                                                    .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                                Text(angle.title)
+                                                    .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                                    .lineLimit(1)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 4)
+                                            .background(
+                                                isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                    .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                            )
+                                            .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .withoutFocusRing()
                                     }
-                                    onSettingsChanged(.presentation)
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: angle.symbol)
-                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                        Text(angle.title)
-                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                            .lineLimit(1)
+                                    if row.count == 1 {
+                                        Spacer().frame(maxWidth: .infinity)
                                     }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 6)
-                                    .padding(.horizontal, 4)
-                                    .background(
-                                        isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                                    )
-                                    .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
                                 }
-                                .buttonStyle(.plain)
-                                .withoutFocusRing()
                             }
                         }
                     }
@@ -747,9 +759,20 @@ struct SettingsView: View {
                 }
 
                 // 2-Column Responsive Grid of Themes
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(filteredThemes, id: \.self) { theme in
-                        themeTile(theme)
+                let themeChunks = stride(from: 0, to: filteredThemes.count, by: 2).map {
+                    Array(filteredThemes[$0..<min($0 + 2, filteredThemes.count)])
+                }
+                VStack(spacing: 8) {
+                    ForEach(0..<themeChunks.count, id: \.self) { rowIdx in
+                        let row = themeChunks[rowIdx]
+                        HStack(spacing: 8) {
+                            ForEach(row, id: \.self) { theme in
+                                themeTile(theme)
+                            }
+                            if row.count == 1 {
+                                Spacer().frame(maxWidth: .infinity)
+                            }
+                        }
                     }
                 }
             }
