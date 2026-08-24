@@ -32,6 +32,7 @@ struct AccountCredentialsForm: View {
     @State private var isTestingConnection = false
     @State private var testConnectionResult: (success: Bool, message: String)?
     @State private var showUpdateFields = false
+    @State private var showPolestarInteractiveFallback = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -85,6 +86,7 @@ struct AccountCredentialsForm: View {
             .labelsHidden()
             .onChange(of: selectedBrand) { _, _ in
                 testConnectionResult = nil
+                showPolestarInteractiveFallback = false
             }
         }
     }
@@ -96,6 +98,7 @@ struct AccountCredentialsForm: View {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                 selectedBrand = brand
                 testConnectionResult = nil
+                showPolestarInteractiveFallback = false
             }
         } label: {
             VStack(spacing: 6) {
@@ -267,6 +270,41 @@ struct AccountCredentialsForm: View {
                     .onChange(of: polestarVIN) { _, value in preferences.accountDraft.polestarVIN = value }
             }
 
+            if showPolestarInteractiveFallback || testConnectionResult?.message.contains("additional or changed sign-in step") == true {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "globe")
+                            .font(.system(size: 11))
+                            .foregroundStyle(HisingenTheme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.text("Interactive Verification Required"))
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(L10n.text("Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window."))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button {
+                        onSettingsChanged(.polestarWebSignIn)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.forward.app")
+                            Text(L10n.text("Complete Interactive Sign-In"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(8)
+                .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
+                )
+                .transition(.opacity)
+            }
+
             Button {
                 savePolestarCredentials()
             } label: {
@@ -419,6 +457,9 @@ struct AccountCredentialsForm: View {
             guard brand == selectedBrand else { return } // user switched brands mid-check
             isTestingConnection = false
             testConnectionResult = (result.success, result.message)
+            if brand == .polestar && (result.message.contains("additional or changed sign-in step") || result.message.contains("Settings and try again")) {
+                showPolestarInteractiveFallback = true
+            }
         }
     }
 

@@ -11,6 +11,7 @@ enum SettingsChange {
     case launchAtLogin
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
+    case polestarWebSignIn
     case switchToBrand(VehicleBrand)
     case selectVehicle(String)
     case closeSettings

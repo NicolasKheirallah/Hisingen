@@ -49,6 +49,8 @@ actor PolestarAPI {
     var commandTokenExpiry: Date?
     var commandPendingVerifier: String?
     var commandPendingState: String?
+    var webPendingVerifier: String?
+    var webPendingState: String?
     /// Single-flight guard for the command client's refresh grant (see `validCommandToken`).
     var commandRefreshTask: Task<String?, Never>?
 
@@ -263,6 +265,61 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         return Self.queryValue("code", from: url)
+    }
+
+    /// Builds the web client's authorization URL for an in-app `WKWebView` when headless PingFederate
+    /// login is rejected with an interactive challenge (CAPTCHA, 2FA, Terms acceptance, etc.).
+    func beginWebAuthorization() async throws -> (authorizeURL: URL, redirectURI: URL) {
+        if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
+        guard let authorizationEndpoint else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        let verifier = try Self.randomURLSafeString()
+        let state = try Self.randomURLSafeString()
+        webPendingVerifier = verifier
+        webPendingState = state
+        guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+            throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
+        }
+        components.queryItems = Self.authorizationQueryItems(
+            clientID: oidcClientID,
+            redirectURI: oidcRedirectURL.absoluteString,
+            scope: oidcScope,
+            state: state,
+            challenge: Self.codeChallenge(for: verifier)
+        )
+        guard let url = components.url else {
+            throw PolestarError.incompatibleAPI(operation: "authorization request")
+        }
+        return (url, oidcRedirectURL)
+    }
+
+    /// Completes web-client authorization from the `https://www.polestar.com/sign-in-callback` redirect
+    /// captured by `PolestarWebSignInPresenter`.
+    func completeWebAuthorization(callbackURL: URL, preferredVIN: String? = nil,
+                                  features: FeatureSelection = .default) async throws {
+        guard let verifier = webPendingVerifier, let expectedState = webPendingState else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        webPendingVerifier = nil
+        webPendingState = nil
+        guard callbackURL.scheme == oidcRedirectURL.scheme,
+              callbackURL.host == oidcRedirectURL.host,
+              Self.normalizedPath(callbackURL) == Self.normalizedPath(oidcRedirectURL) else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        if let error = Self.queryValue("error", from: callbackURL) {
+            throw PolestarError.permissionDenied(operation: error)
+        }
+        guard Self.queryValue("state", from: callbackURL) == expectedState,
+              let code = Self.queryValue("code", from: callbackURL) else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        try await exchangeCodeForToken(code, verifier: verifier)
+        try await fetchCarInfo(preferredVIN: preferredVIN)
+        if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
+        if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+        logger.info("Polestar web-client token acquired via interactive web sign-in")
     }
 
     /// Builds the command client's authorization URL for a real browser to open — the
@@ -820,6 +877,8 @@ actor PolestarAPI {
         capabilityBackoff = [:]
         capabilityCache = [:]
         remoteCommandsInFlight = []
+        webPendingVerifier = nil
+        webPendingState = nil
     }
 
     static func makeSession(delegate: URLSessionDelegate) -> URLSession {

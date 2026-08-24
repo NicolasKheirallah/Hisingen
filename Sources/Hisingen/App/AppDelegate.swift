@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     private let volvoSignInPresenter = VolvoSignInPresenter()
     private let polestarCommandSignInPresenter = PolestarCommandSignInPresenter()
+    private let polestarWebSignInPresenter = PolestarWebSignInPresenter()
     private let updateChecker = UpdateChecker()
     private let sessionManager = SessionManager()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
@@ -377,6 +378,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Authorizes the Polestar web client (vehicle discovery & telemetry) through an in-app
+    /// `WKWebView` window when headless PingFederate login is rejected with an interactive
+    /// challenge (such as 2FA, CAPTCHA, or Terms of Service update).
+    private func beginPolestarWebSignIn() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let (authorizeURL, redirectURI) = try await polestarAPI.beginWebAuthorization()
+                let callbackURL = try await polestarWebSignInPresenter.signIn(
+                    authorizeURL: authorizeURL,
+                    redirectURI: redirectURI
+                )
+                let vin = preferences.vin(for: .polestar)
+                try await polestarAPI.completeWebAuthorization(
+                    callbackURL: callbackURL,
+                    preferredVIN: vin.isEmpty ? nil : vin,
+                    features: preferences.features
+                )
+                switchActiveBrand(to: .polestar, force: true)
+                resumeStoredSession()
+                statusController.dismissSettings()
+                showRemoteResult(
+                    title: L10n.text("Polestar sign-in successful"),
+                    message: L10n.text("Successfully connected to your Polestar account! Fetching telemetry…"),
+                    success: true
+                )
+            } catch {
+                let mapped = error as? LocalizedError
+                logger.error("Polestar interactive web sign-in failed: \(String(describing: error), privacy: .public)")
+                showRemoteResult(
+                    title: L10n.text("Sign-in failed"),
+                    message: mapped?.errorDescription ?? error.localizedDescription,
+                    success: false
+                )
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         commandCoordinator.cancelPendingWork()
         garageRefreshTask?.cancel()
@@ -730,6 +769,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .polestarCommandAuthorization:
             beginPolestarCommandAuthorization()
+        case .polestarWebSignIn:
+            beginPolestarWebSignIn()
         case .switchToBrand(let brand):
             switch brand {
             case .polestar:

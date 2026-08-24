@@ -3,7 +3,18 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.3] - 2026-08-23
+## [1.2.3] - 2026-08-24
+
+### Added
+
+- Interactive in-app `WKWebView` authentication fallback for Polestar when the
+  default headless sign-in flow is rejected with intermediate identity provider
+  challenges (such as 2FA/MFA, CAPTCHA, Terms of Service updates, or password
+  resets), allowing users to complete verification without leaving Hisingen.
+- "Interactive Verification Required" prompt and action button in Settings
+  Account credentials form when Polestar requires interactive authorization.
+- Unit tests covering Polestar web authorization URL construction, PKCE parameter
+  formatting, and state validation.
 
 ### Fixed
 
