@@ -29,7 +29,8 @@ struct RemoteCommandTests {
         authorizer.allow()
         try? await Task.sleep(for: .milliseconds(20))
 
-        XCTAssertEqual(await provider.executedCount(), 0)
+        let executedCount = await provider.executedCount()
+        XCTAssertEqual(executedCount, 0)
     }
 
     @Test

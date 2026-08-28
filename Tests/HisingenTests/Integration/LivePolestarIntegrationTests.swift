@@ -41,7 +41,8 @@ struct LivePolestarReadOnlyIntegrationTests {
             )
             let cars = await api.cars
             XCTAssertFalse(cars.isEmpty)
-            let vin = try XCTUnwrap(await api.resolvedVIN(preferred: preferredVIN))
+            let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+            let vin = try XCTUnwrap(resolvedVIN)
             let state = try await api.fetchVehicleState(vin: vin, features: features)
             XCTAssertEqual(state.vin, vin)
             XCTAssertTrue(state.batteryPercentage != nil || state.rangeKm != nil)
