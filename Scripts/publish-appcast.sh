@@ -11,9 +11,8 @@ ARCHIVE=${4:?missing archive}
 OUTPUT_DIR=${5:?missing output directory}
 PRIVATE_KEY_FILE=${6:?missing Sparkle private-key file}
 
-for tool in "$TOOLS_DIR/bin/generate_appcast"; do
-    [ -x "$tool" ] || { echo "Missing Sparkle tool: $tool" >&2; exit 1; }
-done
+GENERATE_APPCAST="$TOOLS_DIR/bin/generate_appcast"
+[ -x "$GENERATE_APPCAST" ] || { echo "Missing Sparkle tool: $GENERATE_APPCAST" >&2; exit 1; }
 [ -s "$ARCHIVE" ] || { echo "Missing Sparkle update archive: $ARCHIVE" >&2; exit 1; }
 [ -s "$PRIVATE_KEY_FILE" ] || { echo "Missing Sparkle private-key file: $PRIVATE_KEY_FILE" >&2; exit 1; }
 
@@ -28,7 +27,7 @@ cp "$ARCHIVE" "$STAGING/Hisingen.app.zip"
 sh Scripts/extract-release-notes.sh "$VERSION" CHANGELOG.md "$STAGING/Hisingen.app.md"
 
 DOWNLOAD_PREFIX="https://github.com/NicolasKheirallah/Hisingen/releases/download/$RELEASE_TAG/"
-"$TOOLS_DIR/bin/generate_appcast" \
+"$GENERATE_APPCAST" \
     --ed-key-file "$PRIVATE_KEY_FILE" \
     --download-url-prefix "$DOWNLOAD_PREFIX" \
     --release-notes-url-prefix "$DOWNLOAD_PREFIX" \
