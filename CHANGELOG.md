@@ -18,6 +18,10 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- Reconciled charging-session summaries with their observed SoC samples, recovered
+  energy and cost estimates from legacy zero-value records when possible, excluded
+  unfinished/empty observations from history, and prevented stale stop snapshots
+  from erasing a real charge.
 - Corrected Sparkle framework packaging so clean builds discover the built
   framework reliably and installed apps resolve it from `Contents/Frameworks`.
 - Made appcast publication fail closed when release notes are missing, the

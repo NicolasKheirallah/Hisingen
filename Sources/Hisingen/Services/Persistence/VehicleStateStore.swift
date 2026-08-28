@@ -92,8 +92,16 @@ final class VehicleStateStore {
                 interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
                 requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
             )
+            let capacity = preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
+                ?? state.configuredUsableBatteryCapacityKwh
+            if preferences.storeChargingHistory {
+                database.repairLegacyChargingSessions(
+                    for: state.vin, usableCapacityKwh: capacity
+                )
+            }
             let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
-                .map { $0.toDomainSession(database: database) }
+                .map { $0.toDomainSession(database: database, usableCapacityKwh: capacity) }
+                .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
             let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
                 .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
             if let odo = state.odometerKm, let estimate = BatteryHealthEstimator.estimate(
@@ -112,6 +120,13 @@ final class VehicleStateStore {
             let voltage = state.chargingVoltageVolts.map(Double.init)
             let current = state.chargingCurrentAmps.map(Double.init)
 
+            guard preferences.storeChargingHistory else {
+                if let active = database.activeChargingSession(for: state.vin) {
+                    database.discardChargingSession(id: active.id)
+                }
+                return
+            }
+
             if state.chargingState.isActivelyCharging {
                 let session = database.activeChargingSession(for: state.vin)
                 let sessionId: String
@@ -123,25 +138,34 @@ final class VehicleStateStore {
                         guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else { return nil }
                         return String(format: "%.4f°, %.4f°", lat, lon)
                     }()
-                    sessionId = database.startChargingSession(vin: state.vin, startSoc: batteryPct, location: locName)
+                    sessionId = database.startChargingSession(
+                        vin: state.vin, startSoc: batteryPct, location: locName,
+                        startedAt: state.fetchedAt
+                    )
                 }
                 database.recordChargingSample(
                     sessionId: sessionId, vin: state.vin, soc: batteryPct,
                     powerKw: powerKw, voltage: voltage, current: current,
-                    chargingType: state.chargingType.rawValue
+                    chargingType: state.chargingType.rawValue, timestamp: state.fetchedAt
                 )
             } else if let active = database.activeChargingSession(for: state.vin) {
                 let samples = database.chargingSamples(for: active.id)
-                let peak = samples.compactMap(\.powerKw).max() ?? (powerKw ?? 0.0)
-                let avg = samples.isEmpty ? peak : (samples.compactMap(\.powerKw).reduce(0, +) / Double(samples.count))
-                let socDelta = max(0, batteryPct - active.startSoc)
-                let capacity = preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
-                    ?? state.configuredUsableBatteryCapacityKwh
+                let powers = samples.compactMap(\.powerKw)
+                let peak = powers.max() ?? (powerKw ?? 0.0)
+                let avg = powers.isEmpty ? peak : (powers.reduce(0, +) / Double(powers.count))
+                // A charging-stop snapshot can lag behind the last charging sample. Never
+                // erase a real gain by finalizing with that stale value.
+                let endSoc = max(batteryPct, samples.last?.soc ?? active.startSoc)
+                let socDelta = max(0, endSoc - active.startSoc)
                 let energy = (socDelta / 100.0) * capacity
-                database.completeChargingSession(
-                    id: active.id, endSoc: batteryPct, energyDeliveredKwh: energy,
-                    peakPowerKw: peak, averagePowerKw: avg
-                )
+                if socDelta > 0, energy > 0 {
+                    database.completeChargingSession(
+                        id: active.id, endSoc: endSoc, energyDeliveredKwh: energy,
+                        peakPowerKw: peak, averagePowerKw: avg, endedAt: state.fetchedAt
+                    )
+                } else {
+                    database.discardChargingSession(id: active.id)
+                }
             }
         }
 

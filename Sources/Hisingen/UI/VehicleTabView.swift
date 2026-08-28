@@ -75,13 +75,17 @@ struct VehicleTabView: View {
         }
         .animation(cardChangeAnimation, value: warningsSignature)
         .animation(cardChangeAnimation, value: pillSignature)
-        .task(id: state.vin) {
+        .task(id: state.fetchedAt) {
             // Prefetch persistent charging history off-main; the charging card renders from
             // this instead of querying SQLite synchronously per render pass.
             let db = database
             let vin = state.vin
+            let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
+                ?? state.configuredUsableBatteryCapacityKwh
             let sessions = await Task.detached(priority: .userInitiated) {
-                db.recentChargingSessions(for: vin).map { $0.toDomainSession(database: db) }
+                db.recentChargingSessions(for: vin)
+                    .map { $0.toDomainSession(database: db, usableCapacityKwh: capacity) }
+                    .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
             }.value
             guard !Task.isCancelled else { return }
             persistentChargingSessions = sessions
@@ -780,7 +784,7 @@ struct VehicleTabView: View {
             }
             return []
         }()
-        let allChargingSessions = !state.chargingSessions.isEmpty ? state.chargingSessions : persistentChargingSessions
+        let allChargingSessions = persistentChargingSessions
 
         guard state.powertrain.hasElectricRange, (headline != nil || !details.isEmpty || !activeSamples.isEmpty
             || !allChargingSessions.isEmpty) else { return nil }

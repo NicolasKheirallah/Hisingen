@@ -434,7 +434,10 @@ struct SQLiteDatabaseTests {
         #expect(samples.first?.powerKw == 145.0)
 
         let domainSession = active?.toDomainSession(database: vdb)
-        #expect(domainSession?.samples.count == 2)
+        // Domain conversion restores the durable 15% session boundary that predates the
+        // first retained 20% sample, keeping the summary and curve on the same SoC range.
+        #expect(domainSession?.samples.count == 3)
+        #expect(domainSession?.samples.first?.batteryPercentage == 15.0)
         #expect(domainSession?.startBatteryPercentage == 15.0)
 
         vdb.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 52.0, peakPowerKw: 145.0, averagePowerKw: 95.0)

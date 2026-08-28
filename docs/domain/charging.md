@@ -14,7 +14,7 @@
 | Estimated completion time | `Format.completionTime` | **Calculated** — `vehicleReportedAt (or fetchedAt) + estimatedChargingTimeToFullMinutes`, suppressed if the state is stale |
 | Estimated completion cost | UI layer, from `Preferences.electricityPricePerKwh` | **Calculated**, user-configured rate — not a real cost from any API |
 | Current Range vs Model WLTP | `VehicleState.currentRangeVsModelWltpPercent(specification:)` | **Calculated** from live range/SOC and a static model-family (or VIN-specific override) reference; explicitly not battery SOH — see [domain/vehicle.md](vehicle.md) |
-| `ChargingSession` history entries | `ChargingSession.completed(previous:current:pricePerKwh:)`, appended by `RefreshCoordinator.apply` | **Calculated** from consecutive polls, not a real session log from either backend |
+| `ChargingSession` history entries | `VehicleStateStore` + SQLite `charging_sessions`/`charging_samples` | **Calculated** from consecutive polls, not a real session log from either backend |
 
 There is no vehicle-reported "State of Health" or measured usable-capacity figure available from either provider's APIs, and Hisingen doesn't fabricate one — `VehicleState.batteryDegradationPercent` stays `nil` for exactly this reason and always will, until a validated measured field appears. Volvo's `batteryCapacityKWH` is treated as a vehicle specification, not a health measurement, though `BatteryHealthEstimator` does prefer it over the generic model-family table as a more accurate *reference* capacity when no user override exists.
 
@@ -58,7 +58,20 @@ Independent of the charging transitions above: if battery% drops to or below `Pr
 
 ## Charging session history
 
-`ChargingSession.completed(previous:current:pricePerKwh:)` builds a session record whenever a charging→not-charging transition is observed with a real SOC gain, using the model's nominal usable-capacity constant to estimate kWh delivered (`percentageAdded / 100 × nominalUsableCapacityKwh`) — this is only meaningful for Polestar models with verified nominal specs. Sessions are capped at 20 per vehicle (`RefreshCoordinator.apply` trims the oldest), and only recorded at all if `Preferences.storeChargingHistory` is enabled (default off).
+`VehicleStateStore` opens a durable SQLite session while active charging is observed and
+finalizes it on the first subsequent non-charging state. The final SoC is the greater of the
+stop snapshot and the last charging sample, because provider stop snapshots can lag behind the
+latest charging telemetry. Estimated energy is `percentageAdded / 100 × usableCapacityKwh`,
+preferring the user's VIN-specific usable-capacity override and otherwise using the model's
+nominal reference. Cost remains a local estimate based on the configured electricity tariff.
+
+Only completed sessions with a measurable SoC/energy gain are shown as history. An active row
+stays internal to the recorder instead of appearing as a growing-duration `0 kWh` charge.
+Persisted header boundaries and chart samples are reconciled when read, so the list, duration,
+SoC curve, energy, and cost all describe the same start/end points. This also repairs older
+zero-energy records when their retained samples prove a real gain. History is recorded only if
+`Preferences.storeChargingHistory` is enabled (default off); SQLite is the single history source
+used by the UI.
 
 ## Charging sample buffer (for the sparkline)
 

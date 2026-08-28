@@ -16,8 +16,14 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     let locationName: String?
     let createdAt: Date
 
-    func toDomainSession(database: VehicleDatabase) -> ChargingSession {
-        let samples = database.chargingSamples(for: id).map {
+    /// Converts the durable summary and its samples into one internally consistent session.
+    ///
+    /// Older builds could finalize a header with a stale end SoC, or retain a header boundary
+    /// that was absent from the bounded chart sample list. Treat the header start and the
+    /// greatest observed final SoC as authoritative, synthesize missing boundary samples, and
+    /// recover a zero energy estimate when a usable-capacity reference is available.
+    func toDomainSession(database: VehicleDatabase, usableCapacityKwh: Double? = nil) -> ChargingSession {
+        let samples = reconciledSamples(database: database).map {
             ChargingSample(
                 timestamp: $0.timestamp,
                 batteryPercentage: $0.soc,
@@ -25,13 +31,75 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
                 chargingType: $0.chargingType.flatMap(ChargingType.init(rawValue:)) ?? .unknown
             )
         }
+
+        let observedEndSoc = samples.last?.batteryPercentage ?? startSoc
+        let resolvedEndSoc = max(startSoc, max(endSoc ?? startSoc, observedEndSoc))
+        let resolvedEndDate = max(endedAt ?? startedAt, samples.last?.timestamp ?? startedAt)
+        let percentageAdded = max(0, resolvedEndSoc - startSoc)
+        let resolvedEnergy: Double = {
+            if energyDeliveredKwh > 0 { return energyDeliveredKwh }
+            guard let usableCapacityKwh, usableCapacityKwh > 0, percentageAdded > 0 else { return 0 }
+            return percentageAdded / 100 * usableCapacityKwh
+        }()
         return ChargingSession(
             id: UUID(uuidString: id) ?? UUID(), vin: vin,
-            startDate: startedAt, endDate: endedAt ?? Date(),
-            startBatteryPercentage: startSoc, endBatteryPercentage: endSoc ?? startSoc,
-            kwhDelivered: energyDeliveredKwh,
+            startDate: startedAt, endDate: resolvedEndDate,
+            startBatteryPercentage: startSoc, endBatteryPercentage: resolvedEndSoc,
+            kwhDelivered: resolvedEnergy,
             peakPowerWatts: peakPowerKw > 0 ? Int(peakPowerKw * 1000.0) : nil,
             cost: nil, targetPercentage: nil, samples: samples
+        )
+    }
+
+    /// Historical-dashboard representation of the same repaired curve used by the vehicle
+    /// card, while retaining voltage/current fields that the domain chart does not carry.
+    func reconciledSamples(database: VehicleDatabase) -> [HistoricalChargingSample] {
+        var samples = database.chargingSamples(for: id).sorted { $0.timestamp < $1.timestamp }
+        let startSample = HistoricalChargingSample(
+            id: .min, sessionId: id, vin: vin, timestamp: startedAt, soc: startSoc,
+            powerKw: nil, voltageVolts: nil, currentAmps: nil, chargingType: nil
+        )
+        if let first = samples.first {
+            if abs(first.timestamp.timeIntervalSince(startedAt)) > 1
+                || abs(first.soc - startSoc) > 0.01 {
+                samples.insert(startSample, at: 0)
+            }
+        } else {
+            samples = [startSample]
+        }
+
+        guard let endedAt, let last = samples.last else { return samples }
+        let resolvedEndDate = max(endedAt, last.timestamp)
+        let resolvedEndSoc = max(startSoc, max(endSoc ?? startSoc, last.soc))
+        if abs(last.timestamp.timeIntervalSince(resolvedEndDate)) > 1
+            || abs(last.soc - resolvedEndSoc) > 0.01 {
+            samples.append(HistoricalChargingSample(
+                id: .max, sessionId: id, vin: vin, timestamp: resolvedEndDate,
+                soc: resolvedEndSoc, powerKw: nil, voltageVolts: nil,
+                currentAmps: nil, chargingType: nil
+            ))
+        }
+        return samples
+    }
+
+    /// Repairs zero-value legacy summaries in memory for aggregate dashboard statistics.
+    /// Normal rows return without querying their sample table.
+    func reconciled(database: VehicleDatabase, usableCapacityKwh: Double) -> HistoricalChargingSession {
+        guard endedAt != nil,
+              energyDeliveredKwh <= 0 || (endSoc ?? startSoc) <= startSoc else { return self }
+        let samples = reconciledSamples(database: database)
+        let resolvedEndSoc = max(startSoc, max(endSoc ?? startSoc, samples.last?.soc ?? startSoc))
+        let percentageAdded = max(0, resolvedEndSoc - startSoc)
+        guard percentageAdded > 0, usableCapacityKwh > 0 else { return self }
+        let powers = samples.compactMap(\.powerKw)
+        return HistoricalChargingSession(
+            id: id, vin: vin, startedAt: startedAt,
+            endedAt: max(endedAt ?? startedAt, samples.last?.timestamp ?? startedAt),
+            startSoc: startSoc, endSoc: resolvedEndSoc,
+            energyDeliveredKwh: percentageAdded / 100 * usableCapacityKwh,
+            peakPowerKw: max(peakPowerKw, powers.max() ?? 0),
+            averagePowerKw: powers.isEmpty ? averagePowerKw : powers.reduce(0, +) / Double(powers.count),
+            locationName: locationName, createdAt: createdAt
         )
     }
 }

@@ -136,13 +136,17 @@ struct HistoryDashboardView: View {
             let db = database
             let hasCombustion = state.powertrain.hasCombustionEngine
             let currentCutoff = cutoff
+            let chargingCapacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
+                ?? state.configuredUsableBatteryCapacityKwh
             let loaded = await Task.detached(priority: .userInitiated) { () -> HistoryDataSnapshot in
                 var snap = HistoryDataSnapshot()
                 let rawTrips = db.derivedTrips(for: vin, limit: 1_000)
                 snap.trips = rawTrips.filter { trip in currentCutoff.map { trip.endedAt >= $0 } ?? true }
 
                 let rawSessions = db.recentChargingSessions(for: vin, limit: 1_000)
-                snap.chargingSessions = rawSessions.filter { session in currentCutoff.map { session.startedAt >= $0 } ?? true }
+                snap.chargingSessions = rawSessions
+                    .map { $0.reconciled(database: db, usableCapacityKwh: chargingCapacity) }
+                    .filter { session in currentCutoff.map { session.startedAt >= $0 } ?? true }
 
                 let rawCommands = db.recentCommandAudits(for: vin, limit: 250)
                 snap.commands = rawCommands.filter { cmd in currentCutoff.map { cmd.executedAt >= $0 } ?? true }
@@ -195,13 +199,13 @@ struct HistoryDashboardView: View {
             snapshot = loaded
         }
         .task(id: selectedSession?.id) {
-            guard let sessionID = selectedSession?.id else {
+            guard let session = selectedSession else {
                 selectedSessionSamples = []
                 return
             }
             let db = database
             let samples = await Task.detached(priority: .userInitiated) {
-                db.chargingSamples(for: sessionID)
+                session.reconciledSamples(database: db)
             }.value
             guard !Task.isCancelled else { return }
             selectedSessionSamples = samples

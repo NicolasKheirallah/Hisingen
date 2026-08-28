@@ -415,7 +415,9 @@ This controls database growth but should not be treated as a privacy guarantee t
 
 ## Charging History
 
-`VehicleStateStore` maintains structured charging history separately from the reduced cached snapshot.
+`VehicleStateStore` maintains structured charging history in SQLite separately from the reduced
+cached snapshot. SQLite is authoritative; legacy `chargingSessions` arrays carried in cached
+snapshots are cleared during refresh and are not used to render history.
 
 When charging begins:
 
@@ -426,7 +428,17 @@ If location is available when the session starts, an approximate coordinate stri
 
 Charging samples then record battery and electrical measurements.
 
-When charging stops, the active session is finalized with calculated values.
+When charging stops, the active session is finalized only if its observed SoC increased. The
+last charging sample is allowed to supersede a stale stop-snapshot SoC. Observations with no
+measurable gain are discarded, and unfinished rows are excluded from completed history.
+
+At read time, missing start/end boundary samples are reconstructed from the durable session
+header. If an older record contains zero energy but its samples prove an SoC gain, the estimate
+is recovered from the current usable-capacity reference. While history recording is enabled,
+`VehicleStateStore` also writes that recovered end SoC, energy, and power summary back to the
+completed row on the next vehicle refresh. This makes cards, dashboards, aggregate statistics,
+and later CSV exports agree; the repair is idempotent and never guesses when samples show no
+gain.
 
 Charging-session summaries and samples therefore have different retention rules.
 

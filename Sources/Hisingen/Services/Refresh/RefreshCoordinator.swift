@@ -620,18 +620,9 @@ final class RefreshCoordinator {
         // "waiting for the vehicle" marker must not survive into it (and is deliberately not
         // carried across by `mergingLastKnown`).
         state.pendingCommand = nil
-        if preferences.storeChargingHistory,
-           let session = ChargingSession.completed(
-               previous: previous,
-               current: state,
-               pricePerKwh: preferences.electricityPricePerKwh,
-               usableCapacityKwh: preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
-           ) {
-            state.chargingSessions.append(session)
-            if state.chargingSessions.count > 20 {
-                state.chargingSessions.removeFirst(state.chargingSessions.count - 20)
-            }
-        }
+        // SQLite is the single source of truth for completed charging history. Clear legacy
+        // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
+        state.chargingSessions = []
         latest = state
         lastError = nil
         lastLatency = latency

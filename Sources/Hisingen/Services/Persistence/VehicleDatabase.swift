@@ -382,8 +382,8 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     @discardableResult
-    func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double, location: String? = nil) -> String {
-        let now = Date()
+    func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double,
+                              location: String? = nil, startedAt: Date = Date()) -> String {
         let sql = """
         INSERT INTO charging_sessions (id, vin, started_at, start_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at)
         VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?);
@@ -391,10 +391,10 @@ final class VehicleDatabase: @unchecked Sendable {
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(id, at: 1)
             try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(now, at: 3)
+            try stmt.bindDate(startedAt, at: 3)
             try stmt.bindDouble(startSoc, at: 4)
             try stmt.bindText(location, at: 5)
-            try stmt.bindDate(now, at: 6)
+            try stmt.bindDate(startedAt, at: 6)
             try stmt.executeUpdate()
         } process: { _ in }
         return id
@@ -402,7 +402,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func recordChargingSample(sessionId: String, vin: String, soc: Double,
                               powerKw: Double?, voltage: Double?, current: Double?,
-                              chargingType: String? = nil) {
+                              chargingType: String? = nil, timestamp: Date = Date()) {
         let sql = """
         INSERT INTO charging_samples (session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?);
@@ -410,7 +410,7 @@ final class VehicleDatabase: @unchecked Sendable {
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(sessionId, at: 1)
             try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(Date(), at: 3)
+            try stmt.bindDate(timestamp, at: 3)
             try stmt.bindDouble(soc, at: 4)
             try stmt.bindDouble(powerKw, at: 5)
             try stmt.bindDouble(voltage, at: 6)
@@ -421,7 +421,8 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     func completeChargingSession(id: String, endSoc: Double, energyDeliveredKwh: Double,
-                                 peakPowerKw: Double, averagePowerKw: Double) {
+                                 peakPowerKw: Double, averagePowerKw: Double,
+                                 endedAt: Date = Date()) {
         let sql = """
         UPDATE charging_sessions SET
             ended_at = ?,
@@ -432,7 +433,7 @@ final class VehicleDatabase: @unchecked Sendable {
         WHERE id = ?;
         """
         try? db.query(sql: sql) { stmt in
-            try stmt.bindDate(Date(), at: 1)
+            try stmt.bindDate(endedAt, at: 1)
             try stmt.bindDouble(endSoc, at: 2)
             try stmt.bindDouble(energyDeliveredKwh, at: 3)
             try stmt.bindDouble(peakPowerKw, at: 4)
@@ -440,6 +441,21 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindText(id, at: 6)
             try stmt.executeUpdate()
         } process: { _ in }
+    }
+
+    /// Removes an unfinished observation that never produced a measurable SoC gain. Keeping
+    /// these rows made an interrupted poll look like a completed 0 kWh / 0 cost charge.
+    func discardChargingSession(id: String) {
+        try? db.withTransaction {
+            try db.query(sql: "DELETE FROM charging_samples WHERE session_id = ?;") { stmt in
+                try stmt.bindText(id, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+            try db.query(sql: "DELETE FROM charging_sessions WHERE id = ? AND ended_at IS NULL;") { stmt in
+                try stmt.bindText(id, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     func activeChargingSession(for vin: String) -> HistoricalChargingSession? {
@@ -486,7 +502,16 @@ final class VehicleDatabase: @unchecked Sendable {
     func recentChargingSessions(for vin: String, limit: Int = 20) -> [HistoricalChargingSession] {
         let sql = """
         SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
-        FROM charging_sessions WHERE vin = ? ORDER BY started_at DESC LIMIT ?;
+        FROM charging_sessions
+        WHERE vin = ? AND ended_at IS NOT NULL
+          AND (
+            end_soc > start_soc OR energy_delivered_kwh > 0 OR EXISTS (
+              SELECT 1 FROM charging_samples
+              WHERE charging_samples.session_id = charging_sessions.id
+                AND charging_samples.soc > charging_sessions.start_soc
+            )
+          )
+        ORDER BY started_at DESC LIMIT ?;
         """
         return (try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -504,6 +529,35 @@ final class VehicleDatabase: @unchecked Sendable {
             }
             return list
         }) ?? []
+    }
+
+    /// Repairs completed rows written by older builds with a stale/zero final summary. The
+    /// operation is idempotent and only touches rows whose retained samples prove a real gain.
+    func repairLegacyChargingSessions(for vin: String, usableCapacityKwh: Double) {
+        guard usableCapacityKwh > 0 else { return }
+        let candidates = recentChargingSessions(for: vin, limit: 1_000).filter {
+            $0.energyDeliveredKwh <= 0 || ($0.endSoc ?? $0.startSoc) <= $0.startSoc
+        }
+        for candidate in candidates {
+            let repaired = candidate.reconciled(
+                database: self, usableCapacityKwh: usableCapacityKwh
+            )
+            guard repaired.energyDeliveredKwh > 0,
+                  let endSoc = repaired.endSoc, endSoc > repaired.startSoc else { continue }
+            try? db.query(sql: """
+                UPDATE charging_sessions SET
+                    end_soc = ?, energy_delivered_kwh = ?,
+                    peak_power_kw = ?, average_power_kw = ?
+                WHERE id = ? AND ended_at IS NOT NULL;
+                """) { stmt in
+                try stmt.bindDouble(endSoc, at: 1)
+                try stmt.bindDouble(repaired.energyDeliveredKwh, at: 2)
+                try stmt.bindDouble(repaired.peakPowerKw, at: 3)
+                try stmt.bindDouble(repaired.averagePowerKw, at: 4)
+                try stmt.bindText(repaired.id, at: 5)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     // MARK: - Battery Health History

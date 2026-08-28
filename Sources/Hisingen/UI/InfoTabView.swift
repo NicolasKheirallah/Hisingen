@@ -867,8 +867,11 @@ struct InfoTabView: View {
     }
 
     private var batteryHealthCard: some View {
+        let capacity = preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
+            ?? state.configuredUsableBatteryCapacityKwh
         let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
-            .map { $0.toDomainSession(database: database) }
+            .map { $0.toDomainSession(database: database, usableCapacityKwh: capacity) }
+            .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
         // Reads the same last-stored estimate `VehicleStateStore.save` smoothed toward, so this
         // card's number matches whatever gets persisted rather than showing an independently
         // unsmoothed figure.

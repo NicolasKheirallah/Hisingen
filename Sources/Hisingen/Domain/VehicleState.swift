@@ -1092,7 +1092,9 @@ struct VehicleState: Codable, Equatable, Sendable {
             unavailableFeatures: [],
             probedCapabilities: probedCapabilities,
             chargingSamples: chargingSamples,
-            chargingSessions: chargingSessions,
+            // Completed charge history is authoritative in SQLite. Keeping a second copy in
+            // the snapshot was the source of summary/chart drift after relaunch.
+            chargingSessions: [],
             powertrain: powertrain,
             fuelLevelPercent: fuelLevelPercent,
             fuelRangeKm: fuelRangeKm,
@@ -1239,7 +1241,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             unavailableFeatures: unavailableFeatures,
             probedCapabilities: mergedProbes,
-            chargingSessions: previous.chargingSessions,
+            chargingSessions: [],
             powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
             fuelLevelPercent: fuelLevelPercent ?? previous.fuelLevelPercent,
             fuelRangeKm: fuelRangeKm ?? previous.fuelRangeKm,

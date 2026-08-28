@@ -48,6 +48,6 @@ verify that deleting a draft cannot delete or replace its committed value.
 
 ## What's deliberately *not* in the Keychain
 
-- Vehicle telemetry, capability observations, charging history — all in `UserDefaults` via `VehicleStateStore`, never Keychain (they aren't secrets).
+- Vehicle telemetry, capability observations, and charging history — stored in the local SQLite database via `VehicleStateStore`, never Keychain (they aren't credentials).
 - The Volvo Client ID — a public OAuth client identifier, stored in `Preferences`/`UserDefaults`.
 - Anything shared between the two brands — there is no cross-brand Keychain item; see [architecture/providers.md](../architecture/providers.md).

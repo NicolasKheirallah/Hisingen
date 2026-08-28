@@ -89,7 +89,7 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, NSWindow
 
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         if let target = navigationAction.request.url, isRedirectCallback(target) {
             decisionHandler(.cancel)
             finish(with: .success(target))
