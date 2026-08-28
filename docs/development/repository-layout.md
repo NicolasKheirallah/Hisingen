@@ -23,7 +23,7 @@
 ├── docs/                 This documentation set (+ oauth-callback.html, the Volvo redirect bridge)
 ├── Scripts/              doctor.sh, test.sh, check-localization.py (translation coverage/duplicate-key check)
 ├── .github/
-│   ├── workflows/         ci.yml, security.yml, live-integration.yml, release.yml — see operations/ci.md
+│   ├── workflows/         CI, security, dependency review, live integration, release, and Pages workflows
 │   ├── dependabot.yml      Weekly updates for pinned GitHub Actions SHAs and (future) SwiftPM dependencies
 │   ├── ISSUE_TEMPLATE/     bug_report.md, feature_request.md, vehicle_compatibility.md, config.yml
 │   └── pull_request_template.md

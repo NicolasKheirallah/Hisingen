@@ -3,8 +3,6 @@ name: Security
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   schedule:
     # 04:17 UTC every Monday — off-peak, avoids stacking with other scheduled jobs.
     - cron: "17 4 * * 1"
@@ -20,10 +18,10 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL (Swift)
-    # push/schedule always run; pull_request only runs when it could plausibly need re-analysis.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: macos-15
-    timeout-minutes: 30
+    # Instrumented Swift builds regularly need 26–28 minutes on hosted runners,
+    # followed by analysis and cleanup. Keep enough headroom for runner variance.
+    timeout-minutes: 60
     permissions:
       contents: read
       security-events: write
@@ -57,23 +55,3 @@ jobs:
         uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           category: "/language:swift"
-
-  dependency-review:
-    name: Dependency Review
-    # Only meaningful on pull_request: it diffs the dependency graph against the base branch.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Dependency Review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4.7.1
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: never

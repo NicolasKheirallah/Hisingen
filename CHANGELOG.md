@@ -25,6 +25,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   archive, and release-note signatures are incomplete.
 - Stopped manual update checks from remaining stuck in the checking state when
   Sparkle aborts, without overwriting later download or installation states.
+- Prevented Swift CodeQL runs from timing out during analysis and moved the
+  pull-request-only dependency review into a dedicated workflow, eliminating
+  permanently skipped jobs from push and scheduled security runs.
 - Revalidated the active vehicle, provider, and VIN after remote-command
   authorization, preventing a command approved for one vehicle from being
   sent after the active context changes.

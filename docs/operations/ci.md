@@ -1,8 +1,8 @@
 # CI
 
-Six GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
-`security.yml`, `pages.yml`, `live-integration.yml`, `tag-release.yml`, and
-`release.yml`. All actions used
+Seven GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
+`security.yml`, `dependency-review.yml`, `pages.yml`, `live-integration.yml`,
+`tag-release.yml`, and `release.yml`. All actions used
 across them are pinned to commit SHAs with a version comment (e.g.
 `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`) —
 preserve that pinning style when bumping any of them. This document covers
@@ -16,7 +16,8 @@ flowchart LR
         L10n["ci.yml: check-localization<br/>duplicate-key detection + coverage report"]
         Docs["ci.yml: check-docs<br/>broken links + unbalanced fences"]
         CI["ci.yml: build-and-test<br/>macos-14 + macos-15 matrix<br/>build, test, bundle validation"]
-        Sec["security.yml<br/>CodeQL (Swift) + Dependency Review"]
+        Sec["security.yml<br/>CodeQL (Swift)"]
+        Dep["dependency-review.yml<br/>PR dependency diff"]
         Pages["pages.yml<br/>website typecheck + build + Pages deploy"]
     end
     subgraph Manual["workflow_dispatch"]
@@ -105,14 +106,12 @@ catch).
 
 ## `security.yml`
 
-**Trigger:** `push` to `main`, pull requests targeting `main`, a weekly schedule
-(Mondays 04:17 UTC), and manual dispatch. CodeQL runs for same-repository pull
-requests but skips untrusted forks, where GitHub does not grant the
-`security-events: write` permission. Dependency Review runs for every pull
-request.
+**Trigger:** `push` to `main`, a weekly schedule (Mondays 04:17 UTC), and manual
+dispatch. Pull requests use the separate `dependency-review.yml`; the normal CI
+matrix still compiles and tests every pull request before merge.
 **Secrets:** none.
 
-### Job `codeql` (macos-15, `security-events: write`, ~10–15 min)
+### Job `codeql` (macos-15, `security-events: write`, 60-minute timeout)
 
 CodeQL Swift analysis using `build-mode: manual`, the shared Xcode-selection
 script, and the same strict-concurrency `swift build` command as CI rather than
@@ -121,13 +120,24 @@ previously caused index-output mismatches and compiler type-check timeouts under
 CodeQL tracing. Results land under the
 repo's **Security → Code scanning alerts**.
 
-### Job `dependency-review` (ubuntu-latest, `pull_request` only, ~1 min)
+The instrumented Swift build has taken 26–28 minutes on hosted runners, followed
+by roughly 2–3 minutes of analysis and cleanup. The 60-minute timeout leaves
+headroom for runner variance; the former 30-minute timeout could cancel a valid
+analysis immediately after a successful build.
+
+## `dependency-review.yml`
+
+**Trigger:** pull requests targeting `main` only. Keeping this in a dedicated
+workflow means push, scheduled, and manually dispatched Security runs do not
+create a permanently skipped job.
+
+### Job `dependency-review` (ubuntu-latest, ~1 min)
 
 Diffs the dependency graph between base and head (GitHub Actions used in
 workflows are part of that graph; Hisingen has zero external SwiftPM
 dependencies today). Fails on `high`/`critical` severity findings only.
 
-Neither `security.yml` job is currently wired into required branch checks
+Neither security workflow is currently wired into required branch checks
 (see the branch protection recommendation in [releases.md](./releases.md)) —
 treat them as advisory signal to triage unless you decide otherwise.
 

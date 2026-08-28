@@ -30,7 +30,7 @@ Hisingen needs by hand — `Services/API/PolestarGRPC.swift`,
 ## Consequences
 
 No SwiftPM dependency resolution and no supply-chain surface from a
-third-party protobuf library — `security.yml`'s dependency-review job has
+third-party protobuf library — `dependency-review.yml` has
 nothing from this to flag today. Full control over exactly which message
 fields are parsed. The tradeoff: any change to Polestar's wire format
 requires manually updating the hand-rolled parser rather than regenerating
