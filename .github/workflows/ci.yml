@@ -105,7 +105,7 @@ jobs:
       - name: Validate repository and release inputs
         run: sh Scripts/validate-release.sh
       - name: Build ad-hoc app bundle
-        run: make app IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+        run: make app OUTPUT_DIR=. IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
       - name: Validate app bundle
         run: |
           set -euo pipefail
@@ -117,7 +117,7 @@ jobs:
         if: matrix.os == 'macos-15'
         run: |
           set -euo pipefail
-          make dmg IDENTITY="-"
+          make dmg OUTPUT_DIR=. IDENTITY="-"
           test -s Hisingen.dmg
           hdiutil verify Hisingen.dmg
           shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256

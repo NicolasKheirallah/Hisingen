@@ -90,8 +90,8 @@ make app-universal
 make dmg
 
 # Generate SHA256
-shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
-echo "🔒 SHA256 Checksum: $(cat Hisingen.dmg.sha256)"
+shasum -a 256 releases/Hisingen.dmg > releases/Hisingen.dmg.sha256
+echo "🔒 SHA256 Checksum: $(cat releases/Hisingen.dmg.sha256)"
 sh Scripts/validate-release.sh
 
 # 5. Commit and Tag
@@ -104,8 +104,8 @@ echo "=========================================="
 echo "✅ Release v${NEW_VERSION} packaged successfully!"
 echo "=========================================="
 echo "📁 Artifacts generated:"
-echo "   - Hisingen.app (Universal: arm64 + x86_64)"
-echo "   - Hisingen.dmg"
-echo "   - Hisingen.dmg.sha256"
+echo "   - releases/Hisingen.app (Universal: arm64 + x86_64)"
+echo "   - releases/Hisingen.dmg"
+echo "   - releases/Hisingen.dmg.sha256"
 echo ""
 echo "🚀 GitHub Actions release workflow triggered for v${NEW_VERSION}."

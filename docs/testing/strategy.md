@@ -33,7 +33,7 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 | Notifications | ✓ (`ChargingTransitionDetectorTests`, `RegressionFixTests` rain/evening-unlocked) | | | |
 | Keychain isolation | ✓ (`KeychainDraftTests`, `VolvoKeychainIsolationTests`) | | | |
 | Refresh coordination (coalescing, backoff) | ✓ (`RefreshCoordinatorTests`) | | | |
-| Remote command construction | ✓ (`RemoteCommandTests`, `RequestConstructionTests`) | | | ✓, but **not run by CI** — `LivePolestarRemoteCommandIntegrationTests` exists and would dispatch a real climate command, but CI's `live-integration.yml` only filters the read-only struct |
+| Remote command construction and coordination | ✓ (`RemoteCommandTests`, `RequestConstructionTests`) | | | — (live command execution is intentionally excluded) |
 | GraphQL decoding, error handling | ✓ | ✓ (`GraphQLDecodingTests`) | | |
 | Volvo REST decoding | | ✓ (`VolvoDecodingTests`, 26 tests) | | ✓ (read path only) |
 | Input boundary validation | ✓ (`InputBoundaryTests`) | | | |
@@ -52,7 +52,7 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 
 Two files, both real network calls, both gated to be read-only by design and by CI configuration:
 
-- **`LivePolestarIntegrationTests.swift`** — `LivePolestarReadOnlyIntegrationTests` (authenticate, discover, fetch, sign out — no mutation) is what CI runs. A second struct, `LivePolestarRemoteCommandIntegrationTests`, actually dispatches a real `startClimate` command against a live vehicle and exists in the file, but CI's workflow filters it out explicitly (`--filter LivePolestarReadOnlyIntegrationTests`) — it would only run if someone deliberately invoked `swift test --filter LivePolestarRemoteCommandIntegrationTests` locally with real credentials, knowingly accepting that it may actuate their vehicle's climate system.
+- **`LivePolestarIntegrationTests.swift`** — `LivePolestarReadOnlyIntegrationTests` is the complete Polestar live suite: authenticate, discover, fetch, restore a session, and sign out. It contains no remote commands, API probing, schema introspection, or sensitive diagnostic output.
 - **`LiveVolvoIntegrationTests.swift`** — `LiveVolvoReadOnlyIntegrationTests`, purely read-only (resumes a session from a pre-obtained refresh token, discovers vehicles, fetches state, verifies Keychain persistence round-trips).
 
 **Required environment variables:**

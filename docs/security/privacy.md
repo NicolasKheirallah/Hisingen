@@ -28,7 +28,7 @@ External communication is limited to the vehicle provider and explicitly used th
 | Volvo Cars services | OAuth material, bearer tokens, VCC API configuration where applicable, VIN, requested vehicle data and commands | Volvo integration | Required for Volvo use |
 | Apple `CLGeocoder` | Latitude and longitude | Reverse-geocode vehicle location | Only when address resolution is used |
 | Open-Meteo | Latitude and longitude | Weather at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
-| GitHub Releases | Application/version-related HTTP request metadata | Update checking | Only when update checking is enabled |
+| Hisingen update feed / GitHub Releases | Application/version-related HTTP request metadata | Signed update checking and download | Only when update checking is enabled |
 | GitHub Pages OAuth callback | Volvo OAuth authorization response and state as part of browser redirect | Return Volvo OAuth result to the desktop app | Required for the normal Volvo OAuth flow |
 | Hisingen-operated server | Nothing | No Hisingen backend exists | N/A |
 

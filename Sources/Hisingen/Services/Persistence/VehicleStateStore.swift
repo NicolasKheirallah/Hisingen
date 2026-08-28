@@ -28,13 +28,24 @@ final class VehicleStateStore {
         if let sqliteSnapshot = database.loadSnapshot(for: vin) {
             return sqliteSnapshot
         }
-        guard var snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
+        guard let snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
         guard Date().timeIntervalSince(snapshot.fetchedAt) <= 7 * 24 * 60 * 60 else {
             clear(vin: vin)
             return nil
         }
-        snapshot.isCachedSnapshot = true
-        return snapshot
+        // Legacy installations stored complete snapshots in UserDefaults. Migrate the entry
+        // once into SQLite, which is now authoritative, but never carry forward sensitive
+        // live fields (location, owner name, registration) from that older representation.
+        // This is both a schema migration and a privacy boundary for caches written by older
+        // versions of the app.
+        let sanitized = snapshot.cacheableCopy
+        database.saveSnapshot(sanitized)
+        var legacySnapshots = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
+        legacySnapshots.removeValue(forKey: vin)
+        store(legacySnapshots, key: snapshotsKey)
+        var migrated = sanitized
+        migrated.isCachedSnapshot = true
+        return migrated
     }
 
     func save(_ state: VehicleState) {

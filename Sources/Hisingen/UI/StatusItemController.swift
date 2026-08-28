@@ -475,6 +475,12 @@ final class StatusItemController: NSObject {
         densityItem.submenu = densityMenu
 
         menu.addItem(.separator())
+        let updateItem = menu.addItem(
+            withTitle: updateVersion.map { L10n.format("Update Available: Hisingen %@", $0) }
+                ?? L10n.text("Check for Updates…"),
+            action: #selector(contextCheckForUpdates), keyEquivalent: ""
+        )
+        updateItem.target = self
         let settingsItem = menu.addItem(
             withTitle: L10n.text("Preferences…"),
             action: #selector(contextSettings),
@@ -542,6 +548,10 @@ final class StatusItemController: NSObject {
 
     @objc private func contextRefresh() {
         onRefresh()
+    }
+
+    @objc private func contextCheckForUpdates() {
+        if updateVersion != nil { onOpenUpdate() } else { onCheckForUpdates() }
     }
 
     @objc private func contextQuit() {

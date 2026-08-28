@@ -20,7 +20,7 @@ Sources/Hisingen/
 │   ├── Security/      RemoteActionAuthorizer, VolvoSignInPresenter
 │   ├── Location/      ReverseGeocoder (cached CLGeocoder)
 │   ├── Integration/   SpotlightIndexer — local Spotlight publication of vehicle state
-│   └── Updates/       UpdateChecker
+│   └── Updates/       UpdateService (Sparkle)
 ├── Support/      Format, L10n, PKCE — small stateless helpers
 └── UI/           StatusItemController (AppKit shell) + SwiftUI views
 ```
@@ -80,6 +80,7 @@ api/overview.md
 ```
 architecture/overview.md
 → security/overview.md
+→ updater-architecture.md
 → operations/ci.md
 → operations/releases.md
 → adr/README.md
@@ -94,5 +95,6 @@ architecture/overview.md
 - **development/** — [getting-started](development/getting-started.md), [repository-layout](development/repository-layout.md), [development-workflow](development/development-workflow.md), [adding-a-feature](development/adding-a-feature.md), [adding-a-provider](development/adding-a-provider.md)
 - **testing/** — [strategy](testing/strategy.md), [fixtures](testing/fixtures.md)
 - **operations/** — [build](operations/build.md), [ci](operations/ci.md), [releases](operations/releases.md), [troubleshooting](operations/troubleshooting.md)
+- [native macOS updater](updater-architecture.md) — Sparkle packaging, trust model, appcast publication, and failure behavior
 - **adr/** — [index](adr/README.md)
 - [glossary](glossary.md)

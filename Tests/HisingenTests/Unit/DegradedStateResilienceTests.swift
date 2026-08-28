@@ -116,6 +116,50 @@ struct DegradedStateResilienceTests {
         XCTAssertNil(restored.location)
     }
 
+    @Test
+    func testLegacyUserDefaultsSnapshotMigratesAndRedactsSensitiveFields() throws {
+        let suiteName = "HisingenTests.legacy-cache.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let database = VehicleDatabase.inMemory()
+        let live = stateWithFullTelemetry()
+        let encoded = try JSONEncoder().encode(live)
+        var legacy = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+
+        // Recreate the pre-clustered persisted layout: older releases wrote these flat
+        // keys, whereas current snapshots group them under fuel/service/trip objects.
+        legacy.removeValue(forKey: "fuelSystem")
+        legacy.removeValue(forKey: "serviceInfo")
+        legacy.removeValue(forKey: "tripComputer")
+        legacy["fuelLevelPercent"] = 55.0
+        legacy["fuelRangeKm"] = 320
+        legacy["daysToService"] = 200
+        legacy["distanceToServiceKm"] = 8_000
+        legacy["serviceWarning"] = false
+        legacy["fluidWarnings"] = []
+        legacy["tripMeterManualKm"] = 12.5
+        legacy["tripMeterAutomaticKm"] = 48.0
+        let cached = try JSONSerialization.data(withJSONObject: [live.vin: legacy])
+        defaults.set(cached, forKey: "cached_vehicle_snapshots_v1")
+
+        let store = VehicleStateStore(defaults: defaults, database: database)
+        let migrated = try XCTUnwrap(store.snapshot(for: live.vin))
+        XCTAssertTrue(migrated.isCachedSnapshot)
+        XCTAssertEqual(migrated.fuelLevelPercent, 55.0)
+        XCTAssertEqual(migrated.daysToService, 200)
+        XCTAssertEqual(migrated.tripMeterManualKm, 12.5)
+        XCTAssertNil(migrated.location)
+        XCTAssertNil(migrated.ownerFirstName)
+        XCTAssertNil(migrated.registrationNo)
+
+        let remainingData = try XCTUnwrap(defaults.data(forKey: "cached_vehicle_snapshots_v1"))
+        let remaining = try JSONDecoder().decode([String: VehicleState].self, from: remainingData)
+        XCTAssertNil(remaining[live.vin])
+        XCTAssertNil(database.loadSnapshot(for: live.vin)?.location)
+    }
+
     // MARK: - Helpers
 
     private func graphQLError(message: String, path: [String], code: String? = nil) -> GraphQLErrorDTO {

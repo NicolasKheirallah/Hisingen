@@ -6,11 +6,11 @@ The architecturally significant pieces, one per section. Each states what it own
 
 **Purpose:** app shell — the only `NSApplicationDelegate`, owns the single instances of everything else.
 
-**Responsibilities:** installs the menu bar, migrates the legacy plaintext password, constructs `StatusItemController`/`RefreshCoordinator`/`Notifier`/`UpdateChecker`/`RemoteActionAuthorizer`, wires every callback between them, resumes a stored session at launch, handles brand switching (`switchActiveBrand`), dispatches remote commands, handles the `hisingen://` URL callback.
+**Responsibilities:** installs the menu bar, migrates the legacy plaintext password, constructs `StatusItemController`/`RefreshCoordinator`/`Notifier`/`UpdateService`/`RemoteActionAuthorizer`, wires every callback between them, resumes a stored session at launch, handles brand switching (`switchActiveBrand`), dispatches remote commands, handles the `hisingen://` URL callback.
 
 **Main types:** `AppDelegate`.
 
-**Dependencies:** `PolestarAPI`, `VolvoAPI`, `RefreshCoordinator`, `StatusItemController`, `Notifier`, `UpdateChecker`, `RemoteActionAuthorizer`, `VolvoSignInPresenter`, `Preferences`, `Keychain`.
+**Dependencies:** `PolestarAPI`, `VolvoAPI`, `RefreshCoordinator`, `StatusItemController`, `Notifier`, `UpdateService`, `RemoteActionAuthorizer`, `VolvoSignInPresenter`, `Preferences`, `Keychain`.
 
 **State it owns:** `latest: VehicleState?`, `lastError`, `sessionValid`, `lastDiagnostics`, `remoteCommandInProgress`, and which `VehicleProviding` (`activeProvider`) is currently active.
 
@@ -118,11 +118,11 @@ See [api/authentication.md](../api/authentication.md).
 
 **Isolation:** true Swift `actor` — the one component in the codebase with no `@MainActor`/manual-lock caveat.
 
-## UpdateChecker (`Services/Updates/UpdateChecker.swift`)
+## UpdateService (`Services/Updates/UpdateService.swift`)
 
-**Purpose:** poll the GitHub Releases API at most once per 24 hours, compare semantic versions, skip drafts/prereleases.
+**Purpose:** expose Sparkle's signed, native macOS updater to the menu-bar application without reimplementing appcast parsing, archive verification, installation, or relaunching.
 
-**Isolation:** `@MainActor` class, single in-flight `Task` with a `waitingCallbacks` array for coalescing.
+**Isolation:** `@MainActor` class. Sparkle owns its update-session serialization; `UpdateService` only maps state into the menu UI and writes secret-free unified logs. See [updater-architecture.md](../updater-architecture.md).
 
 ## UI (`UI/*.swift`)
 

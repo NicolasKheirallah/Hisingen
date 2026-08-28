@@ -5,6 +5,22 @@ import Testing
 struct MeasurementUnitsAndThemeTests {
 
     @Test
+    @MainActor
+    func testInjectedPreferencesStoreOwnsPanelAndPrivacySettings() throws {
+        let suiteName = "HisingenTests.preferences.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = PreferencesStore(defaults: defaults)
+
+        XCTAssertFalse(store.floatingChargingPanelEnabled)
+        XCTAssertFalse(store.privacyRedactionEnabled)
+        store.floatingChargingPanelEnabled = true
+        store.privacyRedactionEnabled = true
+        XCTAssertTrue(defaults.bool(forKey: "floating_charging_panel"))
+        XCTAssertTrue(defaults.bool(forKey: "privacy_redaction_enabled"))
+    }
+
+    @Test
     func testFuelVolumeUnitConversions() {
         let liters = 50.0
 

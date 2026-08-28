@@ -44,6 +44,10 @@ Download the latest universal DMG: [**Hisingen.dmg**](https://github.com/Nicolas
    - **Polestar**: Sign in with your Polestar account.
    - **Volvo**: Select **Sign In with Volvo ID** for direct OAuth2 PKCE login.
 
+Apps installed from the DMG check Hisingen's signed update feed automatically. Choose
+**Hisingen → Check for Updates…** at any time; updates download, verify, install, and relaunch
+without opening GitHub.
+
 ---
 
 ## Table of contents
@@ -870,7 +874,7 @@ In practical terms:
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
 | **Map integration**              | Uses Apple services where applicable                      |
-| **Update checks**                | Uses GitHub Releases                                      |
+| **Update checks**                | Uses Hisingen's signed Sparkle update feed                |
 
 Your vehicle account, VIN, location and remote-control access are sensitive information, so Hisingen treats them accordingly.
 
@@ -906,6 +910,9 @@ Updates are picked up with `brew upgrade --cask hisingen`. The cask is updated a
 3. Drag **Hisingen.app** into **Applications**.
 4. Open Hisingen.
 5. Open **Settings** and connect your vehicle account.
+
+After the first installation, Hisingen handles its own signed in-app updates. It checks daily
+by default and can be checked manually from **Hisingen → Check for Updates…**.
 
 ### Verify the download checksum
 
@@ -1112,7 +1119,7 @@ Useful targets:
 | `make doctor`  | Check your development environment               |
 | `make ci`      | Run the same validation CI performs              |
 | `make test`    | Run the test suite                               |
-| `make app`     | Build `Hisingen.app`                             |
+| `make app`     | Build `releases/Hisingen.app`                    |
 | `make run`     | Build and launch a debug build                   |
 | `make clean`   | Remove build artifacts                           |
 
@@ -1120,7 +1127,7 @@ Then open the app:
 
 ```bash
 make app
-open Hisingen.app
+open releases/Hisingen.app
 ```
 
 Normal CI and the deterministic test suite don't need access to a real Polestar or Volvo account. If `.env.secrets` isn't present, the build injects empty placeholder credentials and compiles cleanly — the app then asks for your own Volvo credentials at sign-in. Live integration testing is kept separate from the deterministic test suite.

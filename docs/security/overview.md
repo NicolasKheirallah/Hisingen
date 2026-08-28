@@ -20,7 +20,7 @@ flowchart LR
     subgraph ThirdParty["Opt-in third parties (untrusted beyond the specific data sent)"]
         Geo["Apple CoreLocation"]
         Meteo["Open-Meteo"]
-        GH["GitHub Releases API"]
+        GH["Signed Hisingen update feed + GitHub Releases"]
     end
 
     UI <--> RC
@@ -31,7 +31,7 @@ flowchart LR
     Prov <-->|bearer tokens, TLS| VID
     Prov -.->|coordinates, opt-in| Geo
     Prov -.->|coordinates, opt-in| Meteo
-    RC -.->|version string, opt-in| GH
+    UI -.->|signed appcast and archive, opt-in| GH
 ```
 
 The boundary that matters most in practice: **credentials and tokens never cross from one provider to the other**, and **nothing about a user's vehicle, account, or credentials is ever sent anywhere except the vendor that owns that account** — no relay, no analytics pipeline, no crash reporter with vehicle data attached.
@@ -68,11 +68,11 @@ Hisingen uses `os.log` (`Logger`) sparingly — mostly for launch-at-login failu
 
 ## External services
 
-Every third-party (non-Polestar-non-Volvo) network call is opt-in and enumerated in [system-context.md](../architecture/system-context.md) — reverse geocoding (Apple), weather (Open-Meteo), and update checks (GitHub). None of them receive credentials or account identifiers; the location-based ones receive coordinates only when the corresponding feature is explicitly enabled.
+Every third-party (non-Polestar-non-Volvo) network call is opt-in and enumerated in [system-context.md](../architecture/system-context.md) — reverse geocoding (Apple), weather (Open-Meteo), and signed update delivery (GitHub Pages/Releases). None receive credentials or account identifiers; the location-based ones receive coordinates only when the corresponding feature is explicitly enabled.
 
 ## Application signing and release integrity
 
-Production releases are Developer ID signed, hardened-runtime enabled, notarized by Apple, and stapled; checksums are published alongside the DMG. Local `make app` builds are ad-hoc signed and explicitly **not** trusted the same way — see [operations/signing](../operations/releases.md#signing-and-notarization) and [operations/troubleshooting.md](../operations/troubleshooting.md).
+Production releases are Developer ID signed, hardened-runtime enabled, notarized by Apple, stapled, and authenticated by Sparkle's Ed25519 signed appcast/archive chain. Local `make app` builds intentionally have no production updater key and are explicitly **not** trusted the same way — see [updater-architecture.md](../updater-architecture.md).
 
 ## Remote control posture
 

@@ -130,15 +130,15 @@ final class PreferencesStore {
 
     /// Floating always-on-top panel while charging.
     var floatingChargingPanelEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "floating_charging_panel") }
-        set { UserDefaults.standard.set(newValue, forKey: "floating_charging_panel") }
+        get { d.bool(forKey: "floating_charging_panel") }
+        set { d.set(newValue, forKey: "floating_charging_panel") }
     }
 
     /// Screenshot privacy mode: when on, views marked `.privacySensitive()` (VIN, plate,
     /// coordinates) render as placeholders under SwiftUI's privacy redaction.
     var privacyRedactionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "privacy_redaction_enabled") }
-        set { UserDefaults.standard.set(newValue, forKey: "privacy_redaction_enabled") }
+        get { d.bool(forKey: "privacy_redaction_enabled") }
+        set { d.set(newValue, forKey: "privacy_redaction_enabled") }
     }
 
     func vehicleNickname(for vin: String) -> String {
@@ -303,6 +303,12 @@ final class PreferencesStore {
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
     var notifyChargerConnection: Bool { get { boolDefaultTrue("notify_charger_connection") } set { d.set(newValue, forKey: "notify_charger_connection") } }
     var notifyClimateChanges: Bool { get { boolDefaultTrue("notify_climate_changes") } set { d.set(newValue, forKey: "notify_climate_changes") } }
+
+    /// Update preferences are intentionally separate from vehicle notifications. The
+    /// defaults follow macOS convention: check in the background, but do not download or
+    /// install executable updates until the user asks Sparkle to do so.
+    var automaticallyChecksForUpdates: Bool { get { boolDefaultTrue("automatically_check_for_updates") } set { d.set(newValue, forKey: "automatically_check_for_updates") } }
+    var automaticallyDownloadsUpdates: Bool { get { d.bool(forKey: "automatically_download_updates") } set { d.set(newValue, forKey: "automatically_download_updates") } }
 
     /// Audible cue on urgent notifications (security, warnings, charging problems).
     /// Routine informational banners stay silent regardless.

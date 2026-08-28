@@ -1,4 +1,5 @@
 .build*/
+releases/
 .swiftpm/
 *.app
 *.dmg
@@ -17,6 +18,7 @@ DerivedData/
 .env.*
 !.env.example
 *.secret
+sparkle-private.key
 
 # Generated at build time by Scripts/inject-secrets.sh from .env.secrets or CI
 # secrets. Never tracked — the XOR masking is trivially reversible, so a

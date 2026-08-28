@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let volvoSignInPresenter = VolvoSignInPresenter()
     private let polestarCommandSignInPresenter = PolestarCommandSignInPresenter()
     private let polestarWebSignInPresenter = PolestarWebSignInPresenter()
-    private let updateChecker = UpdateChecker()
+    private let updateService = UpdateService()
     private let sessionManager = SessionManager()
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
@@ -57,9 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
              preferences: preferences
         )
         statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
-        statusController.onOpenUpdate = { [weak self] in
-            NSWorkspace.shared.open(UpdateChecker.releasePage(for: self?.statusController.updateVersion))
-        }
+        statusController.onOpenUpdate = { [weak self] in self?.checkForUpdates() }
+        updateService.onStateChanged = { [weak self] state in self?.updateStateChanged(state) }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.signOut() }
         statusController.onTestConnection = { [weak self] brand in
@@ -111,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         latest = initialSnapshot
         statusController.render(data: initialSnapshot, error: nil, authenticated: initialAuthenticated)
         applyLaunchAtLogin(userInitiated: false)
-        checkForUpdatesIfEnabled()
+        updateCheckConfiguration()
         resumeStoredSession()
         preloadFleetSnapshots()
         startGarageRefreshLoop()
@@ -425,7 +424,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // semaphore so records from the last few seconds survive a normal quit. Bounded
         // wait: a hung write must not delay termination.
         let flushed = DispatchSemaphore(value: 0)
-        Task {
+        // `applicationWillTerminate` runs on the main actor. A child `Task {}` inherits that
+        // actor, so waiting on the semaphore below would prevent its continuation from ever
+        // returning to the main actor to signal it. Keep this tiny final flush detached.
+        Task.detached(priority: .utility) {
             await APIDiagnosticLogStore.shared.flushPendingWrites()
             flushed.signal()
         }
@@ -725,6 +727,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        let checkForUpdatesItem = appMenu.addItem(
+            withTitle: L10n.text("Check for Updates…"),
+            action: #selector(checkForUpdatesMenuItem), keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = self
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: L10n.text("Quit Hisingen"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
@@ -805,6 +813,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             refreshCoordinator.reloadVehicleMetadata()
         case .launchAtLogin:
             applyLaunchAtLogin(userInitiated: true)
+        case .updater:
+            updateCheckConfiguration()
         }
         render()
     }
@@ -831,54 +841,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateCheckConfiguration() {
         if preferences.features.contains(.updateChecks) {
-            checkForUpdatesIfEnabled()
+            updateService.start(
+                automaticallyChecks: preferences.automaticallyChecksForUpdates,
+                automaticallyDownloads: preferences.automaticallyDownloadsUpdates
+            )
         } else {
+            updateService.configure(automaticallyChecks: false, automaticallyDownloads: false)
             statusController.updateVersion = nil
         }
     }
 
     private func checkForUpdates() {
         guard preferences.features.contains(.updateChecks) else { return }
-        statusController.checkingForUpdates = true
-        render()
-        updateChecker.checkNow { [weak self] result in
-            guard let self else { return }
-            statusController.checkingForUpdates = false
-            let alert = NSAlert()
-            switch result {
-            case .updateAvailable(let version):
-                statusController.updateVersion = version
-                alert.messageText = L10n.format("Hisingen %@ is available", version)
-                alert.informativeText = L10n.text("The release page includes the signed download and SHA-256 checksums.")
-                alert.addButton(withTitle: L10n.text("Open Release Page"))
-                alert.addButton(withTitle: L10n.text("Later"))
-                render()
-                if alert.runModal() == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(UpdateChecker.releasePage(for: version))
-                }
-            case .upToDate:
-                alert.messageText = L10n.text("Hisingen is up to date")
-                alert.informativeText = L10n.text("You are running the latest stable release.")
-                alert.addButton(withTitle: L10n.text("OK"))
-                render()
-                alert.runModal()
-            case .failed:
-                alert.messageText = L10n.text("Couldn't check for updates")
-                alert.informativeText = L10n.text("Check your internet connection and try again later.")
-                alert.addButton(withTitle: L10n.text("OK"))
-                render()
-                alert.runModal()
-            }
-        }
+        updateService.checkForUpdates()
     }
 
-    private func checkForUpdatesIfEnabled() {
-        guard preferences.features.contains(.updateChecks) else { return }
-        updateChecker.checkIfDue { [weak self] version in
-            guard let self, self.preferences.features.contains(.updateChecks) else { return }
-            statusController.updateVersion = version
-            render()
+    @objc private func checkForUpdatesMenuItem() {
+        checkForUpdates()
+    }
+
+    private func updateStateChanged(_ state: UpdateService.State) {
+        switch state {
+        case .idle:
+            statusController.updateVersion = nil
+            statusController.checkingForUpdates = false
+        case .checking:
+            statusController.checkingForUpdates = true
+        case .updateAvailable(let update):
+            statusController.updateVersion = update.marketingVersion
+            statusController.checkingForUpdates = false
+        case .failed:
+            statusController.checkingForUpdates = false
         }
+        render()
     }
 
     private func applyLaunchAtLogin(userInitiated: Bool) {

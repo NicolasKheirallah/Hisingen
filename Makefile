@@ -1,8 +1,15 @@
-APP     = Hisingen.app
+OUTPUT_DIR ?= releases
+APP     ?= $(OUTPUT_DIR)/Hisingen.app
 BINARY  = .build/release/Hisingen
-DMG     = Hisingen.dmg
-ZIP     = Hisingen.zip
+DMG     ?= $(OUTPUT_DIR)/Hisingen.dmg
+ZIP     ?= $(OUTPUT_DIR)/Hisingen.zip
+DMG_STAGING ?= $(OUTPUT_DIR)/dmg-staging
 RESOURCE_BUNDLE = Hisingen_Hisingen.bundle
+# Sparkle is a binary SwiftPM target. It is copied beside a normal build product, but a
+# universal build uses separate scratch paths, so resolve it from whichever build produced it.
+# Keep this recursively expanded: a clean `make app` resolves SwiftPM artifacts only after
+# the `build` prerequisite has completed.
+SPARKLE_FRAMEWORK = $(shell find .build .build-arm64 .build-x86_64 -type d -name Sparkle.framework -print 2>/dev/null | head -n 1)
 
 # Code-signing identity resolution.
 # Auto-detects local developer certificate or provisions "Hisingen Development"
@@ -52,25 +59,34 @@ universal: doctor inject-secrets
 app: $(if $(SKIP_BUILD),,build)
 	plutil -lint Resources/Info.plist
 	rm -rf $(APP)
-	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources $(APP)/Contents/Frameworks
 	cp $(BINARY) $(APP)/Contents/MacOS/Hisingen
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
+	sh Scripts/configure-updater.sh $(APP)/Contents/Info.plist
 	cp Resources/Hisingen.icns $(APP)/Contents/Resources/Hisingen.icns
 	mkdir -p $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)/
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/
+	@if [ -n "$(SPARKLE_FRAMEWORK)" ] && [ -d "$(SPARKLE_FRAMEWORK)" ]; then \
+		cp -R "$(SPARKLE_FRAMEWORK)" "$(APP)/Contents/Frameworks/"; \
+	else \
+		echo "Sparkle.framework was not produced by SwiftPM" >&2; exit 1; \
+	fi
+	@if ! otool -l "$(APP)/Contents/MacOS/Hisingen" | grep -Fq '@executable_path/../Frameworks'; then \
+		install_name_tool -add_rpath '@executable_path/../Frameworks' "$(APP)/Contents/MacOS/Hisingen"; \
+	fi
 ifeq ($(IDENTITY),-)
-	codesign --force -s - $(APP)
+	codesign --force --deep -s - $(APP)
 	@echo "⚠️  Self-signed (ad-hoc) build — this identity changes on every rebuild, so macOS will re-prompt for Keychain/Accessibility access each time you rebuild. Pass IDENTITY=\"<your cert name>\" or run 'make setup-cert' to avoid repeated prompts."
 else
 	@if ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$(IDENTITY)\""; then \
 		sh Scripts/setup-dev-cert.sh; \
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
-	codesign --force --options runtime --timestamp -s "$(IDENTITY)" $(APP)
+	codesign --force --deep --options runtime --timestamp -s "$(IDENTITY)" $(APP)
 	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing (notarize + staple via the release workflow before distributing)."
 else
-	codesign --force -s "$(IDENTITY)" $(APP)
+	codesign --force --deep -s "$(IDENTITY)" $(APP)
 	@echo "✅ Signed with stable local identity \"$(IDENTITY)\" — persistent across rebuilds (Keychain & Accessibility permissions remembered)."
 endif
 endif
@@ -85,12 +101,12 @@ dmg:
 		echo "==> $(APP) not found, building it first..."; \
 		$(MAKE) app IDENTITY="$(IDENTITY)"; \
 	fi
-	rm -rf dmg-staging $(DMG)
-	mkdir dmg-staging
-	cp -R $(APP) dmg-staging/
-	ln -s /Applications dmg-staging/Applications
-	hdiutil create -volname Hisingen -srcfolder dmg-staging -ov -format UDZO $(DMG)
-	rm -rf dmg-staging
+	rm -rf $(DMG_STAGING) $(DMG)
+	mkdir -p $(DMG_STAGING)
+	cp -R $(APP) $(DMG_STAGING)/
+	ln -s /Applications $(DMG_STAGING)/Applications
+	hdiutil create -volname Hisingen -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	rm -rf $(DMG_STAGING)
 	@echo "Done → $(DMG)"
 
 ## Quick run without a bundle (launch-at-login disabled in this mode)
@@ -101,7 +117,8 @@ test: doctor inject-secrets
 	sh Scripts/test.sh
 
 clean:
-	rm -rf .build .build-arm64 .build-x86_64 $(APP) $(DMG) $(ZIP) dmg-staging SHA256SUMS notarize-app.zip
+	rm -rf .build .build-arm64 .build-x86_64 $(APP) $(DMG) $(ZIP) $(DMG_STAGING) SHA256SUMS notarize-app.zip
+	@rmdir $(OUTPUT_DIR) 2>/dev/null || true
 
 ## Cut a release: make release [VERSION=1.0.0 | patch | minor | major]
 ## Bumps Info.plist, commits, tags, pushes — GitHub Actions then

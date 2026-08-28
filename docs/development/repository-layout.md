@@ -12,7 +12,7 @@
 │   │   ├── Notifications/ Notifier, ChargingTransitionDetector
 │   │   ├── Security/     RemoteActionAuthorizer, VolvoSignInPresenter
 │   │   ├── Location/     ReverseGeocoder
-│   │   └── Updates/      UpdateChecker
+│   │   └── Updates/      UpdateService (Sparkle)
 │   ├── Support/          Format, L10n, PKCE — small stateless helpers
 │   ├── Resources/        Assets.xcassets, .lproj localization bundles
 │   └── UI/               StatusItemController (AppKit) + SwiftUI views
@@ -27,7 +27,7 @@
 │   ├── dependabot.yml      Weekly updates for pinned GitHub Actions SHAs and (future) SwiftPM dependencies
 │   ├── ISSUE_TEMPLATE/     bug_report.md, feature_request.md, vehicle_compatibility.md, config.yml
 │   └── pull_request_template.md
-├── Package.swift         SPM manifest — no external dependencies
+├── Package.swift         SPM manifest — pinned Sparkle updater dependency
 ├── Makefile              build/test/package/release orchestration
 ├── README.md             User-facing project README
 ├── SECURITY.md           Vulnerability reporting policy — see security/overview.md

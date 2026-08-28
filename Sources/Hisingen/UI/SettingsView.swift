@@ -9,6 +9,7 @@ enum SettingsChange {
     case notifications
     case presentation
     case launchAtLogin
+    case updater
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case polestarWebSignIn
@@ -84,6 +85,8 @@ struct SettingsView: View {
     @State private var interfaceLanguage = InterfaceLanguage.system
     @State private var tintMenuBarIcon = true
     @State private var launchAtLogin = false
+    @State private var automaticallyChecksForUpdates = true
+    @State private var automaticallyDownloadsUpdates = false
     @State private var features = FeatureSelection.default
     @State private var notifyChargingStarted = true
     @State private var notifyChargingComplete = true
@@ -140,6 +143,7 @@ struct SettingsView: View {
                 fleetVehiclesCard
                 appearanceCard
                 displayCard
+                updaterCard
                 featureQuickActions
 
                 chargingStatOrderEditor
@@ -184,6 +188,8 @@ struct SettingsView: View {
             interfaceLanguage = preferences.interfaceLanguage
             tintMenuBarIcon = preferences.tintMenuBarIcon
             launchAtLogin = preferences.launchAtLogin
+            automaticallyChecksForUpdates = preferences.automaticallyChecksForUpdates
+            automaticallyDownloadsUpdates = preferences.automaticallyDownloadsUpdates
             features = preferences.features
             notifyChargingStarted = preferences.notifyChargingStarted
             notifyChargingComplete = preferences.notifyChargingComplete
@@ -1325,6 +1331,59 @@ struct SettingsView: View {
                                 preferences.requireBiometricsForRemoteControls = requireBiometrics
                             }
                     }
+                }
+            }
+        }
+    }
+
+    private var updaterCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "arrow.down.circle.fill", title: L10n.text("Hisingen Updates"), color: .blue)
+                Text(L10n.text("Updates are downloaded from Hisingen’s signed update feed and verified before installation."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.text("Automatically check for updates"))
+                            .font(.system(size: 12, weight: .medium))
+                        Text(L10n.text("Check quietly once a day while Hisingen is running"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $automaticallyChecksForUpdates)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .onChange(of: automaticallyChecksForUpdates) { _, value in
+                            preferences.automaticallyChecksForUpdates = value
+                            if !value { automaticallyDownloadsUpdates = false; preferences.automaticallyDownloadsUpdates = false }
+                            onSettingsChanged(.updater)
+                        }
+                }
+
+                Divider().opacity(0.4)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.text("Automatically download updates"))
+                            .font(.system(size: 12, weight: .medium))
+                        Text(L10n.text("Download verified updates in the background; installation still uses macOS confirmation."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $automaticallyDownloadsUpdates)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .disabled(!automaticallyChecksForUpdates)
+                        .onChange(of: automaticallyDownloadsUpdates) { _, value in
+                            preferences.automaticallyDownloadsUpdates = value
+                            onSettingsChanged(.updater)
+                        }
                 }
             }
         }

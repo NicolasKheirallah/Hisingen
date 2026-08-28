@@ -16,7 +16,7 @@ Hisingen is built with `-strict-concurrency=complete -warn-concurrency` (enforce
 | `RemoteActionAuthorizer` | `@MainActor` class | none (stateless; needs main actor for `NSAlert`/`LAContext`) | Main-actor confinement |
 | `VolvoSignInPresenter` | `@MainActor` class | one pending `CheckedContinuation` | Main-actor confinement; a new `signIn` call rejects any prior pending continuation rather than racing it |
 | `ReverseGeocoder` | `actor` | in-memory geocode cache | Actor isolation |
-| `UpdateChecker` | `@MainActor` class | in-flight `Task`, `waitingCallbacks` | Main-actor confinement |
+| `UpdateService` | `@MainActor` class | Sparkle controller and UI state | Main-actor confinement; Sparkle serializes update sessions |
 | `Preferences` | `@MainActor enum` | none directly (UserDefaults façade) | Main-actor confinement |
 | `VehicleStateStore` | plain `final class`, **no isolation annotation** | none held across calls — reads/writes UserDefaults fresh each time | **Not compiler-enforced** — see [technical-debt.md](technical-debt.md); safe today only because both callers (`RefreshCoordinator`, `Notifier`) happen to be `@MainActor` |
 | `Keychain` / `KeychainStore` | `struct` (stateless) delegating to `InMemorySecretCache` | none itself | Delegates to the manual-lock singleton below |

@@ -18,7 +18,7 @@ C4Context
 
     System_Ext(appleGeo, "Apple CoreLocation", "On-device/Apple-backed reverse geocoding (CLGeocoder)")
     System_Ext(openMeteo, "Open-Meteo", "Free weather API, no auth")
-    System_Ext(githubApi, "GitHub Releases API", "Update-check polling")
+    System_Ext(githubApi, "GitHub Pages + Releases", "Signed Sparkle appcast and update archive")
     System_Ext(githubPages, "GitHub Pages", "Static OAuth redirect bridge for Volvo (docs/oauth-callback.html)")
 
     System_Ext(keychain, "macOS Keychain", "Local credential storage")
@@ -33,7 +33,7 @@ C4Context
     Rel(hisingen, volvoApi, "REST (bearer token + VCC API key)")
     Rel(hisingen, appleGeo, "Coordinates, if Vehicle Location enabled")
     Rel(hisingen, openMeteo, "Coordinates, if Vehicle Weather enabled")
-    Rel(hisingen, githubApi, "App version, if Update Checks enabled")
+    Rel(hisingen, githubApi, "Signed appcast/archive, if Update Checks enabled")
     Rel(hisingen, githubPages, "Browser redirect only, no app data")
     Rel(hisingen, keychain, "Read/write tokens, passwords")
     Rel(hisingen, notifCenter, "Post/withdraw local notifications")
@@ -51,7 +51,7 @@ C4Context
 | Volvo Connected Vehicle / Energy / Location API | `api.volvocars.com` | All Volvo telemetry and remote commands | No — required for Volvo |
 | Apple CoreLocation (`CLGeocoder`) | Apple-operated | Reverse-geocode vehicle coordinates into a street address | **Yes** — only when "Vehicle Location" is enabled |
 | Open-Meteo | `api.open-meteo.com` | Weather at the vehicle's parked location | **Yes** — only when "Vehicle Weather" is enabled |
-| GitHub Releases API | `api.github.com/repos/NicolasKheirallah/hisingen` | Check for a newer Hisingen release | **Yes** — only when "Update Checks" is enabled |
+| GitHub Pages + Releases | `nicolaskheirallah.github.io/Hisingen/updates/appcast.xml` and GitHub release assets | Signed Sparkle update metadata and archive | **Yes** — only when "Update Checks" is enabled |
 | GitHub Pages | `nicolaskheirallah.github.io/Hisingen/oauth-callback.html` | Static bridge page: Volvo requires an `http(s)` redirect URI, so this page forwards the OAuth callback query string to Hisingen's `hisingen://` URL scheme. It never sees or stores anything — see [api/authentication.md](../api/authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge). | No — required for Volvo sign-in |
 | macOS Keychain | Local | Credential/token storage | No |
 | Notification Center | Local | Charging/warning/security notifications | **Yes** — gated by the Notifications feature and OS permission |

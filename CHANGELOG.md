@@ -3,6 +3,48 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-08-28
+
+### Added
+
+- Read-only, credential-gated live Polestar integration coverage for sign-in,
+  vehicle discovery, state refresh, session restoration, and sign-out.
+- Regression coverage for legacy cached vehicle snapshots, including migration
+  to SQLite and redaction of location, owner, and registration data.
+- Native macOS updates powered by Sparkle: signed background checks, standard
+  in-app download/install/relaunch UI, a “Check for Updates…” menu command,
+  update-available status actions, and preferences for automatic checking and
+  downloading.
+
+### Fixed
+
+- Corrected Sparkle framework packaging so clean builds discover the built
+  framework reliably and installed apps resolve it from `Contents/Frameworks`.
+- Made appcast publication fail closed when release notes are missing, the
+  Ed25519 public key is malformed, the private key does not match it, or feed,
+  archive, and release-note signatures are incomplete.
+- Stopped manual update checks from remaining stuck in the checking state when
+  Sparkle aborts, without overwriting later download or installation states.
+- Revalidated the active vehicle, provider, and VIN after remote-command
+  authorization, preventing a command approved for one vehicle from being
+  sent after the active context changes.
+- Sanitized and migrated legacy `UserDefaults` vehicle snapshots before reuse,
+  so historical sensitive data is not retained in the old cache.
+- Moved shutdown diagnostic flushing off the main actor to avoid a termination
+  deadlock.
+- Honored injected preference stores consistently for floating charging-panel
+  and privacy-redaction settings.
+- Deferred website Three.js scene initialization until its corresponding view
+  nears the viewport, reducing unnecessary startup parsing and GPU work.
+
+### Changed
+
+- Separated durable history record contracts from `VehicleDatabase`, keeping
+  schema/repository behavior and its public data types in focused files.
+- Hardened the release pipeline to sign and notarize builds, generate a
+  signed Ed25519 appcast with Sparkle, and publish the update feed, artifacts,
+  and release notes automatically.
+
 ## [1.2.3] - 2026-08-24
 
 ### Added

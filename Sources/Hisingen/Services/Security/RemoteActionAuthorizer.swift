@@ -2,7 +2,12 @@ import AppKit
 import LocalAuthentication
 
 @MainActor
-final class RemoteActionAuthorizer {
+protocol RemoteActionAuthorizing: AnyObject {
+    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool
+}
+
+@MainActor
+final class RemoteActionAuthorizer: RemoteActionAuthorizing {
     private let preferences: PreferencesStore
 
     init(preferences: PreferencesStore) { self.preferences = preferences }
@@ -49,4 +54,3 @@ final class RemoteActionAuthorizer {
         alert.runModal()
     }
 }
-

@@ -26,15 +26,23 @@ fi
 
 git diff --check
 
-if [ -d "Hisingen.app" ]; then
-    codesign --verify --deep --strict --verbose=2 "Hisingen.app"
+OUTPUT_DIR=${OUTPUT_DIR:-releases}
+APP_PATH=${APP_PATH:-"$OUTPUT_DIR/Hisingen.app"}
+DMG_PATH=${DMG_PATH:-"$OUTPUT_DIR/Hisingen.dmg"}
+DMG_CHECKSUM_PATH=${DMG_CHECKSUM_PATH:-"$OUTPUT_DIR/Hisingen.dmg.sha256"}
+
+if [ -d "$APP_PATH" ]; then
+    codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 fi
 
-if [ -f "Hisingen.dmg" ]; then
+if [ -f "$DMG_PATH" ]; then
     command -v hdiutil >/dev/null 2>&1 || { echo "hdiutil is required to validate a DMG" >&2; exit 1; }
-    hdiutil verify "Hisingen.dmg"
-    if [ -f "Hisingen.dmg.sha256" ]; then
-        shasum -a 256 -c Hisingen.dmg.sha256
+    hdiutil verify "$DMG_PATH"
+    if [ -f "$DMG_CHECKSUM_PATH" ]; then
+        (
+            cd "$(dirname "$DMG_CHECKSUM_PATH")"
+            shasum -a 256 -c "$(basename "$DMG_CHECKSUM_PATH")"
+        )
     fi
 fi
 

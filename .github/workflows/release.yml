@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,6 +18,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
+      actions: write
       attestations: write
       id-token: write
     environment: production-release
@@ -32,10 +34,22 @@ jobs:
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
         run: |
+          set -euo pipefail
           test -n "$VOLVO_CLIENT_ID" || { echo "VOLVO_CLIENT_ID is required"; exit 1; }
           test -n "$VOLVO_CLIENT_SECRET" || { echo "VOLVO_CLIENT_SECRET is required"; exit 1; }
           test -n "$VOLVO_VCC_API_KEY" || { echo "VOLVO_VCC_API_KEY is required"; exit 1; }
+          for secret in MACOS_CERT_P12 MACOS_CERT_PASSWORD NOTARY_APPLE_ID NOTARY_TEAM_ID NOTARY_APP_PASSWORD SPARKLE_PUBLIC_ED_KEY SPARKLE_PRIVATE_ED_KEY SPARKLE_TOOLS_SHA256; do
+            test -n "${!secret}" || { echo "$secret is required for a secure release"; exit 1; }
+          done
 
       - name: Select available Xcode toolchain
         run: sh Scripts/select-xcode.sh
@@ -75,29 +89,22 @@ jobs:
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "$MACOS_CERT_P12" ] && [ -n "$MACOS_CERT_PASSWORD" ]; then
-            echo "🔒 Importing Apple Developer ID certificate..."
-            CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
-            KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
-            KEYCHAIN_PASSWORD=$(uuidgen)
-            printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
-            chmod 600 "$CERTIFICATE_PATH"
-            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security list-keychains -d user -s "$KEYCHAIN_PATH"
-            IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
-            test -n "$IDENTITY" || { echo "No Developer ID Application identity found in certificate"; exit 1; }
-            echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-            echo "SIGNED_RELEASE=true" >> "$GITHUB_ENV"
-            rm -f "$CERTIFICATE_PATH"
-          else
-            echo "ℹ️ No Apple Developer certificate configured — building release with ad-hoc signing."
-            echo "IDENTITY=-" >> "$GITHUB_ENV"
-            echo "SIGNED_RELEASE=false" >> "$GITHUB_ENV"
-          fi
+          echo "🔒 Importing Apple Developer ID certificate..."
+          CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          chmod 600 "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+          test -n "$IDENTITY" || { echo "No Developer ID Application identity found in certificate"; exit 1; }
+          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
 
       - name: Build universal app
         env:
@@ -105,9 +112,10 @@ jobs:
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
-        run: >-
-          make app-universal IDENTITY="$IDENTITY"
-          SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          REQUIRE_SPARKLE_UPDATER=true make app-universal OUTPUT_DIR=. IDENTITY="$IDENTITY" \
+            SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
 
       - name: Verify signature and architectures
         run: |
@@ -116,23 +124,18 @@ jobs:
           codesign --verify --deep --strict --verbose=2 Hisingen.app
           codesign -dvv Hisingen.app
 
-      - name: Notarize and staple app (if Developer ID configured)
-        if: env.SIGNED_RELEASE == 'true'
+      - name: Notarize and staple app
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
-            ditto -c -k --keepParent Hisingen.app notarize-app.zip
-            xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-            xcrun stapler staple Hisingen.app
-            xcrun stapler validate Hisingen.app
-            spctl --assess --type execute --verbose=2 Hisingen.app
-          else
-            echo "ℹ️ Notarization credentials not fully provided — skipping app notarization."
-          fi
+          ditto -c -k --keepParent Hisingen.app notarize-app.zip
+          xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+          xcrun stapler staple Hisingen.app
+          xcrun stapler validate Hisingen.app
+          spctl --assess --type execute --verbose=2 Hisingen.app
 
       - name: Package disk image and archives
         env:
@@ -141,15 +144,13 @@ jobs:
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
-          make dmg IDENTITY="$IDENTITY"
-          if [ "$SIGNED_RELEASE" = "true" ] && [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_APP_PASSWORD" ]; then
-            codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
-            codesign --verify --verbose=2 Hisingen.dmg
-            xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-            xcrun stapler staple Hisingen.dmg
-            xcrun stapler validate Hisingen.dmg
-            spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
-          fi
+          make dmg OUTPUT_DIR=. IDENTITY="$IDENTITY"
+          codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
+          codesign --verify --verbose=2 Hisingen.dmg
+          xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
+          xcrun stapler staple Hisingen.dmg
+          xcrun stapler validate Hisingen.dmg
+          spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
           ditto -c -k --keepParent Hisingen.app Hisingen.zip
           ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
 
@@ -164,22 +165,16 @@ jobs:
           hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"
           DMG_ATTACHED=true
           codesign --verify --deep --strict --verbose=2 "$DMG_MOUNT/Hisingen.app"
-          if [ "$SIGNED_RELEASE" = "true" ]; then
-            spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
-          fi
+          spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
           hdiutil detach "$DMG_MOUNT"
           DMG_ATTACHED=false
 
           ditto -x -k Hisingen.zip "$ZIP_DIR"
           codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/Hisingen.app"
-          if [ "$SIGNED_RELEASE" = "true" ]; then
-            spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
-          fi
+          spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
           ditto -x -k Hisingen.app.zip "$ZIP_DIR/app-asset"
           codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
-          if [ "$SIGNED_RELEASE" = "true" ]; then
-            spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
-          fi
+          spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
           cleanup_packages
           trap - EXIT
           shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
@@ -191,6 +186,39 @@ jobs:
             test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
           done
           shasum -a 256 -c SHA256SUMS
+
+      - name: Download and verify pinned Sparkle release tools
+        env:
+          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
+        run: |
+          set -euo pipefail
+          TOOLS_ARCHIVE="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
+          curl --fail --silent --show-error --location --retry 3 \
+            -o "$TOOLS_ARCHIVE" \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
+          echo "$SPARKLE_TOOLS_SHA256  $TOOLS_ARCHIVE" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/sparkle-tools"
+          tar -xJf "$TOOLS_ARCHIVE" -C "$RUNNER_TEMP/sparkle-tools"
+          SPARKLE_TOOLS_DIR=$(find "$RUNNER_TEMP/sparkle-tools" -type f -path '*/bin/generate_appcast' -print | head -n 1 | xargs dirname | xargs dirname)
+          test -n "$SPARKLE_TOOLS_DIR" && test -x "$SPARKLE_TOOLS_DIR/bin/generate_appcast"
+          echo "SPARKLE_TOOLS_DIR=$SPARKLE_TOOLS_DIR" >> "$GITHUB_ENV"
+
+      - name: Generate signed Sparkle appcast and release notes
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          set -euo pipefail
+          PRIVATE_KEY="$RUNNER_TEMP/hisingen-sparkle-private.key"
+          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | base64 --decode > "$PRIVATE_KEY"
+          chmod 600 "$PRIVATE_KEY"
+          node Scripts/verify-sparkle-keypair.mjs "$PRIVATE_KEY"
+          sh Scripts/publish-appcast.sh "$SPARKLE_TOOLS_DIR" "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" Hisingen.app.zip updates "$PRIVATE_KEY"
+          node Scripts/verify-updater.mjs appcast updates/appcast.xml
+          test -s updates/Hisingen.app.md
+          rm -f "$PRIVATE_KEY"
+          # The key-pair check and appcast structure check fail the release before publication
+          # if the feed, enclosure, or release notes are not signed by the embedded key.
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v2.4.4
@@ -208,6 +236,8 @@ jobs:
             Hisingen.zip
             Hisingen.app.zip
             SHA256SUMS
+            updates/appcast.xml
+            updates/Hisingen.app.md
           fail_on_unmatched_files: true
           generate_release_notes: true
 
@@ -217,14 +247,33 @@ jobs:
         run: |
           set -euo pipefail
           ASSET_NAMES=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
-          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
+          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS appcast.xml Hisingen.app.md; do
             echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $GITHUB_REF_NAME is missing uploaded asset: $artifact"; exit 1; }
           done
+
+      - name: Publish signed appcast to GitHub Pages source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TARGET_PATH="website/public/updates/appcast.xml"
+          CONTENT=$(base64 < updates/appcast.xml | tr -d '\n')
+          EXISTING_SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH?ref=main" --jq .sha 2>/dev/null || true)
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
+              -f message="chore(updates): publish ${GITHUB_REF_NAME} appcast" \
+              -f content="$CONTENT" -f branch=main -f sha="$EXISTING_SHA"
+          else
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
+              -f message="chore(updates): publish ${GITHUB_REF_NAME} appcast" \
+              -f content="$CONTENT" -f branch=main
+          fi
+          gh workflow run pages.yml --ref main
 
       - name: Clean temporary signing material
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/hisingen-signing.p12" notarize-app.zip
+          rm -f "$RUNNER_TEMP/hisingen-signing.p12" "$RUNNER_TEMP/hisingen-sparkle-private.key" "$RUNNER_TEMP/Sparkle-2.9.6.tar.xz" notarize-app.zip
           security delete-keychain "$RUNNER_TEMP/hisingen-signing.keychain-db" 2>/dev/null || true
 
   homebrew-tap:

@@ -21,7 +21,7 @@ cd Hisingen
 make doctor   # check your environment
 make test     # run the test suite
 make ci       # run the same validation CI performs
-make app      # build Hisingen.app
+make app      # build releases/Hisingen.app
 ```
 
 Normal CI and the deterministic test suite never need access to a real Polestar or Volvo account. Without `.env.secrets`, build-time credential injection emits empty placeholders and the project compiles cleanly; live integration testing is kept separate and opt-in.

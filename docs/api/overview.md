@@ -364,7 +364,7 @@ In addition to Polestar and Volvo, Hisingen can communicate with a small number 
 | ------------------------ | --------------------------------------------------- | :------------------------: |
 | Apple geocoding services | Convert vehicle coordinates into readable locations |             Yes            |
 | Open-Meteo               | Weather at the vehicle's reported location          |             Yes            |
-| GitHub Releases          | Check for Hisingen updates                          |             Yes            |
+| GitHub Pages + Releases  | Serve signed Hisingen appcast and update archive    |             Yes            |
 | GitHub Pages             | Volvo OAuth callback bridge                         | Required for Volvo sign-in |
 
 These services do not receive Polestar or Volvo account credentials.
@@ -565,4 +565,3 @@ The Volvo integration depends on Volvo's published Developer Platform and the pe
 The Polestar integration depends on undocumented provider behaviour that may change without notice.
 
 Provider functionality, availability and compatibility cannot be guaranteed.
-

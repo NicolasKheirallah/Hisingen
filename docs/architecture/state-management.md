@@ -14,7 +14,7 @@
 | Capability observations | `VehicleState.probedCapabilities` — travels with the cached snapshot | `UserDefaults` (embedded in the cached `VehicleState`) | Per VIN, 6-hour staleness window on top of the store's 7-day TTL |
 | UI state (selected tab, settings-mode flag, scroll position) | `StatusItemController` / SwiftUI `@State` | In-memory only | Popover lifetime |
 | Reverse-geocode cache | `ReverseGeocoder` (actor) | In-memory only | Process lifetime |
-| Update-check result | `UpdateChecker` + `Preferences` | `UserDefaults` (`available_update_version`, `last_successful_update_check`) | Global |
+| Update state | `UpdateService` / Sparkle | Sparkle-managed `UserDefaults` (schedule, skip/download preference) | Global |
 
 ## Who is allowed to mutate what
 

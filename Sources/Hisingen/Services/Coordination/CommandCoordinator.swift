@@ -34,7 +34,7 @@ final class CommandCoordinator {
     private let logger = AppLog.logger("commands")
     private let preferences: PreferencesStore
     private let database: VehicleDatabase
-    private let authorizer: RemoteActionAuthorizer
+    private let authorizer: any RemoteActionAuthorizing
     private let gate = CapabilityGate()
     private weak var context: (any CommandExecutionContext)?
 
@@ -44,7 +44,7 @@ final class CommandCoordinator {
     init(context: any CommandExecutionContext,
          preferences: PreferencesStore,
          database: VehicleDatabase,
-         authorizer: RemoteActionAuthorizer) {
+         authorizer: any RemoteActionAuthorizing) {
         self.context = context
         self.preferences = preferences
         self.database = database
@@ -89,6 +89,7 @@ final class CommandCoordinator {
             return
         }
         let adapted = command.adapted(to: state.capabilityProfile)
+        let providerBrand = context.currentProvider().brand
         let vehicle = [state.modelName, state.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
         }.joined(separator: " - ")
@@ -99,8 +100,19 @@ final class CommandCoordinator {
                 vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
             ) else { return }
             guard !self.isInProgress else { return }
+            // Authorization can show a modal sheet or biometric prompt. The active account,
+            // provider, or vehicle may change while it is visible; never send the command
+            // that was approved for the old snapshot through the newly selected provider.
+            guard self.isCurrentExecutionContext(vin: state.vin, brand: providerBrand) else { return }
             await self.execute(adapted, vin: state.vin)
         }
+    }
+
+    private func isCurrentExecutionContext(vin: String, brand: VehicleBrand) -> Bool {
+        guard let context, context.sessionIsValid,
+              context.currentProvider().brand == brand,
+              let currentState = context.vehicleState else { return false }
+        return currentState.vin.caseInsensitiveCompare(vin) == .orderedSame
     }
 
     private func execute(_ command: RemoteCommand, vin: String) async {

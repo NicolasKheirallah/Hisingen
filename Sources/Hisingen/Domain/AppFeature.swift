@@ -88,7 +88,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .vehicleLocation: return L10n.text("Show vehicle parking GPS coordinates and 1-click Apple Maps integration.")
         case .multipleVehicles: return L10n.text("Show the vehicle selector for multi-car accounts.")
         case .notifications: return L10n.text("Enable local charging and account notifications.")
-        case .updateChecks: return L10n.text("Check GitHub for stable Hisingen releases.")
+        case .updateChecks: return L10n.text("Check Hisingen’s signed stable update feed.")
         case .remoteClimate: return L10n.text("Start or stop climate with your configured temperature and heating.")
         case .remotePreCleaning: return L10n.text("Start or stop cabin pre-cleaning where supported.")
         case .remoteCharging: return L10n.text("Change charge target/current and override an active charging schedule.")
@@ -136,4 +136,3 @@ struct FeatureSelection: Codable, Equatable, Sendable {
         else { enabled.remove(feature) }
     }
 }
-

@@ -31,21 +31,24 @@ flowchart TD
     D --> E["git tag vX.Y.Z"]
     E --> F["git push origin HEAD vX.Y.Z"]
     F -->|triggers| G["release.yml (tag push v*)"]
-    G --> H["Verify: tag matches vMAJOR.MINOR.PATCH,<br/>Info.plist and CHANGELOG match tag,<br/>tag commit is an ancestor of main"]
+    G --> H["Validate required secrets, pinned tools checksum,<br/>tag, Info.plist, CHANGELOG, and main ancestry"]
     H --> I["swift test --skip Live — full deterministic<br/>suite gates the release"]
-    I --> J["Import Developer ID cert into ephemeral<br/>runner Keychain (security create-keychain/import)"]
-    J --> K["make app-universal IDENTITY='Developer ID Application: ...'"]
-    K --> L["Verify: lipo -verify_arch arm64 x86_64,<br/>codesign --verify --deep --strict"]
-    L --> M["Notarize + staple the .app<br/>(ditto zip → notarytool submit --wait → stapler staple/validate → spctl --assess)"]
-    M --> N["make dmg"]
-    N --> O["Sign, notarize, staple, validate the DMG too"]
-    O --> P["Re-verify by mounting the DMG and unzipping<br/>the app zip, re-running codesign/spctl on each"]
-    P --> Q["shasum -a 256 → SHA256SUMS"]
-    Q --> Q2["Verify DMG/zip/SHA256SUMS exist and are<br/>non-empty, BEFORE publishing anything"]
-    Q2 --> Q3["Attest build provenance for DMG + zip<br/>(actions/attest-build-provenance)"]
-    Q3 --> R["softprops/action-gh-release — publish DMG, zip,<br/>SHA256SUMS with generate_release_notes: true"]
-    R --> R2["Verify all 4 assets are actually attached<br/>to the published release (gh release view --json assets)"]
-    R2 --> S["Always-run cleanup: delete temp .p12/zip<br/>and the ephemeral signing keychain"]
+    I --> J["Import Developer ID cert into ephemeral<br/>runner Keychain"]
+    J --> K["Build universal signed app with embedded Sparkle"]
+    K --> L["Verify architectures, updater configuration,<br/>framework load path, launch, and signatures"]
+    L --> M["Notarize and staple the app"]
+    M --> N["Build, sign, notarize, and staple the DMG"]
+    N --> O["Create and verify Hisingen.zip and Hisingen.app.zip"]
+    O --> P["Generate and verify SHA256SUMS"]
+    P --> Q["Download pinned Sparkle tools; verify SHA-256"]
+    Q --> R["Decode updater private key; derive public key;<br/>require exact match"]
+    R --> S["Extract exact dated changelog section;<br/>generate signed appcast"]
+    S --> T["Verify feed, archive, and release-note signatures"]
+    T --> U["Attest provenance for DMG and both ZIPs"]
+    U --> V["Publish six release assets"]
+    V --> W["Verify release and all six attached assets"]
+    W --> X["Publish appcast to Pages source;<br/>dispatch Pages deploy"]
+    X --> Y["Always-run cleanup: certificate, keychain,<br/>updater private key, and Sparkle tools"]
 ```
 
 `release.yml`'s job runs under `environment: production-release` and has
@@ -55,7 +58,7 @@ test suites even though it runs the rest of the deterministic suite in full.
 
 ## Starting a release
 
-First add the release notes under `## [x.y.z]` in the root
+First add the release notes under `## [x.y.z] - YYYY-MM-DD` in the root
 [`CHANGELOG.md`](../../CHANGELOG.md). Then use either of the supported paths:
 
 1. Run the **Prepare Release** workflow with an exact version or semantic bump.
@@ -78,12 +81,13 @@ the exact tag `release.yml` listens for. Manually tagging without first updating
 
 ## Gating checks (in order, all must pass)
 
-1. **Tag format** — must match `vMAJOR.MINOR.PATCH` exactly.
-2. **Version match** — `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
-3. **Changelog match** — `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`.
-4. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
-5. **`Info.plist` validity** — `plutil -lint`.
-6. **Full deterministic test suite** — `swift test --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
+1. **Secure configuration** — every required backend, Developer ID, notarization, and Sparkle secret must be non-empty, and the pinned Sparkle tools checksum must be configured.
+2. **Tag format** — must match `vMAJOR.MINOR.PATCH` exactly.
+3. **Version match** — `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
+4. **Changelog match** — `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`, optionally followed by a date.
+5. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
+6. **`Info.plist` validity** — `plutil -lint`.
+7. **Full deterministic test suite** — `swift test --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
 
 If any of these fail, nothing is signed, notarized, or published.
 
@@ -99,6 +103,23 @@ See [signing-and-notarization details below](#signing-and-notarization-detail). 
 shasum -a 256 -c SHA256SUMS
 ```
 
+## Sparkle appcast publication
+
+The workflow downloads the pinned Sparkle `2.9.6` tools archive and rejects it unless its
+SHA-256 digest matches the `SPARKLE_TOOLS_SHA256` repository variable. It decodes the temporary
+private-key export, derives its Ed25519 public key, and requires an exact match with the
+32-byte `SPARKLE_PUBLIC_ED_KEY` before calling `generate_appcast --ed-key-file`.
+
+The matching dated changelog section is extracted into `Hisingen.app.md`; extraction stops at
+the next release heading. Appcast generation adds two release assets:
+
+- `appcast.xml`
+- `Hisingen.app.md`
+
+Before publication, an independent verifier requires the signed-feed block, archive Ed25519
+signature, and release-notes signature. Missing notes, malformed keys, mismatched key pairs,
+or incomplete signatures fail the release.
+
 ## Release artifact verification
 
 Two independent checks exist specifically to prevent a run showing green in
@@ -106,10 +127,12 @@ Actions while leaving an unusable or incomplete release behind:
 
 1. **Pre-publish**: before `softprops/action-gh-release` runs at all, a step
    asserts `Hisingen.dmg`, `Hisingen.zip`, `Hisingen.app.zip`, and
-   `SHA256SUMS` exist, are non-empty, and verifies every checksum.
+   `SHA256SUMS` exist, are non-empty, and verifies every checksum. The appcast
+   step separately requires non-empty, fully signed `appcast.xml` and
+   `Hisingen.app.md`.
 2. **Post-publish**: after publishing, `gh release view "$GITHUB_REF_NAME"
-   --json assets` is queried and the job fails if any of the three expected
-   assets isn't actually attached — the specific gap that matters, since it's
+   --json assets` is queried and the job fails unless exactly the six expected
+   assets are attached — the specific gap that matters, since it's
    possible for an upload step to report success while silently attaching
    zero files (e.g. a glob matching nothing).
 
@@ -178,6 +201,8 @@ branch can never read them.
 | `NOTARY_TEAM_ID` | release.yml | `production-release` | Apple Developer Team ID. |
 | `NOTARY_APP_PASSWORD` | release.yml | `production-release` | App-specific password for the Apple ID above (not the account password). |
 | `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` | release.yml | `production-release` | Volvo Developer API credentials embedded in the production build configuration. |
+| `SPARKLE_PUBLIC_ED_KEY` | release.yml | `production-release` | Base64-encoded 32-byte Ed25519 public key embedded in the app. |
+| `SPARKLE_PRIVATE_ED_KEY` | release.yml | `production-release` | Base64 encoding of the Sparkle private-key export, used only to sign the appcast. |
 | `HISINGEN_TEST_EMAIL` / `HISINGEN_TEST_PASSWORD` / `HISINGEN_TEST_VIN` | live-integration.yml (`live-polestar`) | `live-integration` | Dedicated Polestar test account — never a personal account. VIN is optional. |
 | `HISINGEN_TEST_VOLVO_CLIENT_ID` / `_CLIENT_SECRET` / `_VCC_API_KEY` / `_REFRESH_TOKEN` / `_VIN` | live-integration.yml (`live-volvo`) | `live-integration` | Dedicated Volvo Developer Portal test app registration + test account refresh token. VIN is optional. |
 
@@ -188,12 +213,19 @@ find-identity -v -p codesigning` against a local copy before it lapses, since
 an expired cert fails `release.yml` at the "Import Developer ID certificate"
 step with no advance warning otherwise.
 
+Set repository variable `SPARKLE_TOOLS_SHA256` to the expected SHA-256 digest of
+`Sparkle-2.9.6.tar.xz`. This is a variable rather than a secret, but a release
+still fails before signing if it is empty.
+
 ## Release notes
 
 Every release must have a hand-maintained entry in the root
 [`CHANGELOG.md`](../../CHANGELOG.md). GitHub also generates release-page notes
 from merged PRs and commits through `generate_release_notes: true`; those notes
 supplement the changelog rather than replacing it.
+
+The signed Sparkle note asset contains only the exact tagged changelog section.
+A dated heading such as `## [1.2.4] - 2026-08-28` is supported and preferred.
 
 ## Signing and notarization detail
 
@@ -205,7 +237,7 @@ supplement the changelog rather than replacing it.
 
 **Gatekeeper assessment:** `spctl --assess` is run against both the app and the DMG as a final "would Gatekeeper actually let a user open this" check, not just a signature check.
 
-**Cleanup:** an `if: always()` step deletes the temporary `.p12`, any intermediate zip, and the ephemeral signing keychain — even if an earlier step in the job failed, so a failed release run never leaves a certificate sitting on a shared runner.
+**Cleanup:** an `if: always()` step deletes the temporary `.p12`, any intermediate zip, the decoded Sparkle private key and downloaded tools archive, and the ephemeral signing keychain — even if an earlier step in the job failed, so a failed release run never leaves signing material sitting on a shared runner.
 
 ## What's real vs. what's aspirational
 

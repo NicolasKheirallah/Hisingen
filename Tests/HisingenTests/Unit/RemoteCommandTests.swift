@@ -4,6 +4,35 @@ import Testing
 
 struct RemoteCommandTests {
     @Test
+    @MainActor
+    func testAuthorizedCommandIsDiscardedWhenVehicleChangesBeforeExecution() async throws {
+        let suiteName = "HisingenTests.command-context.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.vin = "YSMFIRST"
+        var features = FeatureSelection.default
+        features.set(.remoteLocks, enabled: true)
+        preferences.features = features
+
+        let provider = CommandContextProvider()
+        let context = CommandContextMock(provider: provider, vehicleState: vehicle(vin: "YSMFIRST"))
+        let authorizer = DeferredCommandAuthorizer()
+        let coordinator = CommandCoordinator(
+            context: context, preferences: preferences, database: .inMemory(), authorizer: authorizer
+        )
+
+        coordinator.perform(.lock)
+        await authorizer.waitForAuthorizationRequest()
+        context.vehicleState = vehicle(vin: "YSMSECOND")
+        preferences.vin = "YSMSECOND"
+        authorizer.allow()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(await provider.executedCount(), 0)
+    }
+
+    @Test
     func testRemoteFeaturesAreDisabledByDefault() {
         XCTAssertTrue(FeatureSelection.default.enabled.intersection(AppFeature.remoteFeatures).isEmpty)
         XCTAssertEqual(RemoteCommand.unlock.feature, .remoteLocks)
@@ -520,4 +549,66 @@ struct RemoteCommandTests {
         let bits = data.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.littleEndian
         return Float(bitPattern: bits)
     }
+}
+
+@MainActor
+private final class DeferredCommandAuthorizer: RemoteActionAuthorizing {
+    private var authorizationContinuation: CheckedContinuation<Bool, Never>?
+    private var requestContinuation: CheckedContinuation<Void, Never>?
+    private var authorizationRequested = false
+
+    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
+        authorizationRequested = true
+        requestContinuation?.resume()
+        requestContinuation = nil
+        return await withCheckedContinuation { authorizationContinuation = $0 }
+    }
+
+    func waitForAuthorizationRequest() async {
+        guard !authorizationRequested else { return }
+        await withCheckedContinuation { requestContinuation = $0 }
+    }
+
+    func allow() {
+        authorizationContinuation?.resume(returning: true)
+        authorizationContinuation = nil
+    }
+}
+
+@MainActor
+private final class CommandContextMock: CommandExecutionContext {
+    var vehicleState: VehicleState?
+    var sessionIsValid = true
+    private let provider: CommandContextProvider
+
+    init(provider: CommandContextProvider, vehicleState: VehicleState) {
+        self.provider = provider
+        self.vehicleState = vehicleState
+    }
+
+    func currentProvider() -> any VehicleProviding { provider }
+    func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
+    func commandInProgressDidChange() {}
+    func presentResult(title: String, message: String, success: Bool) {}
+    func refreshNowAfterCommand() {}
+}
+
+private actor CommandContextProvider: VehicleProviding {
+    nonisolated let brand: VehicleBrand = .polestar
+    let cars = [CarSummary(vin: "YSMFIRST", title: "First")]
+    private var executedVINs: [String] = []
+
+    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func resetSession() async {}
+    func signOut() async throws {}
+    func resolvedVIN(preferred: String?) -> String? { preferred }
+    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState { vehicle(vin: vin) }
+    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        executedVINs.append(vin)
+        return RemoteCommandResult(outcome: .completed, message: nil)
+    }
+
+    func executedCount() -> Int { executedVINs.count }
 }

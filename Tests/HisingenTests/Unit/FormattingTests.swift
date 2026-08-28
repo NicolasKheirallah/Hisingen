@@ -354,44 +354,6 @@ struct FormattingTests {
     }
 
     @Test
-    func testVersionComparisonHandlesSemVer() {
-        XCTAssertTrue(UpdateChecker.isVersion("2.0.0", newerThan: "1.9.9"))
-        XCTAssertTrue(UpdateChecker.isVersion("1.10.0", newerThan: "1.9.1"))
-        XCTAssertTrue(UpdateChecker.isVersion("v1.0.1+12", newerThan: "1.0"))
-        XCTAssertFalse(UpdateChecker.isVersion("1.0.0-beta.2", newerThan: "1.0.0"))
-        XCTAssertTrue(UpdateChecker.isVersion("1.0.0-beta.10", newerThan: "1.0.0-beta.2"))
-        XCTAssertFalse(UpdateChecker.isVersion("invalid", newerThan: "1.0.0"))
-    }
-
-    @Test
-    func testReleaseEvaluationFiltersDraftsAndPrereleases() throws {
-        let stable = #"[{"tag_name":"v3.0.0","draft":false,"prerelease":false}]"#.data(using: .utf8)!
-        let prerelease = #"[{"tag_name":"v4.0.0-beta.1","draft":false,"prerelease":true}]"#.data(using: .utf8)!
-        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: stable, currentVersion: "2.4.1"),
-                           .updateAvailable("3.0.0"))
-        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: stable, currentVersion: "3.0.0"), .upToDate)
-        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: prerelease, currentVersion: "2.4.1"), .upToDate)
-    }
-
-    @Test
-    func testReleaseEvaluationSkipsRollingLatestTagAndPicksHighestSemver() throws {
-        // The CI pipeline republishes a non-semver "latest" rolling build on every push to
-        // main, so it's almost always the most recently published release. The evaluator
-        // must ignore it and pick the highest real version tag instead.
-        let releases = #"""
-        [
-          {"tag_name":"latest","draft":false,"prerelease":false},
-          {"tag_name":"v1.0.0","draft":false,"prerelease":false},
-          {"tag_name":"v2.1.0","draft":false,"prerelease":false},
-          {"tag_name":"v2.5.0","draft":true,"prerelease":false}
-        ]
-        """#.data(using: .utf8)!
-        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: releases, currentVersion: "1.5.0"),
-                           .updateAvailable("2.1.0"))
-        try XCTAssertEqual(UpdateChecker.evaluateRelease(data: releases, currentVersion: "2.1.0"), .upToDate)
-    }
-
-    @Test
     func testGreetingUsesSelectedInterfaceLanguage() {
         // Resolve through the explicit-language API rather than assigning
         // Preferences.interfaceLanguage. That preference is process-global, and the suite

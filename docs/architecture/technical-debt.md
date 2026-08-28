@@ -34,7 +34,7 @@ modifier gating, dead `Preferences` removal) landed in code.
 5. **Test coverage gaps.** Auth/token-refresh lifecycle is now covered by
    `RefreshCoordinatorTests.testTokenExpiryMidRunRecoversSessionFromStorage`; still missing:
    schema-migration fixtures exercising an old database through the `user_version` path,
-   Notifier privacy-body branches, UpdateChecker semver edge cases, AppIntents dialogs.
+   Notifier privacy-body branches, Sparkle end-to-end signed-feed staging coverage, AppIntents dialogs.
 
 6. **Localization of Shortcuts dialogs.** All `AppIntents` user-facing strings are English
    only; every other surface resolves through `L10n`.

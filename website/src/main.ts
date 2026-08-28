@@ -39,6 +39,7 @@ if (document.getElementById('vehicle-showcase')) {
 
 // Lazy-load Three.js Automotive Studio Suite
 import type { StudioMode, ThreeVehicleStudio } from './components/ThreeVehicleStudio';
+import type { ThreeMetricsField } from './components/ThreeMetricsField';
 
 let threeStudio: ThreeVehicleStudio | null = null;
 const initThreeStudio = async (): Promise<void> => {
@@ -104,7 +105,7 @@ const initThreeStudio = async (): Promise<void> => {
 };
 
 // Lazy-load Three.js Metrics Field for Section 07
-let metricsField: any = null;
+let metricsField: ThreeMetricsField | null = null;
 const initMetricsField = async (): Promise<void> => {
   const stage = document.getElementById('metrics-three-stage');
   if (!stage) return;
@@ -112,22 +113,48 @@ const initMetricsField = async (): Promise<void> => {
   try {
     const { ThreeMetricsField } = await import('./components/ThreeMetricsField');
     metricsField = new ThreeMetricsField('metrics-three-stage');
+    metricsField.setTheme(
+      document.documentElement.dataset.theme === 'dark'
+        || (!document.documentElement.dataset.theme
+          && window.matchMedia('(prefers-color-scheme: dark)').matches),
+    );
   } catch (err) {
     console.warn('Metrics field Three.js init fallback:', err);
   }
 };
 
-if ('requestIdleCallback' in window) {
-  (window as any).requestIdleCallback(() => {
-    initThreeStudio();
-    initMetricsField();
-  });
-} else {
-  setTimeout(() => {
-    initThreeStudio();
-    initMetricsField();
-  }, 100);
-}
+/**
+ * The Three.js modules are sizeable and decorative. Load each only when its section is near
+ * the viewport instead of spending network, parse, and GPU setup work during every page load.
+ * The HTML/CSS presentation remains the functional fallback if WebGL is unavailable.
+ */
+const observeWhenNearViewport = (
+  elementId: string,
+  initialize: () => Promise<void>,
+): void => {
+  const element = document.getElementById(elementId);
+  if (!element || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  let started = false;
+  const start = (): void => {
+    if (started) return;
+    started = true;
+    void initialize();
+  };
+  if (!('IntersectionObserver' in window)) {
+    start();
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    start();
+  }, { rootMargin: '480px 0px' });
+  observer.observe(element);
+};
+
+observeWhenNearViewport('three-studio-stage', initThreeStudio);
+observeWhenNearViewport('metrics-three-stage', initMetricsField);
 
 const themeToggle = document.querySelector<HTMLButtonElement>('#theme-toggle');
 const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');

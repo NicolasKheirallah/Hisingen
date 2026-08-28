@@ -11,8 +11,8 @@ git clone https://github.com/NicolasKheirallah/hisingen.git
 cd hisingen
 make doctor   # verifies your toolchain is internally consistent
 make test     # runs the full Swift Testing suite
-make app      # builds an ad-hoc-signed Hisingen.app
-open Hisingen.app
+make app      # builds an ad-hoc-signed releases/Hisingen.app
+open releases/Hisingen.app
 ```
 
 `make doctor` runs `Scripts/doctor.sh`: resolves the active `xcode-select` developer directory, prints `swiftc --version`/SDK path, and does a `swift package dump-package` smoke test in an isolated module-cache directory to catch a mismatched compiler/SDK/SwiftPM combination early, with a clear error message if that fails.
@@ -43,7 +43,7 @@ You'll need your own Polestar ID or your own Volvo Developer Portal application 
 
 - No database to run, no backend to stand up — Hisingen has neither.
 - No SwiftLint/SwiftFormat config — there isn't one in this repo; code style is enforced by convention and the strict-concurrency compiler flags, not a linter (see [operations/ci.md](../operations/ci.md)).
-- No API keys of Hisingen's own — Open-Meteo and the GitHub Releases API used for weather/update-checks require no authentication at all.
+- No API keys of Hisingen's own — Open-Meteo needs no authentication, while production update signing keys are maintainer-only CI secrets and are never used by development builds.
 
 ## Next steps
 
