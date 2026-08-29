@@ -821,18 +821,27 @@ struct ChargingSession: Codable, Equatable, Sendable {
     let kwhDelivered: Double
     let peakPowerWatts: Int?
     let cost: Double?
-
-
     let targetPercentage: Int?
-
-
     let samples: [ChargingSample]
+    let energySource: ChargingSessionEnergySource
+    let confidence: ChargingSessionConfidence
+    let sampleCoverage: Double?
+    let tariffPricePerKwh: Double?
+    let currencySymbol: String?
+    let completionReason: ChargingSessionCompletionReason?
+    let summaryVersion: Int
 
     init(
         id: UUID, vin: String, startDate: Date, endDate: Date,
         startBatteryPercentage: Double, endBatteryPercentage: Double,
         kwhDelivered: Double, peakPowerWatts: Int?, cost: Double?,
-        targetPercentage: Int? = nil, samples: [ChargingSample] = []
+        targetPercentage: Int? = nil, samples: [ChargingSample] = [],
+        energySource: ChargingSessionEnergySource = .legacyEstimate,
+        confidence: ChargingSessionConfidence = .low,
+        sampleCoverage: Double? = nil, tariffPricePerKwh: Double? = nil,
+        currencySymbol: String? = nil,
+        completionReason: ChargingSessionCompletionReason? = nil,
+        summaryVersion: Int = 1
     ) {
         self.id = id
         self.vin = vin
@@ -845,11 +854,20 @@ struct ChargingSession: Codable, Equatable, Sendable {
         self.cost = cost
         self.targetPercentage = targetPercentage
         self.samples = samples
+        self.energySource = energySource
+        self.confidence = confidence
+        self.sampleCoverage = sampleCoverage
+        self.tariffPricePerKwh = tariffPricePerKwh
+        self.currencySymbol = currencySymbol
+        self.completionReason = completionReason
+        self.summaryVersion = summaryVersion
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, vin, startDate, endDate, startBatteryPercentage, endBatteryPercentage
         case kwhDelivered, peakPowerWatts, cost, targetPercentage, samples
+        case energySource, confidence, sampleCoverage, tariffPricePerKwh, currencySymbol
+        case completionReason, summaryVersion
     }
 
 
@@ -866,7 +884,14 @@ struct ChargingSession: Codable, Equatable, Sendable {
             peakPowerWatts: try c.decodeIfPresent(Int.self, forKey: .peakPowerWatts),
             cost: try c.decodeIfPresent(Double.self, forKey: .cost),
             targetPercentage: try c.decodeIfPresent(Int.self, forKey: .targetPercentage),
-            samples: try c.decodeIfPresent([ChargingSample].self, forKey: .samples) ?? []
+            samples: try c.decodeIfPresent([ChargingSample].self, forKey: .samples) ?? [],
+            energySource: try c.decodeIfPresent(ChargingSessionEnergySource.self, forKey: .energySource) ?? .legacyEstimate,
+            confidence: try c.decodeIfPresent(ChargingSessionConfidence.self, forKey: .confidence) ?? .low,
+            sampleCoverage: try c.decodeIfPresent(Double.self, forKey: .sampleCoverage),
+            tariffPricePerKwh: try c.decodeIfPresent(Double.self, forKey: .tariffPricePerKwh),
+            currencySymbol: try c.decodeIfPresent(String.self, forKey: .currencySymbol),
+            completionReason: try c.decodeIfPresent(ChargingSessionCompletionReason.self, forKey: .completionReason),
+            summaryVersion: try c.decodeIfPresent(Int.self, forKey: .summaryVersion) ?? 1
         )
     }
 
@@ -879,7 +904,7 @@ struct ChargingSession: Codable, Equatable, Sendable {
     }
 
     func estimatedCost(tariff: Double? = nil) -> Double? {
-        cost ?? tariff.map { $0 * kwhDelivered }
+        cost ?? (tariffPricePerKwh ?? tariff).map { $0 * kwhDelivered }
     }
 
     static func completed(

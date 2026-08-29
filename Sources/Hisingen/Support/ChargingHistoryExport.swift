@@ -4,12 +4,13 @@ import Foundation
 /// the status-item context menu (previously two verbatim copies that were drifting).
 enum ChargingHistoryExport {
     static func csv(sessions: [ChargingSession], tariffPricePerKwh: Double, currencySymbol: String) -> String {
-        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency\n"
+        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency,Energy Source,Confidence,Sample Coverage,Summary Version\n"
         let rows = sessions.map { session in
             let dateStr = Format.iso8601.string(from: session.startDate)
             let costStr = session.estimatedCost(tariff: tariffPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
             let peakKw = session.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
-            return "\(dateStr),\(session.startBatteryPercentage),\(session.endBatteryPercentage),\(session.percentageAdded),\(session.kwhDelivered),\(peakKw),\(session.durationMinutes),\(costStr),\(currencySymbol)"
+            let coverage = session.sampleCoverage.map { String(format: "%.3f", $0) } ?? ""
+            return "\(dateStr),\(session.startBatteryPercentage),\(session.endBatteryPercentage),\(session.percentageAdded),\(session.kwhDelivered),\(peakKw),\(session.durationMinutes),\(costStr),\(session.currencySymbol ?? currencySymbol),\(session.energySource.rawValue),\(session.confidence.rawValue),\(coverage),\(session.summaryVersion)"
         }.joined(separator: "\n")
         return headers + rows
     }

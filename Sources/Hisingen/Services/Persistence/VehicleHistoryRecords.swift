@@ -1,5 +1,53 @@
 import Foundation
 
+enum ChargingSessionLifecycleState: String, Codable, Equatable, Sendable {
+    case active
+    case paused
+    case pendingCompletion = "pending_completion"
+    case completed
+    case interrupted
+    case abandoned
+}
+
+enum ChargingSessionCompletionReason: String, Codable, Equatable, Sendable {
+    case targetReached = "target_reached"
+    case disconnected
+    case stopped
+    case fault
+    case staleObservation = "stale_observation"
+    case noEnergyAdded = "no_energy_added"
+    case recordingDisabled = "recording_disabled"
+    case legacy
+}
+
+enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
+    case observedPowerIntegration = "observed_power_integration"
+    case socCapacityEstimate = "soc_capacity_estimate"
+    case legacyEstimate = "legacy_estimate"
+
+    var displayName: String {
+        switch self {
+        case .observedPowerIntegration: return L10n.text("Integrated observed power")
+        case .socCapacityEstimate: return L10n.text("SoC and usable-capacity estimate")
+        case .legacyEstimate: return L10n.text("Legacy estimate")
+        }
+    }
+}
+
+enum ChargingSessionConfidence: String, Codable, Equatable, Sendable {
+    case high
+    case medium
+    case low
+
+    var displayName: String {
+        switch self {
+        case .high: return L10n.text("High confidence")
+        case .medium: return L10n.text("Medium confidence")
+        case .low: return L10n.text("Low confidence")
+        }
+    }
+}
+
 /// Historical records exposed by `VehicleDatabase`. Kept outside the repository
 /// implementation so persistence consumers can find the stable data contract without
 /// navigating schema/migration code.
@@ -15,6 +63,69 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     let averagePowerKw: Double
     let locationName: String?
     let createdAt: Date
+    let lifecycleState: ChargingSessionLifecycleState
+    let completionReason: ChargingSessionCompletionReason?
+    let energySource: ChargingSessionEnergySource
+    let confidence: ChargingSessionConfidence
+    let sampleCoverage: Double?
+    let usableCapacityKwh: Double?
+    let tariffPricePerKwh: Double?
+    let nightTariffEnabled: Bool
+    let nightTariffPricePerKwh: Double?
+    let nightTariffStartHour: Int?
+    let nightTariffEndHour: Int?
+    let currencySymbol: String?
+    let targetSoc: Double?
+    let lastObservedAt: Date?
+    let summaryVersion: Int
+    let pendingStopCount: Int
+    let estimatedCost: Double?
+
+    init(
+        id: String, vin: String, startedAt: Date, endedAt: Date?, startSoc: Double,
+        endSoc: Double?, energyDeliveredKwh: Double, peakPowerKw: Double,
+        averagePowerKw: Double, locationName: String?, createdAt: Date,
+        lifecycleState: ChargingSessionLifecycleState = .completed,
+        completionReason: ChargingSessionCompletionReason? = .legacy,
+        energySource: ChargingSessionEnergySource = .legacyEstimate,
+        confidence: ChargingSessionConfidence = .low,
+        sampleCoverage: Double? = nil,
+        usableCapacityKwh: Double? = nil, tariffPricePerKwh: Double? = nil,
+        nightTariffEnabled: Bool = false, nightTariffPricePerKwh: Double? = nil,
+        nightTariffStartHour: Int? = nil, nightTariffEndHour: Int? = nil,
+        currencySymbol: String? = nil, targetSoc: Double? = nil,
+        lastObservedAt: Date? = nil, summaryVersion: Int = 1,
+        pendingStopCount: Int = 0, estimatedCost: Double? = nil
+    ) {
+        self.id = id
+        self.vin = vin
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.startSoc = startSoc
+        self.endSoc = endSoc
+        self.energyDeliveredKwh = energyDeliveredKwh
+        self.peakPowerKw = peakPowerKw
+        self.averagePowerKw = averagePowerKw
+        self.locationName = locationName
+        self.createdAt = createdAt
+        self.lifecycleState = lifecycleState
+        self.completionReason = completionReason
+        self.energySource = energySource
+        self.confidence = confidence
+        self.sampleCoverage = sampleCoverage
+        self.usableCapacityKwh = usableCapacityKwh
+        self.tariffPricePerKwh = tariffPricePerKwh
+        self.nightTariffEnabled = nightTariffEnabled
+        self.nightTariffPricePerKwh = nightTariffPricePerKwh
+        self.nightTariffStartHour = nightTariffStartHour
+        self.nightTariffEndHour = nightTariffEndHour
+        self.currencySymbol = currencySymbol
+        self.targetSoc = targetSoc
+        self.lastObservedAt = lastObservedAt
+        self.summaryVersion = summaryVersion
+        self.pendingStopCount = pendingStopCount
+        self.estimatedCost = estimatedCost
+    }
 
     /// Converts the durable summary and its samples into one internally consistent session.
     ///
@@ -47,7 +158,12 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
             startBatteryPercentage: startSoc, endBatteryPercentage: resolvedEndSoc,
             kwhDelivered: resolvedEnergy,
             peakPowerWatts: peakPowerKw > 0 ? Int(peakPowerKw * 1000.0) : nil,
-            cost: nil, targetPercentage: nil, samples: samples
+            cost: estimatedCost,
+            targetPercentage: targetSoc.map { Int($0.rounded()) }, samples: samples,
+            energySource: energySource, confidence: confidence,
+            sampleCoverage: sampleCoverage, tariffPricePerKwh: tariffPricePerKwh,
+            currencySymbol: currencySymbol, completionReason: completionReason,
+            summaryVersion: summaryVersion
         )
     }
 
@@ -99,7 +215,18 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
             energyDeliveredKwh: percentageAdded / 100 * usableCapacityKwh,
             peakPowerKw: max(peakPowerKw, powers.max() ?? 0),
             averagePowerKw: powers.isEmpty ? averagePowerKw : powers.reduce(0, +) / Double(powers.count),
-            locationName: locationName, createdAt: createdAt
+            locationName: locationName, createdAt: createdAt,
+            lifecycleState: lifecycleState, completionReason: completionReason,
+            energySource: energySource, confidence: confidence,
+            sampleCoverage: sampleCoverage,
+            usableCapacityKwh: usableCapacityKwh, tariffPricePerKwh: tariffPricePerKwh,
+            nightTariffEnabled: nightTariffEnabled,
+            nightTariffPricePerKwh: nightTariffPricePerKwh,
+            nightTariffStartHour: nightTariffStartHour,
+            nightTariffEndHour: nightTariffEndHour,
+            currencySymbol: currencySymbol, targetSoc: targetSoc,
+            lastObservedAt: lastObservedAt, summaryVersion: summaryVersion,
+            pendingStopCount: pendingStopCount, estimatedCost: estimatedCost
         )
     }
 }

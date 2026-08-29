@@ -23,6 +23,9 @@ struct ChargingCurveView: View {
     let readyDate: Date?
     let isLive: Bool
     var currentPowerWatts: Int? = nil
+    var energySource: ChargingSessionEnergySource? = nil
+    var confidence: ChargingSessionConfidence? = nil
+    var sampleCoverage: Double? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
@@ -52,7 +55,7 @@ struct ChargingCurveView: View {
     }
 
     private var socDomain: (low: Double, high: Double) {
-        var values = [startSample.batteryPercentage, lastSample.batteryPercentage]
+        var values = samples.map(\.batteryPercentage)
         if let effectiveTargetPct { values.append(effectiveTargetPct) }
         let minV = values.min() ?? 0
         let maxV = values.max() ?? 100
@@ -73,6 +76,10 @@ struct ChargingCurveView: View {
         let rawEnd = (isLive ? (readyDate ?? lastSample.timestamp) : lastSample.timestamp)
         let end = rawEnd.timeIntervalSince(start) > 60 ? rawEnd : start.addingTimeInterval(60)
         return (start, end)
+    }
+
+    private var observationGaps: [ChargingCharts.SampleGap] {
+        ChargingCharts.gaps(in: samples)
     }
 
     private func xCoord(_ date: Date, horizontalInset: CGFloat, chartWidth: CGFloat, timeStart: Date, totalSpan: TimeInterval) -> CGFloat {
@@ -156,6 +163,25 @@ struct ChargingCurveView: View {
                         .foregroundStyle(curveMode == .power ? Color.green : HisingenTheme.accent)
                 }
 
+                if let energySource, let confidence {
+                    HStack(spacing: 5) {
+                        Label("\(confidence.displayName) · \(energySource.displayName)",
+                              systemImage: "checkmark.seal")
+                        if let sampleCoverage {
+                            Text("· " + L10n.format("%d%% observed", Int((sampleCoverage * 100).rounded())))
+                                .monospacedDigit()
+                        }
+                        Spacer()
+                        if !observationGaps.isEmpty {
+                            Label(L10n.format("%d observation gaps", observationGaps.count),
+                                  systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .font(.system(size: 8.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                }
+
                 GeometryReader { geo in
                     let width = geo.size.width
                     let height = geo.size.height
@@ -165,20 +191,33 @@ struct ChargingCurveView: View {
                     let chartHeight = max(1, height - verticalInset * 2)
                     let bottomY = verticalInset + chartHeight
 
-                    let socPoints = samples.map { sample in
-                        CGPoint(
-                            x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
-                            y: yCoord(sample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
-                        )
+                    let socPointSegments = ChargingCharts.contiguousSegments(samples).map { segment in
+                        segment.map { sample in
+                            CGPoint(
+                                x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                                y: yCoord(sample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                            )
+                        }
                     }
+                    let socPoints = socPointSegments.flatMap { $0 }
 
-                    let powerPoints = samples.map { sample in
-                        let kw = Double(sample.powerWatts ?? currentPowerWatts ?? 0) / 1000.0
-                        return CGPoint(
-                            x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
-                            y: yCoord(kw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
+                    let powerSamples = samples.enumerated().compactMap { index, sample -> ChargingSample? in
+                        let watts = sample.powerWatts ?? (index == samples.count - 1 ? currentPowerWatts : nil)
+                        guard let watts, watts > 0 else { return nil }
+                        return ChargingSample(
+                            timestamp: sample.timestamp, batteryPercentage: sample.batteryPercentage,
+                            powerWatts: watts, chargingType: sample.chargingType
                         )
                     }
+                    let powerPointSegments = ChargingCharts.contiguousSegments(powerSamples).map { segment in
+                        segment.map { sample in
+                            CGPoint(
+                                x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                                y: yCoord(Double(sample.powerWatts ?? 0) / 1000.0, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
+                            )
+                        }
+                    }
+                    let powerPoints = powerPointSegments.flatMap { $0 }
 
                     let firstSocPoint = socPoints.first ?? CGPoint(x: horizontalInset, y: yCoord(startSample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh))
                     let lastSocPoint = socPoints.last ?? firstSocPoint
@@ -201,13 +240,15 @@ struct ChargingCurveView: View {
 
                         if hoveredDate <= lastSample.timestamp || projectedEnd == nil {
                             let closest = samples.min(by: { abs($0.timestamp.timeIntervalSince(hoveredDate)) < abs($1.timestamp.timeIntervalSince(hoveredDate)) }) ?? lastSample
-                            let kw = Double(closest.powerWatts ?? currentPowerWatts ?? 0) / 1000.0
+                            let resolvedWatts = closest.powerWatts
+                                ?? (closest.timestamp == lastSample.timestamp ? currentPowerWatts : nil)
+                            let kw = Double(resolvedWatts ?? 0) / 1000.0
                             let targetY = curveMode == .power ? yCoord(kw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh) : yCoord(closest.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
                             let pt = CGPoint(
                                 x: xCoord(closest.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
                                 y: targetY
                             )
-                            return (pt, closest.batteryPercentage, closest.timestamp, closest.powerWatts ?? currentPowerWatts, false)
+                            return (pt, closest.batteryPercentage, closest.timestamp, resolvedWatts, false)
                         } else if let readyDate, let effectiveTargetPct {
                             let projTotal = readyDate.timeIntervalSince(lastSample.timestamp)
                             let projElapsed = hoveredDate.timeIntervalSince(lastSample.timestamp)
@@ -223,6 +264,16 @@ struct ChargingCurveView: View {
                     }()
 
                     ZStack {
+                        ForEach(observationGaps.indices, id: \.self) { index in
+                            let gap = observationGaps[index]
+                            let startX = xCoord(gap.startedAt, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan)
+                            let endX = xCoord(gap.endedAt, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan)
+                            Rectangle()
+                                .fill(Color.orange.opacity(0.055))
+                                .frame(width: max(2, endX - startX), height: chartHeight)
+                                .position(x: (startX + endX) / 2, y: verticalInset + chartHeight / 2)
+                        }
+
                         if curveMode != .power, let effectiveTargetPct {
                             let guideY = yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
                             Path { path in
@@ -267,15 +318,18 @@ struct ChargingCurveView: View {
                                 )
                             }
 
-                            if socPoints.count >= 2 {
-                                smoothPath(socPoints)
-                                    .addingClosedBottom(firstX: firstSocPoint.x, lastX: lastSocPoint.x, bottomY: bottomY)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
-                                            startPoint: .top, endPoint: .bottom
+                            ForEach(socPointSegments.indices, id: \.self) { index in
+                                let points = socPointSegments[index]
+                                if points.count >= 2, let first = points.first, let last = points.last {
+                                    ChargingCharts.stepPath(points)
+                                        .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
+                                                startPoint: .top, endPoint: .bottom
+                                            )
                                         )
-                                    )
+                                }
                             }
 
                             if let projectedEnd {
@@ -292,32 +346,38 @@ struct ChargingCurveView: View {
                                     .position(projectedEnd)
                             }
 
-                            if socPoints.count >= 2 {
-                                smoothPath(socPoints)
-                                    .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                                    .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
+                            ForEach(socPointSegments.indices, id: \.self) { index in
+                                let points = socPointSegments[index]
+                                if points.count >= 2 {
+                                    ChargingCharts.stepPath(points)
+                                        .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                                        .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
+                                }
                             }
                         }
 
                         if curveMode == .power || curveMode == .dual {
-                            if powerPoints.count >= 2 {
-                                if curveMode == .power {
-                                    smoothPath(powerPoints)
-                                        .addingClosedBottom(firstX: firstPowerPoint.x, lastX: lastPowerPoint.x, bottomY: bottomY)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
-                                                startPoint: .top, endPoint: .bottom
+                            ForEach(powerPointSegments.indices, id: \.self) { index in
+                                let points = powerPointSegments[index]
+                                if points.count >= 2, let first = points.first, let last = points.last {
+                                    if curveMode == .power {
+                                        smoothPath(points)
+                                            .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
+                                                    startPoint: .top, endPoint: .bottom
+                                                )
                                             )
-                                        )
-                                }
+                                    }
 
-                                smoothPath(powerPoints)
-                                    .stroke(
-                                        Color.green,
-                                        style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
-                                    )
-                                    .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
+                                    smoothPath(points)
+                                        .stroke(
+                                            Color.green,
+                                            style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
+                                        )
+                                        .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
+                                }
                             }
                         }
 
@@ -495,33 +555,43 @@ struct MiniSparklineView: View {
 
     var body: some View {
         guard samples.count >= 2 else { return AnyView(EmptyView()) }
-        let pcts = samples.map(\.batteryPercentage)
+        let ordered = samples.sorted { $0.timestamp < $1.timestamp }
+        let pcts = ordered.map(\.batteryPercentage)
         let minV = pcts.min() ?? 0
         let maxV = pcts.max() ?? 100
         let span = max(1.0, maxV - minV)
+        let firstDate = ordered.first?.timestamp ?? Date()
+        let duration = max(1, (ordered.last?.timestamp ?? firstDate).timeIntervalSince(firstDate))
 
         return AnyView(
             GeometryReader { geo in
                 let w = geo.size.width
                 let h = geo.size.height
-                let points = samples.enumerated().map { (idx, s) -> CGPoint in
-                    let x = CGFloat(idx) / CGFloat(samples.count - 1) * w
-                    let y = (1.0 - CGFloat((s.batteryPercentage - minV) / span)) * (h - 4) + 2
-                    return CGPoint(x: x, y: y)
+                let pointSegments = ChargingCharts.contiguousSegments(ordered).map { segment in
+                    segment.map { sample -> CGPoint in
+                        let x = CGFloat(sample.timestamp.timeIntervalSince(firstDate) / duration) * w
+                        let y = (1.0 - CGFloat((sample.batteryPercentage - minV) / span)) * (h - 4) + 2
+                        return CGPoint(x: x, y: y)
+                    }
                 }
+                let points = pointSegments.flatMap { $0 }
 
                 ZStack {
-                    ChargingCharts.smoothPath(points)
-                        .addingClosedBottom(firstX: points.first?.x ?? 0, lastX: points.last?.x ?? w, bottomY: h)
-                        .fill(
-                            LinearGradient(
-                                colors: [HisingenTheme.accent.opacity(0.35), HisingenTheme.accent.opacity(0.02)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-
-                    ChargingCharts.smoothPath(points)
-                        .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    ForEach(pointSegments.indices, id: \.self) { index in
+                        let segment = pointSegments[index]
+                        if segment.count >= 2, let first = segment.first, let last = segment.last {
+                            ChargingCharts.stepPath(segment)
+                                .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: h)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [HisingenTheme.accent.opacity(0.35), HisingenTheme.accent.opacity(0.02)],
+                                        startPoint: .top, endPoint: .bottom
+                                    )
+                                )
+                            ChargingCharts.stepPath(segment)
+                                .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                        }
+                    }
 
                     if let last = points.last {
                         Circle()
@@ -550,6 +620,59 @@ private extension Path {
 
 /// Chart geometry shared by `ChargingCurveView` and `MiniSparklineView`.
 enum ChargingCharts {
+    static let maximumConnectedGap = HistoryInsights.chargingCurveGapThreshold
+
+    struct SampleGap: Equatable, Sendable {
+        let startedAt: Date
+        let endedAt: Date
+    }
+
+    /// Splits observations before rendering so the UI never invents a continuous line across
+    /// a period that was too sparse to support energy integration.
+    static func contiguousSegments(
+        _ samples: [ChargingSample], maximumGap: TimeInterval = maximumConnectedGap
+    ) -> [[ChargingSample]] {
+        let ordered = samples.sorted { $0.timestamp < $1.timestamp }
+        guard let first = ordered.first else { return [] }
+        var result: [[ChargingSample]] = []
+        var current = [first]
+        for sample in ordered.dropFirst() {
+            if sample.timestamp.timeIntervalSince(current[current.count - 1].timestamp) > maximumGap {
+                result.append(current)
+                current = [sample]
+            } else {
+                current.append(sample)
+            }
+        }
+        result.append(current)
+        return result
+    }
+
+    static func gaps(
+        in samples: [ChargingSample], maximumGap: TimeInterval = maximumConnectedGap
+    ) -> [SampleGap] {
+        let ordered = samples.sorted { $0.timestamp < $1.timestamp }
+        return zip(ordered, ordered.dropFirst()).compactMap { first, second in
+            guard second.timestamp.timeIntervalSince(first.timestamp) > maximumGap else { return nil }
+            return SampleGap(startedAt: first.timestamp, endedAt: second.timestamp)
+        }
+    }
+
+    /// SoC is reported in rounded steps, so a step path is more truthful than a spline that
+    /// can overshoot between observations and visually invent charge or discharge events.
+    static func stepPath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        var previous = first
+        for point in points.dropFirst() {
+            path.addLine(to: CGPoint(x: point.x, y: previous.y))
+            path.addLine(to: point)
+            previous = point
+        }
+        return path
+    }
+
     /// Catmull-Rom → cubic Bézier smoothing over the given points.
     static func smoothPath(_ points: [CGPoint]) -> Path {
         var path = Path()

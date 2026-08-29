@@ -74,7 +74,24 @@ final class VehicleDatabase: @unchecked Sendable {
             peak_power_kw REAL DEFAULT 0.0,
             average_power_kw REAL DEFAULT 0.0,
             location_name TEXT,
-            created_at REAL NOT NULL
+            created_at REAL NOT NULL,
+            lifecycle_state TEXT NOT NULL DEFAULT 'active',
+            completion_reason TEXT,
+            energy_source TEXT NOT NULL DEFAULT 'soc_capacity_estimate',
+            confidence TEXT NOT NULL DEFAULT 'low',
+            sample_coverage REAL,
+            usable_capacity_kwh REAL,
+            tariff_price_per_kwh REAL,
+            night_tariff_enabled INTEGER NOT NULL DEFAULT 0,
+            night_tariff_price_per_kwh REAL,
+            night_tariff_start_hour INTEGER,
+            night_tariff_end_hour INTEGER,
+            currency_symbol TEXT,
+            target_soc REAL,
+            last_observed_at REAL,
+            summary_version INTEGER NOT NULL DEFAULT 2,
+            pending_stop_count INTEGER NOT NULL DEFAULT 0,
+            estimated_cost REAL
         );
         CREATE INDEX IF NOT EXISTS idx_charging_sessions_vin ON charging_sessions(vin, started_at DESC);
 
@@ -183,7 +200,6 @@ final class VehicleDatabase: @unchecked Sendable {
         do {
             try db.execute(sql: sql)
             runMigrations()
-            try? db.execute(sql: "PRAGMA user_version = 1;")
         } catch {
             // .fault: without a schema every persistence path degrades silently.
             logger.fault("Could not initialize database schema: \(error, privacy: .public)")
@@ -229,6 +245,46 @@ final class VehicleDatabase: @unchecked Sendable {
             // implementation. Keep them quarantined rather than presenting them as measurements.
             try? db.execute(sql: "UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';")
             try? db.execute(sql: "PRAGMA user_version = 1;")
+        }
+
+        // v2: explicit charging-session lifecycle and versioned summary provenance.
+        if currentVersion < 2 {
+            let additions: [(String, String)] = [
+                ("lifecycle_state", "TEXT NOT NULL DEFAULT 'active'"),
+                ("completion_reason", "TEXT"),
+                ("energy_source", "TEXT NOT NULL DEFAULT 'soc_capacity_estimate'"),
+                ("confidence", "TEXT NOT NULL DEFAULT 'low'"),
+                ("sample_coverage", "REAL"),
+                ("usable_capacity_kwh", "REAL"),
+                ("tariff_price_per_kwh", "REAL"),
+                ("night_tariff_enabled", "INTEGER NOT NULL DEFAULT 0"),
+                ("night_tariff_price_per_kwh", "REAL"),
+                ("night_tariff_start_hour", "INTEGER"),
+                ("night_tariff_end_hour", "INTEGER"),
+                ("currency_symbol", "TEXT"),
+                ("target_soc", "REAL"),
+                ("last_observed_at", "REAL"),
+                ("summary_version", "INTEGER NOT NULL DEFAULT 2"),
+                ("pending_stop_count", "INTEGER NOT NULL DEFAULT 0"),
+                ("estimated_cost", "REAL")
+            ]
+            for (column, declaration) in additions where !columnExists(table: "charging_sessions", column: column) {
+                try? db.execute(sql: "ALTER TABLE charging_sessions ADD COLUMN \(column) \(declaration);")
+            }
+            if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0.0) }) {
+                try? db.execute(sql: """
+                    UPDATE charging_sessions SET
+                        lifecycle_state = CASE WHEN ended_at IS NULL THEN 'active' ELSE 'completed' END,
+                        completion_reason = CASE WHEN ended_at IS NULL THEN NULL ELSE 'legacy' END,
+                        energy_source = 'legacy_estimate', confidence = 'low', summary_version = 1,
+                        last_observed_at = COALESCE(ended_at, started_at);
+                    CREATE INDEX IF NOT EXISTS idx_charging_sessions_active
+                        ON charging_sessions(vin, lifecycle_state, ended_at);
+                    PRAGMA user_version = 2;
+                    """)
+            } else {
+                logger.error("Charging-session schema migration remains incomplete; it will retry next launch")
+            }
         }
     }
 
@@ -360,6 +416,16 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Charging Sessions & Samples
 
+    private static let chargingSessionColumns = """
+        id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh,
+        peak_power_kw, average_power_kw, location_name, created_at, lifecycle_state,
+        completion_reason, energy_source, confidence, sample_coverage,
+        usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
+        night_tariff_price_per_kwh, night_tariff_start_hour, night_tariff_end_hour,
+        currency_symbol, target_soc, last_observed_at, summary_version,
+        pending_stop_count, estimated_cost
+        """
+
     /// Shared column mapping for the `charging_sessions` SELECT shape used by every session
     /// query (previously duplicated in four readers with drift risk).
     private func sessionRow(from stmt: SQLiteStatement,
@@ -376,17 +442,50 @@ final class VehicleDatabase: @unchecked Sendable {
             energyDeliveredKwh: energy ?? (stmt.columnDouble(at: 6) ?? 0.0),
             peakPowerKw: peak ?? (stmt.columnDouble(at: 7) ?? 0.0),
             averagePowerKw: average ?? (stmt.columnDouble(at: 8) ?? 0.0),
-            locationName: location ?? stmt.columnText(at: 9),
-            createdAt: createdAt
+            locationName: location ?? stmt.columnText(at: 9), createdAt: createdAt,
+            lifecycleState: stmt.columnText(at: 11).flatMap(ChargingSessionLifecycleState.init(rawValue:))
+                ?? (endedAt == nil ? .active : .completed),
+            completionReason: stmt.columnText(at: 12).flatMap(ChargingSessionCompletionReason.init(rawValue:)),
+            energySource: stmt.columnText(at: 13).flatMap(ChargingSessionEnergySource.init(rawValue:)) ?? .legacyEstimate,
+            confidence: stmt.columnText(at: 14).flatMap(ChargingSessionConfidence.init(rawValue:)) ?? .low,
+            sampleCoverage: stmt.columnDouble(at: 15),
+            usableCapacityKwh: stmt.columnDouble(at: 16),
+            tariffPricePerKwh: stmt.columnDouble(at: 17),
+            nightTariffEnabled: (stmt.columnInt64(at: 18) ?? 0) != 0,
+            nightTariffPricePerKwh: stmt.columnDouble(at: 19),
+            nightTariffStartHour: stmt.columnInt64(at: 20).map(Int.init),
+            nightTariffEndHour: stmt.columnInt64(at: 21).map(Int.init),
+            currencySymbol: stmt.columnText(at: 22),
+            targetSoc: stmt.columnDouble(at: 23),
+            lastObservedAt: stmt.columnDate(at: 24),
+            summaryVersion: Int(stmt.columnInt64(at: 25) ?? 1),
+            pendingStopCount: Int(stmt.columnInt64(at: 26) ?? 0),
+            estimatedCost: stmt.columnDouble(at: 27)
         )
     }
 
     @discardableResult
     func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double,
-                              location: String? = nil, startedAt: Date = Date()) -> String {
+                              location: String? = nil, startedAt: Date = Date(),
+                              usableCapacityKwh: Double? = nil,
+                              tariffPricePerKwh: Double? = nil,
+                              nightTariffEnabled: Bool = false,
+                              nightTariffPricePerKwh: Double? = nil,
+                              nightTariffStartHour: Int? = nil,
+                              nightTariffEndHour: Int? = nil,
+                              currencySymbol: String? = nil,
+                              targetSoc: Double? = nil,
+                              lifecycleState: ChargingSessionLifecycleState = .active) -> String {
         let sql = """
-        INSERT INTO charging_sessions (id, vin, started_at, start_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at)
-        VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?);
+        INSERT INTO charging_sessions (
+            id, vin, started_at, start_soc, energy_delivered_kwh, peak_power_kw,
+            average_power_kw, location_name, created_at, lifecycle_state, energy_source,
+            confidence, usable_capacity_kwh, tariff_price_per_kwh, currency_symbol,
+            night_tariff_enabled, night_tariff_price_per_kwh,
+            night_tariff_start_hour, night_tariff_end_hour, target_soc,
+            last_observed_at, summary_version, pending_stop_count
+        ) VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?, ?, 'soc_capacity_estimate',
+                  'low', ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 0);
         """
         try? db.query(sql: sql) { stmt in
             try stmt.bindText(id, at: 1)
@@ -395,6 +494,16 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(startSoc, at: 4)
             try stmt.bindText(location, at: 5)
             try stmt.bindDate(startedAt, at: 6)
+            try stmt.bindText(lifecycleState.rawValue, at: 7)
+            try stmt.bindDouble(usableCapacityKwh, at: 8)
+            try stmt.bindDouble(tariffPricePerKwh, at: 9)
+            try stmt.bindText(currencySymbol, at: 10)
+            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 11)
+            try stmt.bindDouble(nightTariffPricePerKwh, at: 12)
+            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 13)
+            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 14)
+            try stmt.bindDouble(targetSoc, at: 15)
+            try stmt.bindDate(startedAt, at: 16)
             try stmt.executeUpdate()
         } process: { _ in }
         return id
@@ -422,14 +531,40 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func completeChargingSession(id: String, endSoc: Double, energyDeliveredKwh: Double,
                                  peakPowerKw: Double, averagePowerKw: Double,
-                                 endedAt: Date = Date()) {
+                                 endedAt: Date = Date(),
+                                 lifecycleState: ChargingSessionLifecycleState = .completed,
+                                 completionReason: ChargingSessionCompletionReason = .stopped,
+                                 energySource: ChargingSessionEnergySource = .socCapacityEstimate,
+                                 confidence: ChargingSessionConfidence = .low,
+                                 usableCapacityKwh: Double? = nil,
+                                 tariffPricePerKwh: Double? = nil,
+                                 nightTariffEnabled: Bool = false,
+                                 nightTariffPricePerKwh: Double? = nil,
+                                 nightTariffStartHour: Int? = nil,
+                                 nightTariffEndHour: Int? = nil,
+                                 currencySymbol: String? = nil,
+                                 targetSoc: Double? = nil,
+                                 sampleCoverage: Double? = nil,
+                                 estimatedCost: Double? = nil) {
         let sql = """
         UPDATE charging_sessions SET
             ended_at = ?,
             end_soc = ?,
             energy_delivered_kwh = ?,
             peak_power_kw = ?,
-            average_power_kw = ?
+            average_power_kw = ?, lifecycle_state = ?, completion_reason = ?,
+            energy_source = ?, confidence = ?,
+            sample_coverage = ?,
+            usable_capacity_kwh = COALESCE(?, usable_capacity_kwh),
+            tariff_price_per_kwh = COALESCE(?, tariff_price_per_kwh),
+            night_tariff_enabled = ?,
+            night_tariff_price_per_kwh = COALESCE(?, night_tariff_price_per_kwh),
+            night_tariff_start_hour = COALESCE(?, night_tariff_start_hour),
+            night_tariff_end_hour = COALESCE(?, night_tariff_end_hour),
+            currency_symbol = COALESCE(?, currency_symbol),
+            target_soc = COALESCE(?, target_soc), last_observed_at = ?,
+            summary_version = 2, pending_stop_count = 0,
+            estimated_cost = ?
         WHERE id = ?;
         """
         try? db.query(sql: sql) { stmt in
@@ -438,7 +573,56 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(energyDeliveredKwh, at: 3)
             try stmt.bindDouble(peakPowerKw, at: 4)
             try stmt.bindDouble(averagePowerKw, at: 5)
-            try stmt.bindText(id, at: 6)
+            try stmt.bindText(lifecycleState.rawValue, at: 6)
+            try stmt.bindText(completionReason.rawValue, at: 7)
+            try stmt.bindText(energySource.rawValue, at: 8)
+            try stmt.bindText(confidence.rawValue, at: 9)
+            try stmt.bindDouble(sampleCoverage, at: 10)
+            try stmt.bindDouble(usableCapacityKwh, at: 11)
+            try stmt.bindDouble(tariffPricePerKwh, at: 12)
+            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 13)
+            try stmt.bindDouble(nightTariffPricePerKwh, at: 14)
+            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 15)
+            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 16)
+            try stmt.bindText(currencySymbol, at: 17)
+            try stmt.bindDouble(targetSoc, at: 18)
+            try stmt.bindDate(endedAt, at: 19)
+            try stmt.bindDouble(estimatedCost, at: 20)
+            try stmt.bindText(id, at: 21)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func updateChargingSessionLifecycle(
+        id: String, state: ChargingSessionLifecycleState, observedAt: Date,
+        pendingStopCount: Int, targetSoc: Double?
+    ) {
+        try? db.query(sql: """
+            UPDATE charging_sessions SET lifecycle_state = ?, last_observed_at = ?,
+                pending_stop_count = ?, target_soc = COALESCE(?, target_soc)
+            WHERE id = ? AND ended_at IS NULL;
+            """) { stmt in
+            try stmt.bindText(state.rawValue, at: 1)
+            try stmt.bindDate(observedAt, at: 2)
+            try stmt.bindInt64(Int64(max(0, pendingStopCount)), at: 3)
+            try stmt.bindDouble(targetSoc, at: 4)
+            try stmt.bindText(id, at: 5)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func abandonChargingSession(id: String, endedAt: Date,
+                                reason: ChargingSessionCompletionReason) {
+        try? db.query(sql: """
+            UPDATE charging_sessions SET ended_at = ?, lifecycle_state = 'abandoned',
+                completion_reason = ?, last_observed_at = ?, pending_stop_count = 0,
+                summary_version = 2
+            WHERE id = ? AND ended_at IS NULL;
+            """) { stmt in
+            try stmt.bindDate(endedAt, at: 1)
+            try stmt.bindText(reason.rawValue, at: 2)
+            try stmt.bindDate(endedAt, at: 3)
+            try stmt.bindText(id, at: 4)
             try stmt.executeUpdate()
         } process: { _ in }
     }
@@ -460,8 +644,11 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func activeChargingSession(for vin: String) -> HistoricalChargingSession? {
         let sql = """
-        SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
-        FROM charging_sessions WHERE vin = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1;
+        SELECT \(Self.chargingSessionColumns)
+        FROM charging_sessions
+        WHERE vin = ? AND ended_at IS NULL
+          AND lifecycle_state IN ('active', 'paused', 'pending_completion')
+        ORDER BY started_at DESC LIMIT 1;
         """
         return (try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -501,9 +688,10 @@ final class VehicleDatabase: @unchecked Sendable {
 
     func recentChargingSessions(for vin: String, limit: Int = 20) -> [HistoricalChargingSession] {
         let sql = """
-        SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
+        SELECT \(Self.chargingSessionColumns)
         FROM charging_sessions
         WHERE vin = ? AND ended_at IS NOT NULL
+          AND lifecycle_state IN ('completed', 'interrupted')
           AND (
             end_soc > start_soc OR energy_delivered_kwh > 0 OR EXISTS (
               SELECT 1 FROM charging_samples
@@ -1089,8 +1277,12 @@ final class VehicleDatabase: @unchecked Sendable {
             sessions = recentChargingSessions(for: vin, limit: 1000)
         } else {
             let sql = """
-            SELECT id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name, created_at
-            FROM charging_sessions ORDER BY started_at DESC LIMIT 1000;
+            SELECT \(Self.chargingSessionColumns)
+            FROM charging_sessions
+            WHERE ended_at IS NOT NULL
+              AND lifecycle_state IN ('completed', 'interrupted')
+              AND (end_soc > start_soc OR energy_delivered_kwh > 0)
+            ORDER BY started_at DESC LIMIT 1000;
             """
             sessions = (try? db.query(sql: sql) { _ in } process: { [weak self] stmt -> [HistoricalChargingSession] in
                 var list: [HistoricalChargingSession] = []
@@ -1107,14 +1299,22 @@ final class VehicleDatabase: @unchecked Sendable {
             }) ?? []
         }
 
-        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location\n"
+        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version\n"
         let df = ISO8601DateFormatter()
         for s in sessions {
             let start = df.string(from: s.startedAt)
             let end = s.endedAt.map { df.string(from: $0) } ?? ""
             let endSoc = s.endSoc.map { String(format: "%.1f", $0) } ?? ""
             let loc = (s.locationName ?? "").replacingOccurrences(of: ",", with: " ")
-            csv += "\(s.id),\(s.vin),\(start),\(end),\(String(format: "%.1f", s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc)\n"
+            let coverage = s.sampleCoverage.map { String(format: "%.3f", $0) } ?? ""
+            let capacity = s.usableCapacityKwh.map { String(format: "%.2f", $0) } ?? ""
+            let tariff = s.tariffPricePerKwh.map { String(format: "%.4f", $0) } ?? ""
+            let nightTariff = s.nightTariffPricePerKwh.map { String(format: "%.4f", $0) } ?? ""
+            let nightStart = s.nightTariffStartHour.map(String.init) ?? ""
+            let nightEnd = s.nightTariffEndHour.map(String.init) ?? ""
+            let cost = s.estimatedCost.map { String(format: "%.2f", $0) } ?? ""
+            let target = s.targetSoc.map { String(format: "%.1f", $0) } ?? ""
+            csv += "\(s.id),\(s.vin),\(start),\(end),\(String(format: "%.1f", s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc),\(s.lifecycleState.rawValue),\(s.completionReason?.rawValue ?? ""),\(s.energySource.rawValue),\(s.confidence.rawValue),\(coverage),\(capacity),\(tariff),\(s.nightTariffEnabled),\(nightTariff),\(nightStart),\(nightEnd),\(cost),\(s.currencySymbol ?? ""),\(target),\(s.summaryVersion)\n"
         }
         return csv
     }
@@ -1307,11 +1507,32 @@ extension VehicleDatabase {
         let peakKw: Double
         let averageKw: Double
         let locationName: String?
+        let lifecycle: String
+        let completionReason: String?
+        let energySource: String
+        let confidence: String
+        let sampleCoverage: Double?
+        let usableCapacityKwh: Double?
+        let tariffPricePerKwh: Double?
+        let nightTariffEnabled: Bool
+        let nightTariffPricePerKwh: Double?
+        let nightTariffStartHour: Int?
+        let nightTariffEndHour: Int?
+        let estimatedCost: Double?
+        let currency: String?
+        let targetSoc: Double?
+        let summaryVersion: Int
     }
 
     private func backupChargingSessions(includeCoordinates: Bool) -> [BackupSession] {
         let sql = """
-        SELECT vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh, peak_power_kw, average_power_kw, location_name
+        SELECT vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh,
+               peak_power_kw, average_power_kw, location_name, lifecycle_state,
+               completion_reason, energy_source, confidence, sample_coverage,
+               usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
+               night_tariff_price_per_kwh, night_tariff_start_hour,
+               night_tariff_end_hour, estimated_cost, currency_symbol, target_soc,
+               summary_version
         FROM charging_sessions ORDER BY started_at DESC;
         """
         let df = ISO8601DateFormatter()
@@ -1329,7 +1550,22 @@ extension VehicleDatabase {
                     energyKwh: stmt.columnDouble(at: 5) ?? 0,
                     peakKw: stmt.columnDouble(at: 6) ?? 0,
                     averageKw: stmt.columnDouble(at: 7) ?? 0,
-                    locationName: includeCoordinates ? stmt.columnText(at: 8) : nil
+                    locationName: includeCoordinates ? stmt.columnText(at: 8) : nil,
+                    lifecycle: stmt.columnText(at: 9) ?? "legacy",
+                    completionReason: stmt.columnText(at: 10),
+                    energySource: stmt.columnText(at: 11) ?? "legacy_estimate",
+                    confidence: stmt.columnText(at: 12) ?? "low",
+                    sampleCoverage: stmt.columnDouble(at: 13),
+                    usableCapacityKwh: stmt.columnDouble(at: 14),
+                    tariffPricePerKwh: stmt.columnDouble(at: 15),
+                    nightTariffEnabled: (stmt.columnInt64(at: 16) ?? 0) != 0,
+                    nightTariffPricePerKwh: stmt.columnDouble(at: 17),
+                    nightTariffStartHour: stmt.columnInt64(at: 18).map(Int.init),
+                    nightTariffEndHour: stmt.columnInt64(at: 19).map(Int.init),
+                    estimatedCost: stmt.columnDouble(at: 20),
+                    currency: stmt.columnText(at: 21),
+                    targetSoc: stmt.columnDouble(at: 22),
+                    summaryVersion: Int(stmt.columnInt64(at: 23) ?? 1)
                 ))
             }
             return out
@@ -1608,7 +1844,7 @@ extension VehicleDatabase {
     /// Lifetime charging energy for a VIN across all stored sessions (kWh).
     func lifetimeChargingEnergyKwh(for vin: String) -> Double {
         var total = 0.0
-        try? db.query(sql: "SELECT COALESCE(SUM(energy_delivered_kwh),0) FROM charging_sessions WHERE vin = ?;", bindings: { stmt in
+        try? db.query(sql: "SELECT COALESCE(SUM(energy_delivered_kwh),0) FROM charging_sessions WHERE vin = ? AND lifecycle_state IN ('completed', 'interrupted');", bindings: { stmt in
             try stmt.bindText(vin, at: 1)
         }, process: { stmt in
             if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
@@ -1632,6 +1868,7 @@ extension VehicleDatabase {
         let sql = """
         SELECT peak_power_kw FROM charging_sessions
         WHERE vin = ? AND location_name = ? AND id != ? AND peak_power_kw > 0
+          AND lifecycle_state IN ('completed', 'interrupted')
         ORDER BY started_at DESC LIMIT ?;
         """
         return (try? db.query(sql: sql) { stmt in

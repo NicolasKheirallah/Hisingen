@@ -136,7 +136,11 @@ A row can contain:
 - calculated energy delivered;
 - peak power;
 - average power;
-- approximate location; and
+- approximate location;
+- lifecycle and completion reason;
+- energy source, confidence, observation coverage, and summary version;
+- the usable-capacity and target references;
+- the saved flat/day/night tariff, currency, and estimated cost; and
 - creation timestamp.
 
 ### `charging_samples`
@@ -419,18 +423,26 @@ This controls database growth but should not be treated as a privacy guarantee t
 cached snapshot. SQLite is authoritative; legacy `chargingSessions` arrays carried in cached
 snapshots are cleared during refresh and are not used to render history.
 
-When charging begins:
+The `ChargingSessionEngine` is the sole writer of lifecycle transitions. When charging begins:
 
 - an existing active session is reused; or
 - a new charging session is created.
 
 If location is available when the session starts, an approximate coordinate string may be attached.
 
-Charging samples then record battery and electrical measurements.
+Charging samples form an append-only observation log of battery and electrical measurements.
 
-When charging stops, the active session is finalized only if its observed SoC increased. The
-last charging sample is allowed to supersede a stale stop-snapshot SoC. Observations with no
-measurable gain are discarded, and unfinished rows are excluded from completed history.
+Paused/scheduled observations keep a session open. A single idle/disconnected observation moves
+it to `pending_completion`; a second confirms the stop. Faults interrupt immediately. Stale open
+or zero-gain sessions become `abandoned`, and unfinished/abandoned rows are excluded from
+completed history. A confirmed stop below the target is classified as interrupted rather than
+completed. The last charging sample may supersede a stale stop-snapshot SoC.
+
+Version-2 summaries are materialized from the observation log. Power is integrated only across
+gaps of at most 15 minutes and becomes authoritative at 70% duration coverage; otherwise energy
+falls back to SoC change × the session's saved usable-capacity reference. The chosen source,
+confidence, coverage, completion reason, target, tariff/currency snapshot, and calculated cost
+are stored with the header so every consumer reads the same interpretation.
 
 At read time, missing start/end boundary samples are reconstructed from the durable session
 header. If an older record contains zero energy but its samples prove an SoC gain, the estimate

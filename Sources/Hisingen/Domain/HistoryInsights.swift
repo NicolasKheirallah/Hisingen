@@ -44,10 +44,10 @@ enum HistoryInsights {
     /// no data at all, e.g. the car sitting unplugged and unused for weeks.
     static let defaultChartGapThreshold: TimeInterval = 3 * 24 * 3_600
     /// Gap threshold for a within-session series (the charging curve): much shorter than
-    /// `defaultChartGapThreshold` since a single session spans hours, not weeks — a 2-hour hole
-    /// mid-session (the app closed, or the car briefly unplugged) is exactly the kind of gap
-    /// that shouldn't be smoothed over with an interpolated line.
-    static let chargingCurveGapThreshold: TimeInterval = 2 * 3_600
+    /// `defaultChartGapThreshold` since a single session spans hours, not weeks. This matches
+    /// the energy integrator: beyond 15 minutes the app does not know what happened and neither
+    /// calculations nor charts may pretend the observations form a continuous interval.
+    static let chargingCurveGapThreshold: TimeInterval = 15 * 60
 
     // MARK: - Charging curve
 

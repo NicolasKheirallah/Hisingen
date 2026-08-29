@@ -116,9 +116,14 @@ A charging session may contain:
 - peak charging power;
 - average charging power;
 - approximate location; and
+- lifecycle/completion status and calculation provenance;
+- observation coverage and usable-capacity reference;
+- the day/night tariff and currency snapshot used for estimated cost; and
 - record creation time.
 
-Charging-session headers are not removed by the 90-day sample-pruning operation.
+Active, paused, and pending-completion headers are internal and do not appear in completed
+history. Stale or zero-gain observations are marked abandoned for diagnosis and likewise stay
+hidden. Charging-session headers are not removed by the 90-day sample-pruning operation.
 
 They remain until vehicle history is explicitly cleared or sign-out invokes the database-clear path.
 

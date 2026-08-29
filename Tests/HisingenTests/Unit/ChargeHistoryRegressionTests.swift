@@ -102,6 +102,12 @@ struct ChargeHistoryRegressionTests {
             vin: vin, soc: 40, charging: false, powerWatts: nil,
             at: startedAt.addingTimeInterval(3_660)
         ))
+        // A second idle observation confirms that this is a real stop rather than a
+        // one-poll provider glitch.
+        store.save(state(
+            vin: vin, soc: 40, charging: false, powerWatts: nil,
+            at: startedAt.addingTimeInterval(3_720)
+        ))
 
         let session = try #require(database.recentChargingSessions(for: vin).first)
         #expect(session.startSoc == 40)
@@ -110,7 +116,7 @@ struct ChargeHistoryRegressionTests {
         #expect(session.peakPowerKw == 4)
         #expect(session.averagePowerKw == 4)
         #expect(session.startedAt == startedAt)
-        #expect(session.endedAt == startedAt.addingTimeInterval(3_660))
+        #expect(session.endedAt == startedAt.addingTimeInterval(3_720))
     }
 
     @MainActor

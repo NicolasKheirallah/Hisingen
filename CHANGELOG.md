@@ -7,6 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- A durable charging-session lifecycle engine with explicit active, paused,
+  pending-completion, completed, interrupted, and abandoned states; versioned
+  summaries now retain their calculation source, confidence, sample coverage,
+  capacity reference, completion reason, target, and tariff snapshot.
+- Charge-history exports and privacy backups now include summary provenance and
+  the saved day/night tariff inputs used for each session.
+- Five-at-a-time pagination for detected trips, with newer/older navigation that
+  retains the active history-period filter.
 - Read-only, credential-gated live Polestar integration coverage for sign-in,
   vehicle discovery, state refresh, session restoration, and sign-out.
 - Regression coverage for legacy cached vehicle snapshots, including migration
@@ -18,6 +26,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- Kept scheduled pauses and one-poll disconnects inside the same physical charge,
+  finalized faults immediately, and quarantined stale or zero-gain observations
+  instead of exposing phantom `0 kWh` sessions.
+- Prevented sparse power samples from underpricing SoC-derived sessions by using
+  their timing only to weight the saved day/night tariff across the authoritative
+  session energy total.
 - Reconciled charging-session summaries with their observed SoC samples, recovered
   energy and cost estimates from legacy zero-value records when possible, excluded
   unfinished/empty observations from history, and prevented stale stop snapshots
@@ -46,6 +60,15 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
+- Charging energy now uses integrated observed power when at least 70% of the
+  session is covered, otherwise falling back to SoC change × usable capacity;
+  the UI explains the chosen source and confidence rather than implying every
+  value came from SoC.
+- Historical costs use the tariff and currency saved when each session began,
+  and the dashboard refuses to silently add costs recorded in mixed currencies.
+- Charging curves now render rounded SoC as steps, break and shade unobserved
+  intervals longer than 15 minutes, avoid inventing power values for missing
+  samples, and show energy source, confidence, coverage, and gap count.
 - Separated durable history record contracts from `VehicleDatabase`, keeping
   schema/repository behavior and its public data types in focused files.
 - Hardened the release pipeline to sign and notarize builds, generate a

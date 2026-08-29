@@ -3,6 +3,23 @@ import Charts
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum HistoryPagination {
+    static let tripsPerPage = 5
+
+    static func pageCount(itemCount: Int, pageSize: Int = tripsPerPage) -> Int {
+        guard itemCount > 0, pageSize > 0 else { return 0 }
+        return (itemCount + pageSize - 1) / pageSize
+    }
+
+    static func page<Element>(of items: [Element], index: Int,
+                              pageSize: Int = tripsPerPage) -> ArraySlice<Element> {
+        guard !items.isEmpty, pageSize > 0 else { return [] }
+        let safeIndex = min(max(0, index), max(0, pageCount(itemCount: items.count, pageSize: pageSize) - 1))
+        let start = safeIndex * pageSize
+        return items[start..<min(items.count, start + pageSize)]
+    }
+}
+
 @MainActor
 struct HistoryDashboardView: View {
     let state: VehicleState
@@ -12,6 +29,7 @@ struct HistoryDashboardView: View {
     @State private var period: HistoryPeriod = .month
     @State private var selectedSessionID: String?
     @State private var sessionSearchText: String = ""
+    @State private var tripPage = 0
 
     private enum HistoryPeriod: String, CaseIterable, Identifiable {
         case week = "7 Days"
@@ -61,6 +79,10 @@ struct HistoryDashboardView: View {
     }
 
     private var trips: [TripHistoryEntry] { snapshot.trips }
+    private var tripPageCount: Int { HistoryPagination.pageCount(itemCount: trips.count) }
+    private var visibleTrips: ArraySlice<TripHistoryEntry> {
+        HistoryPagination.page(of: trips, index: tripPage)
+    }
     private var chargingSessions: [HistoricalChargingSession] { snapshot.chargingSessions }
     private var commands: [RemoteCommandAuditRecord] { snapshot.commands }
     private var batteryHealthRecords: [BatteryHealthRecord] { snapshot.batteryHealthRecords }
@@ -197,6 +219,7 @@ struct HistoryDashboardView: View {
 
             guard !Task.isCancelled else { return }
             snapshot = loaded
+            tripPage = 0
         }
         .task(id: selectedSession?.id) {
             guard let session = selectedSession else {
@@ -246,7 +269,7 @@ struct HistoryDashboardView: View {
         let totalDistance = trips.reduce(0) { $0 + $1.distanceKm }
         let drivingTime = trips.reduce(0) { $0 + $1.duration }
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
-        let estimatedCost = energy * preferences.electricityPricePerKwh
+        let estimatedCost = aggregateChargingCost()
         // Predicted service date from the observed km/day rate and the vehicle's own
         // remaining-distance/time countdowns.
         let serviceProjection = HistoryInsights.projectService(
@@ -280,7 +303,12 @@ struct HistoryDashboardView: View {
                 HStack(spacing: 8) {
                     metric(L10n.text("Charge Sessions"), "\(chargingSessions.count)", "bolt.fill")
                     metric(L10n.text("Estimated Energy"), String(format: "%.1f kWh", energy), "bolt.circle")
-                    metric(L10n.text("Estimated Cost"), String(format: "%.2f %@", estimatedCost, preferences.currencySymbol), "creditcard")
+                    metric(
+                        L10n.text("Estimated Cost"),
+                        estimatedCost.map { String(format: "%.2f %@", $0.amount, $0.currency) }
+                            ?? L10n.text("Mixed currencies"),
+                        "creditcard"
+                    )
                 }
                 if let serviceProjection {
                     HStack(spacing: 5) {
@@ -439,16 +467,20 @@ struct HistoryDashboardView: View {
         let lossPct: Double? = state.powertrain.hasElectricRange
             ? HistoryInsights.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
             : nil
-        let tariffCost: HistoryInsights.TariffCost? = preferences.nightTariffEnabled
-            ? HistoryInsights.tariffAwareCost(from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
-                                              nightRatePerKwh: preferences.nightElectricityPricePerKwh,
-                                              nightStartHour: preferences.nightTariffStartHour,
-                                              nightEndHour: preferences.nightTariffEndHour)
-            : nil
-        // A shorter gap threshold than the daily-cadence charts: a session spans hours, so a
-        // hole of a couple of hours mid-session (app closed, car briefly unplugged) is exactly
-        // the kind of gap that shouldn't be smoothed over with an interpolated line.
+        let displayedCost = session.flatMap { stored in
+            stored.estimatedCost
+                ?? stored.tariffPricePerKwh.map { $0 * stored.energyDeliveredKwh }
+                ?? (stored.summaryVersion < 2
+                    ? preferences.electricityPricePerKwh * stored.energyDeliveredKwh : nil)
+        }
+        let curveGapCount = zip(curve, curve.dropFirst()).filter {
+            $1.timestamp.timeIntervalSince($0.timestamp) > HistoryInsights.chargingCurveGapThreshold
+        }.count
+        // Match the summary integrator's 15-minute continuity threshold: if an interval was
+        // too sparse to calculate, the chart must not smooth a line across it either.
         let curveSegmentByID = gapSegmentIndex(of: curve, maxGap: HistoryInsights.chargingCurveGapThreshold, timestamp: \.timestamp)
+        let powerCurve = curve.filter { $0.powerKw != nil }
+        let powerSegmentByID = gapSegmentIndex(of: powerCurve, maxGap: HistoryInsights.chargingCurveGapThreshold, timestamp: \.timestamp)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -498,14 +530,33 @@ struct HistoryDashboardView: View {
                     .padding(5)
                     .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 5))
                 }
+                if let session {
+                    HStack(spacing: 5) {
+                        Label("\(session.confidence.displayName) · \(session.energySource.displayName)",
+                              systemImage: "checkmark.seal")
+                        if let coverage = session.sampleCoverage {
+                            Text("· " + L10n.format("%d%% observed", Int((coverage * 100).rounded())))
+                                .monospacedDigit()
+                        }
+                        Spacer()
+                        if curveGapCount > 0 {
+                            Label(L10n.format("%d observation gaps", curveGapCount),
+                                  systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .font(.system(size: 8.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                }
                 Chart(curve) { point in
                     AreaMark(
                         x: .value(L10n.text("Time"), point.timestamp),
-                        y: .value(L10n.text("Charge level"), point.soc)
+                        y: .value(L10n.text("Charge level"), point.soc),
+                        series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
                     )
                     .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartPositive.opacity(0.28), HisingenTheme.chartPositive.opacity(0.02)],
                                                      startPoint: .top, endPoint: .bottom))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.stepEnd)
                     LineMark(
                         x: .value(L10n.text("Time"), point.timestamp),
                         y: .value(L10n.text("Charge level"), point.soc),
@@ -513,29 +564,30 @@ struct HistoryDashboardView: View {
                     )
                     .foregroundStyle(HisingenTheme.chartPositive)
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.stepEnd)
                 }
                 .chartYScale(domain: 0...100)
                 .chartYAxisLabel("%")
                 .frame(height: 105)
                 .accessibilityLabel(L10n.text("Charging curve charge-level chart"))
                 if let peak, peak > 0 {
-                    Chart(curve.filter { $0.powerKw != nil }) { point in
+                    Chart(powerCurve) { point in
                         AreaMark(
                             x: .value(L10n.text("Time"), point.timestamp),
-                            y: .value(L10n.text("Power"), point.powerKw ?? 0)
+                            y: .value(L10n.text("Power"), point.powerKw ?? 0),
+                            series: .value(L10n.text("Segment"), powerSegmentByID[point.id] ?? 0)
                         )
                         .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartAttention.opacity(0.25), HisingenTheme.chartAttention.opacity(0.02)],
                                                          startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.linear)
                         LineMark(
                             x: .value(L10n.text("Time"), point.timestamp),
                             y: .value(L10n.text("Power"), point.powerKw ?? 0),
-                            series: .value(L10n.text("Segment"), curveSegmentByID[point.id] ?? 0)
+                            series: .value(L10n.text("Segment"), powerSegmentByID[point.id] ?? 0)
                         )
                         .foregroundStyle(Color.orange)
                         .lineStyle(StrokeStyle(lineWidth: 1.4))
-                        .interpolationMethod(.catmullRom)
+                        .interpolationMethod(.linear)
                     }
                     .chartYAxisLabel("kW")
                     .frame(height: 80)
@@ -551,7 +603,7 @@ struct HistoryDashboardView: View {
                             )
                             .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Voltage (V)")))
                             .lineStyle(StrokeStyle(lineWidth: 1.2))
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.linear)
                         }
                         if let current = point.currentAmps {
                             LineMark(
@@ -561,7 +613,7 @@ struct HistoryDashboardView: View {
                             )
                             .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Current (A)")))
                             .lineStyle(StrokeStyle(lineWidth: 1.2))
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.linear)
                         }
                     }
                     .chartForegroundStyleScale([
@@ -585,7 +637,7 @@ struct HistoryDashboardView: View {
                         curveStat(L10n.text("Peak"), String(format: "%.1f kW", peak))
                     }
                 }
-                if tenToEighty != nil || idleTail != nil || lossPct != nil || tariffCost != nil {
+                if tenToEighty != nil || idleTail != nil || lossPct != nil || displayedCost != nil {
                     HStack(spacing: 12) {
                         if let tenToEighty {
                             curveStat("10→80%", Format.shortDuration(minutes: max(1, Int(tenToEighty / 60))))
@@ -596,8 +648,8 @@ struct HistoryDashboardView: View {
                         if let lossPct, lossPct >= 1 {
                             curveStat(L10n.text("Estimated Loss"), String(format: "%.0f%%", lossPct))
                         }
-                        if let tariffCost {
-                            curveStat(L10n.text("Tariff Cost"), String(format: "%.2f %@", tariffCost.cost, preferences.currencySymbol))
+                        if let displayedCost {
+                            curveStat(L10n.text("Tariff Cost"), String(format: "%.2f %@", displayedCost, session?.currencySymbol ?? preferences.currencySymbol))
                         }
                     }
                 }
@@ -701,7 +753,7 @@ struct HistoryDashboardView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: .teal)
-                ForEach(trips.prefix(20)) { trip in
+                ForEach(visibleTrips) { trip in
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(Format.dateTimeFormatter.string(from: trip.endedAt))
@@ -739,7 +791,38 @@ struct HistoryDashboardView: View {
                             .help(L10n.text("Open trip endpoint in Apple Maps"))
                         }
                     }
-                    if trip.id != trips.prefix(20).last?.id { Divider().opacity(0.25) }
+                    if trip.id != visibleTrips.last?.id { Divider().opacity(0.25) }
+                }
+                if tripPageCount > 1 {
+                    HStack(spacing: 8) {
+                        Button {
+                            tripPage = max(0, tripPage - 1)
+                        } label: {
+                            Label(L10n.text("Newer"), systemImage: "chevron.left")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(tripPage == 0)
+                        .help(L10n.text("Show newer trips"))
+
+                        Spacer()
+                        Text(L10n.format("Page %d of %d", tripPage + 1, tripPageCount))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Spacer()
+
+                        Button {
+                            tripPage = min(tripPageCount - 1, tripPage + 1)
+                        } label: {
+                            Label(L10n.text("Older"), systemImage: "chevron.right")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(tripPage >= tripPageCount - 1)
+                        .help(L10n.text("Show older trips"))
+                    }
+                    .padding(.top, 2)
                 }
                 Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
                     .font(.system(size: 9))
@@ -751,24 +834,23 @@ struct HistoryDashboardView: View {
 
     // MARK: - Charging Summary
 
-    /// Sums each session's tariff-aware (day/night-split) cost when a night tariff is
-    /// configured, falling back per-session to the flat rate for any session whose samples
-    /// can't support the split (too few samples, or recorded before per-sample power existed) —
-    /// so the aggregate is never silently short of a session's contribution.
-    private func aggregateChargingCost() -> Double {
-        guard preferences.nightTariffEnabled else {
-            return chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh * preferences.electricityPricePerKwh }
+    /// Modern summaries retain the cost, tariff, and currency that applied when the charge
+    /// happened. Legacy rows fall back to today's flat price because their historical tariff
+    /// window never existed and cannot honestly be reconstructed. Different currencies are
+    /// never silently added together.
+    private func aggregateChargingCost() -> (amount: Double, currency: String)? {
+        let currencies = Set(chargingSessions.map {
+            let saved = $0.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (saved?.isEmpty == false ? saved : nil) ?? preferences.currencySymbol
+        })
+        guard currencies.count <= 1 else { return nil }
+        let currency = currencies.first ?? preferences.currencySymbol
+        let total = chargingSessions.reduce(0.0) { total, session in
+            if let stored = session.estimatedCost { return total + stored }
+            let dayRate = session.tariffPricePerKwh ?? preferences.electricityPricePerKwh
+            return total + session.energyDeliveredKwh * dayRate
         }
-        return chargingSessions.reduce(0.0) { total, session in
-            let samples = database.chargingSamples(for: session.id)
-            if let tariff = HistoryInsights.tariffAwareCost(
-                from: samples, dayRatePerKwh: preferences.electricityPricePerKwh,
-                nightRatePerKwh: preferences.nightElectricityPricePerKwh,
-                nightStartHour: preferences.nightTariffStartHour, nightEndHour: preferences.nightTariffEndHour) {
-                return total + tariff.cost
-            }
-            return total + session.energyDeliveredKwh * preferences.electricityPricePerKwh
-        }
+        return (total, currency)
     }
 
     private var chargingHistoryCard: some View {
@@ -800,10 +882,13 @@ struct HistoryDashboardView: View {
                 if let dominantTimeOfDay, dominantTimeOfDay.value > 0 {
                     KVRow(L10n.text("Mostly Charges"), L10n.text(dominantTimeOfDay.key.rawValue), symbol: "clock.badge")
                 }
-                KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, preferences.currencySymbol), symbol: "creditcard",
-                      info: preferences.nightTariffEnabled
-                        ? L10n.text("Day/night tariff applied per session from its actual charging times, not a flat multiply.")
-                        : nil)
+                if let cost {
+                    KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost.amount, cost.currency), symbol: "creditcard",
+                          info: L10n.text("Uses each session's saved tariff instead of recalculating old charges with today's settings."))
+                } else {
+                    KVRow(L10n.text("Estimated Cost"), L10n.text("Mixed currencies"), symbol: "creditcard",
+                          info: L10n.text("Costs in different currencies are kept separate and are not added together."))
+                }
             }
         }
     }

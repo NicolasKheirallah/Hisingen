@@ -148,9 +148,12 @@ That can include:
 - estimated energy added;
 - charging duration;
 - observed peak power;
+- calculation source, confidence, and observation coverage;
 - optional price and estimated charging cost.
 
-These are application-level estimates and should not be treated as certified electricity-meter data.
+Power is integrated when observation coverage is sufficiently complete; otherwise the estimate
+uses SoC change and usable capacity. Tariff inputs are snapshotted per session. These are still
+application-level estimates and should not be treated as certified electricity-meter data.
 
 See [Charging](../domain/charging.md).
 

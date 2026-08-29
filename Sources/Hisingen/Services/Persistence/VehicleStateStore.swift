@@ -16,12 +16,14 @@ final class VehicleStateStore {
 
     let database: VehicleDatabase
     private let preferences: PreferencesStore
+    private let chargingSessionEngine: ChargingSessionEngine
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
          preferences: PreferencesStore? = nil) {
         self.defaults = defaults
         self.database = database
         self.preferences = preferences ?? PreferencesStore(defaults: defaults)
+        self.chargingSessionEngine = ChargingSessionEngine(database: database)
     }
 
     func snapshot(for vin: String) -> VehicleState? {
@@ -99,6 +101,36 @@ final class VehicleStateStore {
                     for: state.vin, usableCapacityKwh: capacity
                 )
             }
+            let locationName: String? = {
+                guard preferences.persistLocationHistory else { return nil }
+                guard let location = state.location,
+                      let latitude = location.latitude,
+                      let longitude = location.longitude else { return nil }
+                return String(format: "%.4f°, %.4f°", latitude, longitude)
+            }()
+            chargingSessionEngine.ingest(
+                ChargingSessionObservation(
+                    vin: state.vin, timestamp: state.fetchedAt, soc: batteryPct,
+                    chargingState: state.chargingState,
+                    chargerConnection: state.chargerConnection,
+                    powerKw: state.chargingPowerWatts.map { Double($0) / 1_000 },
+                    voltageVolts: state.chargingVoltageVolts.map(Double.init),
+                    currentAmps: state.chargingCurrentAmps.map(Double.init),
+                    chargingType: state.chargingType,
+                    targetSoc: state.chargeTargetPercentage.map(Double.init)
+                ),
+                configuration: ChargingSessionEngineConfiguration(
+                    usableCapacityKwh: capacity,
+                    tariffPricePerKwh: preferences.electricityPricePerKwh,
+                    nightTariffEnabled: preferences.nightTariffEnabled,
+                    nightTariffPricePerKwh: preferences.nightElectricityPricePerKwh,
+                    nightTariffStartHour: preferences.nightTariffStartHour,
+                    nightTariffEndHour: preferences.nightTariffEndHour,
+                    currencySymbol: preferences.currencySymbol,
+                    locationName: locationName
+                ),
+                recordingEnabled: preferences.storeChargingHistory
+            )
             let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
                 .map { $0.toDomainSession(database: database, usableCapacityKwh: capacity) }
                 .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
@@ -115,57 +147,6 @@ final class VehicleStateStore {
                     degPct: estimate.degradationPercent,
                     usableKwh: estimate.estimatedUsableCapacityKwh
                 )
-            }
-            let powerKw = state.chargingPowerWatts.map { Double($0) / 1000.0 }
-            let voltage = state.chargingVoltageVolts.map(Double.init)
-            let current = state.chargingCurrentAmps.map(Double.init)
-
-            guard preferences.storeChargingHistory else {
-                if let active = database.activeChargingSession(for: state.vin) {
-                    database.discardChargingSession(id: active.id)
-                }
-                return
-            }
-
-            if state.chargingState.isActivelyCharging {
-                let session = database.activeChargingSession(for: state.vin)
-                let sessionId: String
-                if let session {
-                    sessionId = session.id
-                } else {
-                    let locName: String? = {
-                        guard preferences.persistLocationHistory else { return nil }
-                        guard let loc = state.location, let lat = loc.latitude, let lon = loc.longitude else { return nil }
-                        return String(format: "%.4f°, %.4f°", lat, lon)
-                    }()
-                    sessionId = database.startChargingSession(
-                        vin: state.vin, startSoc: batteryPct, location: locName,
-                        startedAt: state.fetchedAt
-                    )
-                }
-                database.recordChargingSample(
-                    sessionId: sessionId, vin: state.vin, soc: batteryPct,
-                    powerKw: powerKw, voltage: voltage, current: current,
-                    chargingType: state.chargingType.rawValue, timestamp: state.fetchedAt
-                )
-            } else if let active = database.activeChargingSession(for: state.vin) {
-                let samples = database.chargingSamples(for: active.id)
-                let powers = samples.compactMap(\.powerKw)
-                let peak = powers.max() ?? (powerKw ?? 0.0)
-                let avg = powers.isEmpty ? peak : (powers.reduce(0, +) / Double(powers.count))
-                // A charging-stop snapshot can lag behind the last charging sample. Never
-                // erase a real gain by finalizing with that stale value.
-                let endSoc = max(batteryPct, samples.last?.soc ?? active.startSoc)
-                let socDelta = max(0, endSoc - active.startSoc)
-                let energy = (socDelta / 100.0) * capacity
-                if socDelta > 0, energy > 0 {
-                    database.completeChargingSession(
-                        id: active.id, endSoc: endSoc, energyDeliveredKwh: energy,
-                        peakPowerKw: peak, averagePowerKw: avg, endedAt: state.fetchedAt
-                    )
-                } else {
-                    database.discardChargingSession(id: active.id)
-                }
             }
         }
 

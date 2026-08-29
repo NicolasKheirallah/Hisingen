@@ -14,7 +14,7 @@
 | Estimated completion time | `Format.completionTime` | **Calculated** — `vehicleReportedAt (or fetchedAt) + estimatedChargingTimeToFullMinutes`, suppressed if the state is stale |
 | Estimated completion cost | UI layer, from `Preferences.electricityPricePerKwh` | **Calculated**, user-configured rate — not a real cost from any API |
 | Current Range vs Model WLTP | `VehicleState.currentRangeVsModelWltpPercent(specification:)` | **Calculated** from live range/SOC and a static model-family (or VIN-specific override) reference; explicitly not battery SOH — see [domain/vehicle.md](vehicle.md) |
-| `ChargingSession` history entries | `VehicleStateStore` + SQLite `charging_sessions`/`charging_samples` | **Calculated** from consecutive polls, not a real session log from either backend |
+| `ChargingSession` history entries | `ChargingSessionEngine` + SQLite `charging_sessions`/`charging_samples` | **Calculated** from an append-only local observation log, not a provider session log |
 
 There is no vehicle-reported "State of Health" or measured usable-capacity figure available from either provider's APIs, and Hisingen doesn't fabricate one — `VehicleState.batteryDegradationPercent` stays `nil` for exactly this reason and always will, until a validated measured field appears. Volvo's `batteryCapacityKWH` is treated as a vehicle specification, not a health measurement, though `BatteryHealthEstimator` does prefer it over the generic model-family table as a more accurate *reference* capacity when no user override exists.
 
@@ -58,20 +58,41 @@ Independent of the charging transitions above: if battery% drops to or below `Pr
 
 ## Charging session history
 
-`VehicleStateStore` opens a durable SQLite session while active charging is observed and
-finalizes it on the first subsequent non-charging state. The final SoC is the greater of the
-stop snapshot and the last charging sample, because provider stop snapshots can lag behind the
-latest charging telemetry. Estimated energy is `percentageAdded / 100 × usableCapacityKwh`,
-preferring the user's VIN-specific usable-capacity override and otherwise using the model's
-nominal reference. Cost remains a local estimate based on the configured electricity tariff.
+`ChargingSessionEngine` owns the durable lifecycle: `active`, `paused`,
+`pending_completion`, `completed`, `interrupted`, or `abandoned`. Paused and scheduled states
+remain part of one physical charge. One idle/disconnected observation enters
+`pending_completion`; a second confirms the stop. Faults finalize immediately, and an open
+session older than 48 hours is abandoned before a new charge starts. Abandoned rows remain
+diagnostic data but never appear as completed history. A confirmed stop at the configured target
+is completed; a disconnect or stop below target is retained as an interrupted session.
 
-Only completed sessions with a measurable SoC/energy gain are shown as history. An active row
+The final SoC is the greatest trustworthy terminal/sample value because provider stop snapshots
+can lag. Energy uses trapezoidal integration of positive power observations when no integrated
+gap exceeds 15 minutes and at least 70% of the session duration is covered. Coverage of at least
+90% is labeled high confidence; 70–90% is medium. Otherwise the engine falls back to
+`SoC change / 100 × usableCapacityKwh`, labeled medium or low according to sample support.
+This explains valid cases where rounded/delayed SoC moves only a few points while sufficiently
+complete power observations show materially more energy.
+
+Each version-2 summary retains its source, confidence, coverage, capacity reference, completion
+reason, target, and the flat or day/night tariff plus currency that applied when the session
+began. Sparse power timing may weight a day/night split, but the weighting is normalized to the
+authoritative session-energy total so missing observations cannot underprice a charge. Changing
+preferences later does not rewrite historical costs, and different currencies are not summed.
+
+Only completed/interrupted sessions with a measurable SoC/energy gain are shown as history. An active row
 stays internal to the recorder instead of appearing as a growing-duration `0 kWh` charge.
 Persisted header boundaries and chart samples are reconciled when read, so the list, duration,
 SoC curve, energy, and cost all describe the same start/end points. This also repairs older
 zero-energy records when their retained samples prove a real gain. History is recorded only if
 `Preferences.storeChargingHistory` is enabled (default off); SQLite is the single history source
 used by the UI.
+
+Historical curves follow the same evidence boundary as the summary calculator. SoC is rendered
+as a step series because providers report rounded percentages; power uses only samples that
+actually contain power. Lines and fills are split across gaps longer than 15 minutes, the missing
+interval is shaded, and the curve shows source, confidence, observed coverage, and gap count.
+This prevents a smooth spline from visually inventing battery movement, power, or continuity.
 
 ## Charging sample buffer (for the sparkline)
 

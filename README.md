@@ -253,12 +253,21 @@ Depending on the telemetry available, a session can include:
 * estimated energy added
 * charging duration
 * peak charging power
-* electricity price
+* the calculation source and confidence
+* the electricity tariff saved when charging began
 * estimated charging cost
 
 Charging data can also be exported for your own analysis.
 
-Energy and cost figures are estimates based on available vehicle data rather than utility-grade metering.
+The history dashboard shows detected trips five at a time with navigation to older pages. Charge
+curves preserve the real observation timeline: rounded SoC is drawn as steps, missing intervals
+are visibly broken, and the source/confidence badge explains how the energy total was derived.
+
+Energy is integrated from observed charging power when coverage is sufficiently complete;
+otherwise Hisingen falls back to the change in battery percentage and configured usable
+capacity. The session shows which method was used. Costs retain the session's day/night tariff
+and currency instead of being recalculated when today's settings change. These remain estimates
+based on vehicle telemetry rather than utility-grade metering.
 
 ### Doors, windows & locks
 
