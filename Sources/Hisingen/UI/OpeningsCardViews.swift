@@ -72,7 +72,7 @@ struct OpeningChipView: View {
                 )
         )
         .scaleEffect(active ? 1.02 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: active)
+        .animation(Motion.selection, value: active)
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
@@ -319,7 +319,7 @@ struct TirePillView: View {
                 )
         )
         .scaleEffect(activeHover ? 1.02 : 1.0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: activeHover)
+        .animation(Motion.selection, value: activeHover)
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
@@ -411,11 +411,11 @@ struct LocationCardView: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(coords, forType: .string)
                                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                                withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                                withAnimation(Motion.stateChange) {
                                     copiedCoordinates = true
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                    withAnimation(Motion.interaction) {
                                         copiedCoordinates = false
                                     }
                                 }

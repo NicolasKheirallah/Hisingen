@@ -138,7 +138,7 @@ struct ChargingCurveView: View {
                             .fill(HisingenTheme.semanticGood)
                             .frame(width: 5, height: 5)
                             .opacity(pulse ? 1.0 : 0.45)
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: pulse)
+                            .animation(reduceMotion ? nil : Motion.livePulse, value: pulse)
                         Text(L10n.text("Live").uppercased())
                             .font(.system(size: 8, weight: .bold))
                             .tracking(0.3)
@@ -467,7 +467,7 @@ struct ChargingCurveView: View {
                     }
                     .onAppear {
                         guard isLive, !reduceMotion else { return }
-                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { pulse = true }
+                        withAnimation(Motion.livePulse) { pulse = true }
                     }
                 }
                 .frame(height: 64)

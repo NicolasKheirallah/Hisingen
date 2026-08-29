@@ -7,6 +7,10 @@ import SwiftUI
 @MainActor
 final class ChargingMiniPanelController {
     private var panel: NSPanel?
+    /// Kept alive across telemetry updates so SwiftUI diffs — and therefore
+    /// cross-fades — new readings into place instead of the whole view being
+    /// torn down and rebuilt on every refresh.
+    private var host: NSHostingView<ChargingMiniPanelView>?
     private let preferences: PreferencesStore
 
     init(preferences: PreferencesStore) {
@@ -23,14 +27,20 @@ final class ChargingMiniPanelController {
         if panel == nil { makePanel() }
         guard let panel else { return }
 
-        let host = NSHostingView(rootView: ChargingMiniPanelView(
+        let content = ChargingMiniPanelView(
             batteryPercentage: state.batteryPercentage,
             powerWatts: state.chargingPowerWatts,
             minutesToTarget: state.batteryDiagnostics?.timeToTargetMinutes
                 ?? state.estimatedChargingTimeToFullMinutes,
             targetPercent: state.chargeTargetPercentage
-        ))
-        panel.contentView = host
+        )
+        if let host {
+            host.rootView = content
+        } else {
+            let host = NSHostingView(rootView: content)
+            panel.contentView = host
+            self.host = host
+        }
         // Match the SwiftUI width so the frame never clips the density-scaled content.
         let scaledWidth = 190 * HisingenTheme.contentScale
         if !panel.isVisible {
@@ -78,6 +88,8 @@ private struct ChargingMiniPanelView: View {
     let targetPercent: Int?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathe = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -85,6 +97,8 @@ private struct ChargingMiniPanelView: View {
                 Image(systemName: "bolt.car.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(.green)
+                    // The same quiet charging breath used across the app.
+                    .opacity(breathe ? 1.0 : 0.62)
                 Text(L10n.text("Charging"))
                     .font(.system(size: 11, weight: .semibold))
                 Spacer()
@@ -93,18 +107,22 @@ private struct ChargingMiniPanelView: View {
                     Text("\(String(format: "%.0f", battery))→\(target)%")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .monospacedDigit()
+                        .hisTelemetryValue(battery, reduceMotion: reduceMotion)
                 } else if let battery = batteryPercentage {
                     Text(String(format: "%.0f%%", battery))
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .monospacedDigit()
+                        .hisTelemetryValue(battery, reduceMotion: reduceMotion)
                 }
             }
             HStack(spacing: 10) {
                 if let watts = powerWatts, watts > 0 {
                     Label(Format.kilowatts(watts: watts), systemImage: "bolt.fill")
+                        .hisTelemetryValue(watts, reduceMotion: reduceMotion)
                 }
                 if let minutes = minutesToTarget, minutes > 0 {
                     Label(Format.shortDuration(minutes: minutes), systemImage: "timer")
+                        .hisTelemetryValue(minutes, reduceMotion: reduceMotion)
                 }
                 Spacer()
             }
@@ -127,5 +145,9 @@ private struct ChargingMiniPanelView: View {
         .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.text("Charging status"))
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(Motion.breath) { breathe = true }
+        }
     }
 }

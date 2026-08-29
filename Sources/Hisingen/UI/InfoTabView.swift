@@ -269,7 +269,7 @@ struct InfoTabView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                     .animation(
-                        isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default,
+                        isRefreshing ? Motion.spin : .default,
                         value: isRefreshing
                     )
             }

@@ -307,7 +307,7 @@ struct VehicleSideProfileDoorsView: View {
             .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
             .scaleEffect(hovered || open ? 1.02 : 1.0)
             .position(pos)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
+            .animation(Motion.selection, value: open || hovered)
         }
     }
 
@@ -342,7 +342,7 @@ struct VehicleSideProfileDoorsView: View {
             .frame(width: size.width, height: size.height)
             .position(pos)
             .blur(radius: 2)
-            .animation(.easeInOut(duration: 0.2), value: active || hovered)
+            .animation(Motion.interaction, value: active || hovered)
     }
 
     @ViewBuilder
@@ -363,7 +363,7 @@ struct VehicleSideProfileDoorsView: View {
             .frame(width: size.width, height: size.height)
             .position(pos)
             .blur(radius: 2)
-            .animation(.easeInOut(duration: 0.2), value: active || hovered)
+            .animation(Motion.interaction, value: active || hovered)
     }
 
     @ViewBuilder
@@ -392,7 +392,7 @@ struct VehicleSideProfileDoorsView: View {
             .shadow(color: color.opacity(0.6), radius: 3)
             .scaleEffect(hovered || open ? 1.18 : 1.0)
             .position(pos)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: open || hovered)
+            .animation(Motion.selection, value: open || hovered)
         }
     }
 }
@@ -648,7 +648,7 @@ struct VehicleSideProfileTiresView: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
         }
         .position(pos)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hovered || alerting)
+        .animation(Motion.selection, value: hovered || alerting)
     }
 }
 

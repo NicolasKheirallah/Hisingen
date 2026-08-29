@@ -635,7 +635,7 @@ struct SettingsView: View {
                         ForEach(AppearanceMode.allCases, id: \.self) { mode in
                             let isModeSelected = appearanceMode == mode
                             Button {
-                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
                                     appearanceMode = mode
                                     preferences.appearanceMode = mode
                                 }
@@ -697,7 +697,7 @@ struct SettingsView: View {
                                     ForEach(row, id: \.self) { angle in
                                         let isAngleSelected = carRenderAngle == angle
                                         Button {
-                                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
                                                 carRenderAngle = angle
                                                 preferences.carRenderAngle = angle
                                             }
@@ -776,7 +776,7 @@ struct SettingsView: View {
         let isSelected = selectedThemeCategory == cat
         let count = themeCategoryCount(cat)
         return Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
                 selectedThemeCategory = cat
             }
         } label: {
@@ -806,7 +806,7 @@ struct SettingsView: View {
         let accentColor = Color(hex: theme.accentColorHex) ?? HisingenTheme.accent
         return Button {
             guard appTheme != theme else { return }
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
                 appTheme = theme
                 preferences.appTheme = theme
             }

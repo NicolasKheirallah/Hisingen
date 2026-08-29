@@ -67,7 +67,7 @@ struct ChargingSessionRow: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
         )
-        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
+        .animation(Motion.selection, value: isHovered)
         .onHover { isHovered = $0 }
     }
 

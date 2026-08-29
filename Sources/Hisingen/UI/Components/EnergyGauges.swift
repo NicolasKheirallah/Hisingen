@@ -7,7 +7,7 @@ private struct ChargingFlowHighlight: View {
 
     private let coreWidth: CGFloat = 38
     private let haloWidth: CGFloat = 72
-    private let speed: CGFloat = 46
+    private let speed: CGFloat = Motion.chargeFlowPointsPerSecond
 
     private func trail(peakOpacity: Double) -> LinearGradient {
         LinearGradient(
@@ -97,8 +97,8 @@ struct BatteryGauge: View {
                     .shadow(color: isPolestar ? .clear : color.opacity(isCharging ? (breathingGlow ? 0.65 : 0.25) : 0.35),
                             radius: isPolestar ? 0 : (isCharging ? (breathingGlow ? 6 : 2) : 4),
                             x: 0, y: 1)
-                    .animation(.easeInOut(duration: 0.6), value: fraction)
-                    .animation(.easeInOut(duration: 0.4), value: color)
+                    .animation(Motion.progress, value: fraction)
+                    .animation(.easeInOut(duration: Motion.fast), value: color)
 
 
                 if isCharging && !reduceMotion && !isPolestar {
@@ -131,7 +131,7 @@ struct BatteryGauge: View {
         .accessibilityLabel(accessibilityValue)
         .onAppear {
             if isCharging && !reduceMotion && !isPolestar {
-                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                withAnimation(Motion.breath) {
                     breathingGlow = true
                 }
             }
@@ -139,11 +139,11 @@ struct BatteryGauge: View {
         .onChange(of: isCharging) { _, charging in
             guard !reduceMotion else { return }
             if charging {
-                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                withAnimation(Motion.breath) {
                     breathingGlow = true
                 }
             } else {
-                withAnimation(.easeInOut(duration: 0.4)) {
+                withAnimation(Motion.interaction) {
                     breathingGlow = false
                 }
             }
@@ -188,8 +188,8 @@ struct FuelGauge: View {
                     .shadow(color: isPolestar ? .clear : color.opacity(0.35),
                             radius: isPolestar ? 0 : 3,
                             x: 0, y: 1)
-                    .animation(.easeInOut(duration: 0.6), value: fraction)
-                    .animation(.easeInOut(duration: 0.4), value: color)
+                    .animation(Motion.progress, value: fraction)
+                    .animation(.easeInOut(duration: Motion.fast), value: color)
             }
         }
         .frame(height: 9)

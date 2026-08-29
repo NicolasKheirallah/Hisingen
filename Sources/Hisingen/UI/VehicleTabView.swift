@@ -25,7 +25,7 @@ struct VehicleTabView: View {
 
 
     private var cardChangeAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.82)
+        reduceMotion ? nil : Motion.cardChange
     }
     private var cardTransition: AnyTransition {
         .asymmetric(
@@ -177,8 +177,9 @@ struct VehicleTabView: View {
                                 Capsule()
                                     .stroke(isSelected ? HisingenTheme.accent : Color.primary.opacity(0.15), lineWidth: isSelected ? 1.2 : 0.5)
                             )
+                            .animation(reduceMotion ? nil : Motion.selection, value: isSelected)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                     }
                 }
                 .padding(.horizontal, 2)
@@ -455,8 +456,8 @@ struct VehicleTabView: View {
                             color: statusColor,
                             symbol: state.isCharging ? "bolt.fill" : nil
                         )
-                        .scaleEffect(chargingJustStarted ? 1.14 : 1.0)
-                        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.45), value: chargingJustStarted)
+                        .scaleEffect(chargingJustStarted ? 1.08 : 1.0)
+                        .animation(reduceMotion ? nil : Motion.stateChange, value: chargingJustStarted)
                     } else if state.powertrain.isCombustionOnly {
                         Pill(
                             text: state.fuelType ?? L10n.text("Combustion"),
@@ -495,7 +496,7 @@ struct VehicleTabView: View {
                 .onChange(of: state.isCharging) { _, charging in
                     guard charging, !reduceMotion else { return }
                     chargingJustStarted = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         chargingJustStarted = false
                     }
                 }
@@ -516,8 +517,7 @@ struct VehicleTabView: View {
                                 .tracking(HisingenTheme.displayTracking)
                                 .monospacedDigit()
                                 .foregroundStyle(HisingenTheme.ink)
-                                .contentTransition(reduceMotion ? .identity : .numericText())
-                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.fuelLevelPercent)
+                                .hisTelemetryValue(state.fuelLevelPercent, reduceMotion: reduceMotion)
                             if let liters = state.fuelAmountLiters {
                                 Text("\(Format.fuelVolume(liters: liters, unit: preferences.fuelVolumeUnit)) \(L10n.text("remaining"))")
                                     .font(.system(size: 10, weight: .medium))
@@ -532,8 +532,7 @@ struct VehicleTabView: View {
                                 Text(state.fuelRangeKm.map { Format.distance(km: $0, unit: preferences.distanceUnit) } ?? "—")
                                     .font(.system(size: 16, weight: HisingenTheme.valueWeight))
                                     .monospacedDigit()
-                                    .contentTransition(reduceMotion ? .identity : .numericText())
-                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.fuelRangeKm)
+                                    .hisTelemetryValue(state.fuelRangeKm, reduceMotion: reduceMotion)
                             }
                             .foregroundStyle(HisingenTheme.inkMuted)
                             Text(L10n.text("Fuel Range"))
@@ -559,8 +558,7 @@ struct VehicleTabView: View {
                                     .tracking(HisingenTheme.displayTracking)
                                     .monospacedDigit()
                                     .foregroundStyle(HisingenTheme.ink)
-                                    .contentTransition(reduceMotion ? .identity : .numericText())
-                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
+                                    .hisTelemetryValue(state.batteryPercentage, reduceMotion: reduceMotion)
                                 if let fuel = state.fuelLevelPercent {
                                     Text(String(format: "· %.0f%% %@", fuel, L10n.text("fuel")))
                                         .font(.system(size: 14, weight: .medium))
@@ -576,8 +574,7 @@ struct VehicleTabView: View {
                                 Text(state.primaryRangeKm.map { Format.distance(km: $0, unit: preferences.distanceUnit) } ?? "—")
                                     .font(.system(size: 16, weight: HisingenTheme.valueWeight))
                                     .monospacedDigit()
-                                    .contentTransition(reduceMotion ? .identity : .numericText())
-                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.primaryRangeKm)
+                                    .hisTelemetryValue(state.primaryRangeKm, reduceMotion: reduceMotion)
                             }
                             .foregroundStyle(HisingenTheme.inkMuted)
                             Text(L10n.text("Total Range"))
@@ -601,8 +598,7 @@ struct VehicleTabView: View {
                                 .tracking(HisingenTheme.displayTracking)
                                 .monospacedDigit()
                                 .foregroundStyle(HisingenTheme.ink)
-                                .contentTransition(reduceMotion ? .identity : .numericText())
-                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.batteryPercentage)
+                                .hisTelemetryValue(state.batteryPercentage, reduceMotion: reduceMotion)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 1) {
@@ -612,8 +608,7 @@ struct VehicleTabView: View {
                                 Text(state.rangeKm.map { Format.distance(km: $0, unit: preferences.distanceUnit) } ?? "—")
                                     .font(.system(size: 16, weight: HisingenTheme.valueWeight))
                                     .monospacedDigit()
-                                    .contentTransition(reduceMotion ? .identity : .numericText())
-                                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: state.rangeKm)
+                                    .hisTelemetryValue(state.rangeKm, reduceMotion: reduceMotion)
                             }
                             .foregroundStyle(HisingenTheme.inkMuted)
                             Text(L10n.text("Estimated Range"))
@@ -790,13 +785,24 @@ struct VehicleTabView: View {
             || !allChargingSessions.isEmpty) else { return nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(
-                    symbol: "bolt.fill",
-                    title: L10n.text("Charging"),
-                    color: .green,
-                    isSemantic: true,
-                    isPulsing: state.isCharging
-                )
+                HStack(spacing: 6) {
+                    CardHeader(
+                        symbol: "bolt.fill",
+                        title: L10n.text("Charging"),
+                        color: .green,
+                        isSemantic: true,
+                        isPulsing: state.isCharging
+                    )
+                    // A quiet acknowledgement when a session finishes — a settle,
+                    // not a celebration.
+                    if state.isComplete {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(HisingenTheme.semanticGood)
+                            .transition(.scale(scale: 0.86).combined(with: .opacity))
+                            .accessibilityLabel(L10n.text("Complete"))
+                    }
+                }
 
                 if let headline {
                     Text(headline)
@@ -881,7 +887,7 @@ struct VehicleTabView: View {
                     .font(.system(size: 12, weight: .medium))
                 }
             }
-            .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(activeSamples.count)")
+            .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(activeSamples.count)|\(state.isComplete)")
         })
     }
 

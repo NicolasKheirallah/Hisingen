@@ -86,12 +86,11 @@ struct CardHeader: View {
             Image(systemName: symbol)
                 .foregroundStyle(isSemantic ? color : HisingenTheme.decorativeTint(color))
                 .font(.system(size: 13, weight: HisingenTheme.headingWeight))
-                .scaleEffect(isPulsing && pulse ? 1.15 : 1.0)
-                .shadow(color: isPulsing && pulse ? color.opacity(0.6) : .clear, radius: 4)
+                // A quiet breath, not a throb: a ~6 % swell on a slow cycle.
+                .scaleEffect(isPulsing && pulse ? 1.06 : 1.0)
+                .shadow(color: isPulsing && pulse ? color.opacity(0.45) : .clear, radius: 3)
                 .animation(
-                    isPulsing && !reduceMotion
-                        ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
-                        : .default,
+                    isPulsing && !reduceMotion ? Motion.breath : .default,
                     value: pulse
                 )
                 .onAppear {

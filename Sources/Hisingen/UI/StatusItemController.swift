@@ -58,6 +58,14 @@ final class StatusItemController: NSObject {
 
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
+    /// Ambient animation for the menu-bar glyph (charging breath, remote-op
+    /// shimmer, completion settle). Lazily built so `statusItem.button` exists.
+    private lazy var iconAnimator = MenuBarIconAnimator(button: statusItem.button)
+    /// Tracks the charging → complete edge so the icon can acknowledge a finished
+    /// session before settling back to the resting glyph.
+    private var chargingWasActive = false
+    private var chargingCompletedAt: Date?
+    private var completionExpiryTask: Task<Void, Never>?
     /// When the popover last closed. In transient ("Close When Switching Apps") mode the
     /// system closes the panel *before* the click on the status item reaches this class,
     /// so a naive toggle would immediately reopen it — the guard swallows that same click.
@@ -743,11 +751,59 @@ final class StatusItemController: NSObject {
 
         let isStale = data?.isStale() ?? false
         icon = dimmed(icon, when: isStale)
-        statusItem.button?.image = icon
+        applyMenuBarIcon(icon, for: data)
         setStatusBarTitle(title, for: data)
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
         updateFleetToolTip(activeState: data)
         refreshPopoverIfNeeded()
+    }
+
+    /// Routes the freshly-built menu-bar image through ``MenuBarIconAnimator``,
+    /// resolving the priority state (critical warning → remote op → charging →
+    /// climate → connected → normal) and tracking the charging → complete edge so
+    /// the glyph can dwell on a quiet acknowledgement before settling back.
+    private func applyMenuBarIcon(_ image: NSImage?, for data: VehicleState?) {
+        guard let image else {
+            statusItem.button?.image = nil
+            return
+        }
+
+        let charging = data?.isCharging == true
+        if charging {
+            chargingCompletedAt = nil
+        } else if chargingWasActive, data?.isComplete == true {
+            chargingCompletedAt = Date()
+            scheduleCompletionExpiry()
+        }
+        chargingWasActive = charging
+
+        let recentlyCompleted = chargingCompletedAt.map {
+            Date().timeIntervalSince($0) < Motion.menuBarCompletionDwell
+        } ?? false
+
+        let inputs = MenuBarIconState.inputs(
+            for: data,
+            remoteCommandInProgress: remoteCommandInProgress,
+            chargingRecentlyCompleted: recentlyCompleted
+        )
+        iconAnimator.apply(
+            state: .resolve(inputs),
+            image: image,
+            reduceMotion: VehicleMotionPreference.prefersReducedMotion
+        )
+    }
+
+    /// The completion acknowledgement is a fixed dwell rather than a state the
+    /// provider reports, so nothing else re-renders the icon when it lapses.
+    private func scheduleCompletionExpiry() {
+        completionExpiryTask?.cancel()
+        completionExpiryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Motion.menuBarCompletionDwell + 0.1))
+            guard let self, !Task.isCancelled else { return }
+            self.chargingCompletedAt = nil
+            self.render(data: self.latestState, error: self.latestError,
+                        authenticated: self.authenticated, diagnostics: self.diagnostics)
+        }
     }
 
     private func updateFleetToolTip(activeState: VehicleState?) {

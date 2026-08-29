@@ -883,29 +883,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         render()
     }
 
+    /// Reconciles the macOS login-item registration with the user's stored intent.
+    ///
+    /// `preferences.launchAtLogin` is the single source of truth for what the user
+    /// wants; the `SMAppService` registration is separate OS state that an app
+    /// update, move, or re-sign invalidates (`SMAppService.mainApp` is bound to the
+    /// bundle's code signature, and locally-built copies are ad-hoc signed with a
+    /// fresh hash every build). This method only moves the *registration* toward the
+    /// *intent* — the decision is in ``LaunchAtLoginReconciliation/resolve(intent:status:userInitiated:)``
+    /// so it never writes the intent from `status`, which is what made the first
+    /// launch after every replace silently forget the setting.
     private func applyLaunchAtLogin(userInitiated: Bool) {
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         let service = SMAppService.mainApp
-        do {
-            if preferences.launchAtLogin {
-                switch service.status {
-                case .notRegistered:
-                    try service.register()
-                case .requiresApproval:
-                    if userInitiated { SMAppService.openSystemSettingsLoginItems() }
-                case .enabled:
-                    break
-                case .notFound:
-                    preferences.launchAtLogin = false
-                @unknown default:
-                    preferences.launchAtLogin = false
-                }
-            } else if service.status == .enabled || service.status == .requiresApproval {
-                try service.unregister()
+        let status = service.status
+        let action = LaunchAtLoginReconciliation.resolve(
+            intent: preferences.launchAtLogin, status: status, userInitiated: userInitiated
+        )
+        switch action {
+        case .none:
+            break
+        case .restoreClearedIntent:
+            // The login item is still enabled but the preference reads off — only the
+            // old destructive reconcile produced that; a real opt-out unregisters.
+            preferences.launchAtLogin = true
+        case .register:
+            // `.notFound` is the post-update state: the registration points at a
+            // bundle whose signature/location no longer matches. Re-register for the
+            // current bundle instead of giving up on the setting. A failure here
+            // (disk image, ~/Downloads, App Translocation) keeps the stored intent so
+            // the next launch from /Applications self-heals.
+            do { try service.register() }
+            catch {
+                logger.error("Launch-at-login register failed (status \(String(describing: status), privacy: .public)): \(String(describing: error), privacy: .public)")
             }
-        } catch {
-            preferences.launchAtLogin = service.status == .enabled || service.status == .requiresApproval
-            logger.error("Launch-at-login update failed: \(String(describing: error), privacy: .public)")
+        case .unregister:
+            do { try service.unregister() }
+            catch {
+                logger.error("Launch-at-login unregister failed: \(String(describing: error), privacy: .public)")
+            }
+        case .promptForApproval:
+            SMAppService.openSystemSettingsLoginItems()
         }
     }
 

@@ -221,11 +221,11 @@ struct HisingenContentView: View {
         // overflow would draw outside the transparent popover window.
         .clipped()
         .background { HisingenTheme.popoverSurface }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: panelLayout)
+        .animation(reduceMotion ? nil : Motion.layout, value: panelLayout)
         .tint(HisingenTheme.accent)
         .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: appTheme)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: storedAppearanceMode)
+        .animation(reduceMotion ? nil : .easeInOut(duration: Motion.fast), value: appTheme)
+        .animation(reduceMotion ? nil : .easeInOut(duration: Motion.fast), value: storedAppearanceMode)
         .id(preferences.interfaceLanguage.rawValue)
     }
 
@@ -267,7 +267,7 @@ struct HisingenContentView: View {
 
 
     private var tabIndicatorAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.8)
+        reduceMotion ? nil : Motion.selection
     }
 
     private var tabBar: some View {
@@ -585,7 +585,7 @@ struct HisingenContentView: View {
             }
             Button {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.65)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.deliberate)) {
                     refreshRotation += 360
                 }
                 onRefresh()

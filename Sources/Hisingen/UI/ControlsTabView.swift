@@ -811,7 +811,7 @@ struct ControlsTabView: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .hisTelemetryValue(chargeTarget, reduceMotion: reduceMotion)
             }
 
             HStack(spacing: 6) {
@@ -827,8 +827,9 @@ struct ControlsTabView: View {
                             .background(selected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05),
                                        in: RoundedRectangle(cornerRadius: 6))
                             .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
+                            .animation(reduceMotion ? nil : Motion.selection, value: selected)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .disabled(isDisabled(.setChargeTarget(target)))
                     .accessibilityLabel(L10n.format("Set charge target to %@", Format.percent(Double(target))))
                     .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -869,7 +870,7 @@ struct ControlsTabView: View {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .hisTelemetryValue(ampLimit, reduceMotion: reduceMotion)
             }
 
             if let ampLimit {
@@ -1661,14 +1662,14 @@ struct SpinningFanView: View {
                 if spinning {
                     startSpinning()
                 } else {
-                    withAnimation(.easeOut(duration: 0.4)) { angle = 0 }
+                    withAnimation(Motion.interaction) { angle = 0 }
                 }
             }
             .accessibilityHidden(true)
     }
 
     private func startSpinning() {
-        withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+        withAnimation(Motion.spin) {
             angle = 360
         }
     }

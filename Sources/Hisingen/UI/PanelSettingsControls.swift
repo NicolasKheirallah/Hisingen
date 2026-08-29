@@ -29,7 +29,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
             ForEach(options, id: \.self) { option in
                 let isSelected = selection == option
                 Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
                         selection = option
                     }
                 } label: {
