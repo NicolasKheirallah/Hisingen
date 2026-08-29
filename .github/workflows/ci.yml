@@ -119,7 +119,21 @@ jobs:
           set -euo pipefail
           make dmg OUTPUT_DIR=. IDENTITY="-"
           test -s Hisingen.dmg
-          hdiutil verify Hisingen.dmg
+          # `hdiutil` on the hosted macos-15 runners intermittently returns
+          # "Resource temporarily unavailable" for a few seconds after `hdiutil
+          # create`, while diskarbitrationd still holds the freshly written image.
+          # Retry before treating a verify failure as a real corruption.
+          for attempt in 1 2 3 4 5 6; do
+            if hdiutil verify Hisingen.dmg; then
+              break
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              echo "hdiutil verify still failing after $attempt attempts" >&2
+              exit 1
+            fi
+            echo "hdiutil verify attempt $attempt failed; retrying in 5s" >&2
+            sleep 5
+          done
           shasum -a 256 Hisingen.dmg > Hisingen.dmg.sha256
       - name: Upload DMG validation artifact
         if: matrix.os == 'macos-15'

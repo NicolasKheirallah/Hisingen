@@ -162,8 +162,20 @@ jobs:
             rm -rf "$DMG_MOUNT" "$ZIP_DIR"
           }
           trap cleanup_packages EXIT
-          hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"
-          DMG_ATTACHED=true
+          # Hosted macOS runners occasionally return "Resource temporarily
+          # unavailable" from hdiutil while diskarbitrationd settles; retry.
+          for attempt in 1 2 3 4 5 6; do
+            if hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"; then
+              DMG_ATTACHED=true
+              break
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              echo "hdiutil attach still failing after $attempt attempts" >&2
+              exit 1
+            fi
+            echo "hdiutil attach attempt $attempt failed; retrying in 5s" >&2
+            sleep 5
+          done
           codesign --verify --deep --strict --verbose=2 "$DMG_MOUNT/Hisingen.app"
           spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
           hdiutil detach "$DMG_MOUNT"
