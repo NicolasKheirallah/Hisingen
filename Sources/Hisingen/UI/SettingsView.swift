@@ -158,7 +158,10 @@ struct SettingsView: View {
                 .padding(.horizontal, HisingenTheme.sectionSpacing)
 
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: HisingenTheme.sectionSpacing) {
+                // Eager VStack: the settings screen has a small, bounded set of
+                // heavyweight cards. LazyVStack rebuilt them on every scroll tick,
+                // which froze scrolling — a plain VStack builds them once on open.
+                VStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) { accountCard; fleetVehiclesCard }
                     if shows(.appearance) { appearanceCard }
                     if shows(.general) { displayCard; chargingStatOrderEditor }
