@@ -12,7 +12,7 @@ DerivedData/
 *.p12
 *.key
 *.csr
-
+.unlazy/
 # Local environment secrets and keys
 .env
 .env.*

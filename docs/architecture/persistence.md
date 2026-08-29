@@ -68,14 +68,14 @@ It does not mean the data cannot be copied by macOS backups, filesystem snapshot
 | Theme/language/display settings | `UserDefaults` | Application | Persistent | Low |
 | Cached vehicle snapshot | SQLite + `UserDefaults` fallback | VIN | 7-day useful TTL | Yes |
 | Charging transition baseline | `UserDefaults` | VIN | 7 days | Moderate |
-| Charging-session history | SQLite | VIN | Until clear/sign-out | Yes |
+| Charging-session history | SQLite | VIN | Until cleared (kept across sign-out unless opted in) | Yes |
 | Charging samples | SQLite | VIN/session | Maintenance-prunable after 90 days | Yes |
-| Battery-health milestones | SQLite | VIN | Long-term until clear/sign-out | Yes |
+| Battery-health milestones | SQLite | VIN | Long-term until cleared (kept across sign-out unless opted in) | Yes |
 | Historical telemetry | SQLite | VIN | Maintenance-prunable after 90 days | Yes |
-| Remote-command audit history | SQLite | VIN | Until clear/sign-out | Yes |
+| Remote-command audit history | SQLite | VIN | Until cleared (kept across sign-out unless opted in) | Yes |
 | Connectivity samples (wake/signal) | SQLite | VIN | Change-gated; pruned with samples | Moderate |
 | Cabin climate samples | SQLite | VIN | Hourly heartbeat; pruned with samples | Low |
-| Manual fuel fill-ups | SQLite | VIN | Until cleared/sign-out | No |
+| Manual fuel fill-ups | SQLite | VIN | Until cleared (kept across sign-out unless opted in) | No |
 | Full JSON backup export | User-chosen file | All vehicles | User-managed | Yes (coordinates only when opted in) |
 | Reverse-geocode cache | Memory | Process | Process lifetime | Yes |
 | Provider capability/request caches | Memory | Provider/VIN | Short-lived | Low/moderate |
@@ -98,7 +98,11 @@ All three must be treated as potentially containing sensitive application data.
 
 The database is opened and managed by `VehicleDatabase`.
 
-If the database cannot be opened, Hisingen should degrade safely rather than crashing the application.
+If the database cannot be opened, Hisingen degrades to a closed handle (`SQLiteDatabase.unavailable`): every write is logged and dropped rather than crashing. If the Application Support directory itself is unavailable, `VehicleDatabase` also uses a closed handle — it must **not** fall back to a temporary directory, which macOS purges and which previously made "my history vanished" indistinguishable from an OS housekeeping sweep.
+
+On open, a pre-existing file that fails `PRAGMA quick_check` is renamed aside to `hisingen.sqlite3.corrupt-<timestamp>` (with its `-wal`/`-shm` siblings) and a fresh database is created, so a corrupt file is recoverable by hand rather than silently recreated empty.
+
+Immediately before a schema migration runs (`PRAGMA user_version` is about to increase on a pre-existing database), `VehicleDatabase` writes a one-shot `VACUUM INTO` copy to `hisingen.sqlite3.pre-v<target>.bak`. It is never overwritten once present.
 
 ---
 
@@ -521,21 +525,17 @@ The global database wipe removes all rows from:
 
 It then performs SQLite vacuuming.
 
-`VehicleStateStore.clear()` with no VIN invokes this global database wipe and removes the persisted snapshot and charging-baseline `UserDefaults` keys.
+`VehicleStateStore.clear(vin:eraseHistory:)` always drops the cached snapshot (SQLite `vehicle_snapshots` plus the `UserDefaults` mirror) and the charging-baseline `UserDefaults` key. It invokes the global database wipe above **only** when `eraseHistory` is `true`.
 
-Current sign-out behavior uses this global clear path.
-
-Therefore sign-out currently removes local vehicle-history data rather than preserving the SQLite database contents.
+Sign-out and account-change pass `preferences.eraseHistoryOnSignOut` (Settings → Privacy & Data, key `erase_history_on_sign_out`, off by default). With the default, sign-out preserves the SQLite history tables; the deliberate "Erase local vehicle data" action in Settings is the path that wipes them.
 
 ---
 
 ## Account Changes
 
-`RefreshCoordinator` also clears local persisted vehicle state when it detects a switch to a different configured account.
+`RefreshCoordinator` also clears local persisted vehicle **snapshot** state when it detects a switch to a different configured account.
 
-This prevents cached or historical data belonging to one account from being accidentally presented after a new account is configured.
-
-Because the database is shared by the application, this clear operation affects the shared local vehicle-history store.
+This prevents cached data belonging to one account from being accidentally presented after a new account is configured. It passes the same `eraseHistoryOnSignOut` flag, so the shared SQLite history store is wiped on an account change only when the user has opted in.
 
 ---
 
@@ -615,7 +615,9 @@ If a cached vehicle snapshot cannot be decoded, Hisingen should treat it as unav
 
 The application should be able to obtain a fresh state from the provider after cache failure.
 
-SQLite schema changes should use explicit migrations rather than assuming all existing installations start with an empty database.
+SQLite schema changes must use explicit, `PRAGMA user_version`-gated migrations in `VehicleDatabase.runMigrations(from:)` — additive only (`ALTER TABLE ADD COLUMN`, `CREATE TABLE/INDEX IF NOT EXISTS`, in-place `UPDATE`). A migration must never `DROP` or recreate a table that can hold user history. Bump `VehicleDatabase.latestSchemaVersion` in lockstep with each new block. `DataRetentionHardeningTests.schemaMigrationPreservesExistingRows` opens a pre-`user_version` database with a row and asserts it survives the upgrade.
+
+Note on `CFBundleIdentifier`: `UserDefaults.standard` is keyed on it, so changing it orphans every stored preference. `PreferencesStore.migrateLegacyDefaults()` runs once at launch to carry values forward from `PreferencesStore.legacyDefaultsDomains`; add any new legacy identifier there. The Keychain service (`io.kheirallah.hisingen`) and the SQLite path are independent of the bundle identifier.
 
 ---
 
@@ -673,8 +675,9 @@ Persistence tests should cover at least:
 - 90-day pruning;
 - battery-health milestone deduplication;
 - global wipe;
-- sign-out-triggered local state clearing; and
-- corrupt snapshot handling.
+- sign-out-triggered local state clearing (snapshot always, history only with `erase_history_on_sign_out`);
+- schema-migration row preservation and the pre-migration backup; and
+- corrupt-database quarantine (`PRAGMA quick_check`).
 
 Any test using VINs, coordinates, account identifiers, or authentication material must use sanitized fixtures.
 

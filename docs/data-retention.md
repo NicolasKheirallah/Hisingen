@@ -49,9 +49,9 @@ These files should all be treated as parts of the same local database.
 | Non-secret configuration and preferences | `UserDefaults` | Until changed, reset, or application data is removed |
 | Cached vehicle snapshot | SQLite + `UserDefaults` fallback | Maximum useful age of 7 days; expired snapshot is removed when read |
 | Charging transition baseline | `UserDefaults` | 7 days; expired baseline is removed when read |
-| Charging-session header | SQLite | Retained until local history is cleared/sign-out removes database history |
-| Charging samples | SQLite | Can be pruned with a 90-day cutoff through maintenance |
-| Historical telemetry | SQLite | Can be pruned with a 90-day cutoff through maintenance |
+| Charging-session header | SQLite | Retained until local history is explicitly cleared (kept across sign-out unless "Erase local history on sign out" is enabled) |
+| Charging samples | SQLite | Can be pruned after the selected 30, 90, 180, or 365-day period through maintenance |
+| Historical telemetry | SQLite | Can be pruned after the selected 30, 90, 180, or 365-day period through maintenance |
 | Precise coordinates in historical telemetry/charging sessions | SQLite | Disabled by default; only written after explicit user opt-in, then follows the parent history retention |
 | Battery-health milestones | SQLite | Long-term; retained until local history is cleared |
 | Remote-command audit records | SQLite | Retained until local history is cleared |
@@ -125,7 +125,7 @@ Active, paused, and pending-completion headers are internal and do not appear in
 history. Stale or zero-gain observations are marked abandoned for diagnosis and likewise stay
 hidden. Charging-session headers are not removed by the 90-day sample-pruning operation.
 
-They remain until vehicle history is explicitly cleared or sign-out invokes the database-clear path.
+They remain until vehicle history is explicitly cleared. Sign-out keeps them unless "Erase local history on sign out" is enabled.
 
 ### Charging location retention
 
@@ -157,9 +157,10 @@ Charging samples do not themselves contain latitude or longitude columns.
 
 The associated charging-session header may contain an approximate charging location.
 
-### 90-day pruning
+### Configurable sample pruning
 
-The database maintenance operation uses a default cutoff of 90 days for charging samples.
+Settings → Privacy & Data lets the user choose a 30, 90, 180, or 365 day cutoff for
+high-volume charging samples. The default is 90 days.
 
 The current implementation performs this pruning when the maintenance action is invoked.
 
@@ -167,7 +168,7 @@ It is not an automatic guarantee that every sample disappears exactly 90 days af
 
 Documentation should therefore say:
 
-> Charging samples can be pruned after 90 days through maintenance.
+> Charging samples can be pruned after the configured retention period through maintenance.
 
 rather than:
 
@@ -211,11 +212,11 @@ location labels for the selected VIN.
 
 This means precise vehicle coordinates can exist in the local SQLite database even though the cached `VehicleState` snapshot itself strips the location field.
 
-### 90-day pruning
+### Configurable sample pruning
 
 Historical telemetry uses the same maintenance pruning path as charging samples.
 
-The default cutoff is 90 days.
+The selectable cutoff is 30, 90, 180, or 365 days; the default is 90 days.
 
 As with charging samples, this occurs when the maintenance operation is invoked rather than through a guaranteed automatic deletion exactly at 90 days.
 
@@ -342,38 +343,33 @@ Authentication secrets must not be placed in SQLite vehicle-history tables.
 
 ## Sign-Out
 
-Sign-out currently clears local vehicle history.
+Sign-out keeps local vehicle history by default.
 
-The current flow calls Hisingen's global state-store clear operation before completing provider-specific sign-out.
+The flow calls Hisingen's global state-store clear operation before completing
+provider-specific sign-out. That operation always removes:
 
-That clears:
-
-- SQLite vehicle snapshots;
-- charging sessions;
-- charging samples;
-- battery-health history;
-- telemetry history;
-- remote-command audit history;
+- SQLite vehicle snapshots (they hold live-ish fields such as parking location and owner name);
 - cached vehicle snapshots stored in `UserDefaults`; and
 - charging transition baselines stored in `UserDefaults`.
 
+It removes the durable SQLite history tables — charging sessions and samples,
+battery-health milestones, telemetry, air quality, connectivity, cabin climate,
+manual fuel fill-ups, remote-command audit — **only** when the user has enabled
+**Settings → Privacy & Data → "Erase local history on sign out"** (off by default,
+`erase_history_on_sign_out`). The default keeps that history so a re-signed local
+build, an accidentally dismissed Keychain prompt, or a stray sign-out does not
+discard months of data. The deliberate way to remove it is the separately
+confirmed "Erase local vehicle data" action in the same pane.
+
 Provider-specific sign-out then handles the associated authentication state.
-
-This means the previous documentation statement:
-
-> Sign-out clears cached vehicle snapshots and credentials; it does not remove the application database.
-
-is incorrect and must not be retained.
-
-Because the vehicle database is shared by the application, the current global clear operation removes locally stored vehicle history rather than preserving history for another account.
 
 ---
 
 ## Account Changes
 
-When Hisingen detects that the configured account has changed, the refresh coordinator also clears the shared local vehicle state before starting a session for the new account.
+When Hisingen detects that the configured account has changed, the refresh coordinator clears the shared local vehicle **snapshot** state before starting a session for the new account, so stale live data from one account is never shown as another's.
 
-This prevents stale vehicle history from one account being presented as data belonging to another account.
+Durable SQLite history is retained across an account change unless "Erase local history on sign out" is enabled, in which case the account-change path erases it too.
 
 ---
 
@@ -398,6 +394,10 @@ Pruning samples does not remove:
 
 A full clear is required to remove those categories.
 
+Settings exposes that full clear as a separately confirmed destructive action. It awaits
+the SQLite transaction before reporting success. When a vehicle is selected, only that
+VIN is cleared; otherwise the action explicitly says that all local vehicle data is erased.
+
 ---
 
 ## Exported Data
@@ -413,6 +413,10 @@ Exports may contain sensitive values such as:
 - charging history;
 - battery-health information; and
 - charging location.
+
+Settings archives are different from history exports. They contain presentation, feature,
+update, tariff, and notification preferences only. Account identifiers, VINs, nicknames,
+tokens, passwords, client secrets, API keys, and SQLite history are excluded.
 
 Users are responsible for storing and deleting exported files.
 
@@ -477,8 +481,9 @@ At minimum, persistence tests should cover:
 - charging-sample pruning;
 - full database wipe;
 - location removal from `cacheableCopy`;
-- historical coordinate persistence when expected; and
-- deletion behavior during sign-out.
+- historical coordinate persistence when expected;
+- history retention across sign-out with `erase_history_on_sign_out` off, and erasure when on; and
+- schema-migration row preservation for a pre-`user_version` database.
 
 ---
 

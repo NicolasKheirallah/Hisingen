@@ -646,4 +646,290 @@ extension HistoryInsights {
         guard median > 0 else { return false }
         return currentPeakKw < median * 0.6
     }
+
+    /// Runs `sessionPeakAnomaly` over a whole session list, comparing each completed session
+    /// against the earlier sessions recorded at the same named location. Returns the ids of
+    /// sessions that look derated so the dashboard can flag them inline.
+    static func sessionPeakAnomalies(in sessions: [HistoricalChargingSession]) -> Set<String> {
+        let chronological = sessions.sorted { $0.startedAt < $1.startedAt }
+        var priorPeaksByLocation: [String: [Double]] = [:]
+        var flagged: Set<String> = []
+        for session in chronological {
+            guard let location = session.locationName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !location.isEmpty else { continue }
+            let key = location.lowercased()
+            let priors = priorPeaksByLocation[key] ?? []
+            if session.endedAt != nil, session.peakPowerKw > 0,
+               sessionPeakAnomaly(currentPeakKw: session.peakPowerKw, priorPeaksKwAtSameLocation: priors) {
+                flagged.insert(session.id)
+            }
+            if session.peakPowerKw > 0 { priorPeaksByLocation[key, default: []].append(session.peakPowerKw) }
+        }
+        return flagged
+    }
+}
+
+// MARK: - Chart scrubbing
+
+extension HistoryInsights {
+    /// The element of `points` whose `timestamp` is closest to `date` — the point a chart
+    /// scrub gesture snaps its readout to.
+    static func nearest<T>(to date: Date, in points: [T], timestamp: (T) -> Date) -> T? {
+        points.min { abs(timestamp($0).timeIntervalSince(date)) < abs(timestamp($1).timeIntervalSince(date)) }
+    }
+}
+
+// MARK: - Month-to-date / year-to-date windows
+
+extension HistoryInsights {
+    /// The elapsed portion of the current month, paired with the identically-long window that
+    /// ended one month earlier. Comparing these two answers "am I ahead of last month *so
+    /// far*" instead of pitting two days against a whole month. `nil` only if calendar math
+    /// fails (it never does for the Gregorian calendar).
+    static func monthToDateWindows(now: Date = Date(), calendar: Calendar = .current)
+        -> (current: DateInterval, previous: DateInterval)? {
+        let monthStart = monthBucket(now, calendar: calendar)
+        guard let previousMonthStart = calendar.date(byAdding: .month, value: -1, to: monthStart) else { return nil }
+        let elapsed = max(0, now.timeIntervalSince(monthStart))
+        // Clamp the mirrored window to the previous month's own length so a 31st never spills
+        // into the month before it.
+        let previousMonthLength = calendar.date(byAdding: .month, value: 1, to: previousMonthStart)
+            .map { $0.timeIntervalSince(previousMonthStart) } ?? elapsed
+        let previousEnd = previousMonthStart.addingTimeInterval(min(elapsed, previousMonthLength))
+        return (DateInterval(start: monthStart, end: now),
+                DateInterval(start: previousMonthStart, end: previousEnd))
+    }
+
+    /// Year-to-date paired with the same span a year earlier — the basis for a year-over-year
+    /// line on the comparison card.
+    static func yearToDateWindows(now: Date = Date(), calendar: Calendar = .current)
+        -> (current: DateInterval, previous: DateInterval)? {
+        let components = calendar.dateComponents([.year], from: now)
+        guard let yearStart = calendar.date(from: components),
+              let previousYearStart = calendar.date(byAdding: .year, value: -1, to: yearStart),
+              let previousEnd = calendar.date(byAdding: .year, value: -1, to: now) else { return nil }
+        return (DateInterval(start: yearStart, end: now),
+                DateInterval(start: previousYearStart, end: previousEnd))
+    }
+}
+
+// MARK: - Monthly charging energy & cost
+
+extension HistoryInsights {
+    struct MonthlyEnergy: Identifiable, Equatable {
+        var id: Date { month }
+        let month: Date
+        let energyKwh: Double
+        /// `nil` when the month mixed currencies and a single total would be misleading.
+        let cost: Double?
+        let currency: String?
+    }
+
+    /// Energy delivered and spend per calendar month, keyed by session start. Each session's
+    /// own saved cost/tariff is honoured; only when a session predates cost retention does
+    /// `fallbackPricePerKwh` apply. Months mixing currencies report `cost == nil`.
+    static func monthlyChargingEnergy(from sessions: [HistoricalChargingSession],
+                                     fallbackPricePerKwh: Double,
+                                     fallbackCurrency: String,
+                                     calendar: Calendar = .current) -> [MonthlyEnergy] {
+        var energyByMonth: [Date: Double] = [:]
+        var costByMonth: [Date: Double] = [:]
+        var currenciesByMonth: [Date: Set<String>] = [:]
+        for session in sessions {
+            let bucket = monthBucket(session.startedAt, calendar: calendar)
+            energyByMonth[bucket, default: 0] += session.energyDeliveredKwh
+            let currency = session.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+            currenciesByMonth[bucket, default: []].insert(currency?.isEmpty == false ? currency! : fallbackCurrency)
+            let cost = session.estimatedCost
+                ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
+                ?? fallbackPricePerKwh * session.energyDeliveredKwh
+            costByMonth[bucket, default: 0] += cost
+        }
+        return energyByMonth.keys.sorted().map { month in
+            let currencies = currenciesByMonth[month] ?? []
+            let mixed = currencies.count > 1
+            return MonthlyEnergy(month: month,
+                                 energyKwh: energyByMonth[month] ?? 0,
+                                 cost: mixed ? nil : costByMonth[month],
+                                 currency: mixed ? nil : currencies.first)
+        }
+    }
+}
+
+// MARK: - Charging location breakdown
+
+extension HistoryInsights {
+    struct LocationStat: Identifiable, Equatable {
+        var id: String { name }
+        let name: String
+        let sessionCount: Int
+        let energyKwh: Double
+        let averagePeakKw: Double
+        let cost: Double?
+        let currency: String?
+    }
+
+    /// Per-location charging summary, most-used first. Sessions without a recorded place name
+    /// collapse into one `unknownLabel` bucket rather than being dropped.
+    static func locationStats(from sessions: [HistoricalChargingSession],
+                              fallbackPricePerKwh: Double,
+                              fallbackCurrency: String,
+                              unknownLabel: String) -> [LocationStat] {
+        struct Accumulator { var count = 0; var energy = 0.0; var peakSum = 0.0; var peakCount = 0
+                             var cost = 0.0; var currencies: Set<String> = [] }
+        var byName: [String: Accumulator] = [:]
+        for session in sessions {
+            let trimmed = session.locationName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = (trimmed?.isEmpty == false ? trimmed! : unknownLabel)
+            var acc = byName[name] ?? Accumulator()
+            acc.count += 1
+            acc.energy += session.energyDeliveredKwh
+            if session.peakPowerKw > 0 { acc.peakSum += session.peakPowerKw; acc.peakCount += 1 }
+            acc.cost += session.estimatedCost
+                ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
+                ?? fallbackPricePerKwh * session.energyDeliveredKwh
+            let currency = session.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+            acc.currencies.insert(currency?.isEmpty == false ? currency! : fallbackCurrency)
+            byName[name] = acc
+        }
+        return byName.map { name, acc in
+            LocationStat(name: name, sessionCount: acc.count, energyKwh: acc.energy,
+                         averagePeakKw: acc.peakCount > 0 ? acc.peakSum / Double(acc.peakCount) : 0,
+                         cost: acc.currencies.count > 1 ? nil : acc.cost,
+                         currency: acc.currencies.count > 1 ? nil : acc.currencies.first)
+        }
+        .sorted { ($0.sessionCount, $0.energyKwh) > ($1.sessionCount, $1.energyKwh) }
+    }
+}
+
+// MARK: - Driving patterns
+
+extension HistoryInsights {
+    struct HourBucket: Identifiable, Equatable {
+        var id: Int { hour }
+        let hour: Int
+        let tripCount: Int
+        let distanceKm: Double
+    }
+
+    /// Trip count and distance by local hour of departure, always a full 0…23 so the
+    /// histogram keeps its shape even for quiet hours.
+    static func tripsByHourOfDay(from trips: [TripHistoryEntry],
+                                 calendar: Calendar = .current) -> [HourBucket] {
+        var counts = Array(repeating: 0, count: 24)
+        var distances = Array(repeating: 0.0, count: 24)
+        for trip in trips {
+            let hour = calendar.component(.hour, from: trip.startedAt)
+            guard (0..<24).contains(hour) else { continue }
+            counts[hour] += 1
+            distances[hour] += trip.distanceKm
+        }
+        return (0..<24).map { HourBucket(hour: $0, tripCount: counts[$0], distanceKm: distances[$0]) }
+    }
+
+    struct WeekdayWeekendSplit: Equatable {
+        let weekdayKm: Double
+        let weekendKm: Double
+        let weekdayTripCount: Int
+        let weekendTripCount: Int
+        /// Distance per calendar day for the five weekdays vs the two weekend days, so the
+        /// two figures are comparable despite the 5:2 split.
+        var weekdayKmPerDay: Double { weekdayKm / 5 }
+        var weekendKmPerDay: Double { weekendKm / 2 }
+    }
+
+    static func weekdayWeekendDistance(from trips: [TripHistoryEntry],
+                                       calendar: Calendar = .current) -> WeekdayWeekendSplit {
+        var weekdayKm = 0.0, weekendKm = 0.0, weekdayCount = 0, weekendCount = 0
+        for trip in trips {
+            if calendar.isDateInWeekend(trip.startedAt) {
+                weekendKm += trip.distanceKm; weekendCount += 1
+            } else {
+                weekdayKm += trip.distanceKm; weekdayCount += 1
+            }
+        }
+        return WeekdayWeekendSplit(weekdayKm: weekdayKm, weekendKm: weekendKm,
+                                   weekdayTripCount: weekdayCount, weekendTripCount: weekendCount)
+    }
+}
+
+// MARK: - Combustion / hybrid fuel economy
+
+extension HistoryInsights {
+    /// Plausible litres-per-100 km bounds. Below ~1 is coasting or a data glitch; above 30 is
+    /// not a driving style on any vehicle this app supports.
+    static let fuelConsumptionBounds = 1.0...30.0
+
+    /// L/100 km trend for combustion / hybrid vehicles, mirroring `efficiencyTrend`. Reads
+    /// only telemetry rows the recorder tagged as litre-unit; `EfficiencyPoint.kwhPer100Km`
+    /// simply carries the litre figure here (the struct is unit-agnostic storage).
+    static func combustionConsumptionTrend(from records: [HistoricalTelemetryRecord]) -> [EfficiencyPoint] {
+        var points: [EfficiencyPoint] = []
+        for record in records.sorted(by: { $0.timestamp < $1.timestamp }) {
+            guard record.averageConsumptionUnit == "l",
+                  let value = record.averageConsumption,
+                  fuelConsumptionBounds.contains(value) else { continue }
+            if let last = points.last, abs(last.kwhPer100Km - value) <= 0.05,
+               record.timestamp.timeIntervalSince(last.timestamp) < 6 * 3_600 {
+                continue
+            }
+            points.append(EfficiencyPoint(id: record.id, timestamp: record.timestamp, kwhPer100Km: value))
+        }
+        return points
+    }
+
+    struct FuelEconomyPoint: Identifiable, Equatable {
+        let id: Int64
+        let date: Date
+        let litersPer100Km: Double
+        let pricePerLiter: Double
+    }
+
+    /// Tank-to-tank economy: each fill's litres divided by the distance since the previous
+    /// fill. Needs an odometer reading on both fills. Fills are supplied newest-first (as the
+    /// database returns them); output is oldest-first for charting.
+    static func fuelEconomyBetweenFills(
+        _ entries: [(id: Int64, date: Date, liters: Double, pricePerLiter: Double, odometerKm: Double?)]
+    ) -> [FuelEconomyPoint] {
+        let chronological = entries.sorted { $0.date < $1.date }
+        var points: [FuelEconomyPoint] = []
+        for (previous, current) in zip(chronological, chronological.dropFirst()) {
+            guard let startOdo = previous.odometerKm, let endOdo = current.odometerKm,
+                  endOdo > startOdo, current.liters > 0 else { continue }
+            let distance = endOdo - startOdo
+            let lPer100 = current.liters / distance * 100
+            guard fuelConsumptionBounds.contains(lPer100) else { continue }
+            points.append(FuelEconomyPoint(id: current.id, date: current.date,
+                                           litersPer100Km: lPer100, pricePerLiter: current.pricePerLiter))
+        }
+        return points
+    }
+}
+
+// MARK: - Emissions comparison
+
+extension HistoryInsights {
+    struct EmissionsComparison: Equatable {
+        /// Grid generation attributable to the electricity the EV km consumed.
+        let electricKgCO2: Double
+        /// A comparable petrol car covering the same distance, well-to-wheel.
+        let petrolKgCO2: Double
+        var avoidedKgCO2: Double { max(0, petrolKgCO2 - electricKgCO2) }
+    }
+
+    /// Rough well-to-wheel CO₂ comparison for distance driven electrically vs a comparable
+    /// petrol car. Every input is an estimate — grid intensity varies by time and region, and
+    /// the petrol baseline is a segment average, not the driver's former car — so callers
+    /// should present the result as indicative. `nil` for non-positive distance/consumption.
+    static func emissionsComparison(electricKm: Double,
+                                    consumptionKwhPer100Km: Double,
+                                    gridGramsCO2PerKwh: Double,
+                                    petrolGramsCO2PerKm: Double = 170) -> EmissionsComparison? {
+        guard electricKm > 0, consumptionKwhPer100Km > 0, gridGramsCO2PerKwh >= 0 else { return nil }
+        let energyKwh = electricKm / 100 * consumptionKwhPer100Km
+        return EmissionsComparison(
+            electricKgCO2: energyKwh * gridGramsCO2PerKwh / 1_000,
+            petrolKgCO2: electricKm * max(0, petrolGramsCO2PerKm) / 1_000
+        )
+    }
 }

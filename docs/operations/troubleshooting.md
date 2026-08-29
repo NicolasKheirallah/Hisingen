@@ -176,6 +176,20 @@ see [domain/capability-matrix.md](../domain/capability-matrix.md).
 Screenshot Privacy Mode is enabled (Settings → Appearance). VIN, plate, coordinates, and
 addresses render as placeholders while it's on.
 
+## Database maintenance reports a failure
+
+Open Settings → Privacy & Data. Maintenance now waits for SQLite to finish and shows the
+underlying error instead of optimistically claiming success. Export a diagnostic report,
+check that the app has write access to Application Support, and retry Vacuum & Checkpoint
+before pruning. Destructive erase actions require separate confirmation.
+
+## Imported settings do not include my account or vehicle
+
+This is intentional. Settings archives exclude credentials, sessions, VINs, nicknames, and
+history. Sign in separately on the new Mac, then import the archive for presentation,
+feature, tariff, update, and notification preferences. Full JSON history exports are
+read-only by design and cannot be imported as vehicle telemetry.
+
 ## The floating charging panel isn't appearing
 
 It requires Settings → Appearance → Floating Charging Panel to be enabled *and* the vehicle to

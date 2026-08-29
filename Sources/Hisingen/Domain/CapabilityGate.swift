@@ -8,6 +8,24 @@ enum CommandAvailability: Equatable, Sendable {
     case unavailableWhileBusy
 
     var isAvailable: Bool { self == .available }
+
+    /// Short, human explanation for why a control is inert, shown under a dimmed card so
+    /// "shown but disabled" reads as a specific state rather than a glitch. `nil` when the
+    /// command is available.
+    var shortReason: String? {
+        switch self {
+        case .available:
+            return nil
+        case .disabledBySettings:
+            return L10n.text("Turn this on in Settings → Telemetry & Features.")
+        case .unsupportedByVehicle:
+            return L10n.text("This vehicle does not support the command.")
+        case .unimplementedByProvider:
+            return L10n.text("Not available through this account's vehicle service.")
+        case .unavailableWhileBusy:
+            return L10n.text("Another remote command is still running.")
+        }
+    }
 }
 
 /// The single application-level decision point for whether a remote command may be shown or sent.

@@ -3,8 +3,12 @@ import SwiftUI
 @MainActor
 struct ScheduleEditorSheet: View {
     let state: VehicleState
+    /// Which segment the "Add Schedule" form opens on, so the caller's context (a climate card
+    /// vs. a charging card) carries through.
+    var initialKind: ScheduleKind = .climate
     let onRemoteCommand: (RemoteCommand) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var selectedKind: ScheduleKind = .climate
     @State private var startHour: Int = 7
@@ -18,6 +22,12 @@ struct ScheduleEditorSheet: View {
     private let hours = Array(0...23)
     private let minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
+    /// A charging window with identical start and end covers no time; block the save so the
+    /// backend never gets a zero-length timer.
+    private var chargingWindowInvalid: Bool {
+        selectedKind == .globalCharging && startHour == endHour && startMinute == endMinute
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -28,6 +38,11 @@ struct ScheduleEditorSheet: View {
                     existingSchedulesList
                     Divider().opacity(0.4)
                     scheduleConfigSection
+                    if chargingWindowInvalid {
+                        Label(L10n.text("Start and end time cannot be the same."), systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(HisingenTheme.semanticWarning)
+                    }
                 }
                 .padding(16)
             }
@@ -35,8 +50,12 @@ struct ScheduleEditorSheet: View {
             Divider().opacity(0.4)
             footerButtons
         }
-        .frame(width: 380, height: 460)
+        .frame(width: 380)
+        .frame(minHeight: 460, maxHeight: dynamicTypeSize.isAccessibilitySize ? 620 : 460)
         .background(HisingenTheme.canvas)
+        .onAppear {
+            if editingScheduleID == nil { selectedKind = initialKind }
+        }
     }
 
     private var header: some View {
@@ -248,6 +267,8 @@ struct ScheduleEditorSheet: View {
                                 .foregroundStyle(selected ? Color.white : Color.primary)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(day.shortName)
+                        .accessibilityAddTraits(selected ? [.isSelected] : [])
                     }
                 }
             }
@@ -275,6 +296,7 @@ struct ScheduleEditorSheet: View {
             .buttonStyle(.borderedProminent)
             .tint(HisingenTheme.accent)
             .controlSize(.small)
+            .disabled(chargingWindowInvalid)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

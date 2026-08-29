@@ -241,11 +241,12 @@ final class RefreshCoordinator {
         pendingPassword = password?.isEmpty == false ? password : nil
         pendingSessionToken = nil
         if accountChanged {
+            let eraseHistory = preferences.eraseHistoryOnSignOut
             for car in cars {
-                stateStore.clear(vin: car.vin)
+                stateStore.clear(vin: car.vin, eraseHistory: eraseHistory)
             }
             if cars.isEmpty, !preferences.vin.isEmpty {
-                stateStore.clear(vin: preferences.vin)
+                stateStore.clear(vin: preferences.vin, eraseHistory: eraseHistory)
             }
             latest = nil
             cars = []
@@ -432,11 +433,13 @@ final class RefreshCoordinator {
         observerTokens.removeAll()
     }
 
-    /// Signs out. Deliberate order: local data is wiped *first*, before the remote revoke
-    /// round-trip, because privacy-on-failure beats session-persistence-on-failure — if the
-    /// revoke request fails, the user still loses nothing by having local history cleared,
-    /// whereas the reverse ordering would leave telemetry on disk after a failed sign-out.
-    /// The only signal when revocation fails is `.secureStorage` in `lastError`.
+    /// Signs out. Deliberate order: local state is cleared *first*, before the remote revoke
+    /// round-trip, because privacy-on-failure beats session-persistence-on-failure. The
+    /// cached snapshot (which holds location and owner name) is always dropped; durable
+    /// history is kept unless the user has opted into "erase history on sign out" in
+    /// Settings → Privacy & Data, so a re-signed local build or a stray sign-out does not
+    /// discard months of charging and trip data. The only signal when revocation fails is
+    /// `.secureStorage` in `lastError`.
     func signOut() {
         cancelCurrentWork()
         let requestGeneration = generation
@@ -456,15 +459,16 @@ final class RefreshCoordinator {
         }
         let currentVin = preferences.vin
         preferences.setVin("", for: api.brand)
+        let eraseHistory = preferences.eraseHistoryOnSignOut
         if carsToClear.isEmpty {
             if !currentVin.isEmpty {
-                stateStore.clear(vin: currentVin)
+                stateStore.clear(vin: currentVin, eraseHistory: eraseHistory)
             } else {
-                stateStore.clear()
+                stateStore.clear(eraseHistory: eraseHistory)
             }
         } else {
             for vin in carsToClear {
-                stateStore.clear(vin: vin)
+                stateStore.clear(vin: vin, eraseHistory: eraseHistory)
             }
         }
         task = Task {

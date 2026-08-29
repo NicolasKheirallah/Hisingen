@@ -41,6 +41,106 @@ final class PreferencesStore {
 
     var accountDraft = AccountDraft()
 
+    enum SettingsTransferError: LocalizedError {
+        case invalidArchive
+        var errorDescription: String? { L10n.text("The selected file is not a valid Hisingen settings archive.") }
+    }
+
+    /// Settings transfer deliberately excludes account identifiers, vehicle identifiers,
+    /// Keychain material, and session/cache state. The exported property list is suitable
+    /// for moving presentation and alert preferences between Macs without leaking identity.
+    private static func isTransferableSettingsKey(_ key: String) -> Bool {
+        let forbiddenFragments = ["email", "password", "secret", "api_key", "session", "token", "vin", "nickname"]
+        guard !forbiddenFragments.contains(where: key.contains) else { return false }
+        let exact: Set<String> = [
+            "charging_stat_order", "floating_charging_panel",
+            "privacy_redaction_enabled", "statusbar_display_option", "panel_size",
+            "content_density", "custom_panel_size_enabled", "custom_panel_width",
+            "custom_panel_height", "wide_card_layout", "panel_close_behavior",
+            "car_render_angle", "vehicle_model_badge_position", "registration_badge_position",
+            "vehicle_label_format", "distance_unit", "temperature_unit", "pressure_unit",
+            "fuel_volume_unit", "fuel_economy_unit", "energy_consumption_unit",
+            "history_sample_retention_days", "interface_language", "tint_menu_bar_icon",
+            "launch_at_login", "his_appearanceMode", "app_theme", "enabled_features_v2",
+            "store_charging_history", "private_notification_details",
+            "low_battery_threshold",
+            "automatically_check_for_updates", "automatically_download_updates",
+            "show_warning_badge", "grid_carbon_intensity_g_per_kwh"
+        ]
+        return exact.contains(key)
+            || ["notify_", "remote_", "night_", "electricity_", "theme_for_"].contains(where: key.hasPrefix)
+    }
+
+    func exportSettingsPropertyList() throws -> Data {
+        var values = d.dictionaryRepresentation().filter { Self.isTransferableSettingsKey($0.key) }
+        if let rawFeatures = values["enabled_features_v2"] as? [String] {
+            values["enabled_features_v2"] = rawFeatures.filter {
+                AppFeature(rawValue: $0)?.isRemoteControl == false
+            }
+        }
+        return try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0)
+    }
+
+    func importSettingsPropertyList(_ data: Data) throws {
+        guard data.count <= 1_000_000,
+              let archive = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              archive.keys.allSatisfy(Self.isTransferableSettingsKey) else {
+            throw SettingsTransferError.invalidArchive
+        }
+        for key in d.dictionaryRepresentation().keys where Self.isTransferableSettingsKey(key) {
+            d.removeObject(forKey: key)
+        }
+        for (key, value) in archive {
+            if key == "enabled_features_v2", let rawFeatures = value as? [String] {
+                // Importing a convenience profile must not grant remote-command access.
+                let safe = rawFeatures.filter { raw in
+                    guard let feature = AppFeature(rawValue: raw) else { return false }
+                    return !feature.isRemoteControl
+                }
+                d.set(safe, forKey: key)
+            } else {
+                d.set(value, forKey: key)
+            }
+        }
+    }
+
+    func resetTransferableSettings() {
+        for key in d.dictionaryRepresentation().keys where Self.isTransferableSettingsKey(key) {
+            d.removeObject(forKey: key)
+        }
+    }
+
+    /// Remove the legacy UserDefaults mirrors that predate SQLite. A database erase must
+    /// clear these too or an old snapshot can reappear and be migrated back into SQLite.
+    /// Corrupt legacy payloads are removed wholesale because retaining an undecodable cache
+    /// is less safe than requiring the affected vehicles to refresh again.
+    func clearLegacyVehicleCaches(for vin: String?, includeBaselines: Bool = true) {
+        func removeEntry<Value: Codable>(_ type: Value.Type, key: String) {
+            guard let vin else {
+                d.removeObject(forKey: key)
+                return
+            }
+            guard let data = d.data(forKey: key),
+                  var values = try? JSONDecoder().decode([String: Value].self, from: data) else {
+                d.removeObject(forKey: key)
+                return
+            }
+            values.removeValue(forKey: vin)
+            if values.isEmpty {
+                d.removeObject(forKey: key)
+            } else if let encoded = try? JSONEncoder().encode(values) {
+                d.set(encoded, forKey: key)
+            } else {
+                d.removeObject(forKey: key)
+            }
+        }
+
+        removeEntry(VehicleState.self, key: "cached_vehicle_snapshots_v1")
+        if includeBaselines {
+            removeEntry(ChargingBaseline.self, key: "charging_baselines_v1")
+        }
+    }
+
     var email: String {
         get {
             if let cached = cachedEmail { return cached }
@@ -128,6 +228,11 @@ final class PreferencesStore {
         set { d.set(newValue, forKey: "charging_stat_order") }
     }
 
+    var garageVehicleOrder: [String] {
+        get { d.array(forKey: "garage_vehicle_order_v1") as? [String] ?? [] }
+        set { d.set(newValue, forKey: "garage_vehicle_order_v1") }
+    }
+
     /// Floating always-on-top panel while charging.
     var floatingChargingPanelEnabled: Bool {
         get { d.bool(forKey: "floating_charging_panel") }
@@ -209,6 +314,14 @@ final class PreferencesStore {
         set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
     }
     var persistLocationHistory: Bool { get { d.bool(forKey: "persist_location_history") } set { d.set(newValue, forKey: "persist_location_history") } }
+    var historySampleRetentionDays: Int { get { let value = d.integer(forKey: "history_sample_retention_days"); return [30, 90, 180, 365].contains(value) ? value : 90 } set { d.set([30, 90, 180, 365].contains(newValue) ? newValue : 90, forKey: "history_sample_retention_days") } }
+    /// When enabled, signing out — or switching to a different account — also erases the
+    /// local SQLite history (charging sessions, telemetry, battery health, fuel entries…)
+    /// for the affected vehicles. Off by default: a re-signed local build, a Keychain
+    /// prompt dismissed by accident, or a stray sign-out should not discard months of
+    /// history. The explicit "Erase local vehicle data" action in Settings → Privacy &
+    /// Data is the deliberate way to remove it.
+    var eraseHistoryOnSignOut: Bool { get { d.bool(forKey: "erase_history_on_sign_out") } set { d.set(newValue, forKey: "erase_history_on_sign_out") } }
     var interfaceLanguage: InterfaceLanguage { get { InterfaceLanguage(rawValue: d.string(forKey: "interface_language") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "interface_language") } }
     var tintMenuBarIcon: Bool { get { d.object(forKey: "tint_menu_bar_icon") == nil || d.bool(forKey: "tint_menu_bar_icon") } set { d.set(newValue, forKey: "tint_menu_bar_icon") } }
     var launchAtLogin: Bool { get { d.bool(forKey: "launch_at_login") } set { d.set(newValue, forKey: "launch_at_login") } }
@@ -219,6 +332,9 @@ final class PreferencesStore {
     var remoteRearLeftSeatHeating: HeatingLevel { get { HeatingLevel(rawValue: d.integer(forKey: "remote_rear_left_seat_heating")) ?? .unspecified } set { d.set(newValue.rawValue, forKey: "remote_rear_left_seat_heating") } }
     var remoteRearRightSeatHeating: HeatingLevel { get { HeatingLevel(rawValue: d.integer(forKey: "remote_rear_right_seat_heating")) ?? .unspecified } set { d.set(newValue.rawValue, forKey: "remote_rear_right_seat_heating") } }
     var remoteSteeringWheelHeating: HeatingLevel { get { HeatingLevel(rawValue: d.integer(forKey: "remote_steering_heating")) ?? .unspecified } set { d.set(newValue.rawValue, forKey: "remote_steering_heating") } }
+    /// Remote-engine-start runtime the Controls tab last used, so the picker keeps the user's
+    /// choice across panel opens instead of snapping back to 15 minutes each time.
+    var remoteEngineRuntimeMinutes: Int { get { let value = d.integer(forKey: "remote_engine_runtime_minutes"); return [5, 10, 15].contains(value) ? value : 15 } set { d.set(newValue, forKey: "remote_engine_runtime_minutes") } }
     var electricityPricePerKwh: Double { get { let value = d.double(forKey: "electricity_price_per_kwh"); return value > 0 ? value : 2.0 } set { d.set(newValue, forKey: "electricity_price_per_kwh") } }
     var currencySymbol: String { get { let value = d.string(forKey: "electricity_currency_symbol") ?? ""; return value.isEmpty ? (Locale.current.currencySymbol ?? "kr") : value } set { d.set(newValue, forKey: "electricity_currency_symbol") } }
     /// Off-peak/night tariff, disabled by default so charging-cost estimates match
@@ -228,9 +344,48 @@ final class PreferencesStore {
     var nightTariffStartHour: Int { get { let value = d.object(forKey: "night_tariff_start_hour") as? Int; return min(max(value ?? 22, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_start_hour") } }
     var nightTariffEndHour: Int { get { let value = d.object(forKey: "night_tariff_end_hour") as? Int; return min(max(value ?? 6, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_end_hour") } }
     var storeChargingHistory: Bool { get { d.bool(forKey: "store_charging_history") } set { d.set(newValue, forKey: "store_charging_history") } }
+    /// Well-to-wheel grid carbon intensity used only for the History tab's indicative
+    /// "emissions avoided vs petrol" figure. Defaults to a middle-of-the-road European blend;
+    /// a Nordic grid is far cleaner, a coal-heavy one dirtier, hence it is user-adjustable.
+    var gridCarbonIntensityGramsPerKwh: Double { get { let value = d.double(forKey: "grid_carbon_intensity_g_per_kwh"); return value > 0 ? value : 120 } set { d.set(min(max(newValue, 0), 1_200), forKey: "grid_carbon_intensity_g_per_kwh") } }
     var privateNotificationDetails: Bool { get { d.object(forKey: "private_notification_details") == nil || d.bool(forKey: "private_notification_details") } set { d.set(newValue, forKey: "private_notification_details") } }
     var requireBiometricsForRemoteControls: Bool { get { d.bool(forKey: "require_biometrics_for_remote_controls") } set { d.set(newValue, forKey: "require_biometrics_for_remote_controls") } }
     var lowBatteryThreshold: Int { get { let value = d.integer(forKey: "low_battery_threshold"); return value == 0 ? 20 : min(max(value, 5), 50) } set { d.set(min(max(newValue, 5), 50), forKey: "low_battery_threshold") } }
+
+    /// The charging session the History tab last had open, per vehicle, so switching tabs or
+    /// periods doesn't snap the curve back to the newest session every time.
+    func selectedHistorySession(for vin: String) -> String? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return nil }
+        return (d.dictionary(forKey: "history_selected_session_v1") as? [String: String])?[key]
+    }
+
+    func setSelectedHistorySession(_ sessionID: String?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var values = (d.dictionary(forKey: "history_selected_session_v1") as? [String: String]) ?? [:]
+        if let sessionID { values[key] = sessionID } else { values.removeValue(forKey: key) }
+        d.set(values, forKey: "history_selected_session_v1")
+    }
+
+    /// Derived trips the user has chosen to hide because segmentation combined or invented
+    /// them. Stored per vehicle as trip-id strings; the dashboard filters these out.
+    func hiddenTripIDs(for vin: String) -> Set<String> {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "history_hidden_trips_v1") as? [String: [String]] else { return [] }
+        return Set(all[key] ?? [])
+    }
+
+    func setTripHidden(_ hidden: Bool, id: String, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var all = (d.dictionary(forKey: "history_hidden_trips_v1") as? [String: [String]]) ?? [:]
+        var ids = Set(all[key] ?? [])
+        if hidden { ids.insert(id) } else { ids.remove(id) }
+        if ids.isEmpty { all.removeValue(forKey: key) } else { all[key] = Array(ids) }
+        d.set(all, forKey: "history_hidden_trips_v1")
+    }
 
     func warrantyInServiceDate(for vin: String) -> Date? {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -303,6 +458,9 @@ final class PreferencesStore {
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
     var notifyChargerConnection: Bool { get { boolDefaultTrue("notify_charger_connection") } set { d.set(newValue, forKey: "notify_charger_connection") } }
     var notifyClimateChanges: Bool { get { boolDefaultTrue("notify_climate_changes") } set { d.set(newValue, forKey: "notify_climate_changes") } }
+    var openingsAlertDelayMinutes: Int { get { let value = d.integer(forKey: "notify_openings_delay_minutes"); return min(max(value == 0 ? 15 : value, 5), 60) } set { d.set(min(max(newValue, 5), 60), forKey: "notify_openings_delay_minutes") } }
+    var plugInReminderThreshold: Int { get { let value = d.integer(forKey: "notify_plugin_threshold"); return min(max(value == 0 ? 40 : value, 10), 80) } set { d.set(min(max(newValue, 10), 80), forKey: "notify_plugin_threshold") } }
+    var eveningUnlockedStartHour: Int { get { let value = d.object(forKey: "notify_evening_unlocked_hour") as? Int; return min(max(value ?? 21, 18), 23) } set { d.set(min(max(newValue, 18), 23), forKey: "notify_evening_unlocked_hour") } }
 
     /// Update preferences are intentionally separate from vehicle notifications. The
     /// defaults follow macOS convention: check in the background, but do not download or
@@ -343,7 +501,15 @@ final class PreferencesStore {
 
     var features: FeatureSelection {
         get {
-            if let values = d.array(forKey: "enabled_features_v2") as? [String] { var set = Set(values.compactMap(AppFeature.init)).intersection(AppFeature.permittedFeatures); set.formUnion([.vehicleLocation, .vehicleWeather, .ownerGreeting]); return FeatureSelection(enabled: set) }
+            if let values = d.array(forKey: "enabled_features_v2") as? [String] {
+                // The stored selection is authoritative. Earlier versions force-enabled
+                // three presentation features on every read, which made their Settings
+                // toggles appear to work only until the next launch.
+                return FeatureSelection(
+                    enabled: Set(values.compactMap(AppFeature.init))
+                        .intersection(AppFeature.permittedFeatures)
+                )
+            }
             // v1 installs predate the .notifications case; it shipped default-on, so the
             // migration must carry it forward or upgraders silently lose every alert.
             if let values = d.array(forKey: "enabled_features_v1") as? [String] { var set = Set(values.compactMap(AppFeature.init)); set.formUnion([.exteriorStatus, .tyreAndWarnings, .softwareUpdates, .chargingSchedule, .climateStatus, .tripMeters, .notifications]); let result = FeatureSelection(enabled: set.intersection(AppFeature.permittedFeatures)); d.set(result.enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2"); return result }
@@ -361,6 +527,33 @@ final class PreferencesStore {
         NSApplication.shared.appearance = appearanceMode.nsAppearance
     }
     func migrateLegacyPassword() { guard let legacy = d.string(forKey: "polestar_password"), !legacy.isEmpty else { return }; do { if try Keychain.readPassword() == nil { try Keychain.savePassword(legacy) }; d.removeObject(forKey: "polestar_password") } catch { logger.error("Legacy Polestar password migration to Keychain failed: \(String(describing: error), privacy: .public)") } }
+
+    /// Bundle identifiers the app shipped with before `CFBundleIdentifier` was collapsed to
+    /// `io.kheirallah.hisingen`. Each was a distinct `UserDefaults` domain.
+    static let legacyDefaultsDomains = ["io.kheirallah.hisingen-cc97f41c-af39-4eb1-a7e6-0014f6e1c80f"]
+
+    /// One-time carry-over of stored preferences from a previous bundle identifier.
+    /// `UserDefaults.standard` is keyed on `CFBundleIdentifier`, so without this the feature
+    /// selection, per-VIN nickname and theme maps, unit choices and notification tuning would
+    /// all silently reset on the update that changes the identifier. Keychain credentials and
+    /// the SQLite database live outside the defaults domain and are unaffected regardless.
+    /// Existing keys are never overwritten, so running this after real use is a no-op.
+    func migrateLegacyDefaults(domains: [String] = PreferencesStore.legacyDefaultsDomains) {
+        let flagKey = "defaults_domain_migrated_v1"
+        guard !d.bool(forKey: flagKey) else { return }
+        for domain in domains where domain != Bundle.main.bundleIdentifier {
+            guard let legacy = d.persistentDomain(forName: domain), !legacy.isEmpty else { continue }
+            var carried = 0
+            for (key, value) in legacy where d.object(forKey: key) == nil {
+                d.set(value, forKey: key)
+                carried += 1
+            }
+            if carried > 0 {
+                logger.notice("Carried \(carried, privacy: .public) preference key(s) forward from \(domain, privacy: .public)")
+            }
+        }
+        d.set(true, forKey: flagKey)
+    }
 }
 
 private struct PreferencesStoreKey: EnvironmentKey {

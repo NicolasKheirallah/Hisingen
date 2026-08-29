@@ -39,6 +39,10 @@ final class CommandCoordinator {
     private weak var context: (any CommandExecutionContext)?
 
     private(set) var isInProgress = false
+    /// `RemoteCommand.identifier` of the command currently executing, so the Controls tab can
+    /// show a "Sending…" state on the specific control that was tapped rather than dimming the
+    /// whole page. `nil` whenever `isInProgress` is false.
+    private(set) var inProgressCommandIdentifier: String?
     private var followUpRefreshTask: Task<Void, Never>?
 
     init(context: any CommandExecutionContext,
@@ -118,10 +122,12 @@ final class CommandCoordinator {
     private func execute(_ command: RemoteCommand, vin: String) async {
         guard let context else { return }
         isInProgress = true
+        inProgressCommandIdentifier = command.identifier
         context.commandInProgressDidChange()
         let startedAt = Date()
         defer {
             isInProgress = false
+            inProgressCommandIdentifier = nil
             context.commandInProgressDidChange()
         }
         do {

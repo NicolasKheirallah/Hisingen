@@ -111,6 +111,13 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         allCases
     }
 
+    /// Features safe to enable in one batch. Remote commands stay an explicit choice:
+    /// some can move vehicle hardware or expose location and must never be swept in by
+    /// a broad convenience action.
+    static var safeBulkEnableCases: [AppFeature] {
+        userSelectableCases.filter { !$0.isRemoteControl }
+    }
+
     static var permittedFeatures: Set<AppFeature> { Set(allCases) }
 
     var isRemoteControl: Bool { Self.remoteFeatures.contains(self) }

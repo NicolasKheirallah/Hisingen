@@ -395,7 +395,7 @@ It does **not** mean every car supports every command.
 
 \* Availability still depends on the vehicle, account and services available for that car.
 
-For sensitive commands such as unlocking the car, Hisingen can require authentication through Touch ID or the Mac password.
+For sensitive commands such as unlocking the car, Hisingen can require device-owner authentication through Touch ID, Apple Watch, or the Mac password, depending on what macOS makes available.
 
 ### About Polestar remote controls
 

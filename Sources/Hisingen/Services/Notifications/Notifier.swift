@@ -316,7 +316,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func checkOpeningsLeftOpen(current: VehicleState) {
         let openings = current.exteriorStatus?.itemsNeedingAttention.map(\.displayName) ?? []
         let condition = current.isEngineRunning != true && !openings.isEmpty
-        trackSustained(condition: condition, key: "\(current.vin).openings", duration: 15 * 60) {
+        trackSustained(condition: condition, key: "\(current.vin).openings", duration: TimeInterval(preferences.openingsAlertDelayMinutes * 60)) {
             guard self.preferences.notifyOpeningsLeftOpen else { return }
             self.postNotice(identifier: "hisingen.\(current.vin).openings-left-open",
                             thread: "hisingen.security.\(current.vin)",
@@ -503,16 +503,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
 
-    nonisolated static func eveningUnlockedCondition(_ state: VehicleState?) -> Bool {
+    nonisolated static func eveningUnlockedCondition(_ state: VehicleState?, startHour: Int = 21) -> Bool {
         guard let state, let ext = state.exteriorStatus, ext.isLocked == false else { return false }
         let hour = Calendar.current.component(.hour, from: state.fetchedAt)
-        return hour >= 21 || hour < 6
+        return hour >= min(max(startHour, 18), 23) || hour < 6
     }
 
     private func checkEveningUnlocked(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyEveningUnlocked,
-              Self.eveningUnlockedCondition(current),
-              !Self.eveningUnlockedCondition(previous) else { return }
+              Self.eveningUnlockedCondition(current, startHour: preferences.eveningUnlockedStartHour),
+              !Self.eveningUnlockedCondition(previous, startHour: preferences.eveningUnlockedStartHour) else { return }
 
         let body: String
         if preferences.privateNotificationDetails {
@@ -529,17 +529,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                    category: Self.unlockedCategoryID)
     }
 
-    nonisolated static func plugInReminderCondition(_ state: VehicleState?) -> Bool {
+    nonisolated static func plugInReminderCondition(_ state: VehicleState?, threshold: Int = 40) -> Bool {
         guard let state, state.powertrain.hasElectricRange,
-              let battery = state.batteryPercentage, battery <= 40.0,
+              let battery = state.batteryPercentage, battery <= Double(min(max(threshold, 10), 80)),
               state.chargerConnection == .disconnected, !state.isCharging else { return false }
         return true
     }
 
     private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyPlugInReminder,
-              Self.plugInReminderCondition(current),
-              !Self.plugInReminderCondition(previous) else { return }
+              Self.plugInReminderCondition(current, threshold: preferences.plugInReminderThreshold),
+              !Self.plugInReminderCondition(previous, threshold: preferences.plugInReminderThreshold) else { return }
 
         let name = displayName(for: current)
         let detailedBody: String

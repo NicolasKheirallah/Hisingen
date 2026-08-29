@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastError: String?
     private var sessionValid = false
     private var lastDiagnostics: DiagnosticsSnapshot?
+    /// Most recent remote-command outcome, mirrored into the Controls tab for an inline banner.
+    private var lastRemoteCommandFeedback: RemoteCommandFeedback?
     private var commandCoordinator: CommandCoordinator!
     private var garageRefreshTask: Task<Void, Never>?
     private var garageScanInProgress = false
@@ -45,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil
         )
+        preferences.migrateLegacyDefaults()
         preferences.migrateLegacyPassword()
         pruneDatabaseIfDue()
         statusController = StatusItemController(
@@ -544,6 +547,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render() {
         let isAuth = sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
+        statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
+        statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback
         statusController.render(data: latest, error: lastError, authenticated: isAuth, diagnostics: lastDiagnostics)
     }
 
@@ -815,6 +820,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             applyLaunchAtLogin(userInitiated: true)
         case .updater:
             updateCheckConfiguration()
+        case .checkForUpdates:
+            checkForUpdates()
         }
         render()
     }
@@ -1064,6 +1071,11 @@ extension AppDelegate: CommandExecutionContext {
             let nick = preferences.vehicleNickname(for: state.vin)
             return nick.isEmpty ? state.model.brand.displayName : nick
         }
+        // Inline banner in the Controls tab first — it is visible regardless of the system
+        // notification permission — then the notification for when the panel is closed.
+        lastRemoteCommandFeedback = RemoteCommandFeedback(
+            title: title, message: message, success: success)
+        render()
         showRemoteResult(title: title, message: message, success: success, subtitle: subtitle)
     }
     func refreshNowAfterCommand() {

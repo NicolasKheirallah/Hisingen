@@ -327,6 +327,25 @@ enum RemoteCommandOutcome: String, Codable, Sendable {
     case completed
 }
 
+/// The last remote-command result, surfaced inline in the Controls tab so a success or (more
+/// importantly) a failure is visible even when system notifications are muted or denied.
+/// `id` changes on every new result so the view can re-trigger its auto-dismiss timer.
+struct RemoteCommandFeedback: Equatable, Sendable, Identifiable {
+    let id: UUID
+    let title: String
+    let message: String
+    let success: Bool
+    let issuedAt: Date
+
+    init(id: UUID = UUID(), title: String, message: String, success: Bool, issuedAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.message = message
+        self.success = success
+        self.issuedAt = issuedAt
+    }
+}
+
 struct RemoteCommandResult: Codable, Equatable, Sendable {
     let outcome: RemoteCommandOutcome
     let message: String?

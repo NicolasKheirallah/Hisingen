@@ -10,6 +10,8 @@ struct HisingenContentView: View {
     let activeVin: String?
     let cachedSnapshots: [String: VehicleState]
     let remoteCommandInProgress: Bool
+    let inFlightRemoteCommandID: String?
+    let lastRemoteCommandFeedback: RemoteCommandFeedback?
     let updateVersion: String?
     let checkingForUpdates: Bool
     let notificationPermission: NotificationPermission
@@ -60,7 +62,10 @@ struct HisingenContentView: View {
     init(
         state: VehicleState?, error: String?, authenticated: Bool, cars: [CarSummary],
         activeVin: String?, cachedSnapshots: [String: VehicleState],
-        remoteCommandInProgress: Bool, updateVersion: String?, checkingForUpdates: Bool,
+        remoteCommandInProgress: Bool,
+        inFlightRemoteCommandID: String? = nil,
+        lastRemoteCommandFeedback: RemoteCommandFeedback? = nil,
+        updateVersion: String?, checkingForUpdates: Bool,
         notificationPermission: NotificationPermission, diagnostics: DiagnosticsSnapshot?,
         onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void, onOpenUpdate: @escaping () -> Void,
@@ -82,6 +87,8 @@ struct HisingenContentView: View {
         self.activeVin = activeVin
         self.cachedSnapshots = cachedSnapshots
         self.remoteCommandInProgress = remoteCommandInProgress
+        self.inFlightRemoteCommandID = inFlightRemoteCommandID
+        self.lastRemoteCommandFeedback = lastRemoteCommandFeedback
         self.updateVersion = updateVersion
         self.checkingForUpdates = checkingForUpdates
         self.notificationPermission = notificationPermission
@@ -172,14 +179,23 @@ struct HisingenContentView: View {
                                     .id(state.vin)
                             case .info:
                                 InfoTabView(state: state, database: database, imageCache: imageCache,
-                                            reverseGeocoder: reverseGeocoder)
+                                            reverseGeocoder: reverseGeocoder,
+                                            onRefresh: onRefresh,
+                                            onNavigateToHistory: {
+                                                withAnimation { selectedTab = .history }
+                                                tabSelection.wrappedValue = .history
+                                            })
                                     .id(state.vin)
                             case .history:
                                 HistoryDashboardView(state: state, database: database)
                                     .id(state.vin)
                             case .controls:
-                                ControlsTabView(state: state, remoteCommandInProgress: remoteCommandInProgress,
-                                                onRemoteCommand: onRemoteCommand)
+                                ControlsTabView(state: state,
+                                                remoteCommandInProgress: remoteCommandInProgress,
+                                                inFlightCommandID: inFlightRemoteCommandID,
+                                                feedback: lastRemoteCommandFeedback,
+                                                onRemoteCommand: onRemoteCommand,
+                                                onRefresh: onRefresh)
                             case .settings:
                                 EmptyView()
                             }

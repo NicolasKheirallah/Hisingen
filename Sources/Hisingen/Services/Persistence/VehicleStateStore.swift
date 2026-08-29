@@ -174,8 +174,18 @@ final class VehicleStateStore {
         store(values, key: baselinesKey)
     }
 
-    func clear(vin: String? = nil) {
-        database.wipeAll(for: vin)
+    /// Forgets a vehicle's cached snapshot and charging baseline. Durable SQLite history
+    /// (charging sessions, telemetry, battery health, fuel entries…) is kept unless
+    /// `eraseHistory` is set: the sign-out path passes the user's Settings → Privacy & Data
+    /// choice, while the deliberate "Erase local vehicle data" action wipes directly.
+    func clear(vin: String? = nil, eraseHistory: Bool = false) {
+        if eraseHistory {
+            database.wipeAll(for: vin)
+        } else if let vin {
+            database.deleteSnapshot(for: vin)
+        } else {
+            database.deleteAllSnapshots()
+        }
         if let vin {
             var snapshots = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
             var baselines = load([String: ChargingBaseline].self, key: baselinesKey) ?? [:]

@@ -244,6 +244,28 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
         return (nominalUsableCapacityKwh * 1_000) / nominalWltpRangeKm
     }
 
+    /// Static charge-port reference for the model family: connector standard plus typical peak
+    /// AC and DC charging power. Like `nominalWltpRangeKm`, this is a model-family benchmark —
+    /// not a VIN/market-verified rating. Connector standard and peak rates vary by market and
+    /// model year (a North-American car uses NACS/J1772; these figures follow the same
+    /// EU-centric assumptions as the capacity/range tables above). `nil` for families without a
+    /// known BEV specification.
+    var connectorSpec: (connector: String, acKw: Double, dcKw: Double)? {
+        switch self {
+        case .polestar1: return ("CCS Combo 2 · Type 2", 11, 50)
+        case .polestar2: return ("CCS Combo 2 · Type 2", 11, 205)
+        case .polestar3: return ("CCS Combo 2 · Type 2", 11, 250)
+        case .polestar4: return ("CCS Combo 2 · Type 2", 11, 200)
+        case .polestar5, .polestar6: return ("CCS Combo 2 · Type 2", 22, 350)
+        case .volvoEX30: return ("CCS Combo 2 · Type 2", 11, 153)
+        case .volvoEX90, .volvoES90: return ("CCS Combo 2 · Type 2", 11, 250)
+        case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40: return ("CCS Combo 2 · Type 2", 11, 205)
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90,
+             .volvoUnknown, .unknown:
+            return nil
+        }
+    }
+
     private enum CodingKeys: String, CodingKey { case kind, name }
 
     init(from decoder: Decoder) throws {

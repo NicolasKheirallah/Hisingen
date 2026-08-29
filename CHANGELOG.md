@@ -3,6 +3,167 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-08-29
+
+### Added
+
+- Info tab cards for parking-location weather, OTA/software-update status
+  (installed and available versions, update state, scheduled install, estimated
+  duration, and failed-update warnings), Chronos vehicle errors, battery
+  diagnostics, saved charge locations, and cabin-climate readings.
+- Static model-family charge-port reference (connector standard, peak AC and DC
+  power) on Powertrain & Specs, and a capability inspector for Volvo vehicles
+  derived from the model capability profile rather than the Polestar-only
+  GetMyCars flags.
+- Info tab header showing data freshness / offline status, with a manual Refresh
+  action, a jump-to-section menu, and Copy / Export of a plain-text vehicle
+  report.
+- Odometer-trend chart and a link into the History tab from the Info activity
+  card, plus open-in-Preview, copy, and save actions on the hero render.
+- History tab: a charging-sessions list that opens a session's curve on tap, a
+  Charging by Location breakdown, a Charging by Month energy-and-cost chart, a
+  Driving Patterns card (departures by hour, weekday vs weekend distance per
+  day), an indicative Emissions vs Petrol estimate, and — for combustion and
+  hybrid vehicles — a fuel-consumption trend plus a tank-to-tank Fuel Economy
+  card with a price-per-litre trend.
+- Detected-trip rows expand to show start and end points with individual map
+  pins and a start-to-end route link, and can be hidden per vehicle when
+  odometer segmentation combined or invented them.
+- 90-day and 1-year history periods and a year-to-date comparison row.
+- Scrub-to-inspect on the distance, consumption, odometer, and battery-health
+  charts, VoiceOver data descriptors for those charts, and legends on the
+  consumption and particulate charts.
+- Charging-curve additions: a day/night tariff energy split, a derated-charger
+  warning when a session's peak is far below the usual for that location, a PM10
+  particulate series, a cabin-filter replacement estimate, and an optional
+  overlay of the previous session's curve.
+- History exports for the automation log, fuel fill-ups, and cabin climate; an
+  option to export the selected period instead of full history; and Copy Summary
+  and Print / Save as PDF actions.
+- Trip search and sort (newest, distance, duration), fuel fill-up pagination
+  with running spend and volume totals, and a manual Refresh action on the
+  History tab.
+- Controls tab: schedule a downloaded OTA update for later (in 2 / 8 / 12 hours),
+  add the vehicle's current position as a saved charge location, rename a saved
+  location, and set a location's minimum charge level; rear-seat heating controls
+  behind a disclosure in the climate card; a "Schedule departure preconditioning"
+  shortcut; and a "Re-check what this vehicle supports" action shown under dimmed
+  or unprobed cards.
+- Controls tab charge-target presets extended to 50 / 60 / 70 / 80 / 90 / 100%
+  and the slider floor lowered to 50%.
+- Settings now has searchable section navigation for Accounts, Appearance,
+  General, Features, Notifications, Privacy & Data, Updates, and About, plus a
+  privacy dashboard and persistent garage ordering.
+- Settings transfer can export, import, and reset an allowlisted preference
+  archive without credentials, sessions, VINs, nicknames, history, precise
+  location policy, device-owner authentication policy, or remote-command grants.
+- Data management adds selectable 30 / 90 / 180 / 365-day sample retention,
+  complete local-history JSON export, database statistics, and separately
+  confirmed actions for pruning, clearing location history, and erasing local
+  vehicle data.
+- Feature controls expose the previously hidden vehicle switcher, app-update,
+  vehicle-error, and real-time-update flags; capability results can be filtered
+  and exported; and notification timing and battery thresholds are configurable.
+
+### Changed
+
+- The Info tab loads all of its local-history data — air quality, connectivity,
+  charging sessions, the battery-health log, and telemetry — on a single
+  background task instead of querying SQLite from inside the view body, and the
+  parking-address lookup no longer re-runs on every redraw.
+- Reordered Info cards so doors, tyres, fluids, errors, and software appear above
+  cosmetic detail; unreported capability rows are collapsed behind a disclosure.
+- The selected studio-render angle is now persisted, and the remaining
+  hard-coded Info strings (compass headings, air-quality units, altitude) are
+  localized.
+- Card headers, charts, progress bars, and the hero image on the Info tab expose
+  VoiceOver labels, values, and heading traits.
+- The History tab splits its load into period-scoped and lifetime queries, so
+  changing the range no longer re-runs the battery-health, odometer, and fuel
+  history, and a loading skeleton shows on first open.
+- The selected charging session is remembered per vehicle, the curve opens on
+  demand instead of auto-selecting the newest session, and new telemetry
+  refreshes the open History tab instead of leaving it stale.
+- History numbers use the platform's decimal and grouping separators, chart
+  series use the theme palette, chart heights track the system text size, and
+  the three repeated "period selector doesn't apply here" captions were replaced
+  by one note under the period picker.
+- The month-over-month comparison measures the elapsed part of this month
+  against the same number of days a month earlier instead of a partial month
+  against a whole one, and its deltas are coloured good/bad only where a
+  direction is meaningful.
+- The automation & commands card reports command latency, a per-command
+  breakdown, and recent failure reasons.
+- Controls tab shows each remote-command outcome inline (successes clear
+  themselves, failures stay until dismissed) so a result is visible even with
+  system notifications off, marks the specific control that is mid-send with a
+  "Sending…" badge, ticks a haptic on every dispatch, and warns when the vehicle
+  is reported offline.
+- Dimmed Controls cards now state why they are inert (feature off, unsupported,
+  or provider-unimplemented) instead of only fading, and the "climate/charging/
+  locks…" banner lists the features actually enabled rather than fixed copy.
+- "Max Heat" no longer overwrites the saved steering-wheel setting as a side
+  effect; the temperature steppers move in whole display units so a Fahrenheit
+  setpoint never shows the same value twice; per-location charge sliders commit
+  once on release instead of firing on every drag tick; the remote-engine-start
+  runtime is remembered; charge-target, current, and location numbers use the
+  platform's digits and units.
+- Controls preset chips, steppers, sliders, and schedule-editor weekday buttons
+  expose VoiceOver labels, values, and selected traits; the spinning-fan
+  indicator holds still under Reduce Motion; and the schedule editor blocks a
+  zero-length charging window and grows with the system text size.
+- Settings feature opt-outs are authoritative across launches, bulk enablement
+  excludes remote controls, remote controls require a separate confirmation,
+  and unsupported controls are gated by the active vehicle capability profile.
+- Database maintenance is awaited off the main thread, refreshes statistics on
+  completion, and reports real SQLite or file-write failures instead of showing
+  optimistic success. Settings import and reset now notify every affected app
+  subsystem before the panel closes.
+- Account, tariff, currency, VIN, battery-capacity, and reference-range inputs
+  are validated before persistence; plaintext credential drafts are cleared
+  after handoff and when the account form disappears; reusable controls expose
+  additional VoiceOver labels and hints.
+- Localization validation now requires exact key parity and unique keys across
+  all 15 shipped locales.
+- Signing out (and switching accounts) now keeps local charging, trip, and health
+  history by default. A new Settings → Privacy & Data toggle, "Erase local history
+  on sign out" (off by default), restores the previous wipe-on-sign-out behaviour;
+  the separately confirmed "Erase local vehicle data" action still removes it
+  outright.
+- The app bundle identifier is now `io.kheirallah.hisingen` (was a
+  UUID-suffixed variant). A one-time launch migration copies existing
+  preferences forward from the old identifier so no settings are lost.
+
+### Fixed
+
+- Signing out no longer erased months of local vehicle history as a side effect of
+  a re-signed local build, a dismissed Keychain prompt, or an accidental sign-out.
+- The vehicle database no longer falls back to a temporary directory macOS purges
+  when Application Support is briefly unavailable; it degrades to a logged
+  read-only state instead.
+- A database that fails `PRAGMA quick_check` on launch is now quarantined to
+  `hisingen.sqlite3.corrupt-<timestamp>` and recreated, instead of the schema
+  layer silently rebuilding an empty database over a corrupt file. A one-shot
+  `hisingen.sqlite3.pre-v<n>.bak` copy is written before any schema migration.
+- File-write failures from the Info tab's CSV, vehicle-report, and image exports
+  are now surfaced in an alert instead of failing silently.
+- The History period selector's custom range now respects its end date, "All"
+  and custom ranges no longer cap silently at 1 000 rows, the empty state no
+  longer renders beneath populated cards, and it distinguishes "nothing in this
+  range" from "nothing recorded yet".
+- Deleting a fuel fill-up asks for confirmation, and History CSV export failures
+  are surfaced in an alert instead of failing silently.
+- The odometer and battery-health charts use monotone interpolation so the line
+  cannot visually dip below a real reading.
+- Corrected the Appearance-card hierarchy, made panel presets persistently
+  disable custom geometry, removed a fake fixed-duration Volvo sign-in spinner,
+  and wired “Check Now” to the signed stable update service.
+- Prevented settings archives from exporting VIN-bearing garage order or remote
+  feature grants, and made oversized or non-allowlisted archives fail closed.
+- Location clearing and local-data erasure now wait for SQLite compaction, clear
+  legacy UserDefaults caches, remove per-vehicle fuel and cached-image rows, and
+  include every durable history table in the JSON history export.
+
 ## [1.2.4] - 2026-08-28
 
 ### Added

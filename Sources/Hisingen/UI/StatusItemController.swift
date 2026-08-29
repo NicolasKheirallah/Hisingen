@@ -30,6 +30,11 @@ final class StatusItemController: NSObject {
     var cachedSnapshots: [String: VehicleState] = [:]
     var onSelectCar: ((String) -> Void)?
     var remoteCommandInProgress = false
+    /// `RemoteCommand.identifier` of the command currently in flight, or `nil`. Lets the
+    /// Controls tab show a "Sending…" state on the exact control that was tapped.
+    var inFlightRemoteCommandID: String?
+    /// Most recent remote-command outcome for the Controls tab's inline banner.
+    var lastRemoteCommandFeedback: RemoteCommandFeedback?
     var onOpenPanel: (() -> Void)?
     private(set) var notificationPermission: NotificationPermission = .notDetermined
 
@@ -848,6 +853,8 @@ final class StatusItemController: NSObject {
             activeVin: activeVin,
             cachedSnapshots: cachedSnapshots,
             remoteCommandInProgress: remoteCommandInProgress,
+            inFlightRemoteCommandID: inFlightRemoteCommandID,
+            lastRemoteCommandFeedback: lastRemoteCommandFeedback,
             updateVersion: updateVersion,
             checkingForUpdates: checkingForUpdates,
             notificationPermission: notificationPermission,

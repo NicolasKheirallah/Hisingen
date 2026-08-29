@@ -26,13 +26,14 @@ struct AccountCredentialsForm: View {
     @State private var volvoVIN = ""
     @State private var volvoNickname = ""
 
-    @State private var volvoSigningIn = false
     @State private var showCustomVolvoApp = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
     @State private var testConnectionResult: (success: Bool, message: String)?
     @State private var showUpdateFields = false
     @State private var showPolestarInteractiveFallback = false
+    @State private var attemptedPolestarSignIn = false
+    @State private var attemptedVolvoSignIn = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -65,6 +66,15 @@ struct AccountCredentialsForm: View {
                                              volvoClientID: volvoClientID, volvoClientSecret: volvoClientSecret,
                                              volvoApiKey: volvoApiKey, volvoVIN: volvoVIN, volvoNickname: volvoNickname)
             selectedBrand = preferences.activeBrand
+        }
+        .onDisappear {
+            // Drafts improve navigation, but credentials must never survive the form.
+            polestarPassword = ""
+            volvoClientSecret = ""
+            volvoApiKey = ""
+            preferences.accountDraft.polestarPassword = ""
+            preferences.accountDraft.volvoClientSecret = ""
+            preferences.accountDraft.volvoApiKey = ""
         }
     }
 
@@ -250,6 +260,9 @@ struct AccountCredentialsForm: View {
                     .textContentType(.username)
                     .onChange(of: polestarEmail) { _, value in preferences.accountDraft.polestarEmail = value }
             }
+            if attemptedPolestarSignIn && !isValidEmail(polestarEmail) {
+                validationMessage(L10n.text("Enter a valid email address."))
+            }
 
             labeledField(L10n.text("Password")) {
                 SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
@@ -268,6 +281,9 @@ struct AccountCredentialsForm: View {
                 TextField("YSM...", text: $polestarVIN)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: polestarVIN) { _, value in preferences.accountDraft.polestarVIN = value }
+            }
+            if attemptedPolestarSignIn && !isValidOptionalVIN(polestarVIN) {
+                validationMessage(L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
             if showPolestarInteractiveFallback || testConnectionResult?.message.contains("additional or changed sign-in step") == true {
@@ -306,6 +322,7 @@ struct AccountCredentialsForm: View {
             }
 
             Button {
+                attemptedPolestarSignIn = true
                 savePolestarCredentials()
             } label: {
                 HStack(spacing: 4) {
@@ -323,7 +340,7 @@ struct AccountCredentialsForm: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled(polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(!isValidEmail(polestarEmail) || !isValidOptionalVIN(polestarVIN))
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
@@ -424,26 +441,25 @@ struct AccountCredentialsForm: View {
                     .textFieldStyle(.roundedBorder)
                         .onChange(of: volvoVIN) { _, value in preferences.accountDraft.volvoVIN = value }
             }
+            if attemptedVolvoSignIn && !isValidOptionalVIN(volvoVIN) {
+                validationMessage(L10n.text("A VIN must contain 17 valid letters or digits."))
+            }
 
             Button {
+                attemptedVolvoSignIn = true
                 beginVolvoSignIn()
             } label: {
                 HStack(spacing: 4) {
-                    if volvoSigningIn {
-                        ProgressView().controlSize(.small)
-                        Text(L10n.text("Signing in via browser…"))
-                    } else {
-                        Image(systemName: "globe")
-                        Text(hasResumableVolvoSession
-                             ? L10n.text("Switch to Volvo Account")
-                             : L10n.text("Sign in with Volvo ID"))
-                    }
+                    Image(systemName: "globe")
+                    Text(hasResumableVolvoSession
+                         ? L10n.text("Switch to Volvo Account")
+                         : L10n.text("Sign in with Volvo ID"))
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled((!BuiltinVolvoSecrets.isConfigured && volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || volvoSigningIn)
+            .disabled((!BuiltinVolvoSecrets.isConfigured && volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || !isValidOptionalVIN(volvoVIN))
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
@@ -464,16 +480,12 @@ struct AccountCredentialsForm: View {
     }
 
     private func savePolestarCredentials() {
+        guard isValidEmail(polestarEmail), isValidOptionalVIN(polestarVIN) else { return }
         let normalizedEmail = polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let oldVIN = preferences.vin(for: .polestar)
         let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
         let credentialsChanged = normalizedEmail != preferences.email || upperVIN != oldVIN || !polestarPassword.isEmpty
-        preferences.email = normalizedEmail
-        preferences.setVin(upperVIN, for: .polestar)
-        if !nicknameVIN.isEmpty {
-            preferences.setVehicleNickname(polestarNickname, for: nicknameVIN)
-        }
         var keychainFailed = false
         if !polestarPassword.isEmpty {
             do {
@@ -498,21 +510,29 @@ struct AccountCredentialsForm: View {
             }
         }
         guard !keychainFailed else { return }
+        // Persist identity only after a new password has reached Keychain successfully. A
+        // Keychain denial must not leave an email/VIN pointing at credentials that were not
+        // actually saved.
+        preferences.email = normalizedEmail
+        preferences.setVin(upperVIN, for: .polestar)
+        if !nicknameVIN.isEmpty {
+            preferences.setVehicleNickname(polestarNickname, for: nicknameVIN)
+        }
         onSettingsChanged(credentialsChanged ? .credentials : .presentation)
     }
 
     private func beginVolvoSignIn() {
-        volvoSigningIn = true
+        guard isValidOptionalVIN(volvoVIN) else { return }
         let upperVIN = volvoVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldVIN = preferences.vin(for: .volvo)
         preferences.volvoClientID = trimmedClientID
         preferences.setVin(upperVIN, for: .volvo)
         if !upperVIN.isEmpty {
             preferences.setVehicleNickname(volvoNickname, for: upperVIN)
         } else {
-            let existingVIN = preferences.vin(for: .volvo)
-            if !existingVIN.isEmpty {
-                preferences.setVehicleNickname(volvoNickname, for: existingVIN)
+            if !oldVIN.isEmpty {
+                preferences.setVehicleNickname(volvoNickname, for: oldVIN)
             }
         }
         let idToSend = !trimmedClientID.isEmpty ? trimmedClientID : BuiltinVolvoSecrets.clientID
@@ -530,7 +550,21 @@ struct AccountCredentialsForm: View {
         volvoApiKey = ""
         preferences.accountDraft.volvoClientSecret = ""
         preferences.accountDraft.volvoApiKey = ""
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { volvoSigningIn = false }
+    }
+
+    private func isValidEmail(_ value: String) -> Bool {
+        SettingsValidation.isValidEmail(value)
+    }
+
+    private func isValidOptionalVIN(_ value: String) -> Bool {
+        SettingsValidation.isValidOptionalVIN(value)
+    }
+
+    private func validationMessage(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle.fill")
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(.red)
+            .accessibilityLabel(message)
     }
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {

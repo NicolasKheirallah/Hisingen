@@ -445,23 +445,18 @@ VIN and cached vehicle information stored through `UserDefaults` should still be
 
 ## Data Deletion
 
-Current sign-out behavior calls the global vehicle-state clear path.
+Sign-out calls the global vehicle-state clear path. It always clears:
 
-That clears:
+- cached vehicle snapshots (both the SQLite `vehicle_snapshots` rows and the `UserDefaults` mirror); and
+- charging-state baselines.
 
-- the SQLite vehicle-history database;
-- cached vehicle snapshots; and
-- charging-state baselines
-
-before the provider-specific sign-out operation completes.
+It clears the durable SQLite vehicle-history tables only when the user has enabled
+**Settings → Privacy & Data → "Erase local history on sign out"**
+(`erase_history_on_sign_out`, off by default). With the default, sign-out leaves
+the historical database intact so ordinary session churn does not destroy data;
+the "Erase local vehicle data" action is the deliberate path for removing it.
 
 Provider authentication cleanup is then handled by the provider integration.
-
-This is materially different from saying:
-
-> Sign-out leaves the historical database intact.
-
-That statement is not true for the current implementation.
 
 See [`../data-retention.md`](../data-retention.md) for detailed retention and deletion semantics.
 
@@ -606,3 +601,13 @@ Stored locally in SQLite; never sent anywhere.
 User-initiated file export of all local history tables. Coordinates are included **only**
 when the location-history preference is on; there is no import path by design (a tampered
 file must not be able to inject telemetry).
+
+### Settings transfer
+
+Settings → Privacy & Data can export or import an XML property-list archive of non-secret
+preferences. The transfer allowlist excludes any key containing an email, VIN, nickname,
+password, secret, API key, token, or session. Import rejects keys outside that allowlist and
+requires confirmation before replacing current preferences. Keychain items and SQLite
+history are never part of this archive. Active-account selection, precise-location retention,
+device-owner-authentication policy, and remote-command feature grants are also excluded so
+an imported convenience profile cannot grant sensitive access.

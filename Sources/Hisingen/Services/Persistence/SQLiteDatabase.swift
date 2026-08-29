@@ -88,6 +88,17 @@ final class SQLiteDatabase: @unchecked Sendable {
         try SQLiteDatabase(path: ":memory:")
     }
 
+    /// Fast structural sanity check (`PRAGMA quick_check`). A `false` result means the file
+    /// is damaged and must not be trusted for reads or writes — the caller should quarantine
+    /// it rather than let the schema layer silently recreate an empty database over the top.
+    func passesQuickCheck() -> Bool {
+        guard isOpen else { return false }
+        let firstRow = try? query(sql: "PRAGMA quick_check;") { stmt -> String? in
+            stmt.step() ? stmt.columnText(at: 0) : nil
+        }
+        return (firstRow ?? nil) == "ok"
+    }
+
     /// Executes arbitrary SQL statements that return no rows (e.g. CREATE TABLE, PRAGMA).
     func execute(sql: String) throws {
         lock.lock()

@@ -137,6 +137,76 @@ enum Format {
         unit.format(kwhPer100Km: kwhPer100Km)
     }
 
+    /// Locale-aware decimal, so a comma-decimal system never renders "12,3" as "12.3" (or a
+    /// grouped thousands separator lands mid-number). Shared across the History dashboard's
+    /// many small numeric labels.
+    private static let decimalFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter
+    }()
+    private static let decimalFormatterLock = NSLock()
+
+    private static func decimal(_ value: Double, decimals: Int, grouping: Bool = false) -> String {
+        decimalFormatterLock.lock()
+        defer { decimalFormatterLock.unlock() }
+        decimalFormatter.minimumFractionDigits = decimals
+        decimalFormatter.maximumFractionDigits = decimals
+        decimalFormatter.usesGroupingSeparator = grouping
+        return decimalFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.*f", decimals, value)
+    }
+
+    /// "12.3 kWh" with the platform's decimal separator.
+    static func energyKwh(_ kwh: Double, decimals: Int = 1) -> String {
+        L10n.format("%@ kWh", decimal(kwh, decimals: decimals))
+    }
+
+    /// "48.2 kW" — one decimal under 10 kW, whole numbers above, matching `kilowatts(watts:)`.
+    static func powerKw(_ kw: Double) -> String {
+        L10n.format("%@ kW", decimal(kw, decimals: kw >= 10 ? 0 : 1))
+    }
+
+    /// "+12%" / "−4%" — a real minus sign, locale digits, no separator drift.
+    static func signedPercent(_ value: Double, decimals: Int = 0) -> String {
+        signedNumber(value, decimals: decimals) + "%"
+    }
+
+    /// Plain locale-aware decimal with no unit, e.g. a rate like "2.3".
+    static func number(_ value: Double, decimals: Int = 1) -> String {
+        decimal(value, decimals: decimals)
+    }
+
+    /// "92.4%" — unsigned, locale decimal.
+    static func percent(_ value: Double, decimals: Int = 0) -> String {
+        decimal(value, decimals: decimals) + "%"
+    }
+
+    /// "16 A" — locale digits, non-breaking space before the unit.
+    static func amps(_ value: Int) -> String {
+        L10n.format("%@\u{00A0}A", decimal(Double(value), decimals: 0))
+    }
+
+    /// "+0.42" / "−0.42" — a signed plain number for trend slopes.
+    static func signedNumber(_ value: Double, decimals: Int = 2) -> String {
+        (value >= 0 ? "+" : "−") + decimal(abs(value), decimals: decimals)
+    }
+
+    /// "148.4 kg" — used for the History tab's CO₂ comparison.
+    static func massKg(_ kg: Double, decimals: Int = 1) -> String {
+        L10n.format("%@ kg", decimal(kg, decimals: decimals))
+    }
+
+    /// "12.34 kr" — amount then symbol, locale decimal. The symbol is passed through as-is so
+    /// a session's own stored currency is honoured.
+    static func currency(_ amount: Double, symbol: String, decimals: Int = 2) -> String {
+        L10n.format("%@ %@", decimal(amount, decimals: decimals), symbol)
+    }
+
+    /// Grouped integer, e.g. "12,000" or "12 000" depending on locale.
+    static func count(_ value: Int) -> String {
+        decimal(Double(value), decimals: 0, grouping: true)
+    }
+
     static func greeting(_ name: String) -> String {
         L10n.format("%@, %@", L10n.text("Hi"), name)
     }
