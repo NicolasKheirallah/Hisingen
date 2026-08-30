@@ -15,6 +15,10 @@ enum SettingsChange {
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case polestarWebSignIn
+    /// Renew an existing brand's session without re-entering credentials: Polestar through
+    /// its interactive browser window, Volvo by re-running its browser OAuth with the
+    /// developer keys already on file.
+    case reauthenticate(VehicleBrand)
     case switchToBrand(VehicleBrand)
     case selectVehicle(String)
     case closeSettings

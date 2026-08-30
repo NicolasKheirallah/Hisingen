@@ -36,13 +36,52 @@ struct AccountCredentialsForm: View {
     @State private var attemptedVolvoSignIn = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private enum ConnectionHealth { case active, connectedInactive, sessionExpired, notConnected }
+
+    /// Whether the selected brand has enough on file (developer keys / account email, plus a
+    /// previously-discovered VIN) to renew its session with a browser handshake alone — i.e.
+    /// this is an *expired* session, not a brand that was never set up.
+    private var hasRenewableCredentials: Bool {
+        guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
+        switch selectedBrand {
+        case .polestar:
+            return !preferences.email.isEmpty
+        case .volvo:
+            let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
+            let hasSecrets = BuiltinVolvoSecrets.isConfigured
+                || ((try? Keychain.readVolvoClientSecret()) ?? nil)?.isEmpty == false
+            return hasClientID && hasSecrets
+        }
+    }
+
+    private var connectionHealth: ConnectionHealth {
+        // A live-check failure that reads like an auth problem is the strongest signal.
+        if isBrandConnected, let result = testConnectionResult, !result.success,
+           Self.looksLikeAuthFailure(result.message) {
+            return .sessionExpired
+        }
+        if isBrandConnected {
+            return isActiveBrand ? .active : .connectedInactive
+        }
+        // No resumable session, but the credentials to renew one are still on file.
+        return hasRenewableCredentials ? .sessionExpired : .notConnected
+    }
+
+    private static func looksLikeAuthFailure(_ message: String) -> Bool {
+        let needles = ["sign in", "signed in", "session", "expired", "credential",
+                       "additional or changed sign-in", "no active session", "not permitted",
+                       "authoriz", "token"]
+        let lower = message.lowercased()
+        return needles.contains { lower.contains($0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 10) {
             brandPicker
 
             accountStatusBanner
 
-            if style == .welcoming || !isBrandConnected || showUpdateFields {
+            if style == .welcoming || connectionHealth == .notConnected || showUpdateFields {
                 if selectedBrand == .polestar {
                     polestarFields
                 } else {
@@ -97,6 +136,7 @@ struct AccountCredentialsForm: View {
             .onChange(of: selectedBrand) { _, _ in
                 testConnectionResult = nil
                 showPolestarInteractiveFallback = false
+                showUpdateFields = false
             }
         }
     }
@@ -148,36 +188,53 @@ struct AccountCredentialsForm: View {
     private var accountStatusBanner: some View {
         let brandName = selectedBrand.displayName
         let activeLabel = preferences.lastVehicleLabel(for: selectedBrand)
-        let hasTestFailure = testConnectionResult?.success == false
-        let statusColor: Color = hasTestFailure ? .orange : (isActiveBrand ? .green : (isBrandConnected ? .blue : .orange))
+        let health = connectionHealth
+        let statusColor: Color = {
+            switch health {
+            case .active: return .green
+            case .connectedInactive: return .blue
+            case .sessionExpired: return .orange
+            case .notConnected: return .orange
+            }
+        }()
+        let title: String = {
+            switch health {
+            case .active: return L10n.format("Connected · Active Account (%@)", brandName)
+            case .connectedInactive: return L10n.format("Connected · Inactive Account (%@)", brandName)
+            case .sessionExpired: return L10n.format("Session Expired · %@", brandName)
+            case .notConnected: return L10n.format("Not Connected to %@", brandName)
+            }
+        }()
 
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
+                if isTestingConnection {
+                    ProgressView().controlSize(.small).frame(width: 8, height: 8)
+                } else {
+                    Circle().fill(statusColor).frame(width: 8, height: 8)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isActiveBrand
-                         ? L10n.format("Connected · Active Account (%@)", brandName)
-                         : (isBrandConnected
-                            ? L10n.format("Connected · Inactive Account (%@)", brandName)
-                            : L10n.format("Not Connected to %@", brandName)))
-                        .font(.system(size: 12, weight: .semibold))
+                    Text(title).font(.system(size: 12, weight: .semibold))
 
-                    if isBrandConnected {
+                    switch health {
+                    case .active, .connectedInactive:
                         Text(L10n.format("Vehicle: %@", activeLabel))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    } else {
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    case .sessionExpired:
+                        Text(selectedBrand == .polestar
+                             ? L10n.text("Your Polestar sign-in needs renewing. Re-sign in below — no password required.")
+                             : L10n.text("Your Volvo sign-in needs renewing. Re-sign in below with the developer keys already saved."))
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .notConnected:
                         Text(L10n.text("Enter your credentials below to establish a live connection."))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
 
-                if isBrandConnected && !isActiveBrand {
+                if isBrandConnected && !isActiveBrand && health != .sessionExpired {
                     Button {
                         onSettingsChanged(.switchToBrand(selectedBrand))
                     } label: {
@@ -190,39 +247,41 @@ struct AccountCredentialsForm: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.mini)
                 }
+            }
 
-                if isBrandConnected && style != .welcoming {
-                    HStack(spacing: 6) {
-                        Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                                showUpdateFields.toggle()
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
-                                Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit"))
-                            }
-                            .font(.system(size: 10, weight: .medium))
+            if style != .welcoming && (isBrandConnected || health == .sessionExpired) {
+                HStack(spacing: 6) {
+                    reSignInButton(prominent: health == .sessionExpired)
+
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                            showUpdateFields.toggle()
                         }
-                        .controlSize(.mini)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
+                            Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit Credentials"))
+                        }
+                        .font(.system(size: 10, weight: .medium))
+                    }
+                    .controlSize(.mini)
 
+                    if isBrandConnected {
                         Button {
                             testCurrentConnection()
                         } label: {
-                            if isTestingConnection {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Text(L10n.text("Test"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
+                            Text(L10n.text("Test"))
+                                .font(.system(size: 10, weight: .medium))
                         }
                         .controlSize(.mini)
                         .disabled(isTestingConnection)
                     }
+
+                    Spacer()
                 }
             }
 
-            if let test = testConnectionResult {
+            if let test = testConnectionResult, !(health == .sessionExpired && !test.success) {
                 HStack(spacing: 6) {
                     Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .foregroundStyle(test.success ? .green : .red)
@@ -236,14 +295,31 @@ struct AccountCredentialsForm: View {
             }
         }
         .padding(10)
-        .background(
-            statusColor.opacity(0.08),
-            in: RoundedRectangle(cornerRadius: 8)
-        )
+        .background(statusColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(statusColor.opacity(0.25), lineWidth: 0.5)
         )
+    }
+
+    @ViewBuilder
+    private func reSignInButton(prominent: Bool) -> some View {
+        let label = HStack(spacing: 3) {
+            Image(systemName: "arrow.clockwise.circle")
+            Text(L10n.text("Re-sign In"))
+        }
+        .font(.system(size: 10, weight: .semibold))
+
+        if prominent {
+            Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .controlSize(.mini)
+        } else {
+            Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+        }
     }
 
     private var polestarFields: some View {

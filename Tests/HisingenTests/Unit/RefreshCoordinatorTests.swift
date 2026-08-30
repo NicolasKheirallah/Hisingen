@@ -90,6 +90,7 @@ struct RefreshCoordinatorTests {
 private actor MockVehicleProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMTEST", title: "Test vehicle")]
+    var hasWarmSession: Bool { true }
     private(set) var fetchCount = 0
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
@@ -113,6 +114,7 @@ private actor MockVehicleProvider: VehicleProviding {
 private actor RecoveryMockProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMTEST", title: "Test vehicle")]
+    var hasWarmSession: Bool { !expired }
     private(set) var expired = false
     private(set) var restoreCount = 0
 

@@ -103,6 +103,13 @@ actor PolestarAPI {
     func identity(for vin: String?) -> CarIdentity { vin.flatMap { identities[$0] } ?? .empty }
     var ownerFirstName: String?
     var market: String?
+    /// Set when the app-backend "VDMS" discovery source rejects the request with a client
+    /// error (it currently answers `426 Upgrade Required` — the spoofed mobile-app version is
+    /// stale). VDMS only adds cosmetic metadata (colour, upholstery, wheels, packages) on top
+    /// of the primary `getConsumerCarsV2` discovery, so it is skipped until this passes rather
+    /// than re-attempted — and re-logged — on every discovery. Cleared on sign-out.
+    var vdmsDiscoveryBlockedUntil: Date?
+    private static let vdmsBackoffDefaultsKey = "polestar_vdms_backoff_until_v1"
     /// Render images per VIN (replaces the former single selected-car `carImageData`).
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
@@ -129,6 +136,10 @@ actor PolestarAPI {
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
+        let vdmsEpoch = UserDefaults.standard.double(forKey: Self.vdmsBackoffDefaultsKey)
+        if vdmsEpoch > Date().timeIntervalSince1970 {
+            vdmsDiscoveryBlockedUntil = Date(timeIntervalSince1970: vdmsEpoch)
+        }
     }
 
     private struct OIDCDiscovery: Decodable {
@@ -147,11 +158,44 @@ actor PolestarAPI {
         }
     }
 
-    func discoverOIDCConfiguration() async throws {
+    /// Coalesces concurrent cold starts. The actor can re-enter while the network request is
+    /// suspended, so the TTL check alone still allowed four identical well-known requests.
+    private var oidcDiscoveryTask: Task<OIDCDiscovery, Error>?
+
+    /// When the OIDC well-known document was last fetched. The endpoints it returns are
+    /// effectively static, so re-fetching them on every `restoreSession`/brand switch (as a
+    /// bounced brand did twice within three minutes in a support bundle) is wasted round trips.
+    private var oidcDiscoveredAt: Date?
+    private static let oidcDiscoveryTTL: TimeInterval = 6 * 60 * 60
+
+    func discoverOIDCConfiguration(force: Bool = false) async throws {
+        if !force, tokenEndpoint != nil, authorizationEndpoint != nil,
+           let discoveredAt = oidcDiscoveredAt,
+           Date().timeIntervalSince(discoveredAt) < Self.oidcDiscoveryTTL {
+            return
+        }
+        if let oidcDiscoveryTask {
+            try applyOIDCDiscovery(await oidcDiscoveryTask.value)
+            return
+        }
+        let task = Task { try await self.loadOIDCDiscovery() }
+        oidcDiscoveryTask = task
+        defer { oidcDiscoveryTask = nil }
+        try applyOIDCDiscovery(await task.value)
+    }
+
+    private func loadOIDCDiscovery() async throws -> OIDCDiscovery {
         let url = oidcProviderURL.appendingPathComponent(".well-known/openid-configuration")
         let (data, response) = try await perform(URLRequest(url: url))
         try validateHTTP(response)
-        guard let discovery = try? JSONDecoder().decode(OIDCDiscovery.self, from: data),
+        guard let discovery = try? JSONDecoder().decode(OIDCDiscovery.self, from: data) else {
+            throw PolestarError.incompatibleAPI(operation: "OIDC discovery")
+        }
+        return discovery
+    }
+
+    private func applyOIDCDiscovery(_ discovery: OIDCDiscovery) throws {
+        guard
               let issuer = URL(string: discovery.issuer),
               issuer.scheme == oidcProviderURL.scheme,
               issuer.host == oidcProviderURL.host,
@@ -165,6 +209,7 @@ actor PolestarAPI {
         authorizationEndpoint = authorization
         userinfoEndpoint = discovery.userinfoEndpoint.flatMap(Self.validPolestarURL)
         revocationEndpoint = discovery.revocationEndpoint.flatMap(Self.validPolestarURL)
+        oidcDiscoveredAt = Date()
     }
 
     func obtainAuthorizationCode(email: String, password: String,
@@ -483,6 +528,7 @@ actor PolestarAPI {
 
     static func requestToken(request: URLRequest, session: URLSession,
                                      invalidReason: AuthFailureReason) async throws -> TokenResponseDTO {
+        let startedAt = Date()
         do {
             let (data, response) = try await HTTPBodyReader.data(
                 for: request, using: session, limit: 256_000, operation: "token response", provider: .polestar
@@ -506,9 +552,17 @@ actor PolestarAPI {
                   token.expiresIn > 0 else {
                 throw PolestarError.decoding(operation: "token response")
             }
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "Polestar token request",
+                statusCode: http.statusCode, responseBytes: data.count, responseData: data,
+                startedAt: startedAt)
             return token
-        } catch let error as URLError {
-            throw PolestarError.network(error)
+        } catch {
+            let wrapped: Error = (error as? URLError).map(PolestarError.network) ?? error
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "Polestar token request",
+                startedAt: startedAt, error: wrapped)
+            throw wrapped
         }
     }
 
@@ -609,36 +663,63 @@ actor PolestarAPI {
             logger.warning("Polestar vehicle discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             legacyCars = []
         }
-        do {
-            let vdmsCars = try await fetchAppBackendCars(token: accessToken ?? token)
-            accountCars = vdmsCars.map { vdmsCar in
-                if let matching = legacyCars.first(where: { $0.vin == vdmsCar.vin }) {
-                    return ConsumerCarDTO(
-                        vin: vdmsCar.vin,
-                        internalVehicleIdentifier: vdmsCar.internalVehicleIdentifier ?? matching.internalVehicleIdentifier,
-                        modelName: vdmsCar.modelName ?? matching.modelName,
-                        modelYear: vdmsCar.modelYear ?? matching.modelYear,
-                        registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
-                        pno34: matching.pno34,
-                        structureWeek: matching.structureWeek,
-                        exteriorColorName: vdmsCar.exteriorColorName,
-                        upholsteryName: vdmsCar.upholsteryName,
-                        wheelsName: vdmsCar.wheelsName,
-                        packageNames: vdmsCar.packageNames
-                    )
+        // VDMS (`app-backend` GraphQL) validates against the *command* client's token
+        // (`lp8dyrd_10`) — the same split the invocation commands need — not the web-client
+        // session token, which it answers with "Could not validate the accessToken". Without
+        // command authorization there is nothing usable to send it, so skip the call rather
+        // than fire a request that is guaranteed to fail.
+        let vdmsToken: String?
+        if vdmsDiscoveryBlockedUntil.map({ $0 > Date() }) ?? false {
+            vdmsToken = nil
+        } else if case .authorized(let commandToken) = await commandClientAuthorization() {
+            vdmsToken = commandToken
+        } else {
+            vdmsToken = nil
+        }
+        if let vdmsToken {
+            do {
+                let vdmsCars = try await fetchAppBackendCars(token: vdmsToken)
+                vdmsDiscoveryBlockedUntil = nil
+                UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffDefaultsKey)
+                accountCars = vdmsCars.map { vdmsCar in
+                    if let matching = legacyCars.first(where: { $0.vin == vdmsCar.vin }) {
+                        return ConsumerCarDTO(
+                            vin: vdmsCar.vin,
+                            internalVehicleIdentifier: vdmsCar.internalVehicleIdentifier ?? matching.internalVehicleIdentifier,
+                            modelName: vdmsCar.modelName ?? matching.modelName,
+                            modelYear: vdmsCar.modelYear ?? matching.modelYear,
+                            registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
+                            pno34: matching.pno34,
+                            structureWeek: matching.structureWeek,
+                            exteriorColorName: vdmsCar.exteriorColorName,
+                            upholsteryName: vdmsCar.upholsteryName,
+                            wheelsName: vdmsCar.wheelsName,
+                            packageNames: vdmsCar.packageNames
+                        )
+                    }
+                    return vdmsCar
                 }
-                return vdmsCar
+            } catch {
+                if Self.isRequestLevelFailure(error) {
+                    // The app-backend endpoint is a secondary discovery source. If the primary
+                    // query already produced cars, keep those instead of failing the session;
+                    // only fail when we would otherwise report an empty garage.
+                    if legacyCars.isEmpty { throw error }
+                    logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
+                } else {
+                    // A client-side rejection (426), an API-shape mismatch, or a token the
+                    // app-backend refuses to validate won't fix itself on the next discovery —
+                    // stand down for a day.
+                    if Self.vdmsFailureIsPersistent(error) {
+                        vdmsDiscoveryBlockedUntil = Date().addingTimeInterval(24 * 60 * 60)
+                        UserDefaults.standard.set(vdmsDiscoveryBlockedUntil?.timeIntervalSince1970,
+                                                  forKey: Self.vdmsBackoffDefaultsKey)
+                    }
+                    logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+                }
+                accountCars = legacyCars
             }
-        } catch {
-            if Self.isRequestLevelFailure(error) {
-                // The app-backend endpoint is a secondary discovery source. If the primary
-                // query already produced cars, keep those instead of failing the session;
-                // only fail when we would otherwise report an empty garage.
-                if legacyCars.isEmpty { throw error }
-                logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
-            } else {
-                logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
-            }
+        } else {
             accountCars = legacyCars
         }
         guard requestEpoch == sessionEpoch else {
@@ -704,8 +785,14 @@ actor PolestarAPI {
         request.setValue("GetVDMSCars", forHTTPHeaderField: "X-APOLLO-OPERATION-NAME")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-APOLLO-REQUEST-UUID")
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
-        request.setValue("6.2.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
-        request.setValue("PolestarApp/6.2.0 Android/15", forHTTPHeaderField: "User-Agent")
+        // `X-Polestar-Force-Update-Version` is an app-version gate: the app-backend answers
+        // `426 Upgrade Required` when the declared version is below its current floor (and a
+        // value that doesn't correspond to a real released build — `6.x` doesn't exist; the
+        // Polestar Android app is on 5.x — is treated the same way). Track a currently-accepted
+        // real version. Cross-checked against kildahldev/unofficial-polestar-api, which hit the
+        // same 426 and fixed it with this exact bump (5.5.0 → 5.11.0).
+        request.setValue("5.11.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        request.setValue("PolestarApp/5.11.0b1111 Android/14", forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
         try validateHTTP(response, operation: "VDMS vehicle discovery")
@@ -718,6 +805,24 @@ actor PolestarAPI {
             throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: decoded.data != nil)
         }
         return (decoded.data?.vdms?.getVehiclesInformation ?? []).map(\.consumerCar)
+    }
+
+    /// Whether a VDMS discovery failure warrants standing down for a day rather than
+    /// re-probing on every discovery: a client-side rejection (426 Upgrade Required), an
+    /// API-shape mismatch, or a GraphQL-level authentication rejection ("Could not validate
+    /// the accessToken") — none of which the next attempt would recover from.
+    static func vdmsFailureIsPersistent(_ error: Error) -> Bool {
+        switch error as? PolestarError {
+        case .client, .incompatibleAPI, .permissionDenied:
+            return true
+        case .graphQL(let errors, _):
+            return errors.contains { entry in
+                (entry.code?.localizedCaseInsensitiveContains("auth") ?? false)
+                    || entry.message.localizedCaseInsensitiveContains("accesstoken")
+            }
+        default:
+            return false
+        }
     }
 
     func applyCarInfo(vin: String) async throws {

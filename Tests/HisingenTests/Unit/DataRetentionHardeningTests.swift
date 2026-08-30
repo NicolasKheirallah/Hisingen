@@ -86,6 +86,29 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
+    func staleMigrationBackupsArePrunedOnceSchemaIsCurrent() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hisingen-bak-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let dbURL = dir.appendingPathComponent("hisingen.sqlite3")
+        let handle = try SQLiteDatabase(path: dbURL.path)
+        // Leftovers from earlier schema bumps, plus an unrelated file that must survive.
+        for name in ["hisingen.sqlite3.pre-v1.bak", "hisingen.sqlite3.pre-v2.bak", "keep.txt"] {
+            try Data("x".utf8).write(to: dir.appendingPathComponent(name))
+        }
+
+        _ = VehicleDatabase(database: handle)   // schema setup runs pruneMigrationBackups()
+
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(!remaining.contains("hisingen.sqlite3.pre-v1.bak"))
+        #expect(!remaining.contains("hisingen.sqlite3.pre-v2.bak"))
+        #expect(remaining.contains("hisingen.sqlite3"))
+        #expect(remaining.contains("keep.txt"))
+    }
+
+    @Test
     func legacyDefaultsAreCarriedForwardOnce() throws {
         let legacyName = "io.kheirallah.hisingen.retentiontest.\(UUID().uuidString)"
         let targetName = "io.kheirallah.hisingen.retentiontest.\(UUID().uuidString)"

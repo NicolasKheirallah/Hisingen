@@ -118,6 +118,11 @@ enum DiagnosticLogExporter {
             "hardwareModel": hardwareModel(),
             "locale": Locale.current.identifier,
             "timezone": TimeZone.current.identifier,
+            "sectionRetention": [
+                "unifiedLogHours": Int(logLookback / 3_600),
+                "apiRequestsHours": 24,
+                "commandAuditMaximumEntries": 25,
+            ],
             "redactionNote": "Vehicle identification numbers, UUID-shaped identifiers, and credential-bearing substrings are replaced with placeholders before export.",
         ]
     }
@@ -132,6 +137,7 @@ enum DiagnosticLogExporter {
                            apiEntries: [APILogEntry],
                            apiPayloadBudgetBytes: Int = DiagnosticLogExporter.apiPayloadBudgetBytes,
                            refreshDiagnostics: DiagnosticsSnapshot? = nil,
+                           garageScan: GarageScanDiagnostics? = nil,
                            commandAudits: [[String: Any]] = [],
                            databaseStats: [String: Any]? = nil) throws -> Data {
         let formatter = ISO8601DateFormatter()
@@ -153,6 +159,13 @@ enum DiagnosticLogExporter {
             if let statusCode = entry.statusCode { row["statusCode"] = statusCode }
             if let responseBytes = entry.responseBytes { row["responseBytes"] = responseBytes }
             if let errorType = entry.errorType { row["errorType"] = DiagnosticRedaction.redact(errorType) }
+            if let semanticError = entry.semanticErrorType {
+                row["semanticErrorType"] = DiagnosticRedaction.redact(semanticError)
+            }
+            if let value = entry.appVersion { row["appVersion"] = value }
+            if let value = entry.appBuild { row["appBuild"] = value }
+            if let value = entry.processIdentifier { row["processIdentifier"] = value }
+            if let value = entry.launchIdentifier { row["launchIdentifier"] = value }
             if let payload = entry.responsePayloadJSON {
                 let cost = payload.utf8.count
                 if cost <= payloadBudget {
@@ -161,17 +174,19 @@ enum DiagnosticLogExporter {
                 } else {
                     payloadsTruncated = true
                     row["payloadOmitted"] = true
+                    row["payloadOmissionReason"] = "exportBudget"
                 }
             } else if entry.responseBytes != nil {
                 // The store dropped the body (budget enforcement at retention time, or a
                 // non-JSON response such as a protobuf frame).
                 row["payloadOmitted"] = true
+                row["payloadOmissionReason"] = entry.payloadOmissionReason ?? "unknown"
             }
             apiRows.insert(row, at: 0)
         }
 
         var report: [String: Any] = [
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "meta": meta,
             "unifiedLog": unifiedLog.map { entry in
                 [
@@ -188,6 +203,27 @@ enum DiagnosticLogExporter {
         }
         if let refreshDiagnostics {
             report["refreshDiagnostics"] = Self.diagnosticsSection(refreshDiagnostics, formatter: formatter)
+        }
+        if let garageScan {
+            let brandRows = Dictionary(uniqueKeysWithValues: garageScan.brands.map { brand, health in
+                (brand.rawValue, [
+                    "attempts": health.attempts,
+                    "successes": health.successes,
+                    "failures": health.failures,
+                    "lastSuccess": health.lastSuccess.map(formatter.string(from:)) as Any? ?? NSNull(),
+                    "lastError": health.lastError as Any? ?? NSNull(),
+                ] as [String: Any])
+            })
+            report["garageScan"] = [
+                "passesStarted": garageScan.passesStarted,
+                "passesCompleted": garageScan.passesCompleted,
+                "lastPassCompletedAt": garageScan.lastPassCompletedAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "lastPassDurationSeconds": garageScan.lastPassDurationSeconds as Any? ?? NSNull(),
+                "lastPassVehiclesScanned": garageScan.lastPassVehiclesScanned,
+                "vehiclesScannedTotal": garageScan.vehiclesScannedTotal,
+                "partial": garageScan.lastPassWasPartial,
+                "brands": brandRows,
+            ]
         }
         if !commandAudits.isEmpty {
             report["commandAudit"] = commandAudits
@@ -220,8 +256,10 @@ enum DiagnosticLogExporter {
     static func buildReport(now: Date = Date(), database: VehicleDatabase? = nil) async throws -> Data {
         async let apiEntriesTask = APIDiagnosticLogStore.shared.snapshot()
         async let diagnosticsTask = LatestDiagnosticsStore.shared.current()
+        async let garageScanTask = GarageScanDiagnosticsStore.shared.current()
         let apiEntries = await apiEntriesTask
         let refreshDiagnostics = await diagnosticsTask
+        let garageScan = await garageScanTask
 
         var commandAudits: [[String: Any]] = []
         var databaseStats: [String: Any]?
@@ -253,6 +291,7 @@ enum DiagnosticLogExporter {
                               unifiedLog: collectUnifiedLogEntries(),
                               apiEntries: apiEntries,
                               refreshDiagnostics: refreshDiagnostics,
+                              garageScan: garageScan,
                               commandAudits: commandAudits,
                               databaseStats: databaseStats)
     }

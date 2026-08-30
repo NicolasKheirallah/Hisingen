@@ -60,6 +60,7 @@ actor VolvoAPI {
     var sessionEpoch = 0
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
+    var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
     var endpointBackoff: [String: Date] = [:]
     var remoteCommandsInFlight: Set<String> = []
     var carImageData: [String: Data] = [:]
@@ -75,6 +76,32 @@ actor VolvoAPI {
         self.imageCache = imageCache
         self.preferences = preferences
         session = Self.makeSession()
+        // Restore endpoint back-offs so a market-restricted endpoint (e.g. `location`, which
+        // returns 403 in this region) is not re-probed once per launch forever — the dict was
+        // in-memory only, so every restart erased hours of accumulated "known unavailable".
+        endpointBackoff = Self.loadPersistedEndpointBackoff()
+    }
+
+    private static let endpointBackoffDefaultsKey = "volvo_endpoint_backoff_v1"
+
+    private static func loadPersistedEndpointBackoff() -> [String: Date] {
+        guard let raw = UserDefaults.standard.dictionary(forKey: endpointBackoffDefaultsKey) as? [String: Double]
+        else { return [:] }
+        let now = Date()
+        return raw.compactMapValues { epoch in
+            let date = Date(timeIntervalSince1970: epoch)
+            return date > now ? date : nil
+        }
+    }
+
+    func persistEndpointBackoff() {
+        let live = endpointBackoff.filter { $0.value > Date() }
+        if live.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.endpointBackoffDefaultsKey)
+        } else {
+            UserDefaults.standard.set(live.mapValues { $0.timeIntervalSince1970 },
+                                      forKey: Self.endpointBackoffDefaultsKey)
+        }
     }
 
 
@@ -251,14 +278,26 @@ actor VolvoAPI {
         try apply(token)
     }
 
+    /// When the most recent successful `refresh_token` grant landed, and the lifetime that
+    /// grant advertised. A brand-new token is the freshest one obtainable, so a caller that
+    /// arrives within a few seconds of a completed grant reuses it instead of starting
+    /// another — this collapses the ~20-endpoint telemetry fan-out (and a wave of requests
+    /// that all `401` at once) from several `refresh_token` grants down to one. Cleared by
+    /// `resetSession()`. Also lets the renewal threshold scale to a short-lived token
+    /// instead of a flat five minutes that would treat it as perpetually stale.
+    var lastTokenGrantAt: Date?
+    var tokenLifetime: TimeInterval = 0
+
     func refreshTokenIfNeeded() async throws {
-        if accessToken == nil || tokenExpiry == nil || (tokenExpiry?.timeIntervalSinceNow ?? 0) < 300 {
-            try await refreshAccessToken(force: true)
-        }
+        try await refreshAccessToken(force: false)
     }
 
     func refreshAccessToken(force: Bool) async throws {
-        if !force, let expiry = tokenExpiry, accessToken != nil, expiry.timeIntervalSinceNow >= 300 { return }
+        let renewalMargin = tokenLifetime > 0 ? min(300, tokenLifetime / 2) : 300
+        if !force, let expiry = tokenExpiry, accessToken != nil,
+           expiry.timeIntervalSinceNow >= renewalMargin { return }
+        if let landed = lastTokenGrantAt, accessToken != nil,
+           Date().timeIntervalSince(landed) < 10 { return }
         if let refreshTask {
             try apply(try await refreshTask.value)
             return
@@ -278,6 +317,21 @@ actor VolvoAPI {
         try apply(try await task.value)
     }
 
+    /// Wipes the stored Volvo session — memory and Keychain — after the identity provider has
+    /// declared the refresh token permanently dead (`invalid_grant` / `expired_token`). Without
+    /// this, `hasResumableSession` stays `true` and the resume / garage-scan loop replays the
+    /// dead token every few minutes; each replay is a failed login that counts toward Volvo's
+    /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
+    /// network error — those can be transient or misconfiguration, and destroying a still-valid
+    /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
+    private func discardDeadRefreshToken() async {
+        refreshToken = nil
+        lastTokenGrantAt = nil
+        tokenLifetime = 0
+        try? keychain.deleteVolvoSessionToken()
+        await MainActor.run { preferences.invalidateSessionCache() }
+    }
+
     private func apply(_ token: VolvoTokenResponseDTO) throws {
         let previous = refreshToken
         let renewable = token.refreshToken ?? refreshToken
@@ -287,9 +341,13 @@ actor VolvoAPI {
         accessToken = token.accessToken
         refreshToken = renewable
         tokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        tokenLifetime = TimeInterval(token.expiresIn)
+        lastTokenGrantAt = Date()
     }
 
     private func requestToken(_ request: URLRequest) async throws -> VolvoTokenResponseDTO {
+        let isRefreshGrant = (request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? "")
+            .contains("grant_type=refresh_token")
         let (data, response) = try await perform(request, operation: "Volvo token request")
         if response.statusCode == 400 || response.statusCode == 401 {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -304,6 +362,7 @@ actor VolvoAPI {
                 case "invalid_client", "unauthorized_client":
                     throw VolvoError.appNotConfigured
                 case "invalid_grant", "expired_token":
+                    if isRefreshGrant { await discardDeadRefreshToken() }
                     throw VolvoError.authenticationRequired(.invalidCredentials)
                 default:
                     throw response.statusCode == 401
@@ -363,7 +422,10 @@ actor VolvoAPI {
             // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
             // not use this path, so their 403s stay `.permissionDenied` — the asymmetry is
             // deliberate. This is tuned from observed behaviour, not Volvo documentation.
-            throw VolvoError.regionRestricted(service: path)
+            if path.hasPrefix("/location/") {
+                throw VolvoError.regionRestricted(service: path)
+            }
+            throw VolvoError.permissionDenied(operation: path)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
@@ -397,9 +459,16 @@ actor VolvoAPI {
         guard enabled else { return nil }
         let backoffKey = "\(vin)|\(key)"
         if let until = endpointBackoff[backoffKey], until > Date() { return nil }
+        if let cached = optionalTelemetryCache[backoffKey], cached.expiresAt > Date(),
+           let value = cached.value as? Value { return value }
         do {
             let value = try await operation()
-            endpointBackoff[backoffKey] = nil
+            let ttl = Self.optionalTelemetryTTL(for: key)
+            if ttl > 0 {
+                optionalTelemetryCache[backoffKey] = CapabilityCacheEntry(
+                    value: value, expiresAt: Date().addingTimeInterval(ttl))
+            }
+            if endpointBackoff.removeValue(forKey: backoffKey) != nil { persistEndpointBackoff() }
             return value
         } catch {
             if Self.isGlobalFailure(error) { throw error }
@@ -410,12 +479,32 @@ actor VolvoAPI {
             }
             let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)
             endpointBackoff[backoffKey] = Date().addingTimeInterval(duration)
+            // Persist only the long, market/permission back-offs; the 5-minute transient ones
+            // expire before the next launch and are not worth carrying across restarts.
+            if isRestricted { persistEndpointBackoff() }
             if isRestricted {
                 logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
             } else {
                 logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) — \(String(describing: error), privacy: .public)")
             }
             return nil
+        }
+    }
+
+    /// Provider timestamps show that these categories change on very different timescales.
+    /// Poll fast operational state normally while avoiding hourly re-downloads of multi-day
+    /// diagnostics and static capability lists.
+    static func optionalTelemetryTTL(for key: String) -> TimeInterval {
+        switch key {
+        case "tyres", "diagnostics", "engine-diagnostics", "odometer", "statistics",
+             "brakes", "warnings", "commands":
+            return 60 * 60
+        case "fuel", "location":
+            return 15 * 60
+        case "command-accessibility":
+            return 5 * 60
+        default:
+            return 0
         }
     }
 

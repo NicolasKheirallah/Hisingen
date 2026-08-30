@@ -49,6 +49,13 @@ extension VolvoAPI {
         throw VolvoError.authenticationRequired(.callbackRejected)
     }
 
+    /// See `VehicleProviding.hasWarmSession`. Client credentials, a stored refresh token, and
+    /// known vehicles are enough for `fetchVehicleState`; `refreshTokenIfNeeded` inside that
+    /// path renews an expired access token without a full re-restore.
+    var hasWarmSession: Bool {
+        isConfigured && refreshToken != nil && !cars.isEmpty
+    }
+
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else { throw VolvoError.authenticationRequired(.noStoredSession) }
         guard isConfigured else { throw VolvoError.appNotConfigured }
@@ -68,6 +75,8 @@ extension VolvoAPI {
         accessToken = nil
         refreshToken = nil
         tokenExpiry = nil
+        lastTokenGrantAt = nil
+        tokenLifetime = 0
         refreshTask?.cancel()
         refreshTask = nil
         pendingVerifier = nil
@@ -76,7 +85,9 @@ extension VolvoAPI {
         selectedVIN = nil
         vehicleDetailsCache = [:]
         capabilityCache = [:]
-        endpointBackoff = [:]
+        optionalTelemetryCache = [:]
+        // Preserve persisted permission/market back-offs across a session reset. Re-signing
+        // does not make an unapproved provider scope available and must not trigger a probe storm.
         remoteCommandsInFlight = []
         session.invalidateAndCancel()
         session = Self.makeSession()

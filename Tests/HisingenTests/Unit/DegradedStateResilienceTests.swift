@@ -247,6 +247,7 @@ struct AuthFailureReschedulingTests {
 private actor AuthFailingProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMTEST", title: "Test vehicle")]
+    var hasWarmSession: Bool { true }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}

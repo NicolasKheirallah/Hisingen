@@ -168,7 +168,37 @@ struct GraphQLDecodingTests {
         XCTAssertEqual(car.wheelsName, "20\" 4-V Spoke Diamond Cut")
         XCTAssertEqual(car.packageNames, ["Pilot Pack", "Plus Pack"])
     }
-}
 
+    @Test
+    func vdmsAuthAndClientRejectionsBackOff_transientErrorsDoNot() {
+        // "Could not validate the accessToken" — the app-backend won't accept this token; a
+        // day-long back-off, not a per-discovery retry.
+        let authFail = PolestarError.graphQL([
+            GraphQLServiceError(message: "Could not validate the accessToken",
+                                path: ["vdms", "getVehiclesInformation"],
+                                code: "AuthenticationFailure")
+        ], hasPartialData: true)
+        XCTAssertTrue(PolestarAPI.vdmsFailureIsPersistent(authFail))
+
+        // 426 Upgrade Required and an API-shape mismatch are also persistent.
+        XCTAssertTrue(PolestarAPI.vdmsFailureIsPersistent(PolestarError.client(statusCode: 426)))
+        XCTAssertTrue(PolestarAPI.vdmsFailureIsPersistent(PolestarError.incompatibleAPI(operation: "VDMS")))
+
+        // A transient GraphQL error and a network blip must not arm the back-off.
+        let transientGraphQL = PolestarError.graphQL([
+            GraphQLServiceError(message: "Internal server error", path: ["vdms"], code: "INTERNAL")
+        ], hasPartialData: false)
+        XCTAssertFalse(PolestarAPI.vdmsFailureIsPersistent(transientGraphQL))
+        XCTAssertFalse(PolestarAPI.vdmsFailureIsPersistent(PolestarError.server(statusCode: 503)))
+    }
+
+    @Test
+    func volvoSlowChangingTelemetryUsesLongerTTLs() {
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "doors"), 0)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "command-accessibility"), 5 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "location"), 15 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "diagnostics"), 60 * 60)
+    }
+}
 
 

@@ -123,7 +123,7 @@ struct DiagnosticLogExporterTests {
             databaseStats: ["sizeBytes": Int64(4096)])
         let output = String(decoding: data, as: UTF8.self)
 
-        #expect(output.contains("\"schemaVersion\" : 1"))
+        #expect(output.contains("\"schemaVersion\" : 2"))
         #expect(output.contains("\"refreshDiagnostics\""))
         #expect(output.contains("\"refreshAttempts\" : 12"))
         #expect(!output.contains("YV1XZEHR2R2371256"))

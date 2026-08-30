@@ -74,7 +74,11 @@ final class SignInCoordinator {
 
     // MARK: - Volvo
 
-    func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String) {
+    /// `forceInteractive` bypasses the "already configured, nothing to do" fast path — used by
+    /// the explicit "Re-sign in" affordance, where the user wants a fresh browser handshake
+    /// even if a (possibly stale) session token is still on file.
+    func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String,
+                          nickname: String, forceInteractive: Bool = false) {
         var trimmedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedClientID.isEmpty && BuiltinVolvoSecrets.isConfigured {
             trimmedClientID = BuiltinVolvoSecrets.clientID
@@ -99,7 +103,8 @@ final class SignInCoordinator {
 
         // Already fully configured and the form came back blank: there is nothing to
         // re-authorize — just re-adopt the Volvo brand and resume from the stored token.
-        if !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
+        if !forceInteractive,
+           !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
            trimmedClientID == preferences.volvoClientID, clientSecret.isEmpty, vccApiKey.isEmpty {
             // Fire-and-forget: this branch is synchronous, and the VIN is already resolvable
             // from the warm provider.

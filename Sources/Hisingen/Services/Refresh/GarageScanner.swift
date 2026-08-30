@@ -117,6 +117,10 @@ final class GarageScanner {
         scanInProgress = true
         defer { scanInProgress = false }
 
+        let startedAt = Date()
+        vehiclesScannedThisPass = 0
+        await GarageScanDiagnosticsStore.shared.recordPassStart()
+
         let originalBrand = preferences.activeBrand
         for brand in VehicleBrand.allCases where hasResumableSession(brand) {
             guard !Task.isCancelled else { return }
@@ -124,23 +128,36 @@ final class GarageScanner {
                 if try await scan(brand: brand, originalBrand: originalBrand, context: context) == .abort {
                     return
                 }
+                await GarageScanDiagnosticsStore.shared.recordBrandSuccess(brand)
             } catch {
+                await GarageScanDiagnosticsStore.shared.recordBrandFailure(brand, error: error)
                 logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
         guard preferences.activeBrand == originalBrand else { return }
+        await GarageScanDiagnosticsStore.shared.recordPassComplete(
+            vehiclesScanned: vehiclesScannedThisPass,
+            duration: Date().timeIntervalSince(startedAt)
+        )
         context.garageScanDidCompletePass()
     }
 
+    /// Vehicles fetched during the pass currently running; folded into the diagnostics tally
+    /// when the pass completes.
+    private var vehiclesScannedThisPass = 0
+
     private func scan(brand: VehicleBrand, originalBrand: VehicleBrand,
                       context: any GarageScanContext) async throws -> PassOutcome {
-        // The dormant brand's provider is not kept warm, so re-establish its session before
-        // scanning its vehicles.
+        let provider = self.provider(brand)
+        // Re-establish the dormant brand's session only when it has gone cold. It usually
+        // hasn't between five-minute passes, and an unconditional restore forced a token grant
+        // and a full vehicle re-discovery every pass — `fetchVehicleState` renews an expired
+        // access token on its own.
         if brand != originalBrand {
-            try await restoreDormantSession(brand)
+            let warm = await provider.hasWarmSession
+            if !warm { try await restoreDormantSession(brand) }
         }
 
-        let provider = self.provider(brand)
         let selectedVIN = preferences.vin(for: brand)
         let providerCars = await provider.cars
         for car in providerCars {
@@ -155,6 +172,7 @@ final class GarageScanner {
             guard preferences.activeBrand == originalBrand,
                   preferences.vin(for: brand) == selectedVIN,
                   !context.commandPipelineIsBusy else { return .abort }
+            vehiclesScannedThisPass += 1
             context.garageScanDidCaptureState(state)
         }
         // No re-selection of the previously selected car at the end: telemetry and commands

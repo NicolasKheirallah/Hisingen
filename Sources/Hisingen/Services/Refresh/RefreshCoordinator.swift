@@ -51,6 +51,64 @@ actor LatestDiagnosticsStore {
     }
 }
 
+/// Since-launch tally of the background garage scan. `DiagnosticsSnapshot.refreshAttempts`
+/// only counts the active-brand `RefreshCoordinator`, so a support bundle otherwise showed
+/// "7 refreshes" while the five-minute garage loop had quietly made hundreds of requests
+/// against the dormant brand.
+struct GarageScanDiagnostics: Sendable {
+    var passesStarted: Int = 0
+    var passesCompleted: Int = 0
+    var lastPassCompletedAt: Date?
+    var lastPassDurationSeconds: TimeInterval?
+    var lastPassVehiclesScanned: Int = 0
+    var vehiclesScannedTotal: Int = 0
+    var brands: [VehicleBrand: GarageBrandDiagnostics] = [:]
+    var lastPassWasPartial: Bool = false
+}
+
+struct GarageBrandDiagnostics: Sendable {
+    var attempts: Int = 0
+    var successes: Int = 0
+    var failures: Int = 0
+    var lastSuccess: Date?
+    var lastError: String?
+}
+
+actor GarageScanDiagnosticsStore {
+    static let shared = GarageScanDiagnosticsStore()
+    private(set) var stats = GarageScanDiagnostics()
+
+    func recordPassStart() {
+        stats.passesStarted += 1
+        stats.lastPassWasPartial = false
+    }
+
+    func recordBrandSuccess(_ brand: VehicleBrand) {
+        stats.brands[brand, default: GarageBrandDiagnostics()].attempts += 1
+        stats.brands[brand, default: GarageBrandDiagnostics()].successes += 1
+        stats.brands[brand, default: GarageBrandDiagnostics()].lastSuccess = Date()
+        stats.brands[brand, default: GarageBrandDiagnostics()].lastError = nil
+    }
+
+    func recordBrandFailure(_ brand: VehicleBrand, error: Error) {
+        stats.brands[brand, default: GarageBrandDiagnostics()].attempts += 1
+        stats.brands[brand, default: GarageBrandDiagnostics()].failures += 1
+        stats.brands[brand, default: GarageBrandDiagnostics()].lastError =
+            DiagnosticRedaction.redact(String(describing: error))
+        stats.lastPassWasPartial = true
+    }
+
+    func recordPassComplete(vehiclesScanned: Int, duration: TimeInterval) {
+        stats.passesCompleted += 1
+        stats.lastPassCompletedAt = Date()
+        stats.lastPassDurationSeconds = duration
+        stats.lastPassVehiclesScanned = vehiclesScanned
+        stats.vehiclesScannedTotal += vehiclesScanned
+    }
+
+    func current() -> GarageScanDiagnostics { stats }
+}
+
 enum RefreshPolicy {
     /// Floor for polls while the vehicle reports itself unavailable (asleep, power saving,
     /// in service). Deep-sleeping cars answer every poll with the same stale snapshot, so

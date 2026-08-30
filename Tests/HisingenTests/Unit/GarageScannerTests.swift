@@ -81,6 +81,67 @@ struct GarageScannerTests {
         XCTAssertEqual(context.completePassCount, 1)
     }
 
+    /// A dormant brand whose provider is still warm is scanned without a restore round trip.
+    @Test
+    func warmDormantBrandIsScannedWithoutRestoring() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.activeBrand = .polestar
+        preferences.setVin("P1", for: .polestar)
+        preferences.setVin("VSELECTED", for: .volvo)
+
+        let context = RecordingScanContext()
+        let polestar = StubProvider(brand: .polestar, vins: ["P1", "P2"])
+        let volvo = StubProvider(brand: .volvo, vins: ["V1"], warm: true)
+        let volvoRestores = CallCounter()
+
+        let scanner = GarageScanner(
+            context: context,
+            preferences: preferences,
+            provider: { $0 == .volvo ? volvo : polestar },
+            hasResumableSession: { _ in true },
+            restoreDormantSession: { brand in if brand == .volvo { await volvoRestores.increment() } }
+        )
+
+        await scanner.scanNow()
+
+        let restores = await volvoRestores.count
+        XCTAssertEqual(restores, 0, "a warm dormant provider must not be re-restored")
+        XCTAssertEqual(context.capturedStates.count, 2, "P2 + V1 still scanned")
+        XCTAssertEqual(context.completePassCount, 1)
+    }
+
+    /// A cold dormant brand is still restored before its vehicles are scanned.
+    @Test
+    func coldDormantBrandIsRestoredBeforeScanning() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.activeBrand = .polestar
+        preferences.setVin("P1", for: .polestar)
+        preferences.setVin("VSELECTED", for: .volvo)
+
+        let context = RecordingScanContext()
+        let polestar = StubProvider(brand: .polestar, vins: ["P1", "P2"])
+        let volvo = StubProvider(brand: .volvo, vins: ["V1"], warm: false)
+        let volvoRestores = CallCounter()
+
+        let scanner = GarageScanner(
+            context: context,
+            preferences: preferences,
+            provider: { $0 == .volvo ? volvo : polestar },
+            hasResumableSession: { _ in true },
+            restoreDormantSession: { brand in if brand == .volvo { await volvoRestores.increment() } }
+        )
+
+        await scanner.scanNow()
+
+        let restores = await volvoRestores.count
+        XCTAssertEqual(restores, 1, "a cold dormant provider is restored once")
+        XCTAssertEqual(context.capturedStates.count, 2)
+    }
+
     /// A scan started while a command is already in progress never begins.
     @Test
     func scanIsSuppressedWhileACommandIsInProgress() async throws {
@@ -135,13 +196,18 @@ private actor CallCounter {
 private actor StubProvider: VehicleProviding {
     let brand: VehicleBrand
     private let vins: [String]
+    /// Defaults to cold so the dormant-brand restore path stays exercised; a test can pass
+    /// `warm: true` to check the skip.
+    let warm: Bool
 
-    init(brand: VehicleBrand, vins: [String]) {
+    init(brand: VehicleBrand, vins: [String], warm: Bool = false) {
         self.brand = brand
         self.vins = vins
+        self.warm = warm
     }
 
     var cars: [CarSummary] { vins.map { CarSummary(vin: $0, title: $0) } }
+    var hasWarmSession: Bool { warm }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}

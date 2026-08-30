@@ -12,22 +12,27 @@ enum SpotlightIndexer {
     private nonisolated static let logger = AppLog.logger("spotlight")
     private static let domainIdentifier = "io.kheirallah.hisingen.vehicle"
 
+    /// Set once CoreSpotlight reports indexing is unavailable on this system
+    /// (`CSIndexErrorDomain` -1000). Every state update otherwise re-submitted the item and
+    /// re-failed, once per refresh, for the life of the session.
+    private static var indexingUnavailable = false
+
     /// Re-indexes (or replaces) the entry for this VIN.
     static func indexVehicle(_ state: VehicleState, nickname: String) {
-        guard !state.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
+        guard !indexingUnavailable, !state.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
         let item = CSSearchableItem(
             uniqueIdentifier: state.vin,
             domainIdentifier: domainIdentifier,
             attributeSet: attributeSet(for: state, nickname: nickname)
         )
         CSSearchableIndex.default().indexSearchableItems([item]) { error in
-            if let error {
-                let nsError = error as NSError
-                if nsError.domain == CSIndexErrorDomain && nsError.code == -1000 {
-                    logger.debug("Spotlight indexing unsupported on system: \(String(describing: error), privacy: .public)")
-                } else {
-                    logger.warning("Spotlight indexing failed: \(String(describing: error), privacy: .public)")
-                }
+            guard let error else { return }
+            let nsError = error as NSError
+            if nsError.domain == CSIndexErrorDomain && nsError.code == -1000 {
+                logger.debug("Spotlight indexing unsupported on system; disabling for this session: \(String(describing: error), privacy: .public)")
+                Task { @MainActor in SpotlightIndexer.indexingUnavailable = true }
+            } else {
+                logger.warning("Spotlight indexing failed: \(String(describing: error), privacy: .public)")
             }
         }
     }

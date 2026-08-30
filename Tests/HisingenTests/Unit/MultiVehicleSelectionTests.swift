@@ -222,6 +222,7 @@ struct MultiVehicleSelectionTests {
 private actor TwoCarProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let vins: [String]
+    var hasWarmSession: Bool { !vins.isEmpty }
     private(set) var selectionOrder: [String] = []
     private(set) var selectCount = 0
     private(set) var fetchCount = 0

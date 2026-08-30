@@ -34,6 +34,41 @@ struct APIDiagnosticLogTests {
     }
 
     @Test
+    func tokenResponsesAreNeverRetainedAndTokenKeysAreRedacted() async throws {
+        let store = APIDiagnosticLogStore()
+        let request = URLRequest(url: URL(string: "https://identity.example.test/as/token.oauth2")!)
+        await store.record(
+            provider: .volvo, request: request, operation: "Volvo token request",
+            statusCode: 200, responseBytes: 200,
+            responseData: Data(#"{"access_token":"access","id_token":"header.payload.signature","refresh_token":"refresh"}"#.utf8),
+            startedAt: Date())
+        let entry = try #require(await store.snapshot().first)
+        #expect(entry.responsePayloadJSON == nil)
+        #expect(entry.payloadOmissionReason == "sensitive")
+
+        await store.clear()
+        await store.record(
+            provider: .polestar, request: nil, operation: "profile",
+            statusCode: 200, responseBytes: 80,
+            responseData: Data(#"{"custom_token":"secret","display_name":"Ada"}"#.utf8),
+            startedAt: Date())
+        let payload = try #require(await store.snapshot().first?.responsePayloadJSON)
+        #expect(!payload.contains("secret"))
+        #expect(payload.contains("<redacted>"))
+    }
+
+    @Test
+    func semanticFailuresInsideHTTP200AreClassified() async throws {
+        let store = APIDiagnosticLogStore()
+        await store.record(
+            provider: .polestar, request: nil, operation: "VDMS",
+            statusCode: 200, responseBytes: 100,
+            responseData: Data(#"{"errors":[{"message":"denied","extensions":{"code":"AuthenticationFailure"}}]}"#.utf8),
+            startedAt: Date())
+        #expect(await store.snapshot().first?.semanticErrorType == "graphql:AuthenticationFailure")
+    }
+
+    @Test
     func errorTypeCarriesEnumPayloadsAndCodes() async throws {
         let store = APIDiagnosticLogStore()
         await store.clear()
@@ -50,6 +85,29 @@ struct APIDiagnosticLogTests {
         #expect(entry.durationMilliseconds >= 0)
         // Timestamp is the request start, not completion, for unified-log correlation.
         #expect(abs(entry.timestamp.timeIntervalSince(startedAt)) < 0.001)
+    }
+
+    @Test
+    func cancelledRequestsAreNotRecorded() async throws {
+        let store = APIDiagnosticLogStore()
+        await store.clear()
+
+        // Raw URLError.cancelled, and the shape the providers actually hand in: their own
+        // error enum whose description carries the -999 code.
+        await store.record(provider: .polestar, request: nil, operation: "discovery",
+                           startedAt: Date(), error: URLError(.cancelled))
+        await store.record(provider: .volvo, request: nil, operation: "vehicles",
+                           startedAt: Date(), error: CancellationError())
+        await store.record(provider: .polestar, request: nil, operation: "token",
+                           startedAt: Date(),
+                           error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
+
+        #expect(await store.snapshot().isEmpty)
+
+        // A real failure on the same code path is still recorded.
+        await store.record(provider: .volvo, request: nil, operation: "poll",
+                           startedAt: Date(), error: URLError(.timedOut))
+        #expect(await store.snapshot().count == 1)
     }
 
     @Test

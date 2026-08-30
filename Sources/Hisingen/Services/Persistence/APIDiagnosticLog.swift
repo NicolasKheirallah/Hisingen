@@ -17,8 +17,43 @@ struct APILogEntry: Codable, Equatable, Sendable {
     let statusCode: Int?
     let responseBytes: Int?
     let responsePayloadJSON: String?
+    /// Why a response body is absent. This separates privacy suppression from binary data,
+    /// oversized bodies, and retention-budget eviction in support exports.
+    let payloadOmissionReason: String?
     let durationMilliseconds: Int
     let errorType: String?
+    /// Provider-level failure found inside an HTTP-success response (GraphQL errors,
+    /// gRPC status trailers represented as JSON, or property-level API failures).
+    let semanticErrorType: String?
+    /// Provenance belongs to each row because the ring buffer survives relaunches.
+    let appVersion: String?
+    let appBuild: String?
+    let processIdentifier: Int32?
+    let launchIdentifier: String?
+
+    init(timestamp: Date, provider: APILogProvider, method: String, endpoint: String,
+         operation: String, statusCode: Int?, responseBytes: Int?,
+         responsePayloadJSON: String?, payloadOmissionReason: String? = nil,
+         durationMilliseconds: Int, errorType: String?, semanticErrorType: String? = nil,
+         appVersion: String? = nil, appBuild: String? = nil,
+         processIdentifier: Int32? = nil, launchIdentifier: String? = nil) {
+        self.timestamp = timestamp
+        self.provider = provider
+        self.method = method
+        self.endpoint = endpoint
+        self.operation = operation
+        self.statusCode = statusCode
+        self.responseBytes = responseBytes
+        self.responsePayloadJSON = responsePayloadJSON
+        self.payloadOmissionReason = payloadOmissionReason
+        self.durationMilliseconds = durationMilliseconds
+        self.errorType = errorType
+        self.semanticErrorType = semanticErrorType
+        self.appVersion = appVersion
+        self.appBuild = appBuild
+        self.processIdentifier = processIdentifier
+        self.launchIdentifier = launchIdentifier
+    }
 
     var payloadOmitted: Bool { responsePayloadJSON == nil && responseBytes != nil }
 
@@ -28,8 +63,10 @@ struct APILogEntry: Codable, Equatable, Sendable {
         APILogEntry(
             timestamp: timestamp, provider: provider, method: method, endpoint: endpoint,
             operation: operation, statusCode: statusCode, responseBytes: responseBytes,
-            responsePayloadJSON: nil, durationMilliseconds: durationMilliseconds,
-            errorType: errorType)
+            responsePayloadJSON: nil, payloadOmissionReason: "retentionBudget",
+            durationMilliseconds: durationMilliseconds, errorType: errorType,
+            semanticErrorType: semanticErrorType, appVersion: appVersion, appBuild: appBuild,
+            processIdentifier: processIdentifier, launchIdentifier: launchIdentifier)
     }
 }
 
@@ -51,6 +88,9 @@ actor APIDiagnosticLogStore {
     /// Rows past the budget keep their metadata and lose only their payload body,
     /// oldest first — mirroring the export bundle's own budgeting.
     static let maximumTotalPayloadBytes = 32 * 1024 * 1024
+    private static let launchIdentifier = UUID().uuidString
+    private static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    private static let appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
 
     private let persistsToDisk: Bool
     private let totalPayloadBudgetOverride: Int?
@@ -66,8 +106,17 @@ actor APIDiagnosticLogStore {
     func record(provider: APILogProvider, request: URLRequest?, operation: String,
                 statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
                 startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil) {
+        // A cancelled request (`URLError.cancelled`, NSURLErrorDomain -999) is normal teardown
+        // — a superseded sign-in, a brand switch, app quit. Recording it as an error just adds
+        // noise a support bundle then has to explain away. The providers wrap it in their own
+        // `.network(URLError)` case, so check the whole error text, not just a top-level cast.
+        if let error, Self.isCancellation(error) { return }
         ensureLoaded()
         let completedAt = Date()
+        let sensitiveResponse = Self.isSensitiveResponse(request: request, operation: operation)
+        let redactedPayload = sensitiveResponse ? nil : Self.redactJSON(responseData)
+        let omissionReason = Self.payloadOmissionReason(
+            data: responseData, redactedPayload: redactedPayload, sensitive: sensitiveResponse)
         let entry = APILogEntry(
             // Request start, not completion — keeps exports correlatable with the
             // unified log's timestamps for the same request.
@@ -78,9 +127,15 @@ actor APIDiagnosticLogStore {
             operation: DiagnosticRedaction.redact(operation),
             statusCode: statusCode,
             responseBytes: responseBytes,
-            responsePayloadJSON: Self.redactJSON(responseData),
+            responsePayloadJSON: redactedPayload,
+            payloadOmissionReason: omissionReason,
             durationMilliseconds: max(0, Int(completedAt.timeIntervalSince(startedAt) * 1_000)),
-            errorType: error.map { Self.describeError($0) }
+            errorType: error.map { Self.describeError($0) },
+            semanticErrorType: sensitiveResponse ? nil : Self.semanticError(in: responseData),
+            appVersion: Self.appVersion,
+            appBuild: Self.appBuild,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier,
+            launchIdentifier: Self.launchIdentifier
         )
         entries.append(entry)
         trimIfNeeded()
@@ -184,6 +239,18 @@ actor APIDiagnosticLogStore {
 
     // MARK: - Sanitization
 
+    /// True when `error` is (or wraps) a `URLError.cancelled` / NSURLErrorDomain -999.
+    private static func isCancellation(_ error: Error) -> Bool {
+        if let urlError = error as? URLError { return urlError.code == .cancelled }
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return true }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error { return isCancellation(underlying) }
+        // Providers wrap the URLError in their own `.network(_)` enum case; the payload's
+        // description still carries the -999 code.
+        return String(describing: error).contains("Code=-999")
+    }
+
     private static func describeError(_ error: Error) -> String {
         let typeName = String(reflecting: type(of: error))
         var text = typeName
@@ -199,11 +266,67 @@ actor APIDiagnosticLogStore {
         return DiagnosticRedaction.redact(text)
     }
 
+    private static func isSensitiveResponse(request: URLRequest?, operation: String) -> Bool {
+        let haystack = [operation, request?.url?.lastPathComponent ?? ""]
+            .joined(separator: " ").lowercased()
+        return haystack.contains("token") || haystack.contains("oauth2")
+    }
+
+    private static func payloadOmissionReason(data: Data?, redactedPayload: String?,
+                                              sensitive: Bool) -> String? {
+        if sensitive, data?.isEmpty == false { return "sensitive" }
+        guard let data else { return nil }
+        if data.isEmpty { return "empty" }
+        if data.count > 2_000_000 { return "tooLarge" }
+        if redactedPayload == nil { return "nonJSON" }
+        return nil
+    }
+
+    /// Classifies provider errors that are encoded inside an HTTP 2xx JSON body. Keep the
+    /// value intentionally coarse and credential-free so the inspector can filter it safely.
+    private static func semanticError(in data: Data?) -> String? {
+        guard let data, let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        if let dictionary = object as? [String: Any],
+           let errors = dictionary["errors"] as? [Any], !errors.isEmpty {
+            let code = (errors.first as? [String: Any])?["extensions"] as? [String: Any]
+            let value = (code?["code"] ?? code?["errorType"]) as? String
+            return value.map { "graphql:\($0)" } ?? "graphql:error"
+        }
+        if containsSemanticFailure(object) { return "property:unavailable" }
+        return nil
+    }
+
+    private static func containsSemanticFailure(_ value: Any) -> Bool {
+        if let string = value as? String {
+            let normalized = string.uppercased()
+            return normalized == "PROPERTY_NOT_FOUND" || normalized == "AUTHENTICATIONFAILURE"
+        }
+        if let dictionary = value as? [String: Any] {
+            return dictionary.values.contains(where: containsSemanticFailure)
+        }
+        if let array = value as? [Any] { return array.contains(where: containsSemanticFailure) }
+        return false
+    }
+
     private static func redactURL(_ url: URL?) -> String {
         guard let url else { return "<unavailable>" }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         components?.query = nil
         components?.fragment = nil
+        if let path = components?.percentEncodedPath {
+            components?.percentEncodedPath = path.split(separator: "/", omittingEmptySubsequences: false)
+                .map { segment in
+                    let value = String(segment)
+                    // OAuth resume/state identifiers are typically long URL-safe random
+                    // strings. Endpoint names remain visible; transaction identifiers do not.
+                    if value.count >= 20,
+                       value.range(of: "^[A-Za-z0-9._~-]+$", options: .regularExpression) != nil {
+                        return "redacted"
+                    }
+                    return value
+                }
+                .joined(separator: "/")
+        }
         return DiagnosticRedaction.redact(components?.string ?? "<unavailable>")
     }
 
@@ -223,6 +346,7 @@ actor APIDiagnosticLogStore {
         if let key {
             let normalizedKey = key.normalizedDiagnosticKey
             if sensitiveKeys.contains(normalizedKey)
+                || normalizedKey.hasSuffix("_token")
                 || normalizedKey.hasSuffix("_endpoint")
                 || normalizedKey.hasSuffix("_uri") {
                 return "<redacted>"
@@ -248,7 +372,7 @@ actor APIDiagnosticLogStore {
 
     private static let sensitiveKeys: Set<String> = [
         "access_token", "account_id", "address", "authorization", "authorization_endpoint", "base_url",
-        "client_id", "client_secret",
+        "client_id", "client_secret", "id_token",
         "email", "image_url", "internal_vehicle_identifier", "latitude", "license_plate",
         "id", "identifier", "endpoint", "location", "longitude", "path", "phone", "pno34", "refresh_token", "registration",
         "registration_no",

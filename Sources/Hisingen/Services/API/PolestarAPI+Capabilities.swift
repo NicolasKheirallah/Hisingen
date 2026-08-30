@@ -72,7 +72,11 @@ extension PolestarAPI {
         } catch {
             if Self.isGlobalFailure(error) { throw error }
             let interval: TimeInterval
+            // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle —
+            // treat it like `incompatibleAPI` and stay away for hours, not minutes. (The gRPC
+            // layer also skips it outright for the rest of the process via `unimplementedReadPaths`.)
             if case PolestarError.incompatibleAPI = error { interval = 6 * 60 * 60 }
+            else if case PolestarError.grpcUnimplemented = error { interval = 6 * 60 * 60 }
             else if case PolestarError.invalidResponse = error { interval = 60 * 60 }
             else { interval = 5 * 60 }
             capabilityBackoff[vin, default: [:]][cacheKey] = Date().addingTimeInterval(interval)

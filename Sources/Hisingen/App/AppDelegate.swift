@@ -32,6 +32,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var calendarPreconditioning: CalendarPreconditioningController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Two menu-bar instances share rotating OAuth refresh tokens and the diagnostics
+        // archive. Keep one owner; a second launch activates the existing process and exits
+        // before touching Keychain or network state.
+        if let bundleID = Bundle.main.bundleIdentifier,
+           let existing = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+                         && !$0.isTerminated }) {
+            existing.activate()
+            NSApp.terminate(nil)
+            return
+        }
         mainMenuController = MainMenuController(
             onCheckForUpdates: { [weak self] in self?.updateController.checkNow() })
         mainMenuController.install()
@@ -232,6 +243,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signInCoordinator.beginPolestarCommandAuthorization()
         case .polestarWebSignIn:
             signInCoordinator.beginPolestarWebSignIn()
+        case .reauthenticate(let brand):
+            switch brand {
+            case .polestar:
+                // Interactive browser window — no Polestar ID password re-entry.
+                signInCoordinator.beginPolestarWebSignIn()
+            case .volvo:
+                // Re-run the browser OAuth with the developer keys already on file.
+                let volvoVIN = preferences.vin(for: .volvo)
+                signInCoordinator.beginVolvoSignIn(
+                    clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "",
+                    nickname: volvoVIN.isEmpty ? "" : preferences.vehicleNickname(for: volvoVIN),
+                    forceInteractive: true
+                )
+            }
         case .switchToBrand(let brand):
             switch brand {
             case .polestar:

@@ -262,9 +262,26 @@ final class VehicleDatabase: @unchecked Sendable {
             let currentVersion = schemaVersion()
             backupBeforeMigration(from: currentVersion)
             runMigrations(from: currentVersion)
+            pruneMigrationBackups()
         } catch {
             // .fault: without a schema every persistence path degrades silently.
             logger.fault("Could not initialize database schema: \(error, privacy: .public)")
+        }
+    }
+
+    /// Removes `*.pre-vN.bak` snapshots once the schema has fully reached the latest version.
+    /// `backupBeforeMigration` writes one (a full-size `VACUUM INTO` copy) before each schema
+    /// bump and nothing ever deleted them, so a few version bumps left several ~20 MB copies
+    /// beside the live database. A failed migration leaves `user_version` below target, so the
+    /// backup is only cleared here after the migration it guards has actually landed.
+    private func pruneMigrationBackups() {
+        guard schemaVersion() >= Self.latestSchemaVersion,
+              db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return }
+        let directory = (db.path as NSString).deletingLastPathComponent
+        let prefix = (db.path as NSString).lastPathComponent + ".pre-v"
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory) else { return }
+        for entry in entries where entry.hasPrefix(prefix) && entry.hasSuffix(".bak") {
+            try? FileManager.default.removeItem(atPath: (directory as NSString).appendingPathComponent(entry))
         }
     }
 
@@ -1426,7 +1443,9 @@ final class VehicleDatabase: @unchecked Sendable {
         commandAuditsOlderThanDays: Int = 180,
         airQualityOlderThanDays: Int = 365,
         connectivityOlderThanDays: Int = 180,
-        cabinClimateOlderThanDays: Int = 180
+        cabinClimateOlderThanDays: Int = 180,
+        vehicleImagesOlderThanDays: Int = 120,
+        vehicleImagesHardCap: Int = 24
     ) {
         let cutoffs: [(sql: String, column: String, days: Int)] = [
             ("DELETE FROM charging_sessions WHERE started_at < ?;", "started_at", chargingSessionsOlderThanDays),
@@ -1434,7 +1453,11 @@ final class VehicleDatabase: @unchecked Sendable {
             ("DELETE FROM remote_commands_log WHERE executed_at < ?;", "executed_at", commandAuditsOlderThanDays),
             ("DELETE FROM air_quality_history WHERE timestamp < ?;", "timestamp", airQualityOlderThanDays),
             ("DELETE FROM connectivity_history WHERE timestamp < ?;", "timestamp", connectivityOlderThanDays),
-            ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays)
+            ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays),
+            // The render-image cache stores a full-resolution PNG plus a thumbnail per
+            // (vin, angle) and was never pruned — it is the single biggest contributor to a
+            // multi-megabyte database on accounts that have tried several render angles.
+            ("DELETE FROM vehicle_images WHERE updated_at < ?;", "updated_at", vehicleImagesOlderThanDays)
         ]
         try? db.withTransaction {
             for (sql, _, days) in cutoffs {
@@ -1444,6 +1467,13 @@ final class VehicleDatabase: @unchecked Sendable {
                     try stmt.executeUpdate()
                 } process: { _ in }
             }
+            // Hard ceiling regardless of age: keep only the most-recently-refreshed rows.
+            try db.query(
+                sql: "DELETE FROM vehicle_images WHERE rowid NOT IN (SELECT rowid FROM vehicle_images ORDER BY updated_at DESC LIMIT ?);"
+            ) { stmt in
+                try stmt.bindInt64(Int64(vehicleImagesHardCap), at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
         }
         vacuum()
     }

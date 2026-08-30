@@ -6,6 +6,7 @@ enum CommandAvailability: Equatable, Sendable {
     case unsupportedByVehicle
     case unimplementedByProvider
     case unavailableWhileBusy
+    case unavailableUntilRefresh
 
     var isAvailable: Bool { self == .available }
 
@@ -24,6 +25,8 @@ enum CommandAvailability: Equatable, Sendable {
             return L10n.text("Not available through this account's vehicle service.")
         case .unavailableWhileBusy:
             return L10n.text("Another remote command is still running.")
+        case .unavailableUntilRefresh:
+            return L10n.text("Refresh vehicle data before sending a command.")
         }
     }
 }
@@ -41,6 +44,7 @@ struct CapabilityGate: Sendable {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard command.isImplemented(by: brand) else { return .unimplementedByProvider }
         guard state.capabilityProfile.permits(command.requiredCapability) else { return .unsupportedByVehicle }
+        guard Date().timeIntervalSince(state.fetchedAt) < 10 * 60 else { return .unavailableUntilRefresh }
         guard !commandInProgress else { return .unavailableWhileBusy }
         return .available
     }

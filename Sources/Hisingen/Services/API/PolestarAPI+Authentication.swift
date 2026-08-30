@@ -109,6 +109,13 @@ extension PolestarAPI {
         try? keychain.deleteCommandSessionToken()
     }
 
+    /// See `VehicleProviding.hasWarmSession`. A stored refresh token plus known vehicles and a
+    /// discovered token endpoint is enough for `fetchVehicleState` to run; the access token is
+    /// refreshed lazily inside that path.
+    var hasWarmSession: Bool {
+        refreshToken != nil && tokenEndpoint != nil && !cars.isEmpty
+    }
+
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else { throw PolestarError.authenticationRequired(.noStoredSession) }
         clearAccountState(keepRefreshToken: true)

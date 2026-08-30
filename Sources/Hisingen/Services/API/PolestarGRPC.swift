@@ -48,7 +48,46 @@ actor PolestarGRPC {
     /// server expects an ongoing connection.
     var useStreaming = false
 
+    /// Full gRPC paths (`service/Method`) that answered a read with status 12 UNIMPLEMENTED.
+    /// Not deployed for this backend/vehicle, so they are skipped for the rest of the process
+    /// rather than re-attempted — and failing — on every refresh. Cleared by
+    /// `invalidateDiscoveredHost()` so a host/region change gets a fresh probe.
+    var unimplementedReadPaths: Set<String>
+    private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
+
+    /// Single-flight guard for `fetchLocation`: one telemetry sweep asks for the vehicle's
+    /// location directly *and* again inside `fetchWeather`, so without this the location RPC
+    /// (which itself walks several candidate endpoints) ran twice per refresh.
+    var locationInFlight: [String: Task<VehicleLocation?, Error>] = [:]
+    var chargeLocationsInFlight: [String: Task<Data, Error>] = [:]
+
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
+
+    /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError`. The read paths
+    /// used to collapse every status into `invalidResponse("gRPC status N")`, so a permanently
+    /// unimplemented service (12) was indistinguishable from a transient blip (14) and a real
+    /// `16 UNAUTHENTICATED` never triggered re-authentication.
+    static func readStatusError(status: String, path: String) -> PolestarError {
+        let service = path.split(separator: "/").first.map(String.init) ?? path
+        switch status {
+        case "12": return .grpcUnimplemented(service: service)
+        case "14": return .grpcUnavailable(service: service)
+        case "16": return .authenticationRequired(.expiredSession)
+        default:   return .invalidResponse(operation: "gRPC status \(status)")
+        }
+    }
+
+    /// Applies `readStatusError` and, for UNIMPLEMENTED, remembers the path so it is not
+    /// retried. Call from every read helper's non-zero-status branch.
+    func readStatusFailure(status: String, path: String) -> PolestarError {
+        let error = Self.readStatusError(status: status, path: path)
+        if case .grpcUnimplemented = error,
+           unimplementedReadPaths.insert(path).inserted {
+            UserDefaults.standard.set(Array(unimplementedReadPaths).sorted(),
+                                      forKey: Self.unimplementedReadPathsKey)
+        }
+        return error
+    }
 
     #if DEBUG
     /// Test hook: seeds vehicle-advertised charging bounds without a network round-trip.
@@ -135,7 +174,7 @@ actor PolestarGRPC {
         }
         guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
         if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            throw PolestarError.invalidResponse(operation: "live gRPC status \(status)")
+            throw Self.readStatusError(status: status, path: path)
         }
 
         var header: [UInt8] = []
@@ -179,6 +218,8 @@ actor PolestarGRPC {
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
         session = URLSession(configuration: config)
+        unimplementedReadPaths = Set(UserDefaults.standard.stringArray(
+            forKey: Self.unimplementedReadPathsKey) ?? [])
     }
 
 
@@ -296,6 +337,8 @@ actor PolestarGRPC {
         otaRawSoftwareStates = [:]
         capabilityLimits = [:]
         exteriorCache = [:]
+        // Negative service capabilities survive host rediscovery and relaunch. A provider
+        // service that is not deployed should not be probed once per process forever.
     }
 
 
@@ -322,6 +365,9 @@ actor PolestarGRPC {
 
     func firstMessage(path: String, message: Data, vin: String,
                       accessToken: String, host: GRPCHost = .c3) async throws -> Data {
+        if unimplementedReadPaths.contains(path) {
+            throw PolestarError.grpcUnimplemented(service: path.split(separator: "/").first.map(String.init) ?? path)
+        }
         let base = try await resolvedHost(host, accessToken: accessToken)
         var request = URLRequest(url: base.appendingPathComponent(path))
         request.httpMethod = "POST"
@@ -354,7 +400,7 @@ actor PolestarGRPC {
                 throw PolestarError.server(statusCode: http.statusCode)
             }
             if let grpcStatus, grpcStatus != "0" {
-                throw PolestarError.invalidResponse(operation: "gRPC status \(grpcStatus)")
+                throw readStatusFailure(status: grpcStatus, path: path)
             }
 
             var header = [UInt8]()

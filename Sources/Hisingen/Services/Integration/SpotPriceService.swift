@@ -124,10 +124,10 @@ enum SpotPriceServiceError: LocalizedError {
 }
 
 /// Fetches Swedish day-ahead electricity prices from elprisetjustnu.se — a free, key-less,
-/// public feed. These calls deliberately use a plain `URLSession` rather than the provider
-/// `perform()` path: the data carries no credentials or PII, and it should not appear in the
-/// vehicle-API diagnostic log. elprisetjustnu.se asks non-commercial callers to send an
-/// identifying `User-Agent`, so this does.
+/// public feed. It is recorded under the first-party `.hisingen` diagnostic provider (never
+/// Volvo/Polestar), which makes smart-charging failures inspectable without confusing vehicle
+/// API traffic. elprisetjustnu.se asks non-commercial callers to send an identifying
+/// `User-Agent`, so this does.
 struct SpotPriceService: Sendable {
     let session: URLSession
 
@@ -163,12 +163,28 @@ struct SpotPriceService: Sendable {
         var request = URLRequest(url: url)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw SpotPriceServiceError.invalidResponse
+        let startedAt = Date()
+        var responseRecorded = false
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw SpotPriceServiceError.invalidResponse
+            }
+            await APIDiagnosticLogStore.shared.record(
+                provider: .hisingen, request: request, operation: "spot-price day-ahead",
+                statusCode: http.statusCode, responseBytes: data.count,
+                responseData: data, startedAt: startedAt)
+            responseRecorded = true
+            guard http.statusCode == 200 else { throw SpotPriceServiceError.httpStatus(http.statusCode) }
+            return try Self.decode(data)
+        } catch {
+            if !responseRecorded {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .hisingen, request: request, operation: "spot-price day-ahead",
+                    startedAt: startedAt, error: error)
+            }
+            throw error
         }
-        guard http.statusCode == 200 else { throw SpotPriceServiceError.httpStatus(http.statusCode) }
-        return try Self.decode(data)
     }
 
     func fetchTodayAndTomorrow(area: SwedishPriceArea, now: Date = Date(),

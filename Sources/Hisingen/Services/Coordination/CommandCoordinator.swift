@@ -95,9 +95,14 @@ final class CommandCoordinator {
         guard availability == .available else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: availability == .disabledBySettings
-                    ? RemoteCommandError.disabled.localizedDescription
-                    : RemoteCommandError.unsupported.localizedDescription,
+                message: {
+                    switch availability {
+                    case .disabledBySettings: return RemoteCommandError.disabled.localizedDescription
+                    case .unavailableUntilRefresh: return RemoteCommandError.missingContext.localizedDescription
+                    case .unavailableWhileBusy: return RemoteCommandError.busy.localizedDescription
+                    default: return RemoteCommandError.unsupported.localizedDescription
+                    }
+                }(),
                 success: false)
             return
         }

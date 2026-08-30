@@ -60,8 +60,11 @@ extension PolestarGRPC {
                     return result
                 }
             }
-        } catch {
-
+            // A successful but empty Odometer response means this vehicle exposes no trip
+            // fields there. Do not turn that into a guaranteed-failing Dashboard probe.
+            return nil
+        } catch let error as PolestarError {
+            guard case .grpcUnimplemented = error else { throw error }
         }
         let body = try await firstMessage(path: Self.dashboardPath, message: Self.vehicleRequest(vin),
                                           vin: vin, accessToken: accessToken)
@@ -141,10 +144,19 @@ extension PolestarGRPC {
     /// (1 recent / 2 saved / 3 saved third-party). Field semantics cross-checked against
     /// the independently built kildahldev/unofficial-polestar-api client.
     func fetchChargeLocations(vin: String, accessToken: String) async throws -> [ChargeLocationSnapshot] {
-        let body = try await firstMessage(path: Self.chargeLocationsPath,
-                                          message: Self.chronosRequest(vin),
-                                          vin: vin, accessToken: accessToken, host: .pccs)
-        return Self.parseChargeLocations(body)
+        Self.parseChargeLocations(try await chargeLocationsBody(vin: vin, accessToken: accessToken))
+    }
+
+    private func chargeLocationsBody(vin: String, accessToken: String) async throws -> Data {
+        if let existing = chargeLocationsInFlight[vin] { return try await existing.value }
+        let task = Task {
+            try await self.firstMessage(path: Self.chargeLocationsPath,
+                                        message: Self.chronosRequest(vin),
+                                        vin: vin, accessToken: accessToken, host: .pccs)
+        }
+        chargeLocationsInFlight[vin] = task
+        defer { chargeLocationsInFlight[vin] = nil }
+        return try await task.value
     }
 
     static func parseChargeLocations(_ data: Data) -> [ChargeLocationSnapshot] {
@@ -184,9 +196,7 @@ extension PolestarGRPC {
             }
         } catch { errors.append(error) }
         do {
-            let body = try await firstMessage(path: Self.chargeLocationsPath,
-                                              message: Self.chronosRequest(vin),
-                                              vin: vin, accessToken: accessToken, host: .pccs)
+            let body = try await chargeLocationsBody(vin: vin, accessToken: accessToken)
             schedules.append(contentsOf: Self.parseChargeLocationSchedules(body))
         } catch { errors.append(error) }
 
@@ -411,6 +421,16 @@ extension PolestarGRPC {
 
 
     func fetchLocation(vin: String, accessToken: String) async throws -> VehicleLocation? {
+        if let existing = locationInFlight[vin] {
+            return try await existing.value
+        }
+        let task = Task { try await self.fetchLocationUncached(vin: vin, accessToken: accessToken) }
+        locationInFlight[vin] = task
+        defer { locationInFlight[vin] = nil }
+        return try await task.value
+    }
+
+    private func fetchLocationUncached(vin: String, accessToken: String) async throws -> VehicleLocation? {
         let paths: [(String, GRPCHost)] = [
             (Self.locationPath, .c3),
             ("/services.vehiclestates.location.LocationService/GetLatestLocation", .c3),
@@ -491,8 +511,27 @@ extension PolestarGRPC {
         guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
-        guard let (data, response) = try? await session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
+        let startedAt = Date()
+        let data: Data
+        let http: HTTPURLResponse
+        do {
+            let result = try await session.data(for: request)
+            data = result.0
+            guard let response = result.1 as? HTTPURLResponse else {
+                throw PolestarError.invalidResponse(operation: "Open-Meteo weather")
+            }
+            http = response
+        } catch {
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "Open-Meteo vehicle weather",
+                startedAt: startedAt, error: error)
+            return nil
+        }
+        await APIDiagnosticLogStore.shared.record(
+            provider: .polestar, request: request, operation: "Open-Meteo vehicle weather",
+            statusCode: http.statusCode, responseBytes: data.count,
+            responseData: data, startedAt: startedAt)
+        guard http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let current = json["current"] as? [String: Any] else { return nil }
 

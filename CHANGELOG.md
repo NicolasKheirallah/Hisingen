@@ -7,6 +7,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- Settings → Account has a one-click **Re-sign In** for each connected brand that renews the
+  session without re-entering anything — Polestar through its interactive browser window (no
+  Polestar ID password), Volvo by re-running the browser OAuth with the developer keys
+  already saved. When a brand's session has expired but its credentials are still on file the
+  card now says "Session Expired" and shows the Re-sign In button prominently, instead of
+  reverting to the full "Not Connected" credential form.
 - Spot-price charging recommendation on the Controls tab: fetches Swedish day-ahead
   electricity prices (elprisetjustnu.se, areas SE1–SE4), finds the cheapest contiguous
   window long enough to reach the charge target from the current state of charge, and
@@ -67,6 +73,82 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- Hardened API diagnostics after an exhaustive support-bundle audit:
+  - OAuth/token response bodies are now metadata-only, every JSON key ending in `_token`
+    is redacted, and long OAuth transaction identifiers are removed from endpoint paths.
+  - Each retained request carries app/build/process/launch provenance, an explicit payload
+    omission reason, and a semantic outcome so GraphQL/property failures inside HTTP 200
+    responses appear as errors in the live inspector.
+  - The diagnostic export schema is now version 2 and garage scans report per-brand success,
+    failure, and partial-pass state instead of presenting a failed dormant account as a
+    healthy zero-vehicle scan.
+- Coalesced simultaneous Polestar OIDC discovery and saved-charge-location requests, persisted
+  negative gRPC service capabilities and VDMS backoff across relaunches, and stopped the empty
+  odometer response from falling through to the unsupported Dashboard service.
+- Added category-specific Volvo telemetry caching for slow-changing diagnostics, tyres,
+  warnings, odometer, statistics, command lists, fuel, and location; preserved permission and
+  market backoffs through session resets; and now distinguish a location market restriction
+  from a missing permission on other endpoints.
+- A second Hisingen process now activates the existing menu-bar instance and exits before it
+  can race rotating refresh tokens, Keychain writes, or the persistent diagnostic ring.
+- Remote controls now require a provider-backed state fetched within the last ten minutes,
+  preventing commands from becoming active against a stale startup snapshot.
+- Cut redundant background network traffic found in a diagnostic bundle:
+  - The five-minute garage scan no longer re-restores a dormant brand's session every
+    pass. It only re-establishes a session that has actually gone cold; a warm one already
+    has everything `fetchVehicleState` needs, and its access token is renewed lazily. This
+    removes a forced token grant and a full vehicle re-discovery per pass per dormant brand.
+  - The Volvo token refresh is properly single-flighted: a grant that landed seconds ago is
+    reused instead of every request in the ~20-endpoint telemetry fan-out (and every request
+    that `401`s at once) starting its own, and the renewal threshold now scales to a
+    short-lived token instead of treating it as perpetually stale.
+  - Polestar reads now map gRPC status codes the way the command path already did — `12`
+    UNIMPLEMENTED, `14` UNAVAILABLE, `16` UNAUTHENTICATED — instead of collapsing everything
+    into "unexpected response". An unimplemented service (e.g. `GetLatestDashboard` on
+    Polestar) is remembered and skipped for the rest of the session and backed off for
+    hours, rather than re-called and re-failed every refresh; a `16` on a read now triggers
+    re-authentication.
+  - The app-backend "VDMS" discovery source (colour, upholstery, wheels, package names)
+    started answering `426 Upgrade Required`: the spoofed `X-Polestar-Force-Update-Version`
+    was `6.2.0`, which is below the backend's current floor and does not match any real
+    Polestar app build (the Android app is on 5.x). It now sends `5.11.0` /
+    `PolestarApp/5.11.0b1111 Android/14` — the value cross-checked against
+    `kildahldev/unofficial-polestar-api`, which hit the identical 426 and fixed it with the
+    same bump.
+  - Past the 426, VDMS then rejected the token with "Could not validate the accessToken":
+    the app-backend validates against the *command* client (`lp8dyrd_10`), not the web
+    session token. VDMS discovery now uses the command-client token when remote commands are
+    authorized, and is skipped entirely otherwise (rather than firing a request that is
+    guaranteed to fail). A 426, an API-shape mismatch, or a token the app-backend refuses to
+    validate now backs VDMS off for a day instead of being re-attempted on every discovery.
+  - A Volvo refresh token the identity provider has declared dead (`invalid_grant` /
+    `expired_token`) is now cleared from memory and the Keychain the moment it is rejected,
+    so `hasResumableSession` flips to false and the resume / five-minute garage-scan loop
+    stops replaying it — every replay was a failed login counting toward Volvo's per-client
+    lockout. A bare 401, `invalid_client`, or a network error still leaves the credential
+    untouched.
+  - Stale `*.pre-vN.bak` database snapshots (a full-size `VACUUM INTO` copy written before
+    each schema migration and never deleted — several ~20 MB files beside the live database
+    after a few version bumps) are now pruned once the schema has fully reached the latest
+    version.
+  - Polestar location is fetched once per refresh: the weather lookup reused the location
+    the telemetry sweep already fetched instead of issuing its own.
+  - The Polestar OIDC well-known document is cached for six hours instead of re-fetched on
+    every session restore / brand switch.
+  - Volvo endpoint back-offs (e.g. a region-restricted `location` endpoint returning `403`)
+    now persist across launches, so a known-unavailable endpoint is not re-probed once per
+    launch forever.
+  - Spotlight indexing stops retrying for the session once the system reports it is
+    unavailable (`CSIndexErrorDomain` -1000), and cancelled requests (`URLError.cancelled`
+    / -999, normal during teardown) are no longer written to the API diagnostic log as errors.
+- The render-image cache (`vehicle_images`) is now pruned by the weekly retention job —
+  entries older than 120 days and a hard ceiling of 24 rows — instead of growing unbounded;
+  a full-resolution PNG plus thumbnail per (vin, angle) was the largest contributor to a
+  multi-megabyte database.
+- Diagnostic bundles now include a `garageScan` section (passes, last-pass duration,
+  vehicles scanned). `refreshDiagnostics.refreshAttempts` only ever counted the active-brand
+  refresh loop, so a bundle could show "7 refreshes" while the garage scan had quietly made
+  hundreds of requests against the dormant brand.
 - Polestar remote-command authorization is now surfaced and diagnosed properly. Settings →
   Remote Controls shows whether the command client is authorized and marks the exact
   toggles that need it (locks, climate, windows, cabin cleaning, locate); charging,

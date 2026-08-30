@@ -4,6 +4,16 @@ import Testing
 
 struct RemoteCommandTests {
     @Test
+    func testStaleVehicleSnapshotDisablesCommandsUntilRefresh() {
+        var state = vehicle(vin: "YSMSTALE")
+        state.fetchedAt = Date().addingTimeInterval(-11 * 60)
+        let availability = CapabilityGate().availability(
+            for: .lock, state: state, brand: .polestar,
+            enabledFeatures: [.remoteLocks], commandInProgress: false)
+        XCTAssertEqual(availability, .unavailableUntilRefresh)
+    }
+
+    @Test
     @MainActor
     func testAuthorizedCommandIsDiscardedWhenVehicleChangesBeforeExecution() async throws {
         let suiteName = "HisingenTests.command-context.\(UUID().uuidString)"
@@ -660,6 +670,7 @@ private final class CommandContextMock: CommandExecutionContext {
 private actor CommandContextProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMFIRST", title: "First")]
+    var hasWarmSession: Bool { true }
     private var executedVINs: [String] = []
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}

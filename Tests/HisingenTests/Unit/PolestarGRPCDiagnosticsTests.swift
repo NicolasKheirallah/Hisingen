@@ -43,4 +43,41 @@ struct PolestarGRPCDiagnosticsTests {
         #expect(messagePart.count == 120)
         #expect(!label.contains(String(repeating: "a", count: 200)))
     }
+
+    /// Read paths used to collapse every non-zero gRPC status into a generic
+    /// `invalidResponse`; the typed mapping is what lets a permanently-unimplemented service
+    /// be negative-cached and a `16` trigger re-auth.
+    @Test
+    func readStatusMapsWellKnownCodes() {
+        let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
+
+        if case .grpcUnimplemented(let service) = PolestarGRPC.readStatusError(status: "12", path: path) {
+            #expect(service == "services.vehiclestates.dashboard.DashboardService")
+        } else {
+            Issue.record("status 12 must map to grpcUnimplemented")
+        }
+        if case .grpcUnavailable = PolestarGRPC.readStatusError(status: "14", path: path) {} else {
+            Issue.record("status 14 must map to grpcUnavailable")
+        }
+        if case .authenticationRequired = PolestarGRPC.readStatusError(status: "16", path: path) {} else {
+            Issue.record("status 16 must map to authenticationRequired")
+        }
+        if case .invalidResponse = PolestarGRPC.readStatusError(status: "7", path: path) {} else {
+            Issue.record("an unmapped status stays invalidResponse")
+        }
+    }
+
+    @Test
+    func unimplementedReadPathIsRememberedAndSkipped() async {
+        let grpc = PolestarGRPC()
+        let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
+
+        let first = await grpc.readStatusFailure(status: "12", path: path)
+        #expect({ if case PolestarError.grpcUnimplemented = first { return true } else { return false } }())
+        #expect(await grpc.unimplementedReadPaths.contains(path))
+
+        // A transient status is not remembered.
+        _ = await grpc.readStatusFailure(status: "14", path: "/x/Y")
+        #expect(await !grpc.unimplementedReadPaths.contains("/x/Y"))
+    }
 }

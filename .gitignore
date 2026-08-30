@@ -19,6 +19,9 @@ DerivedData/
 !.env.example
 *.secret
 sparkle-private.key
+# User-generated support bundles can contain historical identity metadata. They are local
+# evidence, never source artifacts.
+hisingen_diagnostics_*.json
 
 # Generated at build time by Scripts/inject-secrets.sh from .env.secrets or CI
 # secrets. Never tracked — the XOR masking is trivially reversible, so a

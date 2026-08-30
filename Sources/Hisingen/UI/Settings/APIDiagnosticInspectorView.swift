@@ -6,6 +6,7 @@ enum APIDiagnosticOutcomeFilter: String, CaseIterable, Identifiable, Sendable {
     case clientError
     case serverError
     case transportError
+    case semanticError
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum APIDiagnosticOutcomeFilter: String, CaseIterable, Identifiable, Sendable {
         case .clientError: return L10n.text("4xx")
         case .serverError: return L10n.text("5xx")
         case .transportError: return L10n.text("Network errors")
+        case .semanticError: return L10n.text("API errors")
         }
     }
 }
@@ -40,10 +42,13 @@ struct APIDiagnosticInspectorFilter: Equatable, Sendable {
                 guard entry.statusCode.map({ (500...599).contains($0) }) == true else { return false }
             case .transportError:
                 guard entry.errorType != nil else { return false }
+            case .semanticError:
+                guard entry.semanticErrorType != nil else { return false }
             }
             guard !needle.isEmpty else { return true }
             return [entry.method, entry.endpoint, entry.operation,
-                    entry.statusCode.map(String.init), entry.errorType, entry.responsePayloadJSON]
+                    entry.statusCode.map(String.init), entry.errorType, entry.semanticErrorType,
+                    entry.responsePayloadJSON]
                 .compactMap { $0 }
                 .joined(separator: " ")
                 .lowercased()
@@ -140,6 +145,9 @@ struct APIDiagnosticInspectorView: View {
                             diagnosticDetail(L10n.text("Operation"), entry.operation)
                             diagnosticDetail(L10n.text("Duration"), "\(entry.durationMilliseconds) ms")
                             if let error = entry.errorType { diagnosticDetail(L10n.text("Error"), error) }
+                            if let error = entry.semanticErrorType {
+                                diagnosticDetail(L10n.text("API outcome"), error)
+                            }
                             if let payload = entry.responsePayloadJSON {
                                 Text(payload)
                                     .font(.system(size: 10, design: .monospaced))
@@ -148,7 +156,8 @@ struct APIDiagnosticInspectorView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
                             } else if entry.payloadOmitted {
-                                Text(L10n.text("Payload omitted by the retention budget."))
+                                Text(L10n.format("Payload omitted (%@).",
+                                                 entry.payloadOmissionReason ?? "unknown"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -165,7 +174,8 @@ struct APIDiagnosticInspectorView: View {
                             if let status = entry.statusCode {
                                 Text(String(status))
                                     .font(.caption.monospacedDigit())
-                                    .foregroundStyle(status >= 400 ? Color.red : Color.secondary)
+                                .foregroundStyle(status >= 400 || entry.semanticErrorType != nil
+                                                 ? Color.red : Color.secondary)
                             } else if entry.errorType != nil {
                                 Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
                             }
