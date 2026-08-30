@@ -106,6 +106,13 @@ actor GarageScanDiagnosticsStore {
         stats.vehiclesScannedTotal += vehiclesScanned
     }
 
+    func recordPassAborted(vehiclesScanned: Int) {
+        stats.lastPassWasPartial = true
+        // Captured snapshots remain real work even when a user action interrupts the rest of
+        // the pass. Count them once here; completed passes account for theirs above.
+        stats.vehiclesScannedTotal += vehiclesScanned
+    }
+
     func current() -> GarageScanDiagnostics { stats }
 }
 
@@ -845,16 +852,21 @@ final class RefreshCoordinator {
             while !Task.isCancelled {
                 guard let self, requestGeneration == self.generation,
                       self.latest?.vin == vin else { return }
+                let streamStartedAt = Date()
+                var receivedFrame = false
                 do {
                     let stream = try await streaming.liveVehicleUpdates(vin: vin)
                     self.liveStreamConnected = true
                     self.liveStreamRetryAt = nil
                     self.publishDiagnostics()
-                    failure = 0
                     for try await update in stream {
                         try Task.checkCancellation()
                         guard requestGeneration == self.generation,
                               var current = self.latest, current.vin == vin else { return }
+                        // Connecting is not "healthy" — a sleeping vehicle can idle-time-out
+                        // repeatedly without ever sending a frame. Only a real frame clears
+                        // the backoff.
+                        if !receivedFrame { receivedFrame = true; failure = 0 }
                         current.applyLiveUpdate(update)
                         self.latest = current
                         let now = Date()
@@ -871,10 +883,21 @@ final class RefreshCoordinator {
                     return
                 } catch {
                     self.liveStreamConnected = false
+                    // A stream that carried frames, or stayed up for minutes before the
+                    // request-inactivity timeout on an idle parked vehicle, is not a flap:
+                    // reset the backoff and log softly. A fast, frameless failure keeps
+                    // escalating and is surfaced as a warning.
+                    let looksHealthy = receivedFrame
+                        || Date().timeIntervalSince(streamStartedAt) >= 5 * 60
+                    if looksHealthy { failure = 0 }
                     failure += 1
                     let delay = min(5 * pow(2, Double(min(failure - 1, 4))), 60)
                     self.liveStreamRetryAt = Date().addingTimeInterval(delay)
-                    self.logger.warning("Live stream dropped; retrying in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
+                    if looksHealthy {
+                        self.logger.debug("Live stream reconnecting in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
+                    } else {
+                        self.logger.warning("Live stream dropped; retrying in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
+                    }
                     self.publishDiagnostics()
                     do { try await Task.sleep(for: .seconds(delay)) }
                     catch { return }

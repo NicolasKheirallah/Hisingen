@@ -69,7 +69,10 @@ struct PolestarGRPCDiagnosticsTests {
 
     @Test
     func unimplementedReadPathIsRememberedAndSkipped() async {
-        let grpc = PolestarGRPC()
+        let suite = "HisingenPolestarGRPCDiagnostics.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite)
         let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
 
         let first = await grpc.readStatusFailure(status: "12", path: path)
@@ -79,5 +82,10 @@ struct PolestarGRPCDiagnosticsTests {
         // A transient status is not remembered.
         _ = await grpc.readStatusFailure(status: "14", path: "/x/Y")
         #expect(await !grpc.unimplementedReadPaths.contains("/x/Y"))
+
+        // A fresh actor restores the bounded negative capability from disk.
+        let restored = PolestarGRPC(defaultsSuiteName: suite)
+        #expect(await restored.unimplementedReadPaths.contains(path))
+        #expect(await restored.unimplementedReadPathExpirations[path] != nil)
     }
 }

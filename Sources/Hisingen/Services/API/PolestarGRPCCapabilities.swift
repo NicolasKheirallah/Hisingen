@@ -148,14 +148,17 @@ extension PolestarGRPC {
     }
 
     private func chargeLocationsBody(vin: String, accessToken: String) async throws -> Data {
-        if let existing = chargeLocationsInFlight[vin] { return try await existing.value }
+        if let existing = chargeLocationsInFlight[vin] { return try await existing.task.value }
+        let requestID = UUID()
         let task = Task {
             try await self.firstMessage(path: Self.chargeLocationsPath,
                                         message: Self.chronosRequest(vin),
                                         vin: vin, accessToken: accessToken, host: .pccs)
         }
-        chargeLocationsInFlight[vin] = task
-        defer { chargeLocationsInFlight[vin] = nil }
+        chargeLocationsInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
+        defer {
+            if chargeLocationsInFlight[vin]?.id == requestID { chargeLocationsInFlight[vin] = nil }
+        }
         return try await task.value
     }
 
@@ -238,17 +241,41 @@ extension PolestarGRPC {
         request.setValue(vin, forHTTPHeaderField: "vin")
         request.httpBody = Protobuf.grpcFrame(Self.chronosEnvelope(vin: vin))
 
+        let startedAt = Date()
+        var httpStatus: Int?
+        var grpcStatus: String?
+        var grpcMessage: String?
         do {
             let (bytes, response) = try await longSession.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .polestar, request: request, operation: "gRPC errors",
+                    startedAt: startedAt,
+                    error: PolestarError.invalidResponse(operation: "gRPC errors"))
                 return []
             }
-            if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
+            httpStatus = http.statusCode
+            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
+            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
+            if let status = grpcStatus, status != "0" {
                 // 12=UNIMPLEMENTED, 14=UNAVAILABLE — service not deployed; no errors to report.
-                if status == "12" || status == "14" { return [] }
+                if status == "12" || status == "14" {
+                    await APIDiagnosticLogStore.shared.record(
+                        provider: .polestar, request: request,
+                        operation: Self.diagnosticOperation("gRPC errors", grpcStatus: status,
+                                                            grpcMessage: grpcMessage),
+                        statusCode: http.statusCode, startedAt: startedAt)
+                    return []
+                }
                 throw PolestarError.invalidResponse(operation: "gRPC errors status \(status)")
             }
-            guard http.statusCode == 200 else { return [] }
+            guard http.statusCode == 200 else {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .polestar, request: request, operation: "gRPC errors",
+                    statusCode: http.statusCode, startedAt: startedAt,
+                    error: PolestarError.server(statusCode: http.statusCode))
+                return []
+            }
             var header = [UInt8]()
             var body = Data()
             var expected: Int?
@@ -264,11 +291,33 @@ extension PolestarGRPC {
                 body.append(byte)
                 if let frameSize = expected, body.count == frameSize { break }
             }
-            guard !body.isEmpty else { return [] }
+            guard !body.isEmpty else {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .polestar, request: request, operation: "gRPC errors",
+                    statusCode: http.statusCode, responseBytes: 0,
+                    responseData: Data(), startedAt: startedAt)
+                return []
+            }
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "gRPC errors",
+                statusCode: http.statusCode, responseBytes: body.count,
+                responseData: body, startedAt: startedAt)
             return Self.parseErrors(body)
         } catch let error as URLError where error.code == .timedOut {
             // Server-streaming timeout — service didn't respond; treat as no errors.
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
+                                                    grpcMessage: grpcMessage),
+                statusCode: httpStatus, startedAt: startedAt, error: error)
             return []
+        } catch {
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
+                                                    grpcMessage: grpcMessage),
+                statusCode: httpStatus, startedAt: startedAt, error: error)
+            throw error
         }
     }
 
@@ -422,11 +471,14 @@ extension PolestarGRPC {
 
     func fetchLocation(vin: String, accessToken: String) async throws -> VehicleLocation? {
         if let existing = locationInFlight[vin] {
-            return try await existing.value
+            return try await existing.task.value
         }
+        let requestID = UUID()
         let task = Task { try await self.fetchLocationUncached(vin: vin, accessToken: accessToken) }
-        locationInFlight[vin] = task
-        defer { locationInFlight[vin] = nil }
+        locationInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
+        defer {
+            if locationInFlight[vin]?.id == requestID { locationInFlight[vin] = nil }
+        }
         return try await task.value
     }
 

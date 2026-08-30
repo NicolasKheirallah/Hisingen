@@ -45,11 +45,11 @@ struct AccountCredentialsForm: View {
         guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
         switch selectedBrand {
         case .polestar:
-            return !preferences.email.isEmpty
+            return Keychain.hasStoredPolestarEmail
         case .volvo:
             let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
             let hasSecrets = BuiltinVolvoSecrets.isConfigured
-                || ((try? Keychain.readVolvoClientSecret()) ?? nil)?.isEmpty == false
+                || Keychain.hasStoredVolvoAppCredentials
             return hasClientID && hasSecrets
         }
     }

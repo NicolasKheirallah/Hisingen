@@ -196,9 +196,12 @@ struct GraphQLDecodingTests {
     func volvoSlowChangingTelemetryUsesLongerTTLs() {
         XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "doors"), 0)
         XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "command-accessibility"), 5 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "warnings"), 5 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "tyres"), 5 * 60)
         XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "location"), 15 * 60)
-        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "diagnostics"), 60 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "odometer"), 15 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "brakes"), 15 * 60)
+        XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "commands"), 60 * 60)
     }
 }
-
 

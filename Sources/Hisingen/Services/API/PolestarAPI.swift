@@ -56,6 +56,7 @@ actor PolestarAPI {
     var webPendingState: String?
     /// Single-flight guard for the command client's refresh grant (see `commandClientAuthorization`).
     var commandRefreshTask: Task<CommandClientAuthorization, Never>?
+    var commandRefreshTaskID: UUID?
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
@@ -67,6 +68,7 @@ actor PolestarAPI {
     var refreshToken: String?
     var tokenExpiry: Date?
     var refreshTask: Task<TokenResponseDTO, Error>?
+    var refreshTaskID: UUID?
 
     var tokenEndpoint: URL?
     var authorizationEndpoint: URL?
@@ -117,11 +119,12 @@ actor PolestarAPI {
     var capabilityCache: [String: CapabilityCacheEntry] = [:]
     var remoteCommandsInFlight: Set<String> = []
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
+    private var imageDownloadTaskIDs: [String: UUID] = [:]
     /// Bumped whenever account state is cleared/reset. Multi-step operations capture it on
     /// entry and drop their results if a reset interleaved — the actor serializes individual
     /// writes but not whole logical transactions (e.g. a slow discovery from a superseded
     /// login could otherwise repopulate `cars` after sign-out cleared them).
-    private var sessionEpoch = 0
+    var sessionEpoch = 0
     let preferences: PreferencesStore
 
     @MainActor
@@ -488,9 +491,10 @@ actor PolestarAPI {
     }
 
     func refreshAccessToken(force: Bool) async throws {
+        let requestEpoch = sessionEpoch
         if !force, let expiry = tokenExpiry, expiry.timeIntervalSinceNow >= 300 { return }
         if let refreshTask {
-            try apply(try await refreshTask.value)
+            try await applyRefreshResult(from: refreshTask, requestEpoch: requestEpoch)
             return
         }
         guard let tokenEndpoint, let refreshToken else {
@@ -506,24 +510,51 @@ actor PolestarAPI {
         ])
         let tokenRequest = request
         let currentSession = session
+        let taskID = UUID()
         let task = Task {
             try await Self.requestToken(request: tokenRequest, session: currentSession,
                                         invalidReason: .expiredSession)
         }
         refreshTask = task
-        defer { refreshTask = nil }
-        try apply(try await task.value)
+        refreshTaskID = taskID
+        defer {
+            if refreshTaskID == taskID {
+                refreshTask = nil
+                refreshTaskID = nil
+            }
+        }
+        try await applyRefreshResult(from: task, requestEpoch: requestEpoch)
+    }
+
+    private func applyRefreshResult(from task: Task<TokenResponseDTO, Error>,
+                                    requestEpoch: Int) async throws {
+        do {
+            let token = try await task.value
+            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            try apply(token)
+        } catch {
+            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            throw error
+        }
     }
 
     private func apply(_ token: TokenResponseDTO) throws {
         let previousRefreshToken = refreshToken
         let renewableToken = token.refreshToken ?? refreshToken
-        if let renewableToken, renewableToken != previousRefreshToken {
-            try keychain.saveSessionToken(renewableToken)
-        }
+        // In-memory session first, then best-effort persist: a rotated refresh token has
+        // already invalidated `previousRefreshToken`, so a Keychain write failure (an ACL
+        // denial after the code-signing identity changed between dev builds) must not leave the
+        // app replaying the dead token. A failed persist costs a restart, not the session.
         accessToken = token.accessToken
         refreshToken = renewableToken
         tokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        if let renewableToken, renewableToken != previousRefreshToken {
+            do {
+                try keychain.saveSessionToken(renewableToken)
+            } catch {
+                logger.error("Polestar rotated refresh token could not be persisted; the session will not survive a restart: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     static func requestToken(request: URLRequest, session: URLSession,
@@ -870,7 +901,8 @@ actor PolestarAPI {
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 256_000, operation: "user information", provider: .polestar),
+                  for: request, using: session, limit: 256_000, operation: "user information",
+                  provider: .polestar, recordDiagnostics: true),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
         ownerFirstName = info.givenName ?? info.firstName
@@ -902,7 +934,8 @@ actor PolestarAPI {
         request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await HTTPBodyReader.data(
-                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata", provider: .polestar),
+                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata",
+                  provider: .polestar, recordDiagnostics: true),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
@@ -917,7 +950,8 @@ actor PolestarAPI {
         if carImages[vin] == nil, let string = pick?["url"] as? String, let url = URL(string: string),
            url.scheme == "https" {
             if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
-                      for: URLRequest(url: url), using: session, limit: 5_000_000, operation: "vehicle image", provider: .polestar),
+                      for: URLRequest(url: url), using: session, limit: 5_000_000,
+                      operation: "vehicle image", provider: .polestar, recordDiagnostics: true),
                   let http = imageResponse as? HTTPURLResponse,
                   http.statusCode == 200,
                   http.mimeType?.hasPrefix("image/") == true,
@@ -967,10 +1001,12 @@ actor PolestarAPI {
         save: @escaping @Sendable (Data) -> Void
     ) {
         guard imageDownloadTasks[key] == nil else { return }
+        let taskID = UUID()
         let task = Task { [weak self, session] in
             do {
                 let (data, response) = try await HTTPBodyReader.data(
-                    for: request, using: session, limit: 5_000_000, operation: operation, provider: .polestar
+                    for: request, using: session, limit: 5_000_000, operation: operation,
+                    provider: .polestar, recordDiagnostics: true
                 )
                 if (response as? HTTPURLResponse)?.statusCode == 200,
                    data.count <= 5_000_000 {
@@ -981,23 +1017,33 @@ actor PolestarAPI {
             } catch {
                 self?.logger.debug("Background image download failed for \(operation, privacy: .public): \(error, privacy: .public)")
             }
-            await self?.finishImageDownload(key)
+            await self?.finishImageDownload(key, taskID: taskID)
         }
         imageDownloadTasks[key] = task
+        imageDownloadTaskIDs[key] = taskID
     }
 
-    private func finishImageDownload(_ key: String) {
+    private func finishImageDownload(_ key: String, taskID: UUID) {
+        guard imageDownloadTaskIDs[key] == taskID else { return }
         imageDownloadTasks[key] = nil
+        imageDownloadTaskIDs[key] = nil
     }
 
     func cancelImageDownloads() {
         imageDownloadTasks.values.forEach { $0.cancel() }
         imageDownloadTasks.removeAll()
+        imageDownloadTaskIDs.removeAll()
     }
 
 
     func clearAccountState(keepRefreshToken: Bool = false) {
         sessionEpoch &+= 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshTaskID = nil
+        commandRefreshTask?.cancel()
+        commandRefreshTask = nil
+        commandRefreshTaskID = nil
         accessToken = nil
         tokenExpiry = nil
         if !keepRefreshToken { refreshToken = nil }

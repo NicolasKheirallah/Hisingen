@@ -80,9 +80,16 @@ final class CommandCoordinator {
         }
         guard context.sessionIsValid, let state = context.vehicleState,
               (preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
+            // Distinguish "still loading" (session fine, first telemetry fetch not back yet
+            // right after launch) from "you need to refresh" — the command is hard-gated on a
+            // snapshot for capability checks and the optimistic patch.
+            let stillLoading = context.sessionIsValid && context.vehicleState == nil
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: RemoteCommandError.missingContext.localizedDescription, success: false)
+                message: stillLoading
+                    ? L10n.text("Vehicle data is still loading — try again in a moment.")
+                    : RemoteCommandError.missingContext.localizedDescription,
+                success: false)
             return
         }
         let availability = gate.availability(

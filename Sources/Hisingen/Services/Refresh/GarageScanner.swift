@@ -39,6 +39,7 @@ final class GarageScanner {
     /// Re-establishes a dormant brand's session before its vehicles are scanned (its provider
     /// is not kept warm). Only invoked for a brand other than the currently active one.
     private let restoreDormantSession: (VehicleBrand) async throws -> Void
+    private let diagnosticsStore: GarageScanDiagnosticsStore
     private weak var context: (any GarageScanContext)?
 
     /// Cadence knobs, injectable so tests do not wait real minutes.
@@ -61,6 +62,7 @@ final class GarageScanner {
          provider: @escaping (VehicleBrand) -> any VehicleProviding,
          hasResumableSession: @escaping (VehicleBrand) -> Bool,
          restoreDormantSession: @escaping (VehicleBrand) async throws -> Void,
+         diagnosticsStore: GarageScanDiagnosticsStore = .shared,
          initialDelay: TimeInterval = 45,
          loopInterval: TimeInterval = 5 * 60) {
         self.context = context
@@ -68,6 +70,7 @@ final class GarageScanner {
         self.provider = provider
         self.hasResumableSession = hasResumableSession
         self.restoreDormantSession = restoreDormantSession
+        self.diagnosticsStore = diagnosticsStore
         self.initialDelay = initialDelay
         self.loopInterval = loopInterval
     }
@@ -119,23 +122,32 @@ final class GarageScanner {
 
         let startedAt = Date()
         vehiclesScannedThisPass = 0
-        await GarageScanDiagnosticsStore.shared.recordPassStart()
+        await diagnosticsStore.recordPassStart()
 
         let originalBrand = preferences.activeBrand
+        var aborted = false
         for brand in VehicleBrand.allCases where hasResumableSession(brand) {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                aborted = true
+                break
+            }
             do {
                 if try await scan(brand: brand, originalBrand: originalBrand, context: context) == .abort {
-                    return
+                    aborted = true
+                    break
                 }
-                await GarageScanDiagnosticsStore.shared.recordBrandSuccess(brand)
+                await diagnosticsStore.recordBrandSuccess(brand)
             } catch {
-                await GarageScanDiagnosticsStore.shared.recordBrandFailure(brand, error: error)
+                await diagnosticsStore.recordBrandFailure(brand, error: error)
                 logger.debug("Background garage refresh for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
-        guard preferences.activeBrand == originalBrand else { return }
-        await GarageScanDiagnosticsStore.shared.recordPassComplete(
+        if preferences.activeBrand != originalBrand { aborted = true }
+        guard !aborted else {
+            await diagnosticsStore.recordPassAborted(vehiclesScanned: vehiclesScannedThisPass)
+            return
+        }
+        await diagnosticsStore.recordPassComplete(
             vehiclesScanned: vehiclesScannedThisPass,
             duration: Date().timeIntervalSince(startedAt)
         )

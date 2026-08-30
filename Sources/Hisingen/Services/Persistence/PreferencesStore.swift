@@ -202,17 +202,12 @@ final class PreferencesStore {
         let result: Bool
         switch brand {
         case .polestar:
-            if ((try? Keychain.readSessionToken()) ?? nil)?.isEmpty == false {
-                result = true
-            } else {
-                result = !email.isEmpty && ((try? Keychain.readPassword()) ?? nil)?.isEmpty == false
-            }
+            // Rendering menus and account cards asks this frequently. Presence bits avoid a
+            // protected Keychain read here; SessionManager still reads and validates the real
+            // token/password when an actual restore begins.
+            result = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
         case .volvo:
-            guard !volvoClientID.isEmpty else {
-                result = false
-                break
-            }
-            result = ((try? Keychain.readVolvoSessionToken()) ?? nil)?.isEmpty == false
+            result = !volvoClientID.isEmpty && keychain.hasStoredVolvoSession
         }
         cachedHasResumableSession[brand] = result
         return result
@@ -225,7 +220,7 @@ final class PreferencesStore {
     /// (`clearCommandAuthorization()`) when the grant is rejected. Charging, timers and OTA
     /// commands do not need it.
     var hasPolestarCommandAuthorization: Bool {
-        ((try? keychain.readCommandSessionToken()) ?? nil)?.isEmpty == false
+        keychain.hasStoredCommandSession
     }
 
     /// Preferred display order of the Charging card's detail rows. Identifiers not present

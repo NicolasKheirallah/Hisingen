@@ -5,6 +5,45 @@ import Testing
 struct RequestConstructionTests {
 
     @Test
+    @MainActor
+    func volvoReadOnlyRetryOmitsApprovalGatedScopes() async throws {
+        let suite = "HisingenVolvoScopeTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.volvoRestrictedScopesEnabled = true
+        let api = VolvoAPI(
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)"),
+            preferences: preferences)
+        await api.configure(clientID: "test-client", clientSecret: "test-secret",
+                            vccApiKey: "test-key")
+
+        let fullURL = try await api.beginSignIn()
+        let fullScope = try #require(URLComponents(url: fullURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "scope" })?.value)
+        let fullScopes = Set(fullScope.split(separator: " ").map(String.init))
+        #expect(fullScopes.contains("conve:lock"))
+        #expect(fullScopes.contains("location:read"))
+
+        let readOnlyURL = try await api.beginSignIn(forceReadOnlyScopes: true)
+        let readOnlyScope = try #require(URLComponents(url: readOnlyURL, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "scope" })?.value)
+        let readOnlyScopes = Set(readOnlyScope.split(separator: " ").map(String.init))
+        #expect(readOnlyScopes.contains("conve:battery_charge_level"))
+        #expect(!readOnlyScopes.contains("conve:lock"))
+        #expect(!readOnlyScopes.contains("location:read"))
+
+        let callback = try #require(URL(string: "https://example.invalid/callback?error=invalid_scope"))
+        do {
+            try await api.completeSignIn(callbackURL: callback, preferredVIN: nil,
+                                         features: preferences.features)
+            Issue.record("invalid_scope must stay distinguishable for the read-only retry")
+        } catch VolvoError.permissionDenied(let operation) {
+            #expect(operation == "invalid_scope")
+        }
+    }
+
+    @Test
     func testLockAndUnlockRequests() throws {
         let lockData = PolestarGRPC.lockRequest("YSMTESTVIN0000001")
         let lockFields = Protobuf.fields(lockData)
@@ -108,5 +147,3 @@ struct RequestConstructionTests {
         return String(data: bytes, encoding: .utf8)
     }
 }
-
-

@@ -79,52 +79,84 @@ struct KeychainStore: Sendable {
     private static let volvoBundleAccount = "volvo-credentials-bundle"
     private static let commandSessionAccount = "polestar-command-refresh-token"
 
+    /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
+    /// Authentication still reads and validates the real Keychain values.
+    var hasStoredPolestarSession: Bool {
+        UserDefaults.standard.bool(forKey: "has_polestar_session")
+    }
+    var hasStoredPolestarPassword: Bool {
+        UserDefaults.standard.bool(forKey: "has_polestar_password")
+    }
+    var hasStoredPolestarEmail: Bool {
+        UserDefaults.standard.bool(forKey: "has_polestar_email")
+    }
+    var hasStoredCommandSession: Bool {
+        UserDefaults.standard.bool(forKey: "has_polestar_cmd_session")
+    }
+    var hasStoredVolvoSession: Bool {
+        UserDefaults.standard.bool(forKey: "has_volvo_session")
+    }
+    var hasStoredVolvoAppCredentials: Bool {
+        UserDefaults.standard.bool(forKey: "has_volvo_client_secret")
+            && UserDefaults.standard.bool(forKey: "has_volvo_api_key")
+    }
+
     func saveEmail(_ email: String) throws {
         try save(email, account: Self.emailAccount)
+        UserDefaults.standard.set(!email.isEmpty, forKey: "has_polestar_email")
     }
     func readEmail() throws -> String? {
-        try read(account: Self.emailAccount)
+        let value = try read(account: Self.emailAccount)
+        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_email")
+        return value
     }
     func deleteEmail() throws {
         try delete(account: Self.emailAccount)
+        UserDefaults.standard.set(false, forKey: "has_polestar_email")
     }
 
     func savePassword(_ password: String) throws {
-        UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
         try save(password, account: Self.passwordAccount)
+        UserDefaults.standard.set(!password.isEmpty, forKey: "has_polestar_password")
     }
     func readPassword() throws -> String? {
-        return try read(account: Self.passwordAccount)
+        let value = try read(account: Self.passwordAccount)
+        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_password")
+        return value
     }
     func deletePassword() throws {
-        UserDefaults.standard.set(false, forKey: "has_polestar_password")
         try delete(account: Self.passwordAccount)
+        UserDefaults.standard.set(false, forKey: "has_polestar_password")
     }
 
     func saveSessionToken(_ token: String) throws {
-        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
         try save(token, account: Self.sessionAccount)
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
     }
     func readSessionToken() throws -> String? {
-        return try read(account: Self.sessionAccount)
+        let value = try read(account: Self.sessionAccount)
+        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_session")
+        return value
     }
     func deleteSessionToken() throws {
-        UserDefaults.standard.set(false, forKey: "has_polestar_session")
         try delete(account: Self.sessionAccount)
+        UserDefaults.standard.set(false, forKey: "has_polestar_session")
     }
 
     /// Refresh token for the Polestar command client, kept separate from the primary session
     /// because the two are issued to different OAuth clients and expire independently.
     func saveCommandSessionToken(_ token: String) throws {
-        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
         try save(token, account: Self.commandSessionAccount)
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
     }
     func readCommandSessionToken() throws -> String? {
-        return try read(account: Self.commandSessionAccount)
+        let value = try read(account: Self.commandSessionAccount)
+        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_cmd_session")
+        return value
     }
     func deleteCommandSessionToken() throws {
-        UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
         try delete(account: Self.commandSessionAccount)
+        UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
     }
 
     func saveVolvoSessionToken(_ token: String) throws {
@@ -132,7 +164,7 @@ struct KeychainStore: Sendable {
     }
 
     func readVolvoSessionToken() throws -> String? {
-        readVolvoBundle().sessionToken
+        try readVolvoBundle().sessionToken
     }
 
     func deleteVolvoSessionToken() throws {
@@ -144,7 +176,7 @@ struct KeychainStore: Sendable {
     }
 
     func readVolvoClientSecret() throws -> String? {
-        readVolvoBundle().clientSecret
+        try readVolvoBundle().clientSecret
     }
 
     func deleteVolvoClientSecret() throws {
@@ -156,7 +188,7 @@ struct KeychainStore: Sendable {
     }
 
     func readVolvoApiKey() throws -> String? {
-        readVolvoBundle().apiKey
+        try readVolvoBundle().apiKey
     }
 
     func deleteVolvoApiKey() throws {
@@ -223,9 +255,12 @@ struct KeychainStore: Sendable {
         attemptWipe("Volvo API key draft") { try deleteVolvoApiKeyDraft() }
         attemptWipe("Volvo credential bundle") { try delete(account: Self.volvoBundleAccount) }
         UserDefaults.standard.removeObject(forKey: "has_polestar_password")
+        UserDefaults.standard.removeObject(forKey: "has_polestar_email")
         UserDefaults.standard.removeObject(forKey: "has_polestar_session")
         UserDefaults.standard.removeObject(forKey: "has_polestar_cmd_session")
         UserDefaults.standard.removeObject(forKey: "has_volvo_session")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_client_secret")
+        UserDefaults.standard.removeObject(forKey: "has_volvo_api_key")
         UserDefaults.standard.removeObject(forKey: "has_polestar_pw_draft")
         UserDefaults.standard.removeObject(forKey: "has_volvo_secret_draft")
         UserDefaults.standard.removeObject(forKey: "has_volvo_key_draft")
@@ -246,37 +281,56 @@ struct KeychainStore: Sendable {
     private func mutateVolvoBundle(_ mutate: (inout VolvoSecretBundle) -> Void) throws {
         volvoBundleLock.lock()
         defer { volvoBundleLock.unlock() }
-        var bundle = readVolvoBundle()
+        var bundle = try readVolvoBundle()
         mutate(&bundle)
         try saveVolvoBundle(bundle)
     }
 
-    private func readVolvoBundle() -> VolvoSecretBundle {
-        if let raw = try? read(account: Self.volvoBundleAccount),
-           let data = raw.data(using: .utf8),
-           let bundle = try? JSONDecoder().decode(VolvoSecretBundle.self, from: data) {
+    private func readVolvoBundle() throws -> VolvoSecretBundle {
+        // Do not collapse a denied/corrupt bundle read into "no credentials": callers that
+        // mutate this read-modify-write item must never overwrite an inaccessible bundle with
+        // a partial value. Throwing also avoids three follow-on legacy queries/prompts.
+        if let raw = try read(account: Self.volvoBundleAccount) {
+            let bundle = try JSONDecoder().decode(VolvoSecretBundle.self, from: Data(raw.utf8))
+            Self.updateVolvoPresenceFlags(bundle)
             return bundle
         }
-        let legacySecret = try? read(account: "volvo-client-secret")
-        let legacyApiKey = try? read(account: "volvo-vcc-api-key")
-        let legacySession = try? read(account: "volvo-refresh-token")
-        let bundle = VolvoSecretBundle(clientSecret: legacySecret ?? nil, apiKey: legacyApiKey ?? nil, sessionToken: legacySession ?? nil)
+        let legacySecret = try read(account: "volvo-client-secret")
+        let legacyApiKey = try read(account: "volvo-vcc-api-key")
+        let legacySession = try read(account: "volvo-refresh-token")
+        let bundle = VolvoSecretBundle(clientSecret: legacySecret, apiKey: legacyApiKey,
+                                       sessionToken: legacySession)
         if legacySecret != nil || legacyApiKey != nil || legacySession != nil {
             try? saveVolvoBundle(bundle)
+        } else {
+            Self.updateVolvoPresenceFlags(bundle)
         }
         return bundle
     }
 
     private func saveVolvoBundle(_ bundle: VolvoSecretBundle) throws {
-        let hasValid = (bundle.clientSecret?.isEmpty == false) && (bundle.apiKey?.isEmpty == false) && (bundle.sessionToken?.isEmpty == false)
-        UserDefaults.standard.set(hasValid, forKey: "has_volvo_session")
         if bundle.clientSecret == nil && bundle.apiKey == nil && bundle.sessionToken == nil {
             try delete(account: Self.volvoBundleAccount)
+            Self.updateVolvoPresenceFlags(bundle)
             return
         }
         let data = try JSONEncoder().encode(bundle)
         guard let str = String(data: data, encoding: .utf8) else { return }
         try save(str, account: Self.volvoBundleAccount)
+        Self.updateVolvoPresenceFlags(bundle)
+    }
+
+    /// Non-secret presence bits let SwiftUI render account state without reading a protected
+    /// Keychain item on every body evaluation. The actual values remain Keychain-only and are
+    /// still read by the explicit sign-in/session paths that need them.
+    private static func updateVolvoPresenceFlags(_ bundle: VolvoSecretBundle) {
+        let defaults = UserDefaults.standard
+        let hasSecret = bundle.clientSecret?.isEmpty == false
+        let hasAPIKey = bundle.apiKey?.isEmpty == false
+        defaults.set(hasSecret, forKey: "has_volvo_client_secret")
+        defaults.set(hasAPIKey, forKey: "has_volvo_api_key")
+        defaults.set(hasSecret && hasAPIKey && bundle.sessionToken?.isEmpty == false,
+                     forKey: "has_volvo_session")
     }
 
     /// Only explicitly test-prefixed services bypass the real Keychain. The previous check
@@ -403,6 +457,17 @@ struct KeychainStore: Sendable {
 }
 
 enum Keychain {
+    /// Presence checks only. They intentionally never touch Security.framework, so views may
+    /// evaluate them freely without triggering a Keychain authorization prompt.
+    static var hasStoredCommandSession: Bool {
+        KeychainStore.app.hasStoredCommandSession
+    }
+    static var hasStoredPolestarEmail: Bool {
+        KeychainStore.app.hasStoredPolestarEmail
+    }
+    static var hasStoredVolvoAppCredentials: Bool {
+        KeychainStore.app.hasStoredVolvoAppCredentials
+    }
     static func saveEmail(_ email: String) throws { try KeychainStore.app.saveEmail(email) }
     static func readEmail() throws -> String? { try KeychainStore.app.readEmail() }
     static func deleteEmail() throws { try KeychainStore.app.deleteEmail() }

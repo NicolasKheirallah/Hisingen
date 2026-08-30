@@ -3,6 +3,9 @@ import OSLog
 
 
 actor VolvoAPI {
+    private enum TokenRequestFailure: Error {
+        case deadRefreshToken
+    }
     nonisolated let brand: VehicleBrand = .volvo
     let logger = AppLog.logger("volvo-api")
 
@@ -47,6 +50,7 @@ actor VolvoAPI {
     var refreshToken: String?
     var tokenExpiry: Date?
     var refreshTask: Task<VolvoTokenResponseDTO, Error>?
+    var refreshTaskID: UUID?
     var pendingVerifier: String?
     var pendingState: String?
     let keychain: KeychainStore
@@ -293,13 +297,14 @@ actor VolvoAPI {
     }
 
     func refreshAccessToken(force: Bool) async throws {
+        let requestEpoch = sessionEpoch
         let renewalMargin = tokenLifetime > 0 ? min(300, tokenLifetime / 2) : 300
         if !force, let expiry = tokenExpiry, accessToken != nil,
            expiry.timeIntervalSinceNow >= renewalMargin { return }
         if let landed = lastTokenGrantAt, accessToken != nil,
            Date().timeIntervalSince(landed) < 10 { return }
         if let refreshTask {
-            try apply(try await refreshTask.value)
+            try await applyRefreshResult(from: refreshTask, requestEpoch: requestEpoch)
             return
         }
         guard let clientID, let clientSecret, let refreshToken, !refreshToken.isEmpty else {
@@ -311,10 +316,33 @@ actor VolvoAPI {
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
         request.httpBody = Self.formBody(["grant_type": "refresh_token", "refresh_token": refreshToken])
         let tokenRequest = request
+        let taskID = UUID()
         let task = Task { try await self.requestToken(tokenRequest) }
         refreshTask = task
-        defer { refreshTask = nil }
-        try apply(try await task.value)
+        refreshTaskID = taskID
+        defer {
+            if refreshTaskID == taskID {
+                refreshTask = nil
+                refreshTaskID = nil
+            }
+        }
+        try await applyRefreshResult(from: task, requestEpoch: requestEpoch)
+    }
+
+    private func applyRefreshResult(from task: Task<VolvoTokenResponseDTO, Error>,
+                                    requestEpoch: Int) async throws {
+        do {
+            let token = try await task.value
+            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            try apply(token)
+        } catch TokenRequestFailure.deadRefreshToken {
+            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            await discardDeadRefreshToken()
+            throw VolvoError.authenticationRequired(.invalidCredentials)
+        } catch {
+            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            throw error
+        }
     }
 
     /// Wipes the stored Volvo session — memory and Keychain — after the identity provider has
@@ -335,14 +363,24 @@ actor VolvoAPI {
     private func apply(_ token: VolvoTokenResponseDTO) throws {
         let previous = refreshToken
         let renewable = token.refreshToken ?? refreshToken
-        if let renewable, renewable != previous {
-            try keychain.saveVolvoSessionToken(renewable)
-        }
+        // Update the in-memory session *before* persisting. Volvo's identity provider is
+        // rotate-on-use: this grant has already invalidated `previous` server-side, so if the
+        // Keychain write fails (typically an ACL denial after the code-signing identity changed
+        // between dev builds) the app must still run this session on the rotated token —
+        // otherwise it keeps replaying a token the server just killed and every refresh is
+        // `invalid_grant`. A failed persist costs a restart, not the whole session.
         accessToken = token.accessToken
         refreshToken = renewable
         tokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
         tokenLifetime = TimeInterval(token.expiresIn)
         lastTokenGrantAt = Date()
+        if let renewable, renewable != previous {
+            do {
+                try keychain.saveVolvoSessionToken(renewable)
+            } catch {
+                logger.error("Volvo rotated refresh token could not be persisted; the session will not survive a restart: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     private func requestToken(_ request: URLRequest) async throws -> VolvoTokenResponseDTO {
@@ -362,7 +400,7 @@ actor VolvoAPI {
                 case "invalid_client", "unauthorized_client":
                     throw VolvoError.appNotConfigured
                 case "invalid_grant", "expired_token":
-                    if isRefreshGrant { await discardDeadRefreshToken() }
+                    if isRefreshGrant { throw TokenRequestFailure.deadRefreshToken }
                     throw VolvoError.authenticationRequired(.invalidCredentials)
                 default:
                     throw response.statusCode == 401
@@ -496,12 +534,12 @@ actor VolvoAPI {
     /// diagnostics and static capability lists.
     static func optionalTelemetryTTL(for key: String) -> TimeInterval {
         switch key {
-        case "tyres", "diagnostics", "engine-diagnostics", "odometer", "statistics",
-             "brakes", "warnings", "commands":
+        case "commands":
             return 60 * 60
-        case "fuel", "location":
+        case "odometer", "statistics", "fuel", "location", "brakes":
             return 15 * 60
-        case "command-accessibility":
+        case "tyres", "diagnostics", "engine-diagnostics", "warnings",
+             "command-accessibility":
             return 5 * 60
         default:
             return 0

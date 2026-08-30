@@ -69,6 +69,44 @@ struct APIDiagnosticLogTests {
     }
 
     @Test
+    func staticLongEndpointNamesRemainVisibleWhileTransactionIDsAreRedacted() async throws {
+        let store = APIDiagnosticLogStore()
+        let staticURL = try #require(URL(string:
+            "https://example.invalid/services/VehicleInformationService/GetLatestDashboard"))
+        await store.record(provider: .polestar, request: URLRequest(url: staticURL),
+                           operation: "static path", startedAt: Date())
+        let staticEndpoint = try #require(await store.snapshot().first?.endpoint)
+        #expect(staticEndpoint.contains("VehicleInformationService"))
+        #expect(staticEndpoint.contains("GetLatestDashboard"))
+
+        let dynamicURL = try #require(URL(string:
+            "https://example.invalid/oauth/resume/AbCDef0123456789GhIJklMNop"))
+        await store.record(provider: .polestar, request: URLRequest(url: dynamicURL),
+                           operation: "dynamic path", startedAt: Date())
+        let dynamicEndpoint = try #require(await store.snapshot().last?.endpoint)
+        #expect(!dynamicEndpoint.contains("AbCDef0123456789GhIJklMNop"))
+        #expect(dynamicEndpoint.contains("redacted"))
+
+        let lettersOnly = try #require(URL(string:
+            "https://example.invalid/oauth/resume/aBcDeFgHiJkLmNoPqRsTuVwXyZ"))
+        await store.record(provider: .polestar, request: URLRequest(url: lettersOnly),
+                           operation: "letters-only dynamic path", startedAt: Date())
+        let lettersEndpoint = try #require(await store.snapshot().last?.endpoint)
+        #expect(!lettersEndpoint.contains("aBcDeFgHiJkLmNoPqRsTuVwXyZ"))
+        #expect(lettersEndpoint.contains("redacted"))
+    }
+
+    @Test
+    func nestedAuthenticationFailureHasDistinctSemanticType() async throws {
+        let store = APIDiagnosticLogStore()
+        let data = #"{"data":{"status":"AuthenticationFailure"}}"#.data(using: .utf8)!
+        await store.record(provider: .volvo, request: nil, operation: "semantic auth",
+                           statusCode: 200, responseBytes: data.count, responseData: data,
+                           startedAt: Date())
+        #expect(await store.snapshot().first?.semanticErrorType == "authentication:failure")
+    }
+
+    @Test
     func errorTypeCarriesEnumPayloadsAndCodes() async throws {
         let store = APIDiagnosticLogStore()
         await store.clear()

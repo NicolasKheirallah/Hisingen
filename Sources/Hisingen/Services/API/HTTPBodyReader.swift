@@ -19,8 +19,11 @@ enum HTTPBodyReader {
         using session: URLSession,
         limit: Int,
         operation: String,
-        provider: VehicleBrand
+        provider: VehicleBrand,
+        recordDiagnostics: Bool = false
     ) async throws -> (Data, URLResponse) {
+        let startedAt = Date()
+        let diagnosticProvider: APILogProvider = provider == .polestar ? .polestar : .volvo
         do {
             let (bytes, response) = try await session.bytes(for: request)
             if response.expectedContentLength > Int64(limit) {
@@ -41,9 +44,21 @@ enum HTTPBodyReader {
                 }
             }
             data.append(contentsOf: pending)
+            if recordDiagnostics {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: diagnosticProvider, request: request, operation: operation,
+                    statusCode: (response as? HTTPURLResponse)?.statusCode,
+                    responseBytes: data.count, responseData: data, startedAt: startedAt)
+            }
             return (data, response)
-        } catch let error as URLError {
-            throw Self.network(error, provider: provider)
+        } catch {
+            let mapped = (error as? URLError).map { Self.network($0, provider: provider) } ?? error
+            if recordDiagnostics {
+                await APIDiagnosticLogStore.shared.record(
+                    provider: diagnosticProvider, request: request, operation: operation,
+                    startedAt: startedAt, error: mapped)
+            }
+            throw mapped
         }
     }
 

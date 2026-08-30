@@ -1,14 +1,25 @@
 import Foundation
 
 extension VolvoAPI {
-    func beginSignIn() async throws -> URL {
+    /// `forceReadOnlyScopes` never asks for the approval-gated `restrictedScopes` even when the
+    /// preference wants them — used to retry after Volvo rejects the request with
+    /// `invalid_scope` because the developer application is not approved for lock / unlock /
+    /// engine / honk-flash / location.
+    func beginSignIn(forceReadOnlyScopes: Bool = false) async throws -> URL {
         guard isConfigured, let clientID else { throw VolvoError.appNotConfigured }
+        // A browser authorization begins a new token generation. Cancel an older refresh so
+        // its rotated token cannot land after the authorization-code grant and overwrite it.
+        sessionEpoch &+= 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshTaskID = nil
         let verifier = try PKCE.randomURLSafeString()
         let state = try PKCE.randomURLSafeString()
         pendingVerifier = verifier
         pendingState = state
         var components = URLComponents(url: identityURL(path: authorizationPath), resolvingAgainstBaseURL: false)!
-        let includeRestrictedScopes = await MainActor.run { preferences.volvoRestrictedScopesEnabled }
+        let restrictedScopesWanted = await MainActor.run { preferences.volvoRestrictedScopesEnabled }
+        let includeRestrictedScopes = !forceReadOnlyScopes && restrictedScopesWanted
         let scopes = Self.readScopes + (includeRestrictedScopes ? Self.restrictedScopes : [])
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
@@ -35,7 +46,9 @@ extension VolvoAPI {
         }
         if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
             let desc = components.queryItems?.first(where: { $0.name == "error_description" })?.value ?? error
-            throw VolvoError.permissionDenied(operation: desc)
+            // Keep the raw OAuth code recoverable so the caller can retry `invalid_scope`
+            // read-only, while still carrying the human description for anything else.
+            throw VolvoError.permissionDenied(operation: error == "invalid_scope" ? "invalid_scope" : desc)
         }
         guard components.queryItems?.first(where: { $0.name == "state" })?.value == expectedState,
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
@@ -79,6 +92,7 @@ extension VolvoAPI {
         tokenLifetime = 0
         refreshTask?.cancel()
         refreshTask = nil
+        refreshTaskID = nil
         pendingVerifier = nil
         pendingState = nil
         cars = []

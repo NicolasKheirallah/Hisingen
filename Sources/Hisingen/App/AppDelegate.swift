@@ -32,17 +32,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var calendarPreconditioning: CalendarPreconditioningController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Two menu-bar instances share rotating OAuth refresh tokens and the diagnostics
-        // archive. Keep one owner; a second launch activates the existing process and exits
-        // before touching Keychain or network state.
-        if let bundleID = Bundle.main.bundleIdentifier,
-           let existing = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
-                         && !$0.isTerminated }) {
-            existing.activate()
-            NSApp.terminate(nil)
-            return
-        }
         mainMenuController = MainMenuController(
             onCheckForUpdates: { [weak self] in self?.updateController.checkNow() })
         mainMenuController.install()
@@ -364,6 +353,9 @@ extension AppDelegate: CommandExecutionContext {
 
 extension AppDelegate: SignInCoordinatorContext {
     func activateBrandAfterSignIn(_ brand: VehicleBrand) {
+        // The browser flow has just written a new refresh token. Discard any earlier negative
+        // presence result before the brand switch derives `sessionValid` from preferences.
+        preferences.invalidateSessionCache()
         vehicleSession.adoptBrandAfterSignIn(brand)
     }
 

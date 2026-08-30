@@ -67,13 +67,17 @@ extension PolestarAPI {
             "grant_type": "refresh_token", "client_id": commandClientID, "refresh_token": refresh
         ])
         let currentSession = session
+        let requestEpoch = sessionEpoch
+        let taskID = UUID()
         let task = Task { [logger] () -> CommandClientAuthorization in
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession)
+                guard self.sessionEpoch == requestEpoch else { return .unavailable }
                 self.applyCommandToken(token, fallbackRefresh: refresh)
                 return .authorized(token.accessToken)
             } catch let error as PolestarError where error.requiresAuthentication {
+                guard self.sessionEpoch == requestEpoch else { return .unavailable }
                 // The refresh token itself is dead (invalid_grant / 401). Retrying it every
                 // command just re-fails; drop it so the UI flips to "not authorized" and the
                 // user is pointed at "Authorize Remote Commands" once.
@@ -88,7 +92,13 @@ extension PolestarAPI {
             }
         }
         commandRefreshTask = task
-        defer { commandRefreshTask = nil }
+        commandRefreshTaskID = taskID
+        defer {
+            if commandRefreshTaskID == taskID {
+                commandRefreshTask = nil
+                commandRefreshTaskID = nil
+            }
+        }
         return await task.value
     }
 
@@ -150,6 +160,10 @@ extension PolestarAPI {
         commandPendingSince = nil
         refreshTask?.cancel()
         refreshTask = nil
+        refreshTaskID = nil
+        commandRefreshTask?.cancel()
+        commandRefreshTask = nil
+        commandRefreshTaskID = nil
         cancelImageDownloads()
         clearAccountState()
         session.invalidateAndCancel()

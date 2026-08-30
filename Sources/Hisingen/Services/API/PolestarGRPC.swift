@@ -17,6 +17,11 @@ struct GrpcBatteryExtras: Codable, Equatable, Sendable {
     let diagnostics: BatteryDiagnostics
 }
 
+struct PolestarInFlightRequest<Value: Sendable>: Sendable {
+    let id: UUID
+    let task: Task<Value, Error>
+}
+
 actor PolestarGRPC {
 
     private let discoveryURL = URL(string: "https://cnepmob.volvocars.com")!
@@ -30,7 +35,7 @@ actor PolestarGRPC {
     private let pccsURL = URL(string: "https://api.pccs-prod.plstr.io:443")!
 
     private var c3BaseURL: URL?
-    private var c3DiscoveryTask: Task<URL, Error>?
+    private var c3DiscoveryTask: PolestarInFlightRequest<URL>?
     var exteriorCache: [String: ExteriorSnapshot] = [:]
     var otaSoftwareIDs: [String: String] = [:]
     /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
@@ -49,17 +54,21 @@ actor PolestarGRPC {
     var useStreaming = false
 
     /// Full gRPC paths (`service/Method`) that answered a read with status 12 UNIMPLEMENTED.
-    /// Not deployed for this backend/vehicle, so they are skipped for the rest of the process
-    /// rather than re-attempted — and failing — on every refresh. Cleared by
-    /// `invalidateDiscoveredHost()` so a host/region change gets a fresh probe.
+    /// Not deployed for this backend/vehicle, so they are skipped for 24 hours rather than
+    /// re-attempted — and failing — on every refresh. The expiry lets a newly deployed backend
+    /// capability recover without requiring the user to clear defaults.
     var unimplementedReadPaths: Set<String>
-    private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
+    var unimplementedReadPathExpirations: [String: Date]
+    private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v2"
+    private static let legacyUnimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
+    private static let unimplementedReadPathTTL: TimeInterval = 24 * 60 * 60
+    private let defaults: UserDefaults
 
     /// Single-flight guard for `fetchLocation`: one telemetry sweep asks for the vehicle's
     /// location directly *and* again inside `fetchWeather`, so without this the location RPC
     /// (which itself walks several candidate endpoints) ran twice per refresh.
-    var locationInFlight: [String: Task<VehicleLocation?, Error>] = [:]
-    var chargeLocationsInFlight: [String: Task<Data, Error>] = [:]
+    var locationInFlight: [String: PolestarInFlightRequest<VehicleLocation?>] = [:]
+    var chargeLocationsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
 
     func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
 
@@ -83,10 +92,24 @@ actor PolestarGRPC {
         let error = Self.readStatusError(status: status, path: path)
         if case .grpcUnimplemented = error,
            unimplementedReadPaths.insert(path).inserted {
-            UserDefaults.standard.set(Array(unimplementedReadPaths).sorted(),
-                                      forKey: Self.unimplementedReadPathsKey)
+            unimplementedReadPathExpirations[path] = Date().addingTimeInterval(Self.unimplementedReadPathTTL)
+            persistUnimplementedReadPaths()
         }
         return error
+    }
+
+    private func isReadPathUnimplemented(_ path: String) -> Bool {
+        guard unimplementedReadPaths.contains(path) else { return false }
+        if let expiry = unimplementedReadPathExpirations[path], expiry > Date() { return true }
+        unimplementedReadPaths.remove(path)
+        unimplementedReadPathExpirations[path] = nil
+        persistUnimplementedReadPaths()
+        return false
+    }
+
+    private func persistUnimplementedReadPaths() {
+        defaults.set(unimplementedReadPathExpirations.mapValues(\.timeIntervalSince1970),
+                     forKey: Self.unimplementedReadPathsKey)
     }
 
     #if DEBUG
@@ -151,7 +174,12 @@ actor PolestarGRPC {
         onFrame: @escaping @Sendable (Data) -> Void
     ) async throws {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 90
+        // `timeoutIntervalForRequest` is the maximum gap between received bytes. A parked,
+        // sleeping vehicle legitimately pushes no battery/exterior frames for many minutes, so
+        // a short value here turned "quiet" into a `-1001` drop and a reconnect every ~95 s.
+        // 20 minutes still recovers a silently-dead connection promptly without churning on an
+        // idle car.
+        configuration.timeoutIntervalForRequest = 20 * 60
         configuration.timeoutIntervalForResource = 24 * 60 * 60
         let liveSession = URLSession(configuration: configuration)
         defer { liveSession.invalidateAndCancel() }
@@ -165,17 +193,50 @@ actor PolestarGRPC {
         request.setValue("trailers", forHTTPHeaderField: "TE")
         request.httpBody = Protobuf.grpcFrame(message)
 
-        let (bytes, response) = try await liveSession.bytes(for: request)
+        let startedAt = Date()
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await liveSession.bytes(for: request)
+        } catch {
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "live gRPC \(path)",
+                startedAt: startedAt, error: error)
+            throw error
+        }
         guard let http = response as? HTTPURLResponse else {
-            throw PolestarError.invalidResponse(operation: "live gRPC stream")
+            let error = PolestarError.invalidResponse(operation: "live gRPC stream")
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "live gRPC \(path)",
+                startedAt: startedAt, error: error)
+            throw error
         }
         if http.statusCode == 401 || http.statusCode == 403 {
-            throw PolestarError.authenticationRequired(.expiredSession)
+            let error = PolestarError.authenticationRequired(.expiredSession)
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "live gRPC \(path)",
+                statusCode: http.statusCode, startedAt: startedAt, error: error)
+            throw error
         }
-        guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
+        guard http.statusCode == 200 else {
+            let error = PolestarError.server(statusCode: http.statusCode)
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request, operation: "live gRPC \(path)",
+                statusCode: http.statusCode, startedAt: startedAt, error: error)
+            throw error
+        }
         if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            throw Self.readStatusError(status: status, path: path)
+            let error = Self.readStatusError(status: status, path: path)
+            await APIDiagnosticLogStore.shared.record(
+                provider: .polestar, request: request,
+                operation: Self.diagnosticOperation("live gRPC \(path)", grpcStatus: status,
+                                                    grpcMessage: http.value(forHTTPHeaderField: "grpc-message")),
+                statusCode: http.statusCode, startedAt: startedAt, error: error)
+            throw error
         }
+        await APIDiagnosticLogStore.shared.record(
+            provider: .polestar, request: request, operation: "live gRPC \(path) connected",
+            statusCode: http.statusCode, startedAt: startedAt)
 
         var header: [UInt8] = []
         var body = Data()
@@ -213,13 +274,30 @@ actor PolestarGRPC {
     }
     let session: URLSession
 
-    init() {
+    init(defaultsSuiteName: String? = nil) {
+        self.defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
+        let defaults = self.defaults
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
         session = URLSession(configuration: config)
-        unimplementedReadPaths = Set(UserDefaults.standard.stringArray(
-            forKey: Self.unimplementedReadPathsKey) ?? [])
+        let now = Date()
+        let persisted = (defaults.dictionary(forKey: Self.unimplementedReadPathsKey)
+            as? [String: Double] ?? [:]).compactMapValues { epoch -> Date? in
+                let expiry = Date(timeIntervalSince1970: epoch)
+                return expiry > now ? expiry : nil
+            }
+        var expirations = persisted
+        // One-time migration of the former unbounded set: retain its suppression benefit,
+        // but give every entry a recovery horizon.
+        for path in defaults.stringArray(forKey: Self.legacyUnimplementedReadPathsKey) ?? [] {
+            expirations[path] = now.addingTimeInterval(Self.unimplementedReadPathTTL)
+        }
+        defaults.removeObject(forKey: Self.legacyUnimplementedReadPathsKey)
+        unimplementedReadPathExpirations = expirations
+        unimplementedReadPaths = Set(expirations.keys)
+        defaults.set(expirations.mapValues(\.timeIntervalSince1970),
+                     forKey: Self.unimplementedReadPathsKey)
     }
 
 
@@ -293,7 +371,7 @@ actor PolestarGRPC {
 
     private func c3Host(accessToken: String) async throws -> URL {
         if let cached = c3BaseURL { return cached }
-        if let c3DiscoveryTask { return try await c3DiscoveryTask.value }
+        if let c3DiscoveryTask { return try await c3DiscoveryTask.task.value }
         let discoveryURL = discoveryURL
         let session = session
         let task = Task<URL, Error> {
@@ -301,7 +379,8 @@ actor PolestarGRPC {
             request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "C3 discovery", provider: .polestar
+                for: request, using: session, limit: 256_000, operation: "C3 discovery",
+                provider: .polestar, recordDiagnostics: true
             )
             guard let http = response as? HTTPURLResponse else {
                 throw PolestarError.invalidResponse(operation: "C3 discovery")
@@ -318,16 +397,20 @@ actor PolestarGRPC {
             }
             return url
         }
-        c3DiscoveryTask = task
-        defer { c3DiscoveryTask = nil }
+        let requestID = UUID()
+        c3DiscoveryTask = PolestarInFlightRequest(id: requestID, task: task)
+        defer {
+            if c3DiscoveryTask?.id == requestID { c3DiscoveryTask = nil }
+        }
         let url = try await task.value
+        guard c3DiscoveryTask?.id == requestID else { throw CancellationError() }
         c3BaseURL = url
         return url
     }
 
     func invalidateDiscoveredHost() {
         c3BaseURL = nil
-        c3DiscoveryTask?.cancel()
+        c3DiscoveryTask?.task.cancel()
         c3DiscoveryTask = nil
         // Session-scoped caches must not survive a sign-out: a different account signing in
         // on the same app instance must never inherit the previous account's OTA ids, states,
@@ -337,6 +420,10 @@ actor PolestarGRPC {
         otaRawSoftwareStates = [:]
         capabilityLimits = [:]
         exteriorCache = [:]
+        locationInFlight.values.forEach { $0.task.cancel() }
+        chargeLocationsInFlight.values.forEach { $0.task.cancel() }
+        locationInFlight.removeAll()
+        chargeLocationsInFlight.removeAll()
         // Negative service capabilities survive host rediscovery and relaunch. A provider
         // service that is not deployed should not be probed once per process forever.
     }
@@ -365,7 +452,7 @@ actor PolestarGRPC {
 
     func firstMessage(path: String, message: Data, vin: String,
                       accessToken: String, host: GRPCHost = .c3) async throws -> Data {
-        if unimplementedReadPaths.contains(path) {
+        if isReadPathUnimplemented(path) {
             throw PolestarError.grpcUnimplemented(service: path.split(separator: "/").first.map(String.init) ?? path)
         }
         let base = try await resolvedHost(host, accessToken: accessToken)

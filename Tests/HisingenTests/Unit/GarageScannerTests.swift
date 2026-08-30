@@ -31,13 +31,15 @@ struct GarageScannerTests {
         let polestar = StubProvider(brand: .polestar, vins: ["P1", "P2"])
         let volvo = StubProvider(brand: .volvo, vins: ["V1", "V2"])
         let volvoRestores = CallCounter()
+        let diagnostics = GarageScanDiagnosticsStore()
 
         let scanner = GarageScanner(
             context: context,
             preferences: preferences,
             provider: { $0 == .volvo ? volvo : polestar },
             hasResumableSession: { _ in true },
-            restoreDormantSession: { brand in if brand == .volvo { await volvoRestores.increment() } }
+            restoreDormantSession: { brand in if brand == .volvo { await volvoRestores.increment() } },
+            diagnosticsStore: diagnostics
         )
 
         await scanner.scanNow()
@@ -49,6 +51,12 @@ struct GarageScannerTests {
         let restores = await volvoRestores.count
         XCTAssertEqual(restores, 0,
                        "the pass must not advance to the dormant brand after aborting")
+        let scanStats = await diagnostics.current()
+        XCTAssertEqual(scanStats.passesStarted, 1)
+        XCTAssertEqual(scanStats.passesCompleted, 0)
+        XCTAssertTrue(scanStats.lastPassWasPartial,
+                      "an interrupted pass must be explicit in exported diagnostics")
+        XCTAssertEqual(scanStats.vehiclesScannedTotal, 1)
     }
 
     /// The clean path: with nothing interrupting, every non-selected car of every resumable

@@ -269,18 +269,23 @@ final class VehicleDatabase: @unchecked Sendable {
         }
     }
 
-    /// Removes `*.pre-vN.bak` snapshots once the schema has fully reached the latest version.
+    /// Removes old `*.pre-vN.bak` snapshots once the schema has fully reached the latest version,
+    /// while retaining the backup created for the current schema migration.
     /// `backupBeforeMigration` writes one (a full-size `VACUUM INTO` copy) before each schema
     /// bump and nothing ever deleted them, so a few version bumps left several ~20 MB copies
     /// beside the live database. A failed migration leaves `user_version` below target, so the
-    /// backup is only cleared here after the migration it guards has actually landed.
+    /// backup is only eligible for rotation after the migration it guards has actually landed.
+    /// Keeping the newest one matters: a migration can complete successfully yet still reveal
+    /// a semantic data problem later, and deleting its just-created backup made that unrecoverable.
     private func pruneMigrationBackups() {
         guard schemaVersion() >= Self.latestSchemaVersion,
               db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return }
         let directory = (db.path as NSString).deletingLastPathComponent
         let prefix = (db.path as NSString).lastPathComponent + ".pre-v"
+        let retainedName = "\(prefix)\(Self.latestSchemaVersion).bak"
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory) else { return }
-        for entry in entries where entry.hasPrefix(prefix) && entry.hasSuffix(".bak") {
+        for entry in entries where entry.hasPrefix(prefix) && entry.hasSuffix(".bak")
+            && entry != retainedName {
             try? FileManager.default.removeItem(atPath: (directory as NSString).appendingPathComponent(entry))
         }
     }

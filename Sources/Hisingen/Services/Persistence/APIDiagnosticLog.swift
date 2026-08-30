@@ -292,19 +292,25 @@ actor APIDiagnosticLogStore {
             let value = (code?["code"] ?? code?["errorType"]) as? String
             return value.map { "graphql:\($0)" } ?? "graphql:error"
         }
-        if containsSemanticFailure(object) { return "property:unavailable" }
+        if containsSemanticValue("AUTHENTICATIONFAILURE", in: object) {
+            return "authentication:failure"
+        }
+        if containsSemanticValue("PROPERTY_NOT_FOUND", in: object) {
+            return "property:unavailable"
+        }
         return nil
     }
 
-    private static func containsSemanticFailure(_ value: Any) -> Bool {
+    private static func containsSemanticValue(_ expected: String, in value: Any) -> Bool {
         if let string = value as? String {
-            let normalized = string.uppercased()
-            return normalized == "PROPERTY_NOT_FOUND" || normalized == "AUTHENTICATIONFAILURE"
+            return string.uppercased() == expected
         }
         if let dictionary = value as? [String: Any] {
-            return dictionary.values.contains(where: containsSemanticFailure)
+            return dictionary.values.contains { containsSemanticValue(expected, in: $0) }
         }
-        if let array = value as? [Any] { return array.contains(where: containsSemanticFailure) }
+        if let array = value as? [Any] {
+            return array.contains { containsSemanticValue(expected, in: $0) }
+        }
         return false
     }
 
@@ -319,7 +325,18 @@ actor APIDiagnosticLogStore {
                     let value = String(segment)
                     // OAuth resume/state identifiers are typically long URL-safe random
                     // strings. Endpoint names remain visible; transaction identifiers do not.
-                    if value.count >= 20,
+                    // Preserve recognizable API service/method names, but redact every other
+                    // long opaque segment. Requiring a digit was insufficient: an OAuth state
+                    // can be letters-only and must never survive an export.
+                    let staticService = value.range(
+                        of: "^[A-Z][A-Za-z]+(Service|Controller|Resource)$",
+                        options: .regularExpression) != nil
+                    let staticMethod = value.range(
+                        of: "^(Get|Set|List|Create|Update|Delete|Fetch|Invoke|Start|Stop)[A-Z][A-Za-z]+$",
+                        options: .regularExpression) != nil
+                    let qualifiedService = value.contains(".")
+                        && value.range(of: "^[A-Za-z][A-Za-z.]+$", options: .regularExpression) != nil
+                    if value.count >= 20, !staticService, !staticMethod, !qualifiedService,
                        value.range(of: "^[A-Za-z0-9._~-]+$", options: .regularExpression) != nil {
                         return "redacted"
                     }
