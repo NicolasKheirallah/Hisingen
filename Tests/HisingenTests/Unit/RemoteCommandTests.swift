@@ -200,6 +200,69 @@ struct RemoteCommandTests {
     }
 
     @Test
+    func testCommandClientAuthorizationClassification() {
+        let needsAuth: [RemoteCommand] = [
+            .startClimate(temperatureCelsius: 21, frontLeftSeat: .off, frontRightSeat: .off,
+                          rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+            .stopClimate, .startPreCleaning, .stopPreCleaning,
+            .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate,
+            .openWindows, .closeWindows, .flashLights, .honkAndFlash, .honkHorn
+        ]
+        for command in needsAuth {
+            XCTAssertTrue(command.requiresCommandClientAuthorization,
+                          "\(command.identifier) is dispatched via invocation.InvocationService and needs the command client")
+        }
+
+        let primaryTokenOnly: [RemoteCommand] = [
+            .setChargeTarget(80), .setAmpLimit(16), .startChargingOverride, .stopChargingOverride,
+            .setGlobalChargeTimer(VehicleSchedule(kind: .globalCharging, startHour: 22, startMinute: 0,
+                                                  endHour: 6, endMinute: 0, weekdays: [], isActive: true)),
+            .deleteClimateTimer(id: "t"),
+            .scheduleOTA(delayMinutes: 60), .installOTANow, .cancelOTA,
+            .deleteChargeLocation(id: "loc"), .startEngine(runtimeMinutes: 10), .stopEngine,
+            .lockReducedGuard
+        ]
+        for command in primaryTokenOnly {
+            XCTAssertFalse(command.requiresCommandClientAuthorization,
+                           "\(command.identifier) is accepted with the primary session token")
+        }
+    }
+
+    @Test
+    func testInvocationCommandRejectedWithoutCommandToken() async {
+        do {
+            _ = try await PolestarGRPC().executeRemoteCommand(
+                .lock, vin: "YSMTEST", accessToken: "web-token", commandToken: nil
+            )
+            XCTFail("An invocation command must be rejected before dispatch without a command-client token")
+        } catch RemoteCommandError.rejected(let message) {
+            XCTAssertNotNil(message)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    @MainActor
+    func testHasPolestarCommandAuthorizationReflectsKeychain() throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        let suiteName = "HisingenTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            try? keychain.deleteCommandSessionToken()
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let store = PreferencesStore(defaults: defaults, keychain: keychain)
+
+        XCTAssertFalse(store.hasPolestarCommandAuthorization)
+        try keychain.saveCommandSessionToken("cmd-refresh-token")
+        XCTAssertTrue(store.hasPolestarCommandAuthorization)
+        try keychain.deleteCommandSessionToken()
+        XCTAssertFalse(store.hasPolestarCommandAuthorization)
+    }
+
+    @Test
     func testScheduleKindAndWeekdays() {
         let climateSchedule = VehicleSchedule(
             backendID: "timer-123",

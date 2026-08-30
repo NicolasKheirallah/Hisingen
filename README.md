@@ -269,6 +269,21 @@ capacity. The session shows which method was used. Costs retain the session's da
 and currency instead of being recalculated when today's settings change. These remain estimates
 based on vehicle telemetry rather than utility-grade metering.
 
+Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage Report totals
+the business/private distance split per month with CSV export. Tags are stored locally per
+vehicle.
+
+### Spot-price charging
+
+If you charge in Sweden, the Controls tab can show the cheapest time to charge tonight. Hisingen
+fetches day-ahead electricity prices for your price area (SE1–SE4) from
+[elprisetjustnu.se](https://www.elprisetjustnu.se/elpris-api), works out how long charging needs
+to run to reach the target from the current state of charge, and highlights the cheapest
+contiguous window with its estimated energy cost.
+
+It is advisory only — Hisingen does not change the vehicle's own charging schedule — and the
+prices exclude VAT, grid fees, taxes and retailer markups.
+
 ### Doors, windows & locks
 
 Hisingen can show the state reported for things such as:
@@ -745,6 +760,16 @@ screenshots stay safe.
 Optional tiny always-on-top panel with SoC→target, power and ETA while charging. It never
 steals focus; drag it anywhere and the position is remembered.
 
+### Calendar preconditioning
+
+Hisingen can start cabin climate a set number of minutes before timed events in the calendars
+you choose (Settings → Features). It reads events through macOS Calendar (EventKit) — the
+events stay on your Mac and are never sent anywhere — schedules a single timer for the next one,
+and re-checks after sleep and when the calendar changes. The climate command targets the active
+vehicle and passes the same capability and feature checks as the manual control; because it is a
+preconfigured automation with nobody at the Mac to answer a prompt, it does not raise the
+device-owner confirmation even when that is required for the manual controls.
+
 ### Apple Shortcuts
 
 Hisingen exposes cached vehicle information and verified Volvo command handoffs to Apple
@@ -882,6 +907,8 @@ In practical terms:
 | **Vehicle cache**                | Stored locally                                            |
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
+| **Calendar events**              | Read locally from calendars you select; never sent anywhere |
+| **Electricity prices**           | Fetched from elprisetjustnu.se while the spot-price card is shown |
 | **Map integration**              | Uses Apple services where applicable                      |
 | **Update checks**                | Uses Hisingen's signed Sparkle update feed                |
 

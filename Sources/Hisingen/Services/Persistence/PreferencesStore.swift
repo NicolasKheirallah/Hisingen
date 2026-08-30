@@ -218,6 +218,16 @@ final class PreferencesStore {
         return result
     }
 
+    /// Whether the Polestar *command* client — remote locks, climate, windows, cabin cleaning,
+    /// and locate — has a stored authorization. This is a separate OAuth grant from the account
+    /// session (`hasResumableSession`), obtained via Settings → Remote Controls → "Authorize
+    /// Remote Commands". Backed by the Keychain item `PolestarAPI` writes on success and clears
+    /// (`clearCommandAuthorization()`) when the grant is rejected. Charging, timers and OTA
+    /// commands do not need it.
+    var hasPolestarCommandAuthorization: Bool {
+        ((try? keychain.readCommandSessionToken()) ?? nil)?.isEmpty == false
+    }
+
     /// Preferred display order of the Charging card's detail rows. Identifiers not present
     /// keep their natural position after the ordered ones — so a partial list is safe.
     var chargingStatOrder: [String] {
@@ -335,7 +345,14 @@ final class PreferencesStore {
     /// Remote-engine-start runtime the Controls tab last used, so the picker keeps the user's
     /// choice across panel opens instead of snapping back to 15 minutes each time.
     var remoteEngineRuntimeMinutes: Int { get { let value = d.integer(forKey: "remote_engine_runtime_minutes"); return [5, 10, 15].contains(value) ? value : 15 } set { d.set(newValue, forKey: "remote_engine_runtime_minutes") } }
+    var calendarPreconditioningEnabled: Bool { get { d.bool(forKey: "calendar_preconditioning_enabled_v1") } set { d.set(newValue, forKey: "calendar_preconditioning_enabled_v1") } }
+    var calendarPreconditioningLeadTimeMinutes: Int { get { let value = d.integer(forKey: "calendar_preconditioning_lead_minutes_v1"); return [5, 10, 15, 20, 30, 45, 60].contains(value) ? value : 20 } set { d.set(min(max(newValue, 1), 120), forKey: "calendar_preconditioning_lead_minutes_v1") } }
+    var calendarPreconditioningCalendarIDs: Set<String> { get { Set(d.stringArray(forKey: "calendar_preconditioning_calendar_ids_v1") ?? []) } set { d.set(Array(newValue).sorted(), forKey: "calendar_preconditioning_calendar_ids_v1") } }
+    var calendarPreconditioningFiredOccurrences: [String: Double] { get { d.dictionary(forKey: "calendar_preconditioning_fired_v1") as? [String: Double] ?? [:] } set { d.set(newValue, forKey: "calendar_preconditioning_fired_v1") } }
     var electricityPricePerKwh: Double { get { let value = d.double(forKey: "electricity_price_per_kwh"); return value > 0 ? value : 2.0 } set { d.set(newValue, forKey: "electricity_price_per_kwh") } }
+    var smartChargingPriceArea: SwedishPriceArea { get { SwedishPriceArea(rawValue: d.string(forKey: "smart_charging_price_area_v1") ?? "") ?? .se3 } set { d.set(newValue.rawValue, forKey: "smart_charging_price_area_v1") } }
+    var smartChargingPowerKW: Double { get { let value = d.double(forKey: "smart_charging_power_kw_v1"); return value > 0 ? min(max(value, 1.0), 50) : 11.0 } set { d.set(min(max(newValue, 1.0), 50), forKey: "smart_charging_power_kw_v1"); d.set(true, forKey: "smart_charging_power_customized_v1") } }
+    var smartChargingPowerWasCustomized: Bool { d.bool(forKey: "smart_charging_power_customized_v1") }
     var currencySymbol: String { get { let value = d.string(forKey: "electricity_currency_symbol") ?? ""; return value.isEmpty ? (Locale.current.currencySymbol ?? "kr") : value } set { d.set(newValue, forKey: "electricity_currency_symbol") } }
     /// Off-peak/night tariff, disabled by default so charging-cost estimates match
     /// `electricityPricePerKwh` unchanged unless the user opts in to a two-rate schedule.

@@ -11,6 +11,7 @@ enum SettingsChange {
     case launchAtLogin
     case updater
     case checkForUpdates
+    case automation
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case polestarWebSignIn
@@ -176,6 +177,7 @@ struct SettingsView: View {
                     if shows(.updates) { SettingsUpdatesCard(binder: binder) }
                     if shows(.features) {
                         featureQuickActions
+                        CalendarPreconditioningSettingsCard(binder: binder)
                         SettingsVehicleDataCard(state: state, binder: binder)
                         SettingsRemoteControlsCard(state: state, binder: binder)
                         SettingsCapabilityMatrixCard(state: state)

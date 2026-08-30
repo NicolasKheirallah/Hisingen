@@ -17,6 +17,7 @@ struct SettingsDatabaseCard: View {
     @State private var showPruneConfirmation = false
     @State private var showLocationClearConfirmation = false
     @State private var showWipeConfirmation = false
+    @State private var showAPIDiagnosticInspector = false
     @State private var retentionDays = 90
     @State private var eraseHistoryOnSignOut = false
     @State private var feedback: (message: String, isError: Bool)?
@@ -318,6 +319,19 @@ struct SettingsDatabaseCard: View {
                 .controlSize(.small)
 
                 Button {
+                    showAPIDiagnosticInspector = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform.path.ecg.rectangle")
+                        Text(L10n.text("Inspect Live API Log"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(L10n.text("Shows the in-memory redacted request log with live filters. No raw credentials, VINs, or locations are retained."))
+
+                Button {
                     let db = database
                     Task { @MainActor in
                         let data = await Task.detached(priority: .userInitiated) {
@@ -365,6 +379,9 @@ struct SettingsDatabaseCard: View {
         retentionDays = preferences.historySampleRetentionDays
         eraseHistoryOnSignOut = preferences.eraseHistoryOnSignOut
         await loadStats()
+    }
+    .sheet(isPresented: $showAPIDiagnosticInspector) {
+        APIDiagnosticInspectorView()
     }
     .confirmationDialog(
         L10n.text("Prune old historical samples?"),

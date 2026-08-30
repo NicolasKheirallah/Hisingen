@@ -130,12 +130,12 @@ struct ChargingSessionEngineTests {
     }
 
     @Test("Schema migration version and lifecycle columns are installed idempotently")
-    func schemaVersionTwo() throws {
+    func currentSchemaVersion() throws {
         let database = VehicleDatabase.inMemory()
         let version = try database.db.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
             statement.step() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
         }
-        #expect(version == 2)
+        #expect(version == VehicleDatabase.latestSchemaVersion)
         let columns = try database.db.query(sql: "PRAGMA table_info(charging_sessions);") { _ in } process: { statement in
             var names = Set<String>()
             while statement.step() {
@@ -176,7 +176,7 @@ struct ChargingSessionEngineTests {
         let version = try sqlite.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
             statement.step() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
         }
-        #expect(version == 2)
+        #expect(version == VehicleDatabase.latestSchemaVersion)
     }
 
     @Test("A stale open session observed idle is abandoned, not completed")

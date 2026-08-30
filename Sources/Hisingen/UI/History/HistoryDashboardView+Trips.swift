@@ -44,6 +44,81 @@ extension HistoryDashboardView {
 
     // MARK: - Trips
 
+    var mileageReports: [MonthlyMileageReport] {
+        MonthlyMileageReport.build(from: snapshot.reportTrips, purposes: snapshot.tripPurposes)
+    }
+
+    var selectedMileageReport: MonthlyMileageReport? {
+        guard !mileageReports.isEmpty else { return nil }
+        return mileageReportMonthStart
+            .flatMap { selected in mileageReports.first { $0.monthStart == selected } }
+            ?? mileageReports.first
+    }
+
+    var monthlyMileageReportCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    CardHeader(symbol: "calendar.badge.checkmark", title: L10n.text("Monthly Mileage Report"), color: .indigo)
+                    Spacer()
+                    Picker(L10n.text("Month"), selection: Binding(
+                        get: { selectedMileageReport?.monthStart },
+                        set: { mileageReportMonthStart = $0 }
+                    )) {
+                        ForEach(mileageReports) { report in
+                            Text(report.monthStart.formatted(.dateTime.month(.wide).year()))
+                                .tag(Optional(report.monthStart))
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .fixedSize()
+                }
+                if let report = selectedMileageReport {
+                    HStack(spacing: 8) {
+                        mileageStat(L10n.text("Business"), trips: report.businessTrips,
+                                    distance: report.businessKm, color: .blue)
+                        mileageStat(L10n.text("Private"), trips: report.privateTrips,
+                                    distance: report.privateKm, color: .green)
+                        mileageStat(L10n.text("Unclassified"), trips: report.unclassifiedTrips,
+                                    distance: report.unclassifiedKm, color: .secondary)
+                    }
+                    HStack {
+                        Text(L10n.format("%d trips · %@ total", report.totalTrips,
+                                         Format.distance(km: report.totalKm, decimals: 1, unit: preferences.distanceUnit)))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            exportCSV(
+                                MonthlyMileageReport.csv(reports: mileageReports, vin: state.vin),
+                                name: "monthly-mileage"
+                            )
+                        } label: {
+                            Label(L10n.text("Export report"), systemImage: "square.and.arrow.up")
+                                .font(.system(size: 9))
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    func mileageStat(_ title: String, trips: Int, distance: Double, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit))
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+            Text(L10n.format("%@ · %d trips", title, trips))
+                .font(.system(size: 8.5))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(7)
+        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+    }
+
     var distanceChartCard: some View {
         let longest = HistoryInsights.longestTrip(from: trips)
         let correlation = HistoryInsights.temperatureConsumptionCorrelation(from: trips)
@@ -210,6 +285,17 @@ extension HistoryDashboardView {
                     KVRow(L10n.text("Started"), Format.dateTimeFormatter.string(from: trip.startedAt), symbol: "flag")
                     KVRow(L10n.text("Ended"), Format.dateTimeFormatter.string(from: trip.endedAt), symbol: "flag.checkered")
                     HStack(spacing: 8) {
+                        tripPurposeButton(.privateTrip, trip: trip)
+                        tripPurposeButton(.business, trip: trip)
+                        if snapshot.tripPurposes[trip.id] != nil {
+                            Button {
+                                setPurpose(nil, for: trip)
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(L10n.text("Clear trip classification"))
+                        }
                         if let lat = trip.startLatitude, let lon = trip.startLongitude {
                             Button { openMap(latitude: lat, longitude: lon) } label: {
                                 Label(L10n.text("Start"), systemImage: "mappin")
@@ -250,6 +336,27 @@ extension HistoryDashboardView {
             }
         }
         .padding(.vertical, 1)
+    }
+
+    func tripPurposeButton(_ purpose: TripPurpose, trip: TripHistoryEntry) -> some View {
+        let selected = snapshot.tripPurposes[trip.id] == purpose
+        return Button {
+            setPurpose(purpose, for: trip)
+        } label: {
+            Label(purpose.displayName,
+                  systemImage: purpose == .business ? "briefcase.fill" : "person.fill")
+                .font(.system(size: 9, weight: selected ? .semibold : .regular))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .tint(selected ? (purpose == .business ? .blue : .green) : .gray)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    func setPurpose(_ purpose: TripPurpose?, for trip: TripHistoryEntry) {
+        database.setTripPurpose(purpose, tripID: trip.id, vin: trip.vin)
+        if let purpose { snapshot.tripPurposes[trip.id] = purpose }
+        else { snapshot.tripPurposes.removeValue(forKey: trip.id) }
     }
 
     func tripRowAccessibilityLabel(_ trip: TripHistoryEntry) -> String {

@@ -46,6 +46,15 @@ struct LivePolestarReadOnlyIntegrationTests {
             let state = try await api.fetchVehicleState(vin: vin, features: features)
             XCTAssertEqual(state.vin, vin)
             XCTAssertTrue(state.batteryPercentage != nil || state.rangeKm != nil)
+            if let capabilities = state.otaCapabilities {
+                if capabilities.supportsGlobalChargeAmperageLimit {
+                    XCTAssertTrue(capabilities.chargeAmperageMinLimit > 0)
+                    XCTAssertTrue(capabilities.chargeAmperageMaxLimit >= capabilities.chargeAmperageMinLimit)
+                }
+                if capabilities.supportsTargetChargeLevel {
+                    XCTAssertTrue(capabilities.targetChargeLevelPercentageMinLimit > 0)
+                }
+            }
 
             await api.resetSession()
             let token = try XCTUnwrap(try keychain.readSessionToken())

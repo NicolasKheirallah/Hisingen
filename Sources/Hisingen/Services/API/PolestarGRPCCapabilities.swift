@@ -867,10 +867,32 @@ extension PolestarGRPC {
             // Nested Charging message (field 35)
             let chargingData = message(car, field: 35).map(Protobuf.fields)
             let supportsChargingFunctions = chargingData?.first(where: { $0.number == 1 })?.varint == 1
-            let supportsGlobalChargeAmperageLimit = chargingData?.first(where: { $0.number == 9 })?.varint == 1
-            let supportsTargetChargeLevel = chargingData?.first(where: { $0.number == 8 })?.varint == 1
+            // Newer app schemas changed these two fields from booleans to settings
+            // messages. The nested messages carry the limits while older vehicles still
+            // return a scalar `true`; accept both wire shapes.
+            let amperageSettings = message(chargingData ?? [], field: 9).map(Protobuf.fields)
+            let targetSettings = message(chargingData ?? [], field: 8).map(Protobuf.fields)
+            let supportsGlobalChargeAmperageLimit = amperageSettings != nil
+                || chargingData?.first(where: { $0.number == 9 && $0.wire == 0 })?.varint == 1
+            let supportsTargetChargeLevel = targetSettings != nil
+                || chargingData?.first(where: { $0.number == 8 && $0.wire == 0 })?.varint == 1
             let supportsChargeNowTimerOverride = chargingData?.first(where: { $0.number == 15 })?.varint == 1
             let supportsPlugAndCharge = chargingData?.first(where: { $0.number == 29 })?.varint == 1
+
+            // Settings messages use field 1 for the lower bound and field 2 for the upper
+            // bound. Read those exact fields (rather than every plausible-looking varint)
+            // so a future enum or feature flag cannot silently become a slider limit.
+            let chargeAmperageMinLimit = plausibleLimit(
+                amperageSettings, field: 1, range: 2...64
+            )
+            let advertisedAmpMaximum = plausibleLimit(
+                amperageSettings, field: 2, range: 2...64
+            )
+            let chargeAmperageMaxLimit = advertisedAmpMaximum >= chargeAmperageMinLimit
+                ? advertisedAmpMaximum : 0
+            let targetChargeLevelPercentageMinLimit = plausibleLimit(
+                targetSettings, field: 1, range: 20...100
+            )
 
             // Nested AirPurification message (field 34)
             let airData = message(car, field: 34).map(Protobuf.fields)
@@ -891,12 +913,25 @@ extension PolestarGRPC {
                 supportsGlobalChargeAmperageLimit: supportsGlobalChargeAmperageLimit,
                 supportsTargetChargeLevel: supportsTargetChargeLevel,
                 supportsChargeNowTimerOverride: supportsChargeNowTimerOverride,
+                chargeAmperageMinLimit: chargeAmperageMinLimit,
+                chargeAmperageMaxLimit: chargeAmperageMaxLimit,
+                targetChargeLevelPercentageMinLimit: targetChargeLevelPercentageMinLimit,
                 supportsWindowsControl: supportsWindowsControl,
                 supportsAirPurificationRemoteStart: supportsAirPurificationRemoteStart,
                 supportsPlugAndCharge: supportsPlugAndCharge
             )
         }
         return nil
+    }
+
+    private static func plausibleLimit(
+        _ fields: [Protobuf.Field]?, field number: Int, range: ClosedRange<Int>
+    ) -> Int {
+        guard let raw = fields?.first(where: { $0.number == number && $0.wire == 0 })?.varint else {
+            return 0
+        }
+        let value = Int(raw)
+        return range.contains(value) ? value : 0
     }
 
     static func parseGlobalChargeTimer(_ data: Data) -> VehicleSchedule? {

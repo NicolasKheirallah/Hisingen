@@ -4,6 +4,29 @@ import SwiftUI
 
 @MainActor
 final class StatusItemController: NSObject {
+    enum CoreContextAction: String, CaseIterable, Sendable {
+        case lock
+        case climate
+        case refresh
+    }
+
+    static let coreContextActions = CoreContextAction.allCases
+
+    static func lockCommand(for state: VehicleState?) -> RemoteCommand {
+        state?.exteriorStatus?.isLocked == true ? .unlock : .lock
+    }
+
+    static func climateCommand(for state: VehicleState?, temperatureCelsius: Double) -> RemoteCommand {
+        let activity = state?.climateStatus?.activity
+        let active = activity == .active || activity == .heating
+            || activity == .cooling || activity == .ventilating
+        if active { return .stopClimate }
+        return .startClimate(
+            temperatureCelsius: Float(temperatureCelsius),
+            frontLeftSeat: .off, frontRightSeat: .off,
+            rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off
+        )
+    }
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var latestState: VehicleState?
@@ -572,8 +595,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextToggleLock() {
-        let isLocked = latestState?.exteriorStatus?.isLocked == true
-        onRemoteCommand(isLocked ? .unlock : .lock)
+        onRemoteCommand(Self.lockCommand(for: latestState))
     }
 
     @objc private func contextToggleTailgate() {
@@ -586,16 +608,10 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextToggleClimate() {
-        let climateActive = latestState?.climateStatus?.activity == .active
-            || latestState?.climateStatus?.activity == .heating
-            || latestState?.climateStatus?.activity == .cooling
-            || latestState?.climateStatus?.activity == .ventilating
-        if climateActive {
-            onRemoteCommand(.stopClimate)
-        } else {
-            let temp = Float(preferences.remoteClimateTemperature)
-            onRemoteCommand(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off))
-        }
+        onRemoteCommand(Self.climateCommand(
+            for: latestState,
+            temperatureCelsius: preferences.remoteClimateTemperature
+        ))
     }
 
     @objc private func contextFlashLights() {

@@ -134,6 +134,37 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         }
     }
 
+    /// Polestar only: whether dispatching this command needs a token from the dedicated
+    /// *command* OAuth client (`lp8dyrd_10`), obtained via Settings → Remote Controls →
+    /// "Authorize Remote Commands".
+    ///
+    /// These are the commands routed through Polestar's C3 `invocation.InvocationService`,
+    /// which enforces a client-id allowlist the normal account (web) client is not on. The
+    /// remaining writes — charging, timers, charge locations, OTA — are accepted with the
+    /// primary session token and return `false` here.
+    ///
+    /// `PolestarGRPC.executeRemoteCommand` is the single dispatch authority; its `invocation`
+    /// cases must stay in sync with the `true` set below (the exhaustive switch makes a new
+    /// command a compile error until it is classified).
+    var requiresCommandClientAuthorization: Bool {
+        switch self {
+        case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
+             .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate,
+             .openWindows, .closeWindows,
+             .flashLights, .honkAndFlash, .honkHorn:
+            return true
+        case .lockReducedGuard, .setChargeTarget, .setAmpLimit,
+             .startChargingOverride, .stopChargingOverride,
+             .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer,
+             .scheduleOTA, .installOTANow, .cancelOTA,
+             .createChargeLocationAtCar, .updateChargeLocationAlias,
+             .updateChargeLocationAmpLimit, .updateChargeLocationMinimumSoc,
+             .setChargeLocationOptimisedCharging, .deleteChargeLocation,
+             .startEngine, .stopEngine:
+            return false
+        }
+    }
+
     func adapted(to profile: VehicleCapabilityProfile) -> RemoteCommand {
         guard case .startClimate(let temperature, let frontLeft, let frontRight,
                                  let rearLeft, let rearRight, let steeringWheel) = self else {

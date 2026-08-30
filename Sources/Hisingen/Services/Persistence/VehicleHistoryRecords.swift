@@ -312,6 +312,79 @@ struct TripHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
 }
 
+enum TripPurpose: String, Codable, CaseIterable, Identifiable, Sendable {
+    case privateTrip = "private"
+    case business = "business"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .privateTrip: return L10n.text("Private")
+        case .business: return L10n.text("Business")
+        }
+    }
+}
+
+struct MonthlyMileageReport: Equatable, Identifiable, Sendable {
+    let monthStart: Date
+    let privateKm: Double
+    let businessKm: Double
+    let unclassifiedKm: Double
+    let privateTrips: Int
+    let businessTrips: Int
+    let unclassifiedTrips: Int
+
+    var id: Date { monthStart }
+    var totalKm: Double { privateKm + businessKm + unclassifiedKm }
+    var totalTrips: Int { privateTrips + businessTrips + unclassifiedTrips }
+
+    static func build(
+        from trips: [TripHistoryEntry],
+        purposes: [String: TripPurpose],
+        calendar: Calendar = .current
+    ) -> [MonthlyMileageReport] {
+        let grouped = Dictionary(grouping: trips) { trip in
+            let components = calendar.dateComponents([.era, .year, .month], from: trip.endedAt)
+            return calendar.date(from: components) ?? calendar.startOfDay(for: trip.endedAt)
+        }
+        return grouped.map { month, monthTrips in
+            let privateTrips = monthTrips.filter { purposes[$0.id] == .privateTrip }
+            let businessTrips = monthTrips.filter { purposes[$0.id] == .business }
+            let unclassified = monthTrips.filter { purposes[$0.id] == nil }
+            return MonthlyMileageReport(
+                monthStart: month,
+                privateKm: privateTrips.reduce(0) { $0 + $1.distanceKm },
+                businessKm: businessTrips.reduce(0) { $0 + $1.distanceKm },
+                unclassifiedKm: unclassified.reduce(0) { $0 + $1.distanceKm },
+                privateTrips: privateTrips.count,
+                businessTrips: businessTrips.count,
+                unclassifiedTrips: unclassified.count
+            )
+        }
+        .sorted { $0.monthStart > $1.monthStart }
+    }
+
+    static func csv(
+        reports: [MonthlyMileageReport], vin: String
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM"
+        var csv = "Month,VIN,Business Trips,Business km,Private Trips,Private km,Unclassified Trips,Unclassified km,Total km\n"
+        for report in reports.sorted(by: { $0.monthStart < $1.monthStart }) {
+            csv += [
+                formatter.string(from: report.monthStart), vin,
+                String(report.businessTrips), String(format: "%.2f", report.businessKm),
+                String(report.privateTrips), String(format: "%.2f", report.privateKm),
+                String(report.unclassifiedTrips), String(format: "%.2f", report.unclassifiedKm),
+                String(format: "%.2f", report.totalKm)
+            ].joined(separator: ",") + "\n"
+        }
+        return csv
+    }
+}
+
 struct RemoteCommandAuditRecord: Codable, Equatable, Identifiable, Sendable {
     let id: String
     let vin: String

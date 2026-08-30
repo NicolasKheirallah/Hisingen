@@ -53,7 +53,9 @@ final class VehicleStateStore {
     func save(_ state: VehicleState) {
         database.saveSnapshot(state)
 
-        if let airQuality = state.airQuality {
+        // Cabin AQI comes from Polestar's GetPreCleaning service. Do not persist a value on
+        // Volvo snapshots even if a stale/imported payload happens to carry that field.
+        if !state.isVolvo, let airQuality = state.airQuality {
             database.recordAirQuality(
                 vin: state.vin,
                 airQualityIndex: airQuality.airQualityIndex.map(Double.init),

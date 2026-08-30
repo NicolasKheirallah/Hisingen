@@ -49,10 +49,13 @@ actor PolestarAPI {
     var commandTokenExpiry: Date?
     var commandPendingVerifier: String?
     var commandPendingState: String?
+    /// When the current "Authorize Remote Commands" browser flow began. Used to expire a
+    /// pending PKCE pair the user walked away from rather than leaving it completable forever.
+    var commandPendingSince: Date?
     var webPendingVerifier: String?
     var webPendingState: String?
-    /// Single-flight guard for the command client's refresh grant (see `validCommandToken`).
-    var commandRefreshTask: Task<String?, Never>?
+    /// Single-flight guard for the command client's refresh grant (see `commandClientAuthorization`).
+    var commandRefreshTask: Task<CommandClientAuthorization, Never>?
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
@@ -328,6 +331,12 @@ actor PolestarAPI {
     /// control), the OS can route the final redirect straight back into the app. Used by
     /// `PolestarCommandSignInPresenter` instead of the scripted PingFederate form-fill used for
     /// the web client's own sign-in — Hisingen never sees the password for this flow.
+    ///
+    /// Any macOS app can also register `polestar-explore://`, so a hostile app that wins the
+    /// LaunchServices registration could receive this callback. It is not exploitable: the
+    /// authorization `code` is PKCE-bound to `commandPendingVerifier`, which never leaves this
+    /// process, and `completeCommandAuthorization` rejects any callback whose `state` does not
+    /// match `commandPendingState`. This is the same exposure the official Polestar app carries.
     func beginCommandAuthorization() async throws -> URL {
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
         guard let authorizationEndpoint else {
@@ -337,6 +346,7 @@ actor PolestarAPI {
         let state = try Self.randomURLSafeString()
         commandPendingVerifier = verifier
         commandPendingState = state
+        commandPendingSince = Date()
         guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
             throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
         }
@@ -359,8 +369,16 @@ actor PolestarAPI {
         guard let verifier = commandPendingVerifier, let expectedState = commandPendingState else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        let startedAt = commandPendingSince
         commandPendingVerifier = nil
         commandPendingState = nil
+        commandPendingSince = nil
+        // A flow the user began and walked away from should not stay completable indefinitely —
+        // a much later `polestar-explore://` callback matching this state is more likely stale
+        // or hostile than a legitimate resumption.
+        if let startedAt, Date().timeIntervalSince(startedAt) > 600 {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
         guard callbackURL.scheme == commandRedirectURL.scheme,
               callbackURL.host == commandRedirectURL.host else {
             throw PolestarError.authenticationRequired(.callbackRejected)
@@ -374,8 +392,19 @@ actor PolestarAPI {
         }
         let token = try await exchangeCode(code, verifier: verifier,
                                            clientID: commandClientID, redirectURI: commandRedirectURL)
+        // Without a refresh token the authorization works for ~1 h and then silently stops,
+        // with nothing to refresh from and nothing durable for the next launch. Keep any
+        // refresh token we already hold rather than nulling it, and refuse outright when there
+        // is nothing durable at all so the user knows to retry instead of hitting a silent
+        // expiry later.
+        let durableRefresh = token.refreshToken ?? commandRefreshToken
+            ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        guard let durableRefresh, !durableRefresh.isEmpty else {
+            logger.error("Polestar command authorization returned no refresh token; not persisting")
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
         commandAccessToken = token.accessToken
-        commandRefreshToken = token.refreshToken
+        commandRefreshToken = durableRefresh
         commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
         if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
         logger.info("Polestar command-client token acquired via browser sign-in")

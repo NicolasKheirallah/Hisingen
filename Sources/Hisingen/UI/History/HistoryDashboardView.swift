@@ -39,6 +39,8 @@ struct HistoryDashboardView: View {
 
     @State var expandedTripIDs: Set<String> = []
 
+    @State var mileageReportMonthStart: Date?
+
     /// Bumped by the manual Refresh button and fuel edits — reloads everything.
     @State var refreshToken = 0
 
@@ -129,6 +131,8 @@ struct HistoryDashboardView: View {
 
     struct HistoryDataSnapshot: Sendable {
         var trips: [TripHistoryEntry] = []
+        var reportTrips: [TripHistoryEntry] = []
+        var tripPurposes: [String: TripPurpose] = [:]
         var chargingSessions: [HistoricalChargingSession] = []
         var commands: [RemoteCommandAuditRecord] = []
         var airQualityRecords: [AirQualityRecord] = []
@@ -287,6 +291,7 @@ struct HistoryDashboardView: View {
                 if !trips.isEmpty {
                     drivingPatternsCard
                     distanceChartCard
+                    monthlyMileageReportCard
                     tripListCard
                 }
                 if !chargingSessions.isEmpty {
@@ -404,6 +409,8 @@ struct HistoryDashboardView: View {
 
             let rawTrips = db.derivedTrips(for: vin, limit: tripLimit)
             snap.trips = rawTrips.filter { inRange($0.endedAt) }
+            snap.reportTrips = rawTrips
+            snap.tripPurposes = db.tripPurposes(for: vin)
 
             let rawSessions = db.recentChargingSessions(for: vin, limit: cap)
             let reconciledSessions = rawSessions.map {

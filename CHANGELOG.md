@@ -5,6 +5,31 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [1.3.0] - 2026-08-30
 
+### Added
+
+- Spot-price charging recommendation on the Controls tab: fetches Swedish day-ahead
+  electricity prices (elprisetjustnu.se, areas SE1–SE4), finds the cheapest contiguous
+  window long enough to reach the charge target from the current state of charge, and
+  shows that window with its estimated energy cost. Advisory only — it never changes the
+  vehicle's own charging schedule — and prices are fetched once per area, then the window
+  is re-solved locally as state of charge changes rather than re-fetched.
+- Calendar preconditioning: Hisingen can start cabin climate a configurable lead time
+  before timed events in calendars you choose (Settings → Features). It runs as a
+  menu-bar scheduler that arms a single timer for the next event and re-checks on wake
+  and on calendar changes, targets the active vehicle, and — being a preconfigured
+  automation with nobody present to answer a prompt — dispatches the routine climate
+  command without the interactive device-owner confirmation. Requires calendar access.
+- Trip purpose tagging and a Monthly Mileage Report: mark detected trips **Business** or
+  **Private** on the History tab and get a per-month business/private distance split with
+  CSV export. Purposes are stored locally, per vehicle.
+- Live API Diagnostics inspector (Settings → data & storage): a filterable,
+  auto-refreshing view over the already-redacted API request/response ring buffer, which
+  was previously export-only.
+- Charge-target and current-limit sliders now use the minimum/maximum the vehicle
+  advertises through its `GetMyCars` capabilities (both the older boolean and the newer
+  settings-message wire shapes are accepted), falling back to the conservative
+  40–100 % / 6–32 A ranges when the vehicle does not report them.
+
 ### Changed
 
 - Minimum supported macOS is now **15 Sequoia** (was 14 Sonoma).
@@ -30,6 +55,39 @@ All notable changes to Hisingen are documented in this file. The project follows
   ~460 lines and does little beyond wiring its collaborators together.
 - Finished migrating the test suite off XCTest assertions to Swift Testing
   (`#expect` / `#require`).
+- Broke `SettingsView` (≈3,000 lines) into a composition root plus per-card views —
+  `SettingsNotificationsCard`, `SettingsCapabilityMatrixCard`, `SettingsUpdatesCard`,
+  `SettingsFleetCard`, `SettingsRemoteControlsCard`, `SettingsVehicleDataCard`,
+  `SettingsChargingStatOrderCard`, and a shared `SettingsFeatureToggleRow` — each binding
+  straight through `PreferencesStore` via a shared `PreferenceBinder` instead of a local
+  `@State` mirror seeded in `.onAppear` and written back in `.onChange`.
+- Reorganised `Sources/Hisingen/UI/` into feature folders (`Shell/`, `Vehicle/`,
+  `Controls/`, `Info/`, `History/`, `Settings/`) alongside the existing `Components/` and
+  `Theme/`.
+
+### Fixed
+
+- Polestar remote-command authorization is now surfaced and diagnosed properly. Settings →
+  Remote Controls shows whether the command client is authorized and marks the exact
+  toggles that need it (locks, climate, windows, cabin cleaning, locate); charging,
+  timers and software installation, which work with the account sign-in alone, are no
+  longer implied to need it. A failed command-token refresh now tells "not authorized —
+  re-authorize in Settings" apart from "couldn't reach Polestar, try again", and a
+  rejected refresh token is cleared instead of re-tried on every command. The
+  authorization is refused if it comes back without a durable refresh token (it would
+  otherwise expire silently after an hour), an abandoned browser flow can no longer be
+  completed after 10 minutes, and the command-client token is threaded through each
+  dispatch as a parameter instead of shared actor state that a concurrent command for
+  another vehicle could overwrite mid-flight.
+- `VehicleDatabase` no longer shares one `JSONEncoder` / `JSONDecoder` /
+  `ISO8601DateFormatter` across operations: `saveSnapshot` encoded outside the SQLite
+  lock and the backup path reconfigured a shared encoder, so a concurrent write raced an
+  unsynchronised instance and could change the on-disk snapshot format. Each operation
+  now uses its own.
+- The v1 schema migration's `PRAGMA user_version` bump is now gated on the target columns
+  existing and grouped with its data-migration statement, so a transient failure can no
+  longer advance the schema version past the legacy-row quarantine (matching the v2
+  block's guard).
 
 ## [1.2.5] - 2026-08-29
 

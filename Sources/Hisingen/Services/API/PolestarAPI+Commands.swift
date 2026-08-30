@@ -21,9 +21,29 @@ extension PolestarAPI {
             throw RemoteCommandError.unsupported
         }
         let adaptedCommand = command.adapted(to: profile)
+        // Only the invocation-backed commands (locks, climate, windows, cabin cleaning,
+        // locate) need the separate command-client token; charging, timers and OTA go
+        // through with the primary session token, so don't spend a refresh round-trip on them.
+        let commandToken: String?
+        if adaptedCommand.requiresCommandClientAuthorization {
+            switch await commandClientAuthorization() {
+            case .authorized(let resolved):
+                commandToken = resolved
+            case .notAuthorized:
+                throw RemoteCommandError.rejected(
+                    L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
+                )
+            case .unavailable:
+                throw RemoteCommandError.rejected(
+                    L10n.text("Couldn't confirm remote-command authorization with Polestar. Check your connection and try again.")
+                )
+            }
+        } else {
+            commandToken = nil
+        }
         let result = try await grpc.executeRemoteCommand(
             adaptedCommand, vin: vin, accessToken: token,
-            commandToken: await validCommandToken()
+            commandToken: commandToken
         )
         if case .setChargeTarget(let target) = adaptedCommand { targetCache[vin] = (target, Date()) }
         if case .setAmpLimit(let amps) = adaptedCommand {

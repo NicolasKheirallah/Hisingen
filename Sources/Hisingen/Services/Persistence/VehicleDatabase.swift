@@ -17,7 +17,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 2
+    static let latestSchemaVersion = 3
 
     /// Whether the database file already existed when this process opened it. Gates the
     /// one-shot pre-migration backup and the corruption quarantine — neither is meaningful
@@ -185,6 +185,15 @@ final class VehicleDatabase: @unchecked Sendable {
             longitude REAL
         );
         CREATE INDEX IF NOT EXISTS idx_telemetry_vin ON telemetry_logs(vin, timestamp DESC);
+
+        CREATE TABLE IF NOT EXISTS trip_tags (
+            trip_id TEXT NOT NULL,
+            vin TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (trip_id, vin)
+        );
+        CREATE INDEX IF NOT EXISTS idx_trip_tags_vin ON trip_tags(vin, updated_at DESC);
 
         CREATE TABLE IF NOT EXISTS remote_commands_log (
             id TEXT PRIMARY KEY NOT NULL,
@@ -374,6 +383,26 @@ final class VehicleDatabase: @unchecked Sendable {
                     """)
             } else {
                 logger.error("Charging-session schema migration remains incomplete; it will retry next launch")
+            }
+        }
+
+        // v3: durable business/private classification for locally-derived trips.
+        if currentVersion < 3 {
+            do {
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS trip_tags (
+                        trip_id TEXT NOT NULL,
+                        vin TEXT NOT NULL,
+                        purpose TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        PRIMARY KEY (trip_id, vin)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_trip_tags_vin
+                        ON trip_tags(vin, updated_at DESC);
+                    PRAGMA user_version = 3;
+                    """)
+            } catch {
+                logger.error("Trip-classification schema migration remains incomplete: \(error, privacy: .public)")
             }
         }
     }
@@ -1212,6 +1241,63 @@ final class VehicleDatabase: @unchecked Sendable {
         return csv
     }
 
+    // MARK: - Trip classification and monthly mileage
+
+    func setTripPurpose(_ purpose: TripPurpose?, tripID: String, vin: String) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !tripID.isEmpty, !cleanVIN.isEmpty else { return }
+        if let purpose {
+            let sql = """
+            INSERT INTO trip_tags (trip_id, vin, purpose, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(trip_id, vin) DO UPDATE SET
+                purpose=excluded.purpose, updated_at=excluded.updated_at;
+            """
+            try? db.query(sql: sql) { stmt in
+                try stmt.bindText(tripID, at: 1)
+                try stmt.bindText(cleanVIN, at: 2)
+                try stmt.bindText(purpose.rawValue, at: 3)
+                try stmt.bindDate(Date(), at: 4)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        } else {
+            try? db.query(sql: "DELETE FROM trip_tags WHERE trip_id = ? AND vin = ?;") { stmt in
+                try stmt.bindText(tripID, at: 1)
+                try stmt.bindText(cleanVIN, at: 2)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
+    }
+
+    func tripPurposes(for vin: String) -> [String: TripPurpose] {
+        let sql = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
+        return (try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
+        } process: { stmt -> [String: TripPurpose] in
+            var result: [String: TripPurpose] = [:]
+            while stmt.step() {
+                guard let id = stmt.columnText(at: 0),
+                      let raw = stmt.columnText(at: 1),
+                      let purpose = TripPurpose(rawValue: raw) else { continue }
+                result[id] = purpose
+            }
+            return result
+        }) ?? [:]
+    }
+
+    func monthlyMileageReports(for vin: String, limit: Int = 5_000,
+                               calendar: Calendar = .current) -> [MonthlyMileageReport] {
+        MonthlyMileageReport.build(
+            from: derivedTrips(for: vin, limit: limit),
+            purposes: tripPurposes(for: vin),
+            calendar: calendar
+        )
+    }
+
+    func exportMonthlyMileageCSV(for vin: String, limit: Int = 5_000) -> String {
+        MonthlyMileageReport.csv(reports: monthlyMileageReports(for: vin, limit: limit), vin: vin)
+    }
+
     // MARK: - Remote Commands Audit
 
     func recordCommandAudit(id: String = UUID().uuidString, vin: String,
@@ -1547,6 +1633,7 @@ final class VehicleDatabase: @unchecked Sendable {
                 "DELETE FROM charging_sessions WHERE vin = ?;",
                 "DELETE FROM battery_health_history WHERE vin = ?;",
                 "DELETE FROM telemetry_logs WHERE vin = ?;",
+                "DELETE FROM trip_tags WHERE vin = ?;",
                 "DELETE FROM charging_samples WHERE vin = ?;",
                 "DELETE FROM remote_commands_log WHERE vin = ?;",
                 "DELETE FROM connectivity_history WHERE vin = ?;",
@@ -1571,6 +1658,7 @@ final class VehicleDatabase: @unchecked Sendable {
                 DELETE FROM charging_samples;
                 DELETE FROM battery_health_history;
                 DELETE FROM telemetry_logs;
+                DELETE FROM trip_tags;
                 DELETE FROM remote_commands_log;
                 DELETE FROM air_quality_history;
                 DELETE FROM connectivity_history;

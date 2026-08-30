@@ -1,6 +1,6 @@
 import Foundation
 
-enum APILogProvider: String, Codable, Sendable {
+enum APILogProvider: String, Codable, CaseIterable, Sendable {
     case volvo
     case polestar
     /// Hisingen's own first-party requests (update checks). Deliberately not used for

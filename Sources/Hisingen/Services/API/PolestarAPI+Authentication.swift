@@ -1,5 +1,19 @@
 import Foundation
 
+/// Outcome of resolving a Polestar command-client (`lp8dyrd_10`) access token for a remote
+/// command. Distinguishes the two failure modes so callers can say the right thing:
+/// `.notAuthorized` needs a Settings visit, `.unavailable` just needs another try later.
+enum CommandClientAuthorization: Sendable, Equatable {
+    /// A usable command-client access token.
+    case authorized(String)
+    /// No stored command-client session — the user has not run "Authorize Remote Commands",
+    /// or the stored refresh token was rejected and cleared. Retrying will not help.
+    case notAuthorized
+    /// A command-client refresh token exists but could not be exchanged right now (offline,
+    /// IdP 5xx, rate limit). The authorization is probably still valid.
+    case unavailable
+}
+
 extension PolestarAPI {
     func validAccessToken() async throws -> String? {
         try await refreshTokenIfNeeded()
@@ -22,26 +36,30 @@ extension PolestarAPI {
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
     }
 
-    /// Returns a valid command-client access token, refreshing silently from the stored refresh
-    /// token if needed. Unlike the old implementation, this **never** falls back to replaying a
-    /// stored password or prompting for one — once the command client's refresh token itself is
-    /// gone or rejected, remote commands become unavailable until the user explicitly
-    /// re-authorizes through a real browser window (`SignInCoordinator.beginPolestarCommandAuthorization()`,
-    /// surfaced as "Authorize Remote Commands" in Settings). Callers should treat a `nil` return
-    /// as "not authorized for remote commands right now," not as a transient error to retry.
+    /// Resolves the command-client access token, refreshing silently from the stored refresh
+    /// token when needed. This **never** falls back to replaying a stored password or prompting
+    /// for one — once the command client's refresh token itself is gone or rejected, remote
+    /// commands stay unavailable until the user re-authorizes through a real browser window
+    /// (`SignInCoordinator.beginPolestarCommandAuthorization()`, surfaced as "Authorize Remote
+    /// Commands" in Settings).
+    ///
+    /// The three-way result lets the caller tell the user the truth: `.notAuthorized` is a
+    /// dead end that a Settings visit fixes, `.unavailable` is a transient failure (offline,
+    /// IdP 5xx) that a later retry recovers from on its own. A dead refresh token is cleared
+    /// here so it is not re-tried on every subsequent command.
     ///
     /// Refreshes are single-flight: parallel commands used to each fire a `refresh_token`
     /// grant with the *same* stored token, and under a rotate-on-use identity provider one
     /// replay fails while both paths then persist different rotated tokens (last writer
     /// wins, orphaning the other).
-    func validCommandToken() async -> String? {
+    func commandClientAuthorization() async -> CommandClientAuthorization {
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
-           let token = commandAccessToken { return token }
+           let token = commandAccessToken { return .authorized(token) }
         if let existing = commandRefreshTask {
             return await existing.value
         }
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        guard let refresh = stored, let tokenEndpoint else { return nil }
+        guard let refresh = stored, !refresh.isEmpty, let tokenEndpoint else { return .notAuthorized }
         var request = URLRequest(url: tokenEndpoint)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -49,17 +67,24 @@ extension PolestarAPI {
             "grant_type": "refresh_token", "client_id": commandClientID, "refresh_token": refresh
         ])
         let currentSession = session
-        let task = Task { [logger] () -> String? in
+        let task = Task { [logger] () -> CommandClientAuthorization in
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession)
                 self.applyCommandToken(token, fallbackRefresh: refresh)
-                return token.accessToken
+                return .authorized(token.accessToken)
+            } catch let error as PolestarError where error.requiresAuthentication {
+                // The refresh token itself is dead (invalid_grant / 401). Retrying it every
+                // command just re-fails; drop it so the UI flips to "not authorized" and the
+                // user is pointed at "Authorize Remote Commands" once.
+                logger.warning("Polestar command-token refresh rejected; clearing stored authorization")
+                self.clearCommandAuthorization()
+                return .notAuthorized
             } catch {
-                // Distinguish "not authorized" from "network hiccup" at least in the log so
-                // a Wi-Fi blip isn't misdiagnosed as an expired authorization.
-                logger.warning("Polestar command-token refresh failed: \(String(describing: error), privacy: .public)")
-                return nil
+                // Transient: offline, 5xx, rate limit, decode. The authorization is probably
+                // still good — keep the stored refresh token and let a later command retry.
+                logger.warning("Polestar command-token refresh failed transiently: \(String(describing: error), privacy: .public)")
+                return .unavailable
             }
         }
         commandRefreshTask = task
@@ -72,6 +97,16 @@ extension PolestarAPI {
         commandRefreshToken = token.refreshToken ?? fallbackRefresh
         commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
         if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+    }
+
+    /// Drops every trace of the command-client session — in memory and in the Keychain — so
+    /// `PreferencesStore.hasPolestarCommandAuthorization` and the Settings card reflect that
+    /// remote commands need re-authorizing. Used when the refresh token is rejected.
+    func clearCommandAuthorization() {
+        commandAccessToken = nil
+        commandRefreshToken = nil
+        commandTokenExpiry = nil
+        try? keychain.deleteCommandSessionToken()
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
@@ -105,6 +140,7 @@ extension PolestarAPI {
         // the old state complete a flow the user never restarted.
         commandPendingVerifier = nil
         commandPendingState = nil
+        commandPendingSince = nil
         refreshTask?.cancel()
         refreshTask = nil
         cancelImageDownloads()

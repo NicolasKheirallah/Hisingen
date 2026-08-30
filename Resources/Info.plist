@@ -45,6 +45,10 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Nicolas Kheirallah. Not affiliated with Polestar or Volvo Cars.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
 	<!-- Sparkle 2 uses this HTTPS appcast and Ed25519 key to authenticate updates. The
 	 public key is injected into production bundles by the release workflow; it is never
 	 a private signing key. Local builds intentionally leave the updater disabled. -->

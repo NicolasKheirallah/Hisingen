@@ -2,6 +2,15 @@ import Foundation
 import OSLog
 import UserNotifications
 
+/// Who asked for a command. `.userInitiated` goes through the normal interactive
+/// authorization (confirmation sheet / device-owner prompt). `.automation` is a
+/// pre-authorized background trigger (e.g. calendar preconditioning) with nobody at the
+/// Mac to answer a prompt — it runs routine commands silently and refuses anything riskier.
+enum RemoteCommandOrigin: Sendable {
+    case userInitiated
+    case automation
+}
+
 /// Context the coordinator needs from the app shell. Kept narrow on purpose: everything else
 /// (gating, authorization, execution, audit, optimistic patching, follow-up refresh) lives
 /// here so command behaviour has exactly one home.
@@ -61,7 +70,7 @@ final class CommandCoordinator {
         followUpRefreshTask = nil
     }
 
-    func perform(_ command: RemoteCommand) {
+    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin = .userInitiated) {
         guard let context else { return }
         guard !isInProgress else {
             context.presentResult(
@@ -99,10 +108,20 @@ final class CommandCoordinator {
         }.joined(separator: " - ")
         Task { [weak self] in
             guard let self else { return }
-            guard await self.authorizer.authorize(
-                adapted,
-                vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
-            ) else { return }
+            let approved: Bool
+            switch origin {
+            case .userInitiated:
+                approved = await self.authorizer.authorize(
+                    adapted,
+                    vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
+                )
+            case .automation:
+                // A user-configured automation pre-authorizes routine commands; there is no
+                // one present to answer a confirmation sheet or a device-owner prompt when it
+                // fires. Anything non-routine still requires an explicit person.
+                approved = adapted.risk == .routine
+            }
+            guard approved else { return }
             guard !self.isInProgress else { return }
             // Authorization can show a modal sheet or biometric prompt. The active account,
             // provider, or vehicle may change while it is visible; never send the command

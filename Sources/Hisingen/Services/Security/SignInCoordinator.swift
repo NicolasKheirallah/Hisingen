@@ -13,6 +13,10 @@ protocol SignInCoordinatorContext: AnyObject {
     func activateBrandAfterSignIn(_ brand: VehicleBrand)
     /// Close the Settings surface after a flow succeeds.
     func dismissSettingsAfterSignIn()
+    /// Re-render the Settings surface in place (without closing it) so a card reflects state
+    /// that changed out from under it — e.g. the Polestar command-authorization status after
+    /// the browser round-trip completes.
+    func refreshSettingsSurface()
     /// A persistent, notification-backed confirmation. Used where a transient banner that
     /// self-cleans after 5 s would read as "did that actually go through?".
     func presentSignInNotice(title: String, body: String, subtitle: String?)
@@ -188,6 +192,9 @@ final class SignInCoordinator {
                     body: L10n.text("Polestar remote commands are now available."),
                     subtitle: L10n.text("Polestar")
                 )
+                // The Remote Controls card reads the authorization state synchronously; nudge
+                // it so "Authorize…" becomes "Re-authorize…" without the user reopening Settings.
+                context?.refreshSettingsSurface()
             } catch {
                 let mapped = error as? LocalizedError
                 logger.error("Polestar command authorization failed: \(String(describing: error), privacy: .public)")
@@ -195,6 +202,7 @@ final class SignInCoordinator {
                     title: L10n.text("Authorization failed"),
                     message: mapped?.errorDescription ?? error.localizedDescription, success: false
                 )
+                context?.refreshSettingsSurface()
             }
         }
     }

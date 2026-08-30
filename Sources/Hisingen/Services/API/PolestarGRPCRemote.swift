@@ -32,14 +32,18 @@ extension PolestarGRPC {
                               commandToken: String? = nil) async throws -> RemoteCommandResult {
         // Invocation-backed commands are gated on a client-id allowlist that the primary
         // (web) client is not on, so they need the command client's token (`lp8dyrd_10`). Everything else
-        // — OTA and chronos — is happy with the primary token.
-        let isInvocation = isInvocationCommand(command)
-        if isInvocation && commandToken == nil {
+        // — OTA and chronos — is happy with the primary token. `PolestarAPI.executeRemoteCommand`
+        // resolves the command token (and reports "not authorized" vs "try again") before calling
+        // in; this stays as a defensive backstop.
+        if command.requiresCommandClientAuthorization && commandToken == nil {
             throw RemoteCommandError.rejected(
                 L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
             )
         }
-        self.activeCommandToken = commandToken ?? accessToken
+        // Thread the resolved token through as a local, not actor state: `executeRemoteCommand`
+        // suspends at every `await` below, so a concurrent command for another VIN would
+        // otherwise overwrite a shared field mid-flight and cross the two tokens.
+        let invocationToken = commandToken ?? accessToken
         switch command {
         case .startClimate(let temperature, let frontLeft, let frontRight,
                            let rearLeft, let rearRight, let steeringWheel):
@@ -52,65 +56,64 @@ extension PolestarGRPC {
                                                   frontLeft: frontLeft, frontRight: frontRight,
                                                   rearLeft: rearLeft, rearRight: rearRight,
                                                   steeringWheel: steeringWheel),
-                vin: vin, token: accessToken
+                vin: vin, token: invocationToken
             )
         case .stopClimate:
             return try await invocation(method: "ClimatizationStop",
-                                        request: Self.invocationOnlyRequest(vin), vin: vin, token: accessToken)
+                                        request: Self.invocationOnlyRequest(vin), vin: vin, token: invocationToken)
         case .startPreCleaning:
             return try await invocation(method: "PreCleaning",
                                         request: Self.preCleaningRequest(vin: vin, start: true),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .stopPreCleaning:
             return try await invocation(method: "PreCleaning",
                                         request: Self.preCleaningRequest(vin: vin, start: false),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .lock:
             return try await invocation(method: "Lock", request: Self.lockRequest(vin),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .lockReducedGuard:
             throw RemoteCommandError.unsupported
         case .unlock:
             return try await invocation(method: "Unlock", request: Self.unlockRequest(vin, trunkOnly: false),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .unlockTrunk:
             return try await invocation(method: "Unlock", request: Self.unlockRequest(vin, trunkOnly: true),
-                                         vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .openTailgate:
             return try await invocation(method: "TailgateControl",
                                         request: Self.tailgateRequest(vin, open: true),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .closeTailgate:
             return try await invocation(method: "TailgateControl",
                                         request: Self.tailgateRequest(vin, open: false),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .openWindows:
             return try await invocation(method: "WindowControl", request: Self.windowRequest(vin, action: 1),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .closeWindows:
             return try await invocation(method: "WindowControl", request: Self.windowRequest(vin, action: 2),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .flashLights:
             return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 2),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .honkAndFlash:
             return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 0),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .honkHorn:
             return try await invocation(method: "HonkFlash", request: Self.honkFlashRequest(vin, action: 1),
-                                        vin: vin, token: accessToken)
+                                        vin: vin, token: invocationToken)
         case .setChargeTarget(let target):
             // Validate against the bounds the vehicle itself advertises via GetMyCars when
             // they are known; the hardcoded ranges are only a fallback for vehicles whose
             // capabilities have not been fetched yet. Some models reject targets below 50
             // or above 90 — previously every such request failed server-side with an
             // opaque rejection instead of being caught here with a clear message.
-            let limits = capabilityLimits[vin]
-            let minimumTarget = max(40, limits?.targetChargeLevelPercentageMinLimit ?? 0)
-            guard (minimumTarget...100).contains(target) else {
+            let bounds = VehicleChargeBounds(capabilities: capabilityLimits[vin])
+            guard bounds.targetRange.contains(target) else {
                 throw RemoteCommandError.rejected(
                     L10n.format("The charge target must be between %d%% and 100%% on this vehicle.",
-                                minimumTarget)
+                                bounds.targetRange.lowerBound)
                 )
             }
             var payload = Data()
@@ -126,15 +129,12 @@ extension PolestarGRPC {
             return try Self.chronosResult(body, statusField: 3)
         case .setAmpLimit(let amps):
             // Same capability-aware bounds as the charge target: prefer the vehicle's own
-            // advertised amperage range (e.g. Polestar 3 exposes 6–32 A via GetMyCars) and
-            // keep 1–64 A only as the pre-discovery fallback.
-            let limits = capabilityLimits[vin]
-            let minimumAmps = max(1, limits?.chargeAmperageMinLimit ?? 1)
-            let maximumAmps = min(64, max(minimumAmps, limits?.chargeAmperageMaxLimit ?? 64))
-            guard (minimumAmps...maximumAmps).contains(amps) else {
+            // advertised amperage range (e.g. Polestar 3 exposes 6–32 A via GetMyCars).
+            let bounds = VehicleChargeBounds(capabilities: capabilityLimits[vin])
+            guard bounds.amperageRange.contains(amps) else {
                 throw RemoteCommandError.rejected(
                     L10n.format("The charging current must be between %d A and %d A on this vehicle.",
-                                minimumAmps, maximumAmps)
+                                bounds.amperageRange.lowerBound, bounds.amperageRange.upperBound)
                 )
             }
             let payload = Protobuf.intField(2, amps)
@@ -348,11 +348,14 @@ extension PolestarGRPC {
         }
     }
 
+    /// `token` is the command-client token resolved by the caller (`invocationToken` in
+    /// `executeRemoteCommand`) — invocation RPCs are the ones the primary web client is not
+    /// allowlisted for.
     private func invocation(method: String, request: Data, vin: String,
                             token: String) async throws -> RemoteCommandResult {
         let body = try await lastMessage(path: Self.invocationService + "/\(method)",
                                          message: request, vin: vin,
-                                         accessToken: activeCommandToken ?? token, host: .c3)
+                                         accessToken: token, host: .c3)
         return try Self.parseInvocationResult(body)
     }
 
@@ -527,20 +530,8 @@ extension PolestarGRPC {
         guard let value = message(data, field: field) else { return "" }
         return String(data: value, encoding: .utf8) ?? ""
     }
-    private func isInvocationCommand(_ command: RemoteCommand) -> Bool {
-        switch command {
-        case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
-             .lock, .unlock, .unlockTrunk, .openTailgate, .closeTailgate,
-             .openWindows, .closeWindows,
-             .flashLights, .honkAndFlash, .honkHorn:
-            return true
-        default:
-            return false
-        }
-    }
 }
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-

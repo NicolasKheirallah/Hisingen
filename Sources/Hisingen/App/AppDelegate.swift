@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Most recent remote-command outcome, mirrored into the Controls tab for an inline banner.
     private var lastRemoteCommandFeedback: RemoteCommandFeedback?
     private var commandCoordinator: CommandCoordinator!
+    private var calendarPreconditioning: CalendarPreconditioningController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         mainMenuController = MainMenuController(
@@ -90,6 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commandCoordinator = CommandCoordinator(
             context: self, preferences: preferences,
             database: vehicleDatabase, authorizer: remoteAuthorizer)
+        calendarPreconditioning = CalendarPreconditioningController(
+            preferences: preferences,
+            sendClimateStart: { [weak self] in self?.startCalendarClimate() }
+        )
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
@@ -124,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vehicleSession.resume()
         garageScanner.startLoop()
         urlRouter.startHandlingAppleEvents()
+        calendarPreconditioning.start()
         if !initiallyAuthenticated {
             statusController.openPopover()
         }
@@ -156,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         commandCoordinator.cancelPendingWork()
+        calendarPreconditioning.stop()
         garageScanner.stop()
         vehicleSession.stop()
 
@@ -261,8 +268,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateController.applyConfiguration()
         case .checkForUpdates:
             updateController.checkNow()
+        case .automation:
+            calendarPreconditioning.reload()
         }
         render()
+    }
+
+    private func startCalendarClimate() {
+        // Don't attempt (and don't spend a "Command not sent" banner) when the user has
+        // turned the remote-climate feature off. Capability/session gating still happens
+        // inside `CommandCoordinator`.
+        guard preferences.features.contains(.remoteClimate) else { return }
+        commandCoordinator.perform(.startClimate(
+            temperatureCelsius: Float(preferences.remoteClimateTemperature),
+            frontLeftSeat: preferences.remoteDriverSeatHeating,
+            frontRightSeat: preferences.remoteFrontRightSeatHeating,
+            rearLeftSeat: preferences.remoteRearLeftSeatHeating,
+            rearRightSeat: preferences.remoteRearRightSeatHeating,
+            steeringWheel: preferences.remoteSteeringWheelHeating
+        ), origin: .automation)
     }
 
     @objc private func systemAppearanceDidChange() {
@@ -320,6 +344,10 @@ extension AppDelegate: SignInCoordinatorContext {
 
     func dismissSettingsAfterSignIn() {
         statusController.dismissSettings()
+    }
+
+    func refreshSettingsSurface() {
+        statusController.refreshPopoverIfNeeded()
     }
 
     func presentSignInNotice(title: String, body: String, subtitle: String?) {

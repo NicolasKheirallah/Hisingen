@@ -48,6 +48,9 @@ struct ControlsTabView: View {
     private var ampLimit: Int? {
         state.chargingCurrentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
     }
+    private var chargeBounds: VehicleChargeBounds {
+        VehicleChargeBounds(capabilities: state.otaCapabilities)
+    }
 
     private var isBrandVolvo: Bool { preferences.activeBrand == .volvo }
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
@@ -162,6 +165,10 @@ struct ControlsTabView: View {
                 id: "charging",
                 isVisible: hasAnyVisibleChargingControls,
                 view: { AnyView(self.chargingControlCard) }),
+            CardEntry(
+                id: "smart-charging",
+                isVisible: state.powertrain.hasElectricRange,
+                view: { AnyView(SmartChargingRecommendationView(state: self.state)) }),
             CardEntry(
                 id: "access",
                 isVisible: features.contains(.remoteLocks),
@@ -798,7 +805,7 @@ struct ControlsTabView: View {
         .opacity(cardOpacity(chargingCommands))
     }
 
-    private var chargeTargetPresets: [Int] { [50, 60, 70, 80, 90, 100] }
+    private var chargeTargetPresets: [Int] { chargeBounds.targetPresets() }
 
     private var chargeTargetControls: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -840,7 +847,8 @@ struct ControlsTabView: View {
                 Slider(value: Binding(
                     get: { chargeTargetDraft ?? Double(chargeTarget) },
                     set: { chargeTargetDraft = $0 }
-                ), in: 50...100, step: 5, onEditingChanged: { editing in
+                ), in: Double(chargeBounds.targetRange.lowerBound)...Double(chargeBounds.targetRange.upperBound),
+                   step: 5, onEditingChanged: { editing in
                     guard !editing, let draft = chargeTargetDraft else { return }
                     chargeTargetDraft = nil
                     let rounded = Int(draft.rounded())
@@ -874,7 +882,7 @@ struct ControlsTabView: View {
             }
 
             if let ampLimit {
-                let chips = [6, 8, 10, 13, 16].filter { $0 != ampLimit }
+                let chips = chargeBounds.amperagePresets().filter { $0 != ampLimit }
                 if !chips.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(chips, id: \.self) { preset in
@@ -897,7 +905,8 @@ struct ControlsTabView: View {
                 Slider(value: Binding(
                     get: { ampLimitDraft ?? Double(ampLimit) },
                     set: { ampLimitDraft = $0 }
-                ), in: 6...32, step: 1, onEditingChanged: { editing in
+                ), in: Double(chargeBounds.amperageRange.lowerBound)...Double(chargeBounds.amperageRange.upperBound),
+                   step: 1, onEditingChanged: { editing in
                     guard !editing, let draft = ampLimitDraft else { return }
                     ampLimitDraft = nil
                     let rounded = Int(draft.rounded())

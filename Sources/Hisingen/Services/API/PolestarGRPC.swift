@@ -172,8 +172,6 @@ actor PolestarGRPC {
         try Task.checkCancellation()
         throw PolestarError.grpcUnavailable(service: path)
     }
-    /// Token used for the current invocation-backed command, set by `executeRemoteCommand`.
-    var activeCommandToken: String?
     let session: URLSession
 
     init() {
