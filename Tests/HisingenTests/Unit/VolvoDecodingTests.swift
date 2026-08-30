@@ -157,6 +157,8 @@ struct VolvoDecodingTests {
         XCTAssertEqual(stats.tripMeterAutomatic?.value, 420.0)
         XCTAssertEqual(stats.distanceToEmptyTank?.value, 1312)
         XCTAssertEqual(stats.distanceToEmptyBattery?.value, 200)
+        // Automatic-trip average consumption is now wired through to BatteryDiagnostics.
+        XCTAssertEqual(stats.averageEnergyConsumptionAutomaticKwhPer100Km, 1.9)
     }
 
     @Test
@@ -350,11 +352,97 @@ struct VolvoDecodingTests {
 
     @Test
     func testDocumentedCommandFailuresAreRejected() throws {
-        for status in ["UNABLE_TO_LOCK_DOOR_OPEN", "NOT_ALLOWED_PRIVACY_ENABLED", "CAR_ERROR"] {
-            let json = "{\"invokeStatus\":\"\(status)\"}"
-            let response = try JSONDecoder.volvo.decode(VolvoCommandResponseDTO.self, from: Data(json.utf8))
-            XCTAssertTrue(response.isFailure)
+        // The full documented Connected Vehicle API v2 `invokeStatus` failure set.
+        let failing = [
+            "REJECTED", "TIMEOUT", "CONNECTION_FAILURE", "VEHICLE_IN_SLEEP", "CAR_ERROR",
+            "NOT_ALLOWED_PRIVACY_ENABLED", "NOT_ALLOWED_WRONG_USAGE_MODE",
+            "UNABLE_TO_LOCK_DOOR_OPEN", "UNLOCK_TIME_FRAME_PASSED"
+        ]
+        for status in failing {
+            let response = try JSONDecoder.volvo.decode(
+                VolvoCommandResponseDTO.self, from: Data("{\"invokeStatus\":\"\(status)\"}".utf8))
+            XCTAssertTrue(response.isFailure, "\(status) should be a failure")
+            XCTAssertNotNil(response.failureReason, "\(status) should carry a user-facing reason")
         }
+    }
+
+    @Test
+    func testInProgressAndUnknownCommandStatusesAreNotFailures() throws {
+        for status in ["RUNNING", "WAITING", "COMPLETED", "DELIVERED", "UNKNOWN"] {
+            let response = try JSONDecoder.volvo.decode(
+                VolvoCommandResponseDTO.self, from: Data("{\"invokeStatus\":\"\(status)\"}".utf8))
+            XCTAssertFalse(response.isFailure, "\(status) must not be treated as a rejection")
+            XCTAssertNil(response.failureReason)
+        }
+    }
+
+    @Test
+    func testSleepAndPrivacyStatusesGetSpecificMessages() throws {
+        let sleep = try JSONDecoder.volvo.decode(
+            VolvoCommandResponseDTO.self, from: Data(#"{"invokeStatus":"VEHICLE_IN_SLEEP"}"#.utf8))
+        XCTAssertEqual(sleep.failureReason?.contains("sleep"), true)
+        let privacy = try JSONDecoder.volvo.decode(
+            VolvoCommandResponseDTO.self, from: Data(#"{"invokeStatus":"NOT_ALLOWED_PRIVACY_ENABLED"}"#.utf8))
+        XCTAssertEqual(privacy.failureReason?.lowercased().contains("privacy"), true)
+    }
+
+    @Test
+    func testVehicleDetailsAcceptsExternalColoursArray() throws {
+        let json = #"""
+        {"data":{"vin":"YV1TEST","modelYear":2024,
+          "externalColours":[{"value":"Vapour Grey"},{"value":"Onyx Black"}]}}
+        """#
+        let envelope = try JSONDecoder.volvo.decode(
+            VolvoEnvelope<VolvoVehicleDetailsDTO>.self, from: Data(json.utf8))
+        XCTAssertEqual(envelope.data?.externalColour, "Vapour Grey")
+
+        let flat = try JSONDecoder.volvo.decode(
+            VolvoEnvelope<VolvoVehicleDetailsDTO>.self,
+            from: Data(#"{"data":{"vin":"YV1TEST","externalColour":"Fjord Blue"}}"#.utf8))
+        XCTAssertEqual(flat.data?.externalColour, "Fjord Blue")
+    }
+
+    @Test
+    func testVolvoNullLiteralStringsAreTreatedAsAbsent() {
+        // Volvo serialises `descriptions.upholstery` as the literal string "null" (live).
+        XCTAssertNil(Optional("null").volvoMeaningful)
+        XCTAssertNil(Optional("NULL").volvoMeaningful)
+        XCTAssertNil(Optional("  ").volvoMeaningful)
+        XCTAssertNil(String?.none.volvoMeaningful)
+        XCTAssertEqual(Optional("Charcoal Nubuck").volvoMeaningful, "Charcoal Nubuck")
+    }
+
+    @Test
+    func testCommandNamePrefersHrefEndpointSegment() throws {
+        // Live: command list reports HONK_AND_FLASH but the real invocation path is honk-flash.
+        let json = #"[{"command":"HONK_AND_FLASH","href":"/v2/vehicles/X/commands/honk-flash"}]"#
+        let list = try JSONDecoder.volvo.decode([VolvoCommandDTO].self, from: Data(json.utf8))
+        XCTAssertEqual(list.first?.normalizedName, "honk-flash")
+        // No href → fall back to the (normalised) command label.
+        let noHref = try JSONDecoder.volvo.decode(
+            [VolvoCommandDTO].self, from: Data(#"[{"command":"LOCK_REDUCED_GUARD"}]"#.utf8))
+        XCTAssertEqual(noHref.first?.normalizedName, "lock-reduced-guard")
+    }
+
+    @Test
+    func testChargerPowerStateMapsNoPowerAvailable() {
+        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: "NO_POWER_AVAILABLE"), .noPower)
+        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: "PROVIDING_POWER"), .providingPower)
+    }
+
+    @Test
+    func testTyreSensorFaultIsDistinctFromUnknown() throws {
+        let json = #"""
+        {"data":{"frontLeft":{"value":"NO_SENSOR"},"frontRight":{"value":"SYSTEM_FAULT"},
+          "rearLeft":{"value":"NO_WARNING"},"rearRight":{"value":"LOW"}}}
+        """#
+        let tyres = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoTyresDTO>.self, from: Data(json.utf8))
+        let readings = try XCTUnwrap(tyres.data).readings
+        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .sensorFault)
+        XCTAssertEqual(readings.first(where: { $0.position == .frontRight })?.warning, .sensorFault)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearLeft })?.warning, TyrePressureWarning.none)
+        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .low)
+        XCTAssertFalse(TyrePressureWarning.sensorFault.needsAttention)
     }
 
     @Test

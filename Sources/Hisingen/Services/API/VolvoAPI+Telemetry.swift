@@ -142,6 +142,10 @@ extension VolvoAPI {
         if features.contains(.vehicleHealth), diagnostics == nil, engineDiagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
         if features.contains(.tripMeters), statistics == nil { unavailable.append(.tripMeters) }
         if features.contains(.vehicleLocation), vehicleLocation == nil { unavailable.append(.vehicleLocation) }
+        // Volvo has no weather or exterior-temperature resource in Connected Vehicle API v2
+        // (`/environment`, `/climatization-status` and every sibling spelling 404 — verified
+        // live), so `.vehicleWeather` is always unavailable for this provider.
+        if features.contains(.vehicleWeather) { unavailable.append(.vehicleWeather) }
         if features.contains(.chargingSchedule) { unavailable.append(.chargingSchedule) }
 
         var openings: [OpeningReading] = []
@@ -173,7 +177,8 @@ extension VolvoAPI {
             let names = Set(commands.compactMap(\.normalizedName))
             let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
             let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
-            let supportsLocate = names.contains("honk") || names.contains("flash") || names.contains("honk-flash")
+            let supportsLocate = names.contains("honk") || names.contains("flash")
+                || names.contains("honk-flash") || names.contains("honk-and-flash")
             let supportsEngine = names.contains("engine-start") || names.contains("engine-stop")
             probes.record(.climateStartStop, as: supportsClimate ? .supported : .unavailable)
             probes.record(.locks, as: supportsLocks ? .supported : .unavailable)
@@ -194,7 +199,9 @@ extension VolvoAPI {
 
         let batteryPct: Double? = energy?.batteryChargeLevel?.value ?? fuel?.batteryChargeLevel?.value
         let rangeKm: Int? = energy?.rangeKm ?? statistics?.distanceToEmptyBatteryKm
-        let estMinutes: Int? = energy?.estTimeToTargetMinutes
+        // `/energy/v2/state` reports `estimatedChargingTimeToTargetBatteryChargeLevel: 0` while
+        // parked/unplugged (verified live) — treat a non-positive estimate as "no estimate".
+        let estMinutes: Int? = energy?.estTimeToTargetMinutes.flatMap { $0 > 0 ? $0 : nil }
         let targetPct: Int? = energy?.targetPercent
         let chargingWatts: Int? = energy?.chargingPowerWatts
         let currentDrawAmps: Int? = energy?.chargingCurrent?.value.map { Int($0.rounded()) }
@@ -273,6 +280,7 @@ extension VolvoAPI {
                 chargerPowerState: chargerPowerState,
                 averageConsumption: statistics?.averageEnergyConsumptionKwhPer100Km,
                 averageConsumptionSinceCharge: statistics?.averageEnergyConsumptionSinceChargeKwhPer100Km,
+                averageConsumptionAutomatic: statistics?.averageEnergyConsumptionAutomaticKwhPer100Km,
                 energyUsedSinceChargeWh: nil
             )
             : nil
@@ -282,7 +290,9 @@ extension VolvoAPI {
         let fuelPct: Double? = fuel?.percentage
         let fuelRange: Int? = fuel?.rangeKm ?? statistics?.distanceToEmptyTankKm
         let fuelLiters: Double? = fuel?.liters
+        // Prefer the lifetime figure; fall back to the automatic-trip one Volvo also exposes.
         let avgFuelConsumption: Double? = statistics?.averageFuelConsumption?.value
+            ?? statistics?.averageFuelConsumptionAutomatic?.value
         let isEngineRunning: Bool? = engineStatus?.isRunning
         // vehicle-details batteryCapacityKWH is a vehicle specification, not BMS SoH telemetry.
         let batteryCap: Double? = details.batteryCapacityKWH
@@ -337,17 +347,19 @@ extension VolvoAPI {
             vehicleReportedAt: reportedAt,
             dataWarnings: activeBulbWarnings
         )
-        state.externalColour = details.externalColour
-        state.gearbox = details.gearbox
+        // Volvo serialises some absent descriptors as the literal string "null" (seen live on
+        // `descriptions.upholstery`), which would otherwise render verbatim in the UI.
+        state.externalColour = details.externalColour.volvoMeaningful
+        state.gearbox = details.gearbox.volvoMeaningful
         state.engineHoursToService = diagnostics?.engineHoursToService?.value
         state.averageSpeedKmH = statistics?.averageSpeedKmH
         state.fuelAmountLiters = fuelLiters
         state.averageFuelConsumptionLPer100Km = avgFuelConsumption
         state.isEngineRunning = isEngineRunning
-        state.fuelType = details.fuelType
-        state.upholstery = details.descriptions?.upholstery
-        state.steeringOrientation = details.descriptions?.steering
-        state.serviceTrigger = diagnostics?.serviceTrigger?.value
+        state.fuelType = details.fuelType.volvoMeaningful
+        state.upholstery = details.descriptions?.upholstery.volvoMeaningful
+        state.steeringOrientation = details.descriptions?.steering.volvoMeaningful
+        state.serviceTrigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
         state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBatteryKm
         state.chargingCurrentLimitAmps = currentLimitAmps
         state.interiorImageData = interiorImg
@@ -356,8 +368,8 @@ extension VolvoAPI {
         state.regeneratedEnergyKwh = statistics?.regeneratedEnergyKwh
         state.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
         state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
-        state.preferredWorkshopId = diagnostics?.workshopId?.value
-        state.preferredWorkshopName = diagnostics?.workshopName?.value
+        state.preferredWorkshopId = diagnostics?.workshopId?.value.volvoMeaningful
+        state.preferredWorkshopName = diagnostics?.workshopName?.value.volvoMeaningful
         return state
     }
 

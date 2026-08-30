@@ -6,7 +6,7 @@ struct RequestConstructionTests {
 
     @Test
     @MainActor
-    func volvoReadOnlyRetryOmitsApprovalGatedScopes() async throws {
+    func volvoScopeTiersNarrowFromFullToCore() async throws {
         let suite = "HisingenVolvoScopeTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -18,26 +18,38 @@ struct RequestConstructionTests {
         await api.configure(clientID: "test-client", clientSecret: "test-secret",
                             vccApiKey: "test-key")
 
-        let fullURL = try await api.beginSignIn()
-        let fullScope = try #require(URLComponents(url: fullURL, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "scope" })?.value)
-        let fullScopes = Set(fullScope.split(separator: " ").map(String.init))
-        #expect(fullScopes.contains("conve:lock"))
-        #expect(fullScopes.contains("location:read"))
+        func scopes(_ tier: VolvoAPI.ScopeTier) async throws -> Set<String> {
+            let url = try await api.beginSignIn(tier: tier)
+            let raw = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "scope" })?.value)
+            return Set(raw.split(separator: " ").map(String.init))
+        }
 
-        let readOnlyURL = try await api.beginSignIn(forceReadOnlyScopes: true)
-        let readOnlyScope = try #require(URLComponents(url: readOnlyURL, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "scope" })?.value)
-        let readOnlyScopes = Set(readOnlyScope.split(separator: " ").map(String.init))
-        #expect(readOnlyScopes.contains("conve:battery_charge_level"))
-        #expect(!readOnlyScopes.contains("conve:lock"))
-        #expect(!readOnlyScopes.contains("location:read"))
+        let full = try await scopes(.full)
+        #expect(full.contains("conve:lock"))
+        #expect(full.contains("location:read"))
+        #expect(full.contains("conve:climatization_start_stop"))
 
+        let standard = try await scopes(.standard)
+        #expect(!standard.contains("conve:lock"))
+        #expect(!standard.contains("location:read"))
+        #expect(standard.contains("conve:climatization_start_stop"))
+        #expect(standard.contains("conve:battery_charge_level"))
+
+        let core = try await scopes(.core)
+        #expect(!core.contains("conve:lock"))
+        #expect(!core.contains("conve:climatization_start_stop"))
+        #expect(!core.contains("conve:commands"))
+        #expect(core.contains("conve:battery_charge_level"))
+        #expect(core.contains("conve:vehicle_relation"))
+        #expect(core.contains("openid"))
+
+        // `invalid_scope` stays distinguishable so the coordinator can cascade.
         let callback = try #require(URL(string: "https://example.invalid/callback?error=invalid_scope"))
         do {
             try await api.completeSignIn(callbackURL: callback, preferredVIN: nil,
                                          features: preferences.features)
-            Issue.record("invalid_scope must stay distinguishable for the read-only retry")
+            Issue.record("invalid_scope must reach the caller as permissionDenied(\"invalid_scope\")")
         } catch VolvoError.permissionDenied(let operation) {
             #expect(operation == "invalid_scope")
         }

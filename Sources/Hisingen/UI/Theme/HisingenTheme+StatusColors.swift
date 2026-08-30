@@ -38,6 +38,7 @@ extension HisingenTheme {
         case .none: return semanticGood
         case .veryLow: return semanticCritical
         case .low, .high: return semanticWarning
+        case .sensorFault: return semanticWarning
         case .unknown: return Color.secondary
         }
     }

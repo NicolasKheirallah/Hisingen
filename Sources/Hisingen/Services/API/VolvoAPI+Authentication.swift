@@ -1,11 +1,11 @@
 import Foundation
 
 extension VolvoAPI {
-    /// `forceReadOnlyScopes` never asks for the approval-gated `restrictedScopes` even when the
-    /// preference wants them — used to retry after Volvo rejects the request with
-    /// `invalid_scope` because the developer application is not approved for lock / unlock /
-    /// engine / honk-flash / location.
-    func beginSignIn(forceReadOnlyScopes: Bool = false) async throws -> URL {
+    /// `tier` selects how wide a scope set to request. The caller cascades `.full` → `.standard`
+    /// → `.core` when Volvo answers `invalid_scope` ("exceeds that which the client is permitted
+    /// to request"), which it does for the whole authorization if any single requested scope is
+    /// not approved for the application.
+    func beginSignIn(tier: ScopeTier = .full) async throws -> URL {
         guard isConfigured, let clientID else { throw VolvoError.appNotConfigured }
         // A browser authorization begins a new token generation. Cancel an older refresh so
         // its rotated token cannot land after the authorization-code grant and overwrite it.
@@ -19,8 +19,15 @@ extension VolvoAPI {
         pendingState = state
         var components = URLComponents(url: identityURL(path: authorizationPath), resolvingAgainstBaseURL: false)!
         let restrictedScopesWanted = await MainActor.run { preferences.volvoRestrictedScopesEnabled }
-        let includeRestrictedScopes = !forceReadOnlyScopes && restrictedScopesWanted
-        let scopes = Self.readScopes + (includeRestrictedScopes ? Self.restrictedScopes : [])
+        let scopes: [String]
+        switch tier {
+        case .full:
+            scopes = Self.readScopes + (restrictedScopesWanted ? Self.restrictedScopes : [])
+        case .standard:
+            scopes = Self.readScopes
+        case .core:
+            scopes = Self.coreReadScopes
+        }
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),

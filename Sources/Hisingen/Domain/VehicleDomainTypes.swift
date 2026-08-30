@@ -206,6 +206,10 @@ enum TyrePressureWarning: Int, Codable, Sendable {
     case veryLow = 2
     case low = 3
     case high = 4
+    /// The tyre-pressure monitoring system reported a hardware problem (no sensor / system
+    /// fault) rather than a pressure reading. Distinct from `.unknown`, which means "nothing
+    /// was reported at all".
+    case sensorFault = 5
 
     var displayName: String {
         switch self {
@@ -214,6 +218,7 @@ enum TyrePressureWarning: Int, Codable, Sendable {
         case .veryLow: return L10n.text("Very low")
         case .low: return L10n.text("Low")
         case .high: return L10n.text("High")
+        case .sensorFault: return L10n.text("Sensor fault")
         }
     }
 
@@ -712,6 +717,9 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let chargerPowerState: ChargerPowerState
     let averageConsumption: Double?
     let averageConsumptionSinceCharge: Double?
+    /// Average consumption over the automatic (per-drive) trip period. `Double?` so older
+    /// persisted snapshots without the key still decode.
+    var averageConsumptionAutomatic: Double? = nil
     let energyUsedSinceChargeWh: Double?
 }
 

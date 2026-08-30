@@ -16,8 +16,6 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     /// `docs/research/api-investigation-backlog.md` #2.
     let status: String?
     let unit: String?
-    let code: String?
-    let message: String?
     let unavailableReason: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -26,8 +24,6 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
         case timestamp
         case status
         case unit
-        case code
-        case message
         case unavailableReason
     }
 
@@ -40,8 +36,6 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
                 ?? nil
             status = try? container.decodeIfPresent(String.self, forKey: .status)
             unit = try? container.decodeIfPresent(String.self, forKey: .unit)
-            code = try? container.decodeIfPresent(String.self, forKey: .code)
-            message = try? container.decodeIfPresent(String.self, forKey: .message)
             unavailableReason = try? container.decodeIfPresent(String.self, forKey: .unavailableReason)
             return
         }
@@ -50,8 +44,6 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
         updatedAt = nil
         status = nil
         unit = nil
-        code = nil
-        message = nil
         unavailableReason = nil
     }
 }
@@ -127,6 +119,45 @@ struct VolvoVehicleDetailsDTO: Decodable, Sendable {
             exteriorImageUrl = try container.decodeIfPresent(String.self, forKey: .exteriorImageUrl)
             interiorImageUrl = try container.decodeIfPresent(String.self, forKey: .interiorImageUrl)
                 ?? (try container.decodeIfPresent(String.self, forKey: .internalImageUrl))
+        }
+    }
+}
+
+extension VolvoVehicleDetailsDTO {
+    // Custom decoding lives in an extension so the memberwise initializer is still synthesized
+    // for the placeholder built in `fetchVehicleStateImplementation`.
+    private enum CodingKeys: String, CodingKey {
+        case vin, modelYear, descriptions, fuelType, gearbox, batteryCapacityKWH, images
+        case externalColour, externalColours
+    }
+
+    private struct ColourEntry: Decodable {
+        let value: String?
+        let name: String?
+        let description: String?
+        var label: String? { value ?? name ?? description }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        vin = try c.decodeIfPresent(String.self, forKey: .vin)
+        modelYear = try c.decodeIfPresent(Int.self, forKey: .modelYear)
+        descriptions = try c.decodeIfPresent(Descriptions.self, forKey: .descriptions)
+        fuelType = try c.decodeIfPresent(String.self, forKey: .fuelType)
+        gearbox = try c.decodeIfPresent(String.self, forKey: .gearbox)
+        batteryCapacityKWH = try c.decodeIfPresent(Double.self, forKey: .batteryCapacityKWH)
+        images = try c.decodeIfPresent(Images.self, forKey: .images)
+        // The Connected Vehicle API v2 vehicle-details payload has been seen both as a flat
+        // `externalColour` string and as an `externalColours` array (of `{value}`/`{name}`
+        // objects, or bare strings). Collapse either to the single display string the app uses.
+        if let flat = try? c.decodeIfPresent(String.self, forKey: .externalColour), !flat.isEmpty {
+            externalColour = flat
+        } else if let entries = try? c.decodeIfPresent([ColourEntry].self, forKey: .externalColours) {
+            externalColour = entries.compactMap(\.label).first
+        } else if let strings = try? c.decodeIfPresent([String].self, forKey: .externalColours) {
+            externalColour = strings.first(where: { !$0.isEmpty })
+        } else {
+            externalColour = nil
         }
     }
 }
@@ -312,7 +343,9 @@ extension ChargingType {
 extension ChargerPowerState {
     init(volvoPowerStatus raw: String?) {
         switch raw?.uppercased() {
-        case "NO_POWER", "UNAVAILABLE": self = .noPower
+        // `NO_POWER_AVAILABLE` is what `/energy/v2/state` actually returns for an unplugged
+        // car (verified live); the shorter spellings are kept for older/other shapes.
+        case "NO_POWER", "NO_POWER_AVAILABLE", "UNAVAILABLE": self = .noPower
         case "INITIALIZING", "PREPARING": self = .initializing
         case "AVAILABLE", "READY": self = .available
         case "PROVIDING_POWER", "POWER_AVAILABLE", "CHARGING": self = .providingPower
@@ -381,6 +414,11 @@ struct VolvoTyresDTO: Decodable, Sendable {
     private static func warning(from raw: String?) -> TyrePressureWarning {
         guard let raw = raw?.uppercased() else { return .unknown }
         if raw.contains("NO_WARNING") { return .none }
+        // TPMS hardware problems are not pressure readings — surface them as a distinct state
+        // rather than a false "low pressure" alarm or an indistinguishable "unknown".
+        if raw.contains("NO_SENSOR") || raw.contains("NOSENSOR")
+            || raw.contains("SYSTEM_FAULT") || raw.contains("SYSTEMFAULT")
+            || raw.contains("SENSOR_FAULT") { return .sensorFault }
         if raw.contains("VERY_LOW") { return .veryLow }
         if raw.contains("LOW") { return .low }
         if raw.contains("HIGH") { return .high }
@@ -488,6 +526,7 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     let distanceToEmptyTank: VolvoField<Int>?
     let distanceToEmptyBattery: VolvoField<Int>?
     let averageFuelConsumption: VolvoField<Double>?
+    let averageFuelConsumptionAutomatic: VolvoField<Double>?
     let averageEnergyConsumption: VolvoField<Double>?
     let averageEnergyConsumptionAutomatic: VolvoField<Double>?
     let averageEnergyConsumptionSinceCharge: VolvoField<Double>?
@@ -520,6 +559,12 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
 
     var averageEnergyConsumptionSinceChargeKwhPer100Km: Double? {
         energyConsumptionKwhPer100Km(averageEnergyConsumptionSinceCharge)
+    }
+
+    /// Average electric consumption over the automatic trip-meter period — pairs with
+    /// `tripMeterAutomaticKm`, the same way `averageSpeedAutomatic` pairs with it.
+    var averageEnergyConsumptionAutomaticKwhPer100Km: Double? {
+        energyConsumptionKwhPer100Km(averageEnergyConsumptionAutomatic)
     }
 
     var averageSpeedKmH: Double? {
@@ -567,8 +612,11 @@ struct VolvoCommandDTO: Decodable, Sendable {
     let command: String?
     let href: String?
 
+    /// The last path segment of `href` is the *actual* invocation endpoint name and is what
+    /// `dispatchCommand` POSTs to — prefer it. `command` (e.g. `HONK_AND_FLASH` while `href`
+    /// ends `/honk-flash`, verified live) is only a display label and is the fallback.
     var normalizedName: String? {
-        let source = command ?? href?.split(separator: "/").last.map(String.init)
+        let source = href?.split(separator: "/").last.map(String.init) ?? command
         guard let source else { return nil }
         return source
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -727,8 +775,9 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
 
 
 
-/// Response body of `POST /connected-vehicle/v2/vehicles/{vin}/commands/{name}` and of the
-/// `GET .../commands/{commandId}` status poll — both return the same shape.
+/// Response body of `POST /connected-vehicle/v2/vehicles/{vin}/commands/{name}`. Connected
+/// Vehicle API v2 commands are synchronous — there is no `GET .../commands/{id}` status poll —
+/// so the response's `invokeStatus` is the final word and `commandId` is not carried.
 ///
 /// Previously parsed with untyped `JSONSerialization` dictionary lookups while every read-path
 /// DTO was `Decodable`, which meant a shape change on Volvo's side degraded silently to a
@@ -736,17 +785,20 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
 struct VolvoCommandResponseDTO: Decodable, Sendable {
     let invokeStatus: String?
     let message: String?
-    let commandId: String?
     let readyToUnlock: Bool?
     let readyToUnlockUntil: Int?
 
-    /// Blank-normalised accessors — the API returns `""` as often as it omits the key, and
+    /// Blank-normalised accessor — the API returns `""` as often as it omits the key, and
     /// an empty string surfaced to the UI reads as a missing message rather than no message.
     var text: String? { message?.blankAsNil }
-    var pendingCommandId: String? { commandId?.blankAsNil }
 
     /// Volvo's documented `invokeStatus` values, upper-cased before comparison because the
-    /// API has been observed returning both cases.
+    /// API has been observed returning both cases. The Connected Vehicle API v2 command docs
+    /// enumerate exactly: RUNNING, WAITING, COMPLETED, REJECTED, UNKNOWN, TIMEOUT,
+    /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, DELIVERED, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
+    /// NOT_ALLOWED_WRONG_USAGE_MODE. The extra values below (`SUCCESS`, `NOT_ALLOWED`,
+    /// `UNLOCK_TIME_FRAME_PASSED`, `UNABLE_TO_LOCK_DOOR_OPEN`, `FAILED`) are tolerated
+    /// defensively — older captures and sibling APIs have returned them.
     var outcome: RemoteCommandOutcome? {
         switch invokeStatus?.uppercased() {
         case "COMPLETED", "SUCCESS": return .completed
@@ -756,16 +808,35 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
         }
     }
 
-    var isFailure: Bool {
+    /// A user-facing explanation when `invokeStatus` is a documented failure, or `nil` when the
+    /// command was accepted / is still in progress. `UNKNOWN` is deliberately *not* a failure —
+    /// it means "the vehicle's final state is not known yet", not "it was rejected".
+    var failureReason: String? {
         switch invokeStatus?.uppercased() {
-        case "FAILED", "REJECTED", "TIMEOUT", "CONNECTION_FAILURE", "CAR_ERROR",
-             "VEHICLE_IN_SLEEP", "UNLOCK_TIME_FRAME_PASSED", "UNABLE_TO_LOCK_DOOR_OPEN",
-             "NOT_ALLOWED", "NOT_ALLOWED_PRIVACY_ENABLED", "NOT_ALLOWED_WRONG_USAGE_MODE":
-            return true
+        case "REJECTED", "NOT_ALLOWED", "FAILED":
+            return L10n.text("The vehicle rejected the command.")
+        case "TIMEOUT":
+            return L10n.text("The vehicle did not respond in time — it may be parked somewhere with no reception.")
+        case "CONNECTION_FAILURE":
+            return L10n.text("Hisingen could not reach the vehicle. It may be in an area with no connectivity.")
+        case "VEHICLE_IN_SLEEP":
+            return L10n.text("The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.")
+        case "CAR_ERROR":
+            return L10n.text("The vehicle reported an internal error while handling the command.")
+        case "NOT_ALLOWED_PRIVACY_ENABLED":
+            return L10n.text("Remote commands are blocked while privacy mode is enabled in the vehicle.")
+        case "NOT_ALLOWED_WRONG_USAGE_MODE":
+            return L10n.text("The vehicle is not in a state that allows this command (for example, while it is being driven).")
+        case "UNLOCK_TIME_FRAME_PASSED":
+            return L10n.text("The unlock confirmation window passed before a door was opened. Send the command again.")
+        case "UNABLE_TO_LOCK_DOOR_OPEN":
+            return L10n.text("The vehicle could not lock because a door, the hood, or the tailgate is open.")
         default:
-            return false
+            return nil
         }
     }
+
+    var isFailure: Bool { failureReason != nil }
 }
 
 /// Error envelope returned alongside a non-2xx command response.
@@ -788,5 +859,19 @@ extension String {
     var blankAsNil: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+extension Optional where Wrapped == String {
+    /// Volvo's Connected Vehicle API v2 sometimes serialises an absent descriptor as the
+    /// literal string `"null"` (confirmed live on `descriptions.upholstery`) rather than a
+    /// JSON null. Collapse that — and blank strings — to a real `nil` so nothing renders it.
+    var volvoMeaningful: String? {
+        guard let trimmed = self?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              trimmed.caseInsensitiveCompare("null") != .orderedSame,
+              trimmed.caseInsensitiveCompare("undefined") != .orderedSame
+        else { return nil }
+        return trimmed
     }
 }

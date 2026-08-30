@@ -170,6 +170,37 @@ All notable changes to Hisingen are documented in this file. The project follows
   existing and grouped with its data-migration statement, so a transient failure can no
   longer advance the schema version past the legacy-row quarantine (matching the v2
   block's guard).
+- Volvo Connected Vehicle API v2 alignment, from a full endpoint-by-endpoint audit — every
+  endpoint response shape below was verified against a live production vehicle:
+  - Remote-command results now map every documented `invokeStatus` to a specific message.
+    `VEHICLE_IN_SLEEP` reads as "try again in a few minutes" rather than a hard failure,
+    privacy mode and wrong-usage-mode rejections say exactly that, and `UNKNOWN` is treated
+    as "not confirmed yet" instead of a rejection.
+  - Command POSTs are locally throttled to Volvo's 10-requests-per-minute command quota, so
+    a rapid lock→unlock waits a few seconds instead of drawing an HTTP 429.
+  - Command capability probing now reads each command's real invocation path from its `href`
+    (the list labels honk+flash `HONK_AND_FLASH` while its endpoint is `honk-flash`), so the
+    probe and the dispatch agree.
+  - `descriptions.upholstery` (and other descriptor strings) arriving as the literal string
+    `"null"` are now treated as absent instead of rendering "null" in the UI.
+  - `chargerPowerStatus: "NO_POWER_AVAILABLE"` from `/energy/v2/state` now maps to "No power"
+    instead of "Unknown"; a zero `estimatedChargingTimeToTarget` while parked no longer shows
+    a "Time to Target: 0m" row.
+  - The automatic-trip average consumption from `/statistics` (`averageEnergyConsumptionAutomatic`)
+    is now shown as "Avg (Automatic Trip)" in Battery Diagnostics — it was fetched but never
+    surfaced; the fuel equivalent (`averageFuelConsumptionAutomatic`) is decoded and used as a
+    fallback.
+  - `externalColours` (array form) is accepted in vehicle details alongside the flat
+    `externalColour` string.
+  - A tyre TPMS hardware fault (`NO_SENSOR` / `SYSTEM_FAULT`) is now a distinct "Sensor
+    fault" state instead of being indistinguishable from "no data".
+  - A `404` from an optional telemetry endpoint now backs off for an hour and persists,
+    instead of being re-probed every few minutes. Confirmed there is no `/environment`,
+    `/climatization-status` or software/OTA resource in v2 (all 404), and that Energy API v1
+    and the Extended Vehicle API are gone (HTTP 410) — Hisingen already used their v2
+    replacements.
+  - Removed the decoded-but-unused `commandId` (v2 commands are synchronous) and the
+    per-field `code` / `message` slots.
 
 ## [1.2.5] - 2026-08-29
 

@@ -2,6 +2,7 @@
   "data": {
     "averageFuelConsumption": { "value": 7.2374, "unit": "l/100km", "timestamp": "2026-08-15T09:00:00Z" },
     "averageEnergyConsumption": { "value": 2.2374, "unit": "kWh/100km", "timestamp": "2026-08-15T09:00:00Z" },
+    "averageEnergyConsumptionAutomatic": { "value": 1.9, "unit": "kWh/100km", "timestamp": "2026-08-15T09:00:00Z" },
     "averageSpeed": { "value": 50, "unit": "km/h", "timestamp": "2026-08-15T09:00:00Z" },
     "tripMeterManual": { "value": 500.0, "unit": "km", "timestamp": "2026-08-15T09:00:00Z" },
     "tripMeterAutomatic": { "value": 420.0, "unit": "km", "timestamp": "2026-08-15T09:00:00Z" },

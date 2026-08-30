@@ -122,43 +122,45 @@ final class SignInCoordinator {
         Task { [weak self] in
             guard let self else { return }
             await volvoAPI.configure(clientID: trimmedClientID, clientSecret: effectiveSecret, vccApiKey: effectiveApiKey)
-            do {
-                try await self.runVolvoInteractiveSignIn(
-                    clientID: trimmedClientID, clientSecret: effectiveSecret,
-                    vccApiKey: effectiveApiKey, nickname: trimmedNickname, readOnlyScopes: false
-                )
-            } catch let error as VolvoError where Self.isInvalidScope(error) {
-                // The developer application is not approved for the gated scopes (lock /
-                // unlock / engine-start / honk-flash / vehicle location). Volvo rejects the
-                // whole request, not just the extra scopes — so stop asking for them and
-                // retry with data-access scopes only.
-                logger.warning("Volvo rejected the scope request; retrying without restricted scopes")
-                preferences.volvoRestrictedScopesEnabled = false
+            // Volvo rejects the *whole* authorization with `invalid_scope` if any single
+            // requested scope is not approved for the application. Cascade widest → narrowest:
+            // full (with remote controls) → standard (telemetry + remote climate) → core
+            // (telemetry only), so a stale approval on one scope never blocks sign-in outright.
+            for tier in VolvoAPI.ScopeTier.allCases {
                 do {
                     try await self.runVolvoInteractiveSignIn(
                         clientID: trimmedClientID, clientSecret: effectiveSecret,
-                        vccApiKey: effectiveApiKey, nickname: trimmedNickname, readOnlyScopes: true
+                        vccApiKey: effectiveApiKey, nickname: trimmedNickname, tier: tier
                     )
-                    context?.presentSignInNotice(
-                        title: L10n.text("Volvo connected — data access only"),
-                        body: L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location, so it was reconnected with vehicle data only. Request those permissions for your application on developer.volvocars.com to enable remote controls."),
-                        subtitle: L10n.text("Volvo")
-                    )
+                    if tier != .full {
+                        if tier == .core { preferences.volvoRestrictedScopesEnabled = false }
+                        context?.presentSignInNotice(
+                            title: tier == .standard
+                                ? L10n.text("Volvo connected — data & climate")
+                                : L10n.text("Volvo connected — data only"),
+                            body: tier == .standard
+                                ? L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location. Reconnected with vehicle data and remote climate; request those permissions on developer.volvocars.com to enable the rest.")
+                                : L10n.text("Your Volvo developer application is only approved for vehicle data. Reconnected in read-only mode; request command scopes on developer.volvocars.com to enable remote climate and controls."),
+                            subtitle: L10n.text("Volvo")
+                        )
+                    }
+                    return
+                } catch let error as VolvoError where Self.isInvalidScope(error) && tier != .core {
+                    logger.warning("Volvo rejected scope tier \(tier.rawValue, privacy: .public); retrying narrower")
+                    continue
                 } catch {
                     presentVolvoSignInFailure(error)
+                    return
                 }
-            } catch {
-                presentVolvoSignInFailure(error)
             }
         }
     }
 
     /// One full browser OAuth round trip: authorize → callback → token exchange → discovery,
-    /// then persist the credentials and adopt the brand. `readOnlyScopes` forces the request
-    /// to omit the approval-gated `restrictedScopes`.
+    /// then persist the credentials and adopt the brand. `tier` narrows the requested scope set.
     private func runVolvoInteractiveSignIn(clientID: String, clientSecret: String, vccApiKey: String,
-                                           nickname: String, readOnlyScopes: Bool) async throws {
-        let authorizeURL = try await volvoAPI.beginSignIn(forceReadOnlyScopes: readOnlyScopes)
+                                           nickname: String, tier: VolvoAPI.ScopeTier) async throws {
+        let authorizeURL = try await volvoAPI.beginSignIn(tier: tier)
         let callbackURL = try await volvoPresenter.signIn(
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
@@ -171,11 +173,15 @@ final class SignInCoordinator {
         await assignVolvoNickname(nickname)
         context?.activateBrandAfterSignIn(.volvo)
         context?.dismissSettingsAfterSignIn()
-        resultPresenter.present(
-            title: L10n.text("Volvo sign-in successful"),
-            message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
-            success: true
-        )
+        // A reduced tier gets its own explanatory notice from the caller; don't also fire the
+        // generic success toast.
+        if tier == .full {
+            resultPresenter.present(
+                title: L10n.text("Volvo sign-in successful"),
+                message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
+                success: true
+            )
+        }
     }
 
     private static func isInvalidScope(_ error: VolvoError) -> Bool {

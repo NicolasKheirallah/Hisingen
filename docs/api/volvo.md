@@ -24,18 +24,18 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 
 | Category | Endpoint | Data | Hisingen field(s) |
 |---|---|---|---|
-| Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour, gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
+| Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour (flat `externalColour` string or `externalColours` array), gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
 | Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status/type, charger connection/power state, current limit, power in watts, target SOC, time to target | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingType`, `chargingPowerWatts`, etc. |
 | Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes — see [architecture/capabilities.md](../architecture/capabilities.md) |
 | Doors | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock, door/hood/tailgate/charge-lid state | `exteriorStatus` |
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
-| Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure) | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
+| Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure); `NO_SENSOR` / `SYSTEM_FAULT` map to a distinct `.sensorFault` state | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
 | Diagnostics | `GET /connected-vehicle/v2/vehicles/{vin}/diagnostics` | Service warning, fluid warnings, days/distance to service | `daysToService`, `distanceToServiceKm`, `fluidWarnings` |
 | Engine diagnostics | `GET /connected-vehicle/v2/vehicles/{vin}/engine` | Coolant and oil warning enums (not measured levels) | `healthDetails.warnings` / `reportedWarnings` |
-| Brakes | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid warning | Merged into `healthDetails` |
+| Brakes | `GET /connected-vehicle/v2/vehicles/{vin}/brakes` | Brake fluid warning (live: this is the *only* field returned; `frontBrakePadStatus` / `rearBrakePadStatus` / `parkingBrakeStatus` are decoded defensively but were absent) | Merged into `healthDetails` |
 | Bulb/light warnings | `GET /connected-vehicle/v2/vehicles/{vin}/warnings` | 16+ individual light sensors | Synthesized into a single `.exteriorLight` warning if any are active |
 | Odometer | `GET /connected-vehicle/v2/vehicles/{vin}/odometer` | Total mileage | `odometerKm` |
-| Statistics | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Trip meters, avg consumption/speed, distance-to-empty | `tripMeterManualKm`, `tripMeterAutomaticKm`, `averageSpeedKmH`, `fuelRangeKm` |
+| Statistics | `GET /connected-vehicle/v2/vehicles/{vin}/statistics` | Trip meters, avg consumption (lifetime / since-charge / automatic-trip) / speed, distance-to-empty | `tripMeterManualKm`, `tripMeterAutomaticKm`, `averageSpeedKmH`, `fuelRangeKm`, `batteryDiagnostics.averageConsumption*` |
 | Location | `GET /location/v1/vehicles/{vin}/location` | GeoJSON coordinates, optional altitude, and heading | `location` (requires subscribing to the Location API product and enabling approved permissions) |
 | Engine status | `GET /connected-vehicle/v2/vehicles/{vin}/engine-status` | Running state | Minor |
 | Command accessibility | `GET /connected-vehicle/v2/vehicles/{vin}/command-accessibility` | Whether commands are currently deliverable and why not (`NO_INTERNET`, `POWER_SAVING_MODE`, `CAR_IN_USE`) | `availability`, including the provider reason |
@@ -46,6 +46,13 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 The fuel endpoint is fetched for combustion and hybrid vehicles. The command list is fetched
 when any remote feature is enabled so controls are based on exact VIN support rather than a
 model-wide guess.
+
+A live sweep against a production vehicle (2026-08) confirmed the list above is the complete
+available surface: `/environment`, `/climatization-status`, `/status`, `/battery`, `/position`,
+`/software`, `/ota` and every other guessed path 404; Energy API v1 (`/energy/v1/...`) and the
+Extended Vehicle API return HTTP 410 Gone; and `/location/v1` returns 403 because this
+application is not entitled to the Location API product (requesting `location:read` also makes
+the whole authorization fail `invalid_scope`).
 
 ## Model identification and powertrain
 
@@ -88,12 +95,23 @@ per-VIN probes for remote controls. See [architecture/capabilities.md](../archit
 
 Everything else (`unlockTrunk`, window control, charge-target/amp-limit, schedules, pre-cleaning, OTA) throws `RemoteCommandError.unsupported`. Commands without documented parameters send an empty JSON body; engine start sends only `runtimeMinutes`. Climate temperature and seat-heating values are not sent because Volvo's public climatization endpoint accepts no such body.
 
-Response parsing uses `VolvoCommandResponseDTO`, rejects documented failure statuses, preserves
-accepted/delivered/completed outcomes, and handles Volvo's staged unlock response
-(`readyToUnlock` plus `readyToUnlockUntil`) without falsely changing the visible lock state.
-Successful and failed provider attempts are written to the local command audit with duration.
-Connected Vehicle API v2 commands are synchronous; Hisingen does not call the removed legacy
-sent-command status endpoints.
+The `/commands` list labels honk+flash `HONK_AND_FLASH`, but its `href` — the real invocation
+path, verified live — is `honk-flash`, which is what `dispatchCommand` POSTs. `VolvoCommandDTO.normalizedName`
+derives capability probes from the `href` segment for the same reason.
+
+Response parsing uses `VolvoCommandResponseDTO`. Every documented `invokeStatus` failure value
+(`REJECTED`, `TIMEOUT`, `CONNECTION_FAILURE`, `VEHICLE_IN_SLEEP`, `CAR_ERROR`,
+`NOT_ALLOWED_PRIVACY_ENABLED`, `NOT_ALLOWED_WRONG_USAGE_MODE`, plus the older
+`UNLOCK_TIME_FRAME_PASSED` / `UNABLE_TO_LOCK_DOOR_OPEN`) maps to a specific user-facing
+message via `failureReason`; `VEHICLE_IN_SLEEP` is phrased as retryable and `UNKNOWN` is *not*
+a failure. Accepted/delivered/completed outcomes are preserved, and Volvo's staged unlock
+response (`readyToUnlock` plus `readyToUnlockUntil`) is handled without falsely changing the
+visible lock state. Successful and failed provider attempts are written to the local command
+audit with duration. Connected Vehicle API v2 commands are synchronous; Hisingen does not call
+the removed legacy sent-command status endpoints.
+
+Command POSTs are throttled locally (`throttleCommandDispatch`, one per 6 s) to stay inside
+Volvo's documented 10-requests-per-minute limit on the invocation endpoints.
 
 Concurrency: single-in-flight-per-VIN via `remoteCommandsInFlight`, same pattern as the refresh path.
 
@@ -104,4 +122,4 @@ Volvo's response envelope is inconsistent across endpoints/versions in practice:
 
 ## Relevant tests
 
-`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (26 tests, the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml` — see [operations/ci.md](../operations/ci.md).
+`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml` — see [operations/ci.md](../operations/ci.md).

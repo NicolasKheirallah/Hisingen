@@ -19,25 +19,42 @@ actor VolvoAPI {
     let redirectURI = URL(string: "https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html")!
 
 
-    static let readScopes = [
+    /// Pure telemetry reads plus what vehicle discovery needs. Every published Volvo
+    /// application is granted these automatically, so this is the guaranteed-safe floor a
+    /// scope cascade falls back to.
+    static let coreReadScopes = [
         "openid",
-        "conve:battery_charge_level", "conve:brake_status", "conve:climatization_start_stop",
-        "conve:command_accessibility", "conve:commands", "conve:diagnostics_engine_status",
+        "conve:battery_charge_level", "conve:brake_status", "conve:diagnostics_engine_status",
         "conve:diagnostics_workshop", "conve:doors_status", "conve:engine_status",
         "conve:fuel_status", "conve:lock_status", "conve:odometer_status",
         "conve:trip_statistics", "conve:tyre_status", "conve:vehicle_relation",
         "conve:warnings", "conve:windows_status", "energy:capability:read", "energy:state:read"
     ]
 
+    /// Command-adjacent scopes: listing/checking commands and remote climate. Standard for a
+    /// published app, but a re-approval lapse on the application makes the identity provider
+    /// reject the whole authorization with `invalid_scope`, so the cascade can drop these
+    /// while keeping telemetry.
+    static let commandReadScopes = [
+        "conve:commands", "conve:command_accessibility", "conve:climatization_start_stop"
+    ]
+
+    static let readScopes = coreReadScopes + commandReadScopes
+
+    /// Volvo gates these behind per-application approval. Settings exposes an explicit opt-in;
+    /// only then does the next OAuth sign-in request them, so an unapproved application does
+    /// not break an otherwise valid read-only authorization.
     static let restrictedScopes = [
         "conve:lock", "conve:unlock", "conve:engine_start_stop", "conve:honk_flash",
         "location:read"
     ]
 
-
-    // Volvo gates these scopes behind per-application approval. Settings exposes an explicit
-    // opt-in; only then does the next OAuth sign-in request them. This keeps an unapproved app
-    // from breaking an otherwise valid read-only authorization request.
+    /// Ordered widest → narrowest for the `invalid_scope` fallback cascade.
+    enum ScopeTier: Int, CaseIterable {
+        case full       // readScopes + restrictedScopes (when the preference wants them)
+        case standard   // readScopes only — telemetry + remote climate, no lock/unlock/locate
+        case core       // coreReadScopes only — telemetry, no remote controls at all
+    }
 
 
     var clientID: String?
@@ -69,6 +86,12 @@ actor VolvoAPI {
     var remoteCommandsInFlight: Set<String> = []
     var carImageData: [String: Data] = [:]
     var interiorImageData: [String: Data] = [:]
+
+    /// Volvo caps the invocation/command endpoints at 10 requests/minute per Volvo ID + client.
+    /// `dispatchCommand` spaces its POSTs at least this far apart so a burst of taps waits
+    /// locally instead of drawing an HTTP 429, which Volvo can escalate to a longer lockout.
+    static let minCommandInterval: TimeInterval = 6
+    var nextCommandDispatchAt: Date?
 
     @MainActor
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache()) {
@@ -148,6 +171,8 @@ actor VolvoAPI {
             bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
         case .stopEngine:
             commandName = "engine-stop"
+        // The command list reports this as `HONK_AND_FLASH` but its `href` — and therefore the
+        // real invocation path — is `honk-flash` (verified live against a production vehicle).
         case .honkAndFlash: commandName = "honk-flash"
         case .flashLights: commandName = "flash"
         case .honkHorn: commandName = "honk"
@@ -155,6 +180,9 @@ actor VolvoAPI {
             throw RemoteCommandError.unsupported
         }
         guard let vccApiKey else { throw VolvoError.appNotConfigured }
+
+        try await throttleCommandDispatch()
+
         var request = URLRequest(url: apiURL(
             path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandName)"
         ))
@@ -176,9 +204,8 @@ actor VolvoAPI {
         ), let payload = envelope.data else {
             throw VolvoError.decoding(operation: "command: \(commandName)")
         }
-        if payload.isFailure {
-            throw RemoteCommandError.rejected(payload.text
-                ?? L10n.text("Vehicle reported command failed"))
+        if let failureReason = payload.failureReason {
+            throw RemoteCommandError.rejected(payload.text.map { "\(failureReason) (\($0))" } ?? failureReason)
         }
         if payload.readyToUnlock == true {
             let message = payload.readyToUnlockUntil.map {
@@ -195,6 +222,19 @@ actor VolvoAPI {
         // Connected Vehicle API v2 commands are synchronous and Volvo removed the old sent-
         // command status endpoints. Never poll /commands/{id}; it is not part of v2.
         return RemoteCommandResult(outcome: .accepted, message: payload.text)
+    }
+
+    /// Serialises command POSTs to at most one per `minCommandInterval`. Concurrent callers
+    /// chain: each reserves the next slot and sleeps until it, so a rapid lock→unlock still
+    /// stays inside Volvo's 10 requests/minute command-endpoint quota.
+    private func throttleCommandDispatch() async throws {
+        let now = Date()
+        let earliest = max(now, nextCommandDispatchAt ?? .distantPast)
+        nextCommandDispatchAt = earliest.addingTimeInterval(Self.minCommandInterval)
+        let wait = earliest.timeIntervalSince(now)
+        guard wait > 0 else { return }
+        logger.info("Delaying Volvo command \(String(format: "%.1f", wait), privacy: .public)s to respect the 10/min command limit")
+        try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
     }
 
     private func apiURL(path: String) -> URL {
@@ -513,6 +553,10 @@ actor VolvoAPI {
             let isRestricted: Bool
             switch error as? VolvoError {
             case .regionRestricted, .permissionDenied: isRestricted = true
+            // A 404 is stable: the resource is simply not exposed for this vehicle/market
+            // (e.g. `/environment` on a model without the sensor). Back off long and persist
+            // it so it is not re-probed every few minutes for the life of the install.
+            case .client(let statusCode) where statusCode == 404: isRestricted = true
             default: isRestricted = false
             }
             let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)

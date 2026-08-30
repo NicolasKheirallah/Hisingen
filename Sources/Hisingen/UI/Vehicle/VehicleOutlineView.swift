@@ -548,6 +548,7 @@ struct VehicleSideProfileTiresView: View {
         let pair = [tyre(for: a), tyre(for: b)].compactMap { $0 }.map(\.warning)
         if pair.contains(.veryLow) { return .veryLow }
         if let flagged = pair.first(where: \.needsAttention) { return flagged }
+        if pair.contains(.sensorFault) { return .sensorFault }
         if !pair.isEmpty && pair.allSatisfy({ $0 == .none }) { return .none }
         return .unknown
     }
@@ -615,7 +616,7 @@ struct VehicleSideProfileTiresView: View {
             switch state {
             case .none:
                 return hovered ? HisingenTheme.accent : HisingenTheme.semanticGood
-            case .veryLow, .low, .high:
+            case .veryLow, .low, .high, .sensorFault:
                 return HisingenTheme.tyreWarningColor(state)
             case .unknown:
                 return hovered ? HisingenTheme.accent : HisingenTheme.inkMuted.opacity(0.55)

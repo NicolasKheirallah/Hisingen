@@ -153,6 +153,12 @@ extension InfoTabView {
                               symbol: "chart.line.uptrend.xyaxis",
                               info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))
         }
+        if let value = diag.averageConsumptionAutomatic {
+            rows.append(KVRow(L10n.text("Avg (Automatic Trip)"),
+                              Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit),
+                              symbol: "chart.line.uptrend.xyaxis",
+                              info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))
+        }
         if let wh = diag.energyUsedSinceChargeWh {
             rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill",
                               info: L10n.text("Vehicle Calculation. Total high-voltage energy used by powertrain and HVAC since the last charge.")))
