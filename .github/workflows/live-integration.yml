@@ -56,8 +56,6 @@ jobs:
         run: >-
           swift test --disable-xctest --enable-swift-testing
           --filter LivePolestarReadOnlyIntegrationTests
-          -Xswiftc -strict-concurrency=complete
-          -Xswiftc -warn-concurrency
 
   live-volvo:
     if: inputs.provider == 'all' || inputs.provider == 'volvo'
@@ -100,5 +98,3 @@ jobs:
         run: >-
           swift test --disable-xctest --enable-swift-testing
           --filter LiveVolvoReadOnlyIntegrationTests
-          -Xswiftc -strict-concurrency=complete
-          -Xswiftc -warn-concurrency

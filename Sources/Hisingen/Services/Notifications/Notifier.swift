@@ -170,6 +170,14 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Requests system authorization only when notifications are enabled as a feature *and* at
+    /// least one alert type is on — there is nothing to prompt for otherwise. Called after any
+    /// settings change that could turn the first alert on.
+    func requestAuthorizationIfAnyAlertEnabled() {
+        guard preferences.features.contains(.notifications), preferences.anyNotificationAlertEnabled else { return }
+        requestAuthorizationFromSettings()
+    }
+
     func refreshAuthorizationStatus() {
         guard available else { return }
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
@@ -693,6 +701,27 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             subtitle: displayName(forVIN: vin),
             vin: vin
         )
+    }
+
+    /// One-shot slow-charging anomaly check per completed session, run against a fresh
+    /// telemetry snapshot. Location lives on the persisted DB session (domain sessions don't
+    /// carry it), so detection runs here against the store.
+    func notifyChargingAnomalyIfNeeded(for state: VehicleState) {
+        let database = stateStore.database
+        guard preferences.features.contains(.notifications),
+              let last = database.recentChargingSessions(for: state.vin, limit: 1).first,
+              last.locationName?.isEmpty == false,
+              let ended = last.endedAt,
+              Date().timeIntervalSince(ended) < 600 else { return }
+        let key = "anomaly_\(last.id)"
+        guard !defaults.bool(forKey: key) else { return }
+        let priors = database.priorSessionPeaks(
+            vin: state.vin, locationName: last.locationName ?? "",
+            excludingSessionID: last.id)
+        guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,
+                                                 priorPeaksKwAtSameLocation: priors) else { return }
+        defaults.set(true, forKey: key)
+        notifyChargingAnomaly(locationName: last.locationName ?? "", vin: state.vin)
     }
 
     /// Quiet-hours window check: start == end means "disabled", and a window that wraps

@@ -14,7 +14,7 @@ extension PolestarAPI {
         try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
         // Remote-command authorization (the command client) is a separate, explicit step the
         // user triggers from Settings — see `beginCommandAuthorization()`/
-        // `completeCommandAuthorization(callbackURL:)` and `AppDelegate.beginPolestarCommandAuthorization()`.
+        // `completeCommandAuthorization(callbackURL:)` and `SignInCoordinator.beginPolestarCommandAuthorization()`.
         // It opens a real browser instead of reusing this sign-in's password, so it can't be
         // completed silently here.
         try await fetchCarInfo(preferredVIN: preferredVIN)
@@ -26,7 +26,7 @@ extension PolestarAPI {
     /// token if needed. Unlike the old implementation, this **never** falls back to replaying a
     /// stored password or prompting for one — once the command client's refresh token itself is
     /// gone or rejected, remote commands become unavailable until the user explicitly
-    /// re-authorizes through a real browser window (`AppDelegate.beginPolestarCommandAuthorization()`,
+    /// re-authorizes through a real browser window (`SignInCoordinator.beginPolestarCommandAuthorization()`,
     /// surfaced as "Authorize Remote Commands" in Settings). Callers should treat a `nil` return
     /// as "not authorized for remote commands right now," not as a transient error to retry.
     ///

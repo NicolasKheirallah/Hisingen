@@ -1,6 +1,6 @@
 # Hisingen
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000.svg?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-000000.svg?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
 [![Website](https://img.shields.io/badge/website-nicolaskheirallah.github.io%2FHisingen-2563eb.svg?style=flat-square)](https://nicolaskheirallah.github.io/Hisingen/)
 [![Homebrew Cask](https://img.shields.io/badge/homebrew-hisingen-f59e0b.svg?style=flat-square&logo=homebrew&logoColor=white)](https://github.com/nicolaskheirallah/homebrew-tap)
 [![CI](https://img.shields.io/github/actions/workflow/status/NicolasKheirallah/Hisingen/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml)
@@ -893,7 +893,7 @@ For the full breakdown, see [Privacy](docs/security/privacy.md), [Data retention
 
 ## Installation
 
-Hisingen requires **macOS 14 Sonoma or later**.
+Hisingen requires **macOS 15 Sequoia or later**.
 
 Releases are universal and support both:
 
@@ -1110,7 +1110,7 @@ Things Hisingen deliberately will not do:
 
 ### Requirements
 
-* macOS 14 or later
+* macOS 15 or later
 * Xcode 16 or a compatible Apple development toolchain
 * Git
 

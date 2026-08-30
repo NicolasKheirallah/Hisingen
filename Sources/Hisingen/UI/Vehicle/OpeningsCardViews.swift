@@ -414,7 +414,8 @@ struct LocationCardView: View {
                                 withAnimation(Motion.stateChange) {
                                     copiedCoordinates = true
                                 }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                Task {
+                                    try? await Task.sleep(for: .seconds(1.8))
                                     withAnimation(Motion.interaction) {
                                         copiedCoordinates = false
                                     }

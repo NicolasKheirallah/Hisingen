@@ -26,9 +26,11 @@ all: app dmg
 dist: app dmg
 
 ## Run the deterministic build and test validation used by pull requests.
+## Complete concurrency checking and the Swift 6 language mode are declared in
+## Package.swift, so every build path is checked without extra flags here.
 ci: doctor inject-secrets
-	swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-	sh Scripts/test.sh --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+	swift build
+	sh Scripts/test.sh --skip Live
 
 doctor:
 	sh Scripts/doctor.sh

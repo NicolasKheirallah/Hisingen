@@ -1,6 +1,6 @@
 # Swift Concurrency
 
-Hisingen is built with `-strict-concurrency=complete -warn-concurrency` (enforced in CI — see [operations/ci.md](../operations/ci.md)). Every architecturally significant type declares its isolation explicitly; there are exactly two places that fall back to a manual lock instead of actor isolation, both called out below.
+Hisingen builds in the **Swift 6 language mode** with complete concurrency checking. Both are declared in `Package.swift` (`swift-tools-version:6.0`; `.enableUpcomingFeature("StrictConcurrency")` on every target), so `swift build`, Xcode, IDE indexing, and `make run` are all checked — not only the CI invocation. Every architecturally significant type declares its isolation explicitly; there are exactly two places that fall back to a manual lock instead of actor isolation, both called out below.
 
 ## Isolation by component
 

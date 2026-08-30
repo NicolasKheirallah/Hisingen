@@ -15,7 +15,7 @@ flowchart LR
         Lint["ci.yml: lint-workflows-and-scripts<br/>actionlint + shellcheck"]
         L10n["ci.yml: check-localization<br/>duplicate-key detection + coverage report"]
         Docs["ci.yml: check-docs<br/>broken links + unbalanced fences"]
-        CI["ci.yml: build-and-test<br/>macos-14 + macos-15 matrix<br/>build, test, bundle validation"]
+        CI["ci.yml: build-and-test<br/>macos-15 (deployment target)<br/>build, test, bundle validation"]
         Sec["security.yml<br/>CodeQL (Swift)"]
         Dep["dependency-review.yml<br/>PR dependency diff"]
         Pages["pages.yml<br/>website typecheck + build + Pages deploy"]
@@ -65,15 +65,14 @@ access in this job) or Mermaid diagram *syntax* (only that fences are
 balanced) — Mermaid syntax errors are still visible whenever the page
 actually renders on GitHub.
 
-### Job `build-and-test` (matrix: `macos-14`, `macos-15`, `fail-fast: false`, 25-minute timeout)
+### Job `build-and-test` (matrix: `macos-15`, `fail-fast: false`, 25-minute timeout)
 
 Checkout → cache SwiftPM checkout data (keyed on
 `${{ matrix.os }}-spm-${{ hashFiles('Package.resolved','Package.swift') }}`)
 → select the runner's active full Xcode with `Scripts/select-xcode.sh` →
-`swift --version` + `make doctor` → `swift build -Xswiftc -strict-concurrency=complete
--Xswiftc -warn-concurrency` → `swift test --disable-xctest --enable-swift-testing
---skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`
-→ `make app SWIFT_FLAGS="..."` → bundle validation: binary executable bit
+`swift --version` + `make doctor` → `swift build` → `swift test --disable-xctest
+--enable-swift-testing --skip Live`
+→ `make app` → bundle validation: binary executable bit
 set, `plutil -lint` on `Info.plist`, `codesign --verify --deep --strict`, and
 an explicit assertion that `LSUIElement == true`. The `macos-15` leg also
 builds and verifies an ad-hoc DMG and uploads it as a validation artifact.
@@ -89,9 +88,9 @@ environment-scoped secrets.
 
 **No Swift linting step exists** — no SwiftLint/SwiftFormat configuration
 anywhere in the repo (workflow/shell-script linting now does exist, via
-`lint-workflows-and-scripts` above). The strict-concurrency compiler flags
-are the closest thing to automated Swift style/correctness enforcement
-beyond the test suite itself.
+`lint-workflows-and-scripts` above). The Swift 6 language mode and complete
+concurrency checking (declared in `Package.swift`) are the closest thing to
+automated Swift style/correctness enforcement beyond the test suite itself.
 
 **No production signing/notarization** — CI uses ad-hoc signing (`IDENTITY=-`).
 
@@ -114,7 +113,7 @@ matrix still compiles and tests every pull request before merge.
 ### Job `codeql` (macos-15, `security-events: write`, 60-minute timeout)
 
 CodeQL Swift analysis using `build-mode: manual`, the shared Xcode-selection
-script, and the same strict-concurrency `swift build` command as CI rather than
+script, and the same plain `swift build` command as CI rather than
 the `autobuild` heuristic. Whole-module optimization must not be added here: it
 previously caused index-output mismatches and compiler type-check timeouts under
 CodeQL tracing. Results land under the

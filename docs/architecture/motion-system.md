@@ -66,7 +66,7 @@ breath and the energy-flow sweep drop out.
 
 ## Menu bar / tray icon
 
-`Sources/Hisingen/UI/MenuBarPresentation.swift`.
+`Sources/Hisingen/UI/Shell/MenuBarPresentation.swift`.
 
 The tray glyph is a permanent ambient status light. `MenuBarIconState` is a
 priority-ordered enum — higher wins when several conditions hold at once:

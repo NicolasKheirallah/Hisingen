@@ -2,7 +2,7 @@
 
 ## Requirements
 
-macOS 13 Ventura or later, and Xcode 15+ or compatible Command Line Tools with Swift 5.9+ (`Package.swift` declares `swift-tools-version:5.9`, `.macOS(.v13)`). No external dependencies to install — `Package.swift` has an empty `dependencies:` array; everything is either a system framework or hand-written.
+macOS 15 Sequoia or later, and Xcode 16+ or compatible Command Line Tools with Swift 6.0+ (`Package.swift` declares `swift-tools-version:6.0`, `.macOS(.v15)`, and builds in the Swift 6 language mode). The only package dependency is Sparkle (pinned exact `2.9.6`); everything else is a system framework or hand-written.
 
 ## Clone, build, test, run
 
@@ -42,7 +42,7 @@ You'll need your own Polestar ID or your own Volvo Developer Portal application 
 ## What you don't need
 
 - No database to run, no backend to stand up — Hisingen has neither.
-- No SwiftLint/SwiftFormat config — there isn't one in this repo; code style is enforced by convention and the strict-concurrency compiler flags, not a linter (see [operations/ci.md](../operations/ci.md)).
+- No SwiftLint/SwiftFormat config — there isn't one in this repo; code style is enforced by convention and the Swift 6 language mode / complete concurrency checking (declared in `Package.swift`), not a linter (see [operations/ci.md](../operations/ci.md)).
 - No API keys of Hisingen's own — Open-Meteo needs no authentication, while production update signing keys are maintainer-only CI secrets and are never used by development builds.
 
 ## Next steps

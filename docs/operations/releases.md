@@ -87,7 +87,7 @@ the exact tag `release.yml` listens for. Manually tagging without first updating
 4. **Changelog match** — `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`, optionally followed by a date.
 5. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
 6. **`Info.plist` validity** — `plutil -lint`.
-7. **Full deterministic test suite** — `swift test --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
+7. **Full deterministic test suite** — `swift test --skip Live`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
 
 If any of these fail, nothing is signed, notarized, or published.
 

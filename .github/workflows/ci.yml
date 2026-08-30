@@ -62,7 +62,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        # Deployment target is macOS 15 (see Package.swift / Info.plist), so the
+        # runtime test legs run on 15 and up. Add macos-26 here once that runner
+        # image is generally available.
+        os: [macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -93,11 +96,13 @@ jobs:
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
         run: sh Scripts/inject-secrets.sh
       - name: Build with complete concurrency checks
-        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+        # Swift 6 language mode + complete concurrency checking are declared in
+        # Package.swift, so no per-invocation flags are needed here.
+        run: swift build
       - name: Test deterministic suite
         run: |
           set -euo pipefail
-          sh Scripts/test.sh --skip Live -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
+          sh Scripts/test.sh --skip Live
       - name: Validate localization and documentation
         run: |
           python3 Scripts/check-localization.py
@@ -105,7 +110,7 @@ jobs:
       - name: Validate repository and release inputs
         run: sh Scripts/validate-release.sh
       - name: Build ad-hoc app bundle
-        run: make app OUTPUT_DIR=. IDENTITY="-" SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+        run: make app OUTPUT_DIR=. IDENTITY="-"
       - name: Validate app bundle
         run: |
           set -euo pipefail

@@ -42,11 +42,11 @@ cases for malformed keys, missing notes, and incomplete signatures.
 
 ## Requirements
 
-macOS 14 Sonoma or later; Xcode 15+ or compatible Command Line Tools with Swift 5.9+. `Package.swift` declares `swift-tools-version:5.9`, `platforms: [.macOS(.v14)]`, and an exact Sparkle `2.9.6` package dependency.
+macOS 15 Sequoia or later; Xcode 16+ or compatible Command Line Tools with Swift 6.0+. `Package.swift` declares `swift-tools-version:6.0`, `platforms: [.macOS(.v15)]`, and an exact Sparkle `2.9.6` package dependency.
 
 ## Strict concurrency
 
-Every build in CI (and recommended locally) passes `-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency`. This is not a default `swift build`/`make build` behavior — it's opt-in via `SWIFT_FLAGS`, applied explicitly in `ci.yml` and `release.yml`. See [architecture/concurrency.md](../architecture/concurrency.md).
+The package builds in the Swift 6 language mode with complete concurrency checking, declared in `Package.swift` (`.enableUpcomingFeature("StrictConcurrency")` on every target). No `SWIFT_FLAGS` or `-Xswiftc` flags are needed — `swift build`, `make build`, Xcode, and IDE indexing are all checked identically. See [architecture/concurrency.md](../architecture/concurrency.md).
 
 ## Remote-command dispatch
 

@@ -19,6 +19,32 @@ enum SettingsChange {
     case closeSettings
 }
 
+/// Shared plumbing so a card extracted into its own `View` keeps the `binder(\.key, .change)`
+/// ergonomics without carrying a local `@State` mirror. Writes go straight through
+/// `PreferencesStore`'s own setter (where side effects like `applyAppearance()` live), then
+/// `bump()` re-renders the settings composition (covering same-screen mirrored readouts) and
+/// `change`, when given, is forwarded to `onSettingsChanged`.
+@MainActor
+struct PreferenceBinder {
+    let preferences: PreferencesStore
+    let notify: (SettingsChange) -> Void
+    let bump: () -> Void
+
+    func callAsFunction<Value>(
+        _ keyPath: ReferenceWritableKeyPath<PreferencesStore, Value>,
+        _ change: SettingsChange? = nil
+    ) -> Binding<Value> {
+        Binding(
+            get: { preferences[keyPath: keyPath] },
+            set: { newValue in
+                preferences[keyPath: keyPath] = newValue
+                bump()
+                if let change { notify(change) }
+            }
+        )
+    }
+}
+
 
 @MainActor
 struct SettingsView: View {
@@ -33,24 +59,18 @@ struct SettingsView: View {
         (false, L10n.text("Connection testing is not available."))
     }
 
+    // Presentation, notification, and updater preferences bind straight to `PreferencesStore`
+    // through `bind(_:_:)` below — no local `@State` mirror, no `.onAppear` seed. Only state
+    // that needs bespoke handling (animation, cross-field cascades, debounced text parsing,
+    // value types, or a child-managed confirmation flow) keeps a local mirror here.
     @State private var appTheme: AppTheme = .hisingen
     @State private var appearanceMode: AppearanceMode = .system
-    @State private var privacyRedactionEnabled = false
-    @State private var chargingStatOrder: [String] = []
-    @State private var garageVehicleOrder: [String] = []
-    @State private var floatingPanelEnabled = false
     @State private var carRenderAngle: CarRenderAngle = .frontThreeQuarter
-    @State private var vehicleModelBadgePosition: VehicleModelBadgePosition = .inlineHeader
-    @State private var registrationBadgePosition: RegistrationNumberBadgePosition = .belowGreeting
-    @State private var vehicleLabelFormat: VehicleLabelFormat = .modelAndYear
-    @State private var menuBarStyle = MenuBarStyle.battery
-    @State private var panelCloseBehavior = PanelCloseBehavior.keepOpen
     @State private var panelSize = PanelSize.standard
     @State private var contentDensity = ContentDensity.standard
     @State private var customSizeEnabled = false
     @State private var customWidth: Double = 0
     @State private var customHeight: Double = 0
-    @State private var wideCardLayout = WideCardLayout.fullWidth
 
     /// What the panel currently resolves to with these draft settings — drives the
     /// proportion preview and dimension readout live, including slider drags.
@@ -84,58 +104,14 @@ struct SettingsView: View {
     @State private var fuelEconomyUnit = FuelEconomyUnit.litersPer100Km
     @State private var energyConsumptionUnit = EnergyConsumptionUnit.kwhPer100Km
     @State private var selectedThemeCategory: ThemeCategory = .all
-    @State private var interfaceLanguage = InterfaceLanguage.system
-    @State private var tintMenuBarIcon = true
-    @State private var launchAtLogin = false
-    @State private var automaticallyChecksForUpdates = true
-    @State private var automaticallyDownloadsUpdates = false
-    @State private var features = FeatureSelection.default
-    @State private var notifyChargingStarted = true
-    @State private var notifyChargingComplete = true
-    @State private var notifyChargingProblem = true
-    @State private var notifyLowBattery = true
-    @State private var notifySoftwareUpdates = true
-    @State private var notifyVehicleWarnings = true
-    @State private var notifyOpeningsLeftOpen = true
-    @State private var notifyServiceDue = true
-    @State private var notifyStaleTelemetry = true
-    @State private var notifySlowCharging = true
-    @State private var notifyPlugInReminder = true
-    @State private var notifyChargerConnection = true
-    @State private var notifyClimateChanges = true
-    @State private var notifySounds = true
-    @State private var quietHoursEnabled = false
-    @State private var quietHoursStartHour = 22
-    @State private var quietHoursEndHour = 7
-    @State private var showWarningBadge = false
-    @State private var muteActiveVehicle = false
-    @State private var lowBatteryThreshold = 20
-    @State private var notifyRainWithWindows = true
-    @State private var notifyEveningUnlocked = true
-    @State private var privateNotificationDetails = true
-    @State private var openingsAlertDelayMinutes = 15
-    @State private var plugInReminderThreshold = 40
-    @State private var eveningUnlockedStartHour = 21
     @State private var electricityPrice = "2.00"
     @State private var currencySymbol = "kr"
-    @State private var storeChargingHistory = false
-    @State private var nightTariffEnabled = false
     @State private var nightElectricityPrice = "2.00"
-    @State private var nightTariffStartHour = 22
-    @State private var nightTariffEndHour = 6
-    @State private var requireBiometrics = false
     @State private var persistLocationHistory = false
-    @State private var hasWarrantyInServiceDate = false
-    @State private var warrantyInServiceDate = Date()
-    @State private var usableBatteryCapacityOverride = ""
-    @State private var wltpRangeOverride = ""
-    @State private var specificationValidationMessage: String?
     @State private var selectedSettingsSection = SettingsSection.all
     @State private var settingsSearchText = ""
     @State private var showEnableRemoteConfirmation = false
     @State private var showSignOutConfirmation = false
-    @State private var capabilityFilter = CapabilityFilter.all
-    @State private var capabilityExportFeedback: (message: String, isError: Bool)?
     @State private var pendingSettingsImport: Data?
     @State private var showSettingsImportConfirmation = false
     @State private var showSettingsResetConfirmation = false
@@ -145,6 +121,25 @@ struct SettingsView: View {
 
     private var settingsVehicleVIN: String { state?.vin ?? preferences.vin }
 
+    /// Bumped by every `bind(...)` write so the settings screen re-renders immediately —
+    /// covers same-screen mirrored readouts (e.g. the Privacy Dashboard rows) whose source
+    /// control lives in another card and does not itself fire `onSettingsChanged`.
+    @State private var prefsTick = 0
+
+    /// The binder handed to extracted card views; also backs the local `bind(...)` shorthand.
+    private var binder: PreferenceBinder {
+        PreferenceBinder(preferences: preferences, notify: onSettingsChanged, bump: { prefsTick &+= 1 })
+    }
+
+    /// Live binding straight through to `PreferencesStore`, replacing a local `@State` mirror
+    /// plus its `.onAppear` seed and `.onChange` write-back.
+    private func bind<Value>(
+        _ keyPath: ReferenceWritableKeyPath<PreferencesStore, Value>,
+        _ change: SettingsChange? = nil
+    ) -> Binding<Value> {
+        binder(keyPath, change)
+    }
+
     private var availableRenderAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter {
             imageCache.hasImage(for: settingsVehicleVIN, angle: $0.rawValue)
@@ -152,7 +147,11 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        // Read `prefsTick` so a `bind(...)` write forces a re-render even when it fires no
+        // `onSettingsChanged` (night-tariff, biometrics) — those used to re-render via their
+        // now-removed `@State` mirror, and their values are still mirrored elsewhere on screen.
+        let _ = prefsTick
+        return VStack(spacing: 10) {
             headerBar
             SettingsNavigationBar(selection: $selectedSettingsSection, searchText: $settingsSearchText)
                 .padding(.horizontal, HisingenTheme.sectionSpacing)
@@ -162,17 +161,32 @@ struct SettingsView: View {
                 // heavyweight cards. LazyVStack rebuilt them on every scroll tick,
                 // which froze scrolling — a plain VStack builds them once on open.
                 VStack(spacing: HisingenTheme.sectionSpacing) {
-                    if shows(.accounts) { accountCard; fleetVehiclesCard }
+                    if shows(.accounts) {
+                        accountCard
+                        SettingsFleetCard(
+                            state: state,
+                            cachedSnapshots: cachedSnapshots,
+                            database: database,
+                            imageCache: imageCache,
+                            binder: binder
+                        )
+                    }
                     if shows(.appearance) { appearanceCard }
-                    if shows(.general) { displayCard; chargingStatOrderEditor }
-                    if shows(.updates) { updaterCard }
+                    if shows(.general) { displayCard; SettingsChargingStatOrderCard(binder: binder) }
+                    if shows(.updates) { SettingsUpdatesCard(binder: binder) }
                     if shows(.features) {
                         featureQuickActions
-                        vehicleDataCard
-                        remoteControlsCard
-                        capabilitiesCard
+                        SettingsVehicleDataCard(state: state, binder: binder)
+                        SettingsRemoteControlsCard(state: state, binder: binder)
+                        SettingsCapabilityMatrixCard(state: state)
                     }
-                    if shows(.notifications) { notificationsCard }
+                    if shows(.notifications) {
+                        SettingsNotificationsCard(
+                            notificationPermission: notificationPermission,
+                            state: state,
+                            binder: binder
+                        )
+                    }
                     if shows(.privacyData) {
                         privacyDashboardCard
                         SettingsDatabaseCard(
@@ -181,7 +195,7 @@ struct SettingsView: View {
                             persistLocationHistory: $persistLocationHistory
                         )
                     }
-                    if shows(.about) { actionsCard; versionFooter }
+                    if shows(.about) { actionsCard; SettingsVersionFooter() }
 
                     if !hasVisibleSection {
                         ContentUnavailableView(
@@ -198,6 +212,8 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            // Only the state that still keeps a local mirror is seeded here; everything else
+            // reads live through `bind(_:_:)`.
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
             carRenderAngle = preferences.carRenderAngle
@@ -206,79 +222,21 @@ struct SettingsView: View {
                 carRenderAngle = firstAvailable
                 preferences.carRenderAngle = firstAvailable
             }
-            vehicleModelBadgePosition = preferences.vehicleModelBadgePosition
-            registrationBadgePosition = preferences.registrationBadgePosition
-            vehicleLabelFormat = preferences.vehicleLabelFormat
-            menuBarStyle = preferences.menuBarStyle
-            panelCloseBehavior = preferences.panelCloseBehavior
             panelSize = preferences.panelSize
             contentDensity = preferences.contentDensity
             customSizeEnabled = preferences.customPanelSizeEnabled
             customWidth = preferences.customPanelWidth > 0 ? preferences.customPanelWidth : Double(PanelSize.standard.width)
             customHeight = preferences.customPanelHeight > 0 ? preferences.customPanelHeight : Double(PanelSize.standard.idealHeight)
-            wideCardLayout = preferences.wideCardLayout
             distanceUnit = preferences.distanceUnit
             temperatureUnit = preferences.temperatureUnit
             pressureUnit = preferences.pressureUnit
             fuelVolumeUnit = preferences.fuelVolumeUnit
             fuelEconomyUnit = preferences.fuelEconomyUnit
             energyConsumptionUnit = preferences.energyConsumptionUnit
-            interfaceLanguage = preferences.interfaceLanguage
-            tintMenuBarIcon = preferences.tintMenuBarIcon
-            launchAtLogin = preferences.launchAtLogin
-            automaticallyChecksForUpdates = preferences.automaticallyChecksForUpdates
-            automaticallyDownloadsUpdates = preferences.automaticallyDownloadsUpdates
-            features = preferences.features
-            notifyChargingStarted = preferences.notifyChargingStarted
-            notifyChargingComplete = preferences.notifyChargingComplete
-            notifyChargingProblem = preferences.notifyChargingProblem
-            notifyLowBattery = preferences.notifyLowBattery
-            notifySoftwareUpdates = preferences.notifySoftwareUpdates
-            notifyVehicleWarnings = preferences.notifyVehicleWarnings
-            notifyOpeningsLeftOpen = preferences.notifyOpeningsLeftOpen
-            notifyServiceDue = preferences.notifyServiceDue
-            notifyStaleTelemetry = preferences.notifyStaleTelemetry
-            notifySlowCharging = preferences.notifySlowCharging
-            notifyPlugInReminder = preferences.notifyPlugInReminder
-            notifyChargerConnection = preferences.notifyChargerConnection
-            notifyClimateChanges = preferences.notifyClimateChanges
-            notifySounds = preferences.notifySounds
-            quietHoursEnabled = preferences.quietHoursEnabled
-            quietHoursStartHour = preferences.quietHoursStartHour
-            quietHoursEndHour = preferences.quietHoursEndHour
-            showWarningBadge = preferences.showWarningBadge
-            muteActiveVehicle = preferences.isMuted(vin: state?.vin ?? preferences.vin)
-            privacyRedactionEnabled = preferences.privacyRedactionEnabled
-            chargingStatOrder = preferences.chargingStatOrder
-            garageVehicleOrder = preferences.garageVehicleOrder
-            floatingPanelEnabled = preferences.floatingChargingPanelEnabled
-            lowBatteryThreshold = preferences.lowBatteryThreshold
-            notifyRainWithWindows = preferences.notifyRainWithWindowsOpen
-            notifyEveningUnlocked = preferences.notifyEveningUnlocked
-            privateNotificationDetails = preferences.privateNotificationDetails
-            openingsAlertDelayMinutes = preferences.openingsAlertDelayMinutes
-            plugInReminderThreshold = preferences.plugInReminderThreshold
-            eveningUnlockedStartHour = preferences.eveningUnlockedStartHour
             electricityPrice = String(format: "%.2f", preferences.electricityPricePerKwh)
             currencySymbol = preferences.currencySymbol
-            storeChargingHistory = preferences.storeChargingHistory
-            nightTariffEnabled = preferences.nightTariffEnabled
             nightElectricityPrice = String(format: "%.2f", preferences.nightElectricityPricePerKwh)
-            nightTariffStartHour = preferences.nightTariffStartHour
-            nightTariffEndHour = preferences.nightTariffEndHour
-            requireBiometrics = preferences.requireBiometricsForRemoteControls
             persistLocationHistory = preferences.persistLocationHistory
-            let warrantyVIN = state?.vin ?? preferences.vin
-            if let savedDate = preferences.warrantyInServiceDate(for: warrantyVIN) {
-                hasWarrantyInServiceDate = true
-                warrantyInServiceDate = savedDate
-            }
-            if let specification = preferences.vehicleSpecificationOverride(for: warrantyVIN) {
-                usableBatteryCapacityOverride = specification.usableBatteryCapacityKwh
-                    .map { String(format: "%.1f", $0) } ?? ""
-                wltpRangeOverride = specification.wltpRangeKm
-                    .map { String(format: "%.0f", $0) } ?? ""
-            }
         }
         .confirmationDialog(
             L10n.text("Enable every remote-control feature?"),
@@ -286,10 +244,10 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button(L10n.text("Enable Remote Controls")) {
-                var updated = features
+                var updated = preferences.features
                 for feature in AppFeature.remoteFeatures { updated.set(feature, enabled: true) }
-                features = updated
                 preferences.features = updated
+                prefsTick &+= 1
                 onSettingsChanged(.features)
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
@@ -393,165 +351,6 @@ struct SettingsView: View {
         }
     }
 
-    private var fleetVehiclesCard: some View {
-        let activeVin = preferences.vin
-        var allVins: [String] = []
-        for brand in VehicleBrand.allCases {
-            let bVin = preferences.vin(for: brand)
-            if !bVin.isEmpty && !allVins.contains(bVin) { allVins.append(bVin) }
-        }
-        if !activeVin.isEmpty && !allVins.contains(activeVin) { allVins.append(activeVin) }
-        if let stateVin = state?.vin, !allVins.contains(stateVin) { allVins.append(stateVin) }
-        for vin in cachedSnapshots.keys where !allVins.contains(vin) { allVins.append(vin) }
-        allVins.sort {
-            let left = garageVehicleOrder.firstIndex(of: $0) ?? Int.max
-            let right = garageVehicleOrder.firstIndex(of: $1) ?? Int.max
-            return left == right ? $0 < $1 : left < right
-        }
-
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "car.2.fill", title: L10n.text("Garage & Fleet"), color: HisingenTheme.accent)
-                    Spacer()
-                    Text(L10n.format("%d Vehicles", allVins.count))
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
-                        .foregroundStyle(HisingenTheme.accent)
-                }
-
-                if allVins.isEmpty {
-                    Text(L10n.text("No vehicles discovered yet. Sign in to Polestar or Volvo above to connect your cars."))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                } else {
-                    if allVins.count > 1 {
-                        fleetSummaryBanner(vins: allVins)
-                    }
-
-                    ForEach(Array(allVins.enumerated()), id: \.element) { index, vin in
-                        HStack(spacing: 6) {
-                            FleetVehicleCardRow(
-                                vin: vin,
-                                isActive: vin == activeVin,
-                                state: state,
-                                cachedSnapshots: cachedSnapshots,
-                                database: database,
-                                imageCache: imageCache,
-                                onSettingsChanged: onSettingsChanged
-                            )
-                            VStack(spacing: 2) {
-                                Button { moveGarageVehicle(vin, offset: -1, current: allVins) } label: {
-                                    Image(systemName: "chevron.up")
-                                }
-                                .disabled(index == 0)
-                                .accessibilityLabel(L10n.format("Move %@ up", vin))
-                                Button { moveGarageVehicle(vin, offset: 1, current: allVins) } label: {
-                                    Image(systemName: "chevron.down")
-                                }
-                                .disabled(index == allVins.count - 1)
-                                .accessibilityLabel(L10n.format("Move %@ down", vin))
-                            }
-                            .buttonStyle(.borderless)
-                            .controlSize(.mini)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func moveGarageVehicle(_ vin: String, offset: Int, current: [String]) {
-        guard let index = current.firstIndex(of: vin) else { return }
-        let target = index + offset
-        guard current.indices.contains(target) else { return }
-        var updated = current
-        updated.swapAt(index, target)
-        garageVehicleOrder = updated
-        preferences.garageVehicleOrder = updated
-        onSettingsChanged(.presentation)
-    }
-
-    private func fleetSummaryBanner(vins: [String]) -> some View {
-        let allStates: [VehicleState] = vins.compactMap { vin in
-            (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
-        }
-
-        let totalRange = allStates.compactMap(\.primaryRangeKm).reduce(0, +)
-        let chargingCars = allStates.filter(\.isCharging)
-        let totalChargingWatts = chargingCars.compactMap(\.chargingPowerWatts).reduce(0, +)
-        let totalOdometer = allStates.compactMap(\.odometerKm).reduce(0, +)
-
-        return HStack(spacing: 8) {
-            // Combined Range
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Image(systemName: "gauge.with.needle.fill")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(HisingenTheme.accent)
-                    Text(L10n.text("Fleet Range"))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Text(totalRange > 0 ? Format.distance(km: totalRange, unit: preferences.distanceUnit) : "--")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-
-            // Charging Activity
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Image(systemName: chargingCars.isEmpty ? "bolt.slash" : "bolt.fill")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(chargingCars.isEmpty ? Color.secondary : Color.green)
-                    Text(L10n.text("Charging"))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                if chargingCars.isEmpty {
-                    Text(L10n.text("All Idle"))
-                        .font(.system(size: 11.5, weight: .semibold))
-                } else {
-                    HStack(spacing: 3) {
-                        Text(L10n.format("%d active", chargingCars.count))
-                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.green)
-                        if totalChargingWatts > 0 {
-                            Text("(\(Format.kilowatts(watts: totalChargingWatts)))")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-
-            // Fleet Odometer
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Image(systemName: "road.lanes")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(HisingenTheme.accent)
-                    Text(L10n.text("Fleet Mileage"))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Text(totalOdometer > 0 ? Format.distance(km: totalOdometer, unit: preferences.distanceUnit) : "--")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-        }
-        .padding(.bottom, 2)
-    }
-
     private var filteredThemes: [AppTheme] {
         if selectedThemeCategory == .all {
             return AppTheme.allCases
@@ -593,14 +392,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $privacyRedactionEnabled)
+                        Toggle("", isOn: bind(\.privacyRedactionEnabled, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: privacyRedactionEnabled) { _, newValue in
-                                preferences.privacyRedactionEnabled = newValue
-                                onSettingsChanged(.presentation)
-                            }
                             .accessibilityLabel(L10n.text("Screenshot Privacy Mode"))
                     }
                     .padding(.vertical, 2)
@@ -615,14 +410,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $floatingPanelEnabled)
+                        Toggle("", isOn: bind(\.floatingChargingPanelEnabled, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: floatingPanelEnabled) { _, newValue in
-                                preferences.floatingChargingPanelEnabled = newValue
-                                onSettingsChanged(.presentation)
-                            }
                             .accessibilityLabel(L10n.text("Floating Charging Panel"))
                     }
                     .padding(.vertical, 2)
@@ -875,7 +666,7 @@ struct SettingsView: View {
                         Text(L10n.text("Language"))
                             .font(.system(size: 12))
                         Spacer()
-                        Picker("", selection: $interfaceLanguage) {
+                        Picker("", selection: bind(\.interfaceLanguage, .presentation)) {
                             ForEach(InterfaceLanguage.allCases, id: \.self) { language in
                                 Text(language.title).tag(language)
                             }
@@ -883,10 +674,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: interfaceLanguage) { _, _ in
-                            preferences.interfaceLanguage = interfaceLanguage
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
                     Divider().opacity(0.4)
@@ -900,7 +687,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Picker("", selection: $vehicleModelBadgePosition) {
+                        Picker("", selection: bind(\.vehicleModelBadgePosition, .presentation)) {
                             ForEach(VehicleModelBadgePosition.allCases, id: \.self) { pos in
                                 Text(pos.title).tag(pos)
                             }
@@ -908,10 +695,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: vehicleModelBadgePosition) { _, _ in
-                            preferences.vehicleModelBadgePosition = vehicleModelBadgePosition
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
                     Divider().opacity(0.4)
@@ -925,7 +708,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Picker("", selection: $registrationBadgePosition) {
+                        Picker("", selection: bind(\.registrationBadgePosition, .presentation)) {
                             ForEach(RegistrationNumberBadgePosition.allCases, id: \.self) { pos in
                                 Text(pos.title).tag(pos)
                             }
@@ -933,10 +716,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: registrationBadgePosition) { _, _ in
-                            preferences.registrationBadgePosition = registrationBadgePosition
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
                     Divider().opacity(0.4)
@@ -950,7 +729,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Picker("", selection: $vehicleLabelFormat) {
+                        Picker("", selection: bind(\.vehicleLabelFormat, .presentation)) {
                             ForEach(VehicleLabelFormat.allCases, id: \.self) { format in
                                 Text(format.title).tag(format)
                             }
@@ -958,10 +737,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: vehicleLabelFormat) { _, _ in
-                            preferences.vehicleLabelFormat = vehicleLabelFormat
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
                     let previewTitle = preferences.formattedVehicleTitle(
@@ -969,7 +744,7 @@ struct SettingsView: View {
                         modelName: state?.modelName ?? (preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
                         modelYear: state?.modelYear ?? "2024",
                         registrationNo: state?.registrationNo ?? "ZCJ 06G",
-                        format: vehicleLabelFormat
+                        format: preferences.vehicleLabelFormat
                     )
                     HStack(spacing: 6) {
                         Text(L10n.text("Preview:"))
@@ -1000,14 +775,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $storeChargingHistory)
+                        Toggle("", isOn: bind(\.storeChargingHistory, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: storeChargingHistory) { _, _ in
-                                preferences.storeChargingHistory = storeChargingHistory
-                                onSettingsChanged(.presentation)
-                            }
                     }
 
                     Divider().opacity(0.4)
@@ -1016,7 +787,7 @@ struct SettingsView: View {
                         Text(L10n.text("Menu bar display"))
                             .font(.system(size: 12))
                         Spacer()
-                        Picker("", selection: $menuBarStyle) {
+                        Picker("", selection: bind(\.menuBarStyle, .presentation)) {
                             ForEach(MenuBarStyle.allCases, id: \.self) { style in
                                 Text(style.title).tag(style)
                             }
@@ -1024,10 +795,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 160)
-                        .onChange(of: menuBarStyle) { _, _ in
-                            preferences.menuBarStyle = menuBarStyle
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
 
@@ -1042,7 +809,7 @@ struct SettingsView: View {
                         exteriorStatus: ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false),
                         imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
                     )
-                    let previewText = Format.barTitle(for: previewSample, style: menuBarStyle, unit: distanceUnit)
+                    let previewText = Format.barTitle(for: previewSample, style: preferences.menuBarStyle, unit: distanceUnit)
                     let previewIcon = Format.icon(for: previewSample)
                     HStack(spacing: 6) {
                         Text(L10n.text("Preview:"))
@@ -1051,8 +818,8 @@ struct SettingsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: previewIcon)
                                 .font(.system(size: 10))
-                                .foregroundStyle(tintMenuBarIcon ? Color.green : Color.primary)
-                            if menuBarStyle == .lockAndBattery,
+                                .foregroundStyle(preferences.tintMenuBarIcon ? Color.green : Color.primary)
+                            if preferences.menuBarStyle == .lockAndBattery,
                                let lockSymbol = Format.lockStatusSymbol(for: previewSample) {
                                 Image(systemName: lockSymbol)
                                     .font(.system(size: 12, weight: .bold))
@@ -1075,12 +842,12 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Panel auto-close"))
                                 .font(.system(size: 12, weight: .medium))
-                            Text(panelCloseBehavior.subtitle)
+                            Text(preferences.panelCloseBehavior.subtitle)
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Picker("", selection: $panelCloseBehavior) {
+                        Picker("", selection: bind(\.panelCloseBehavior, .presentation)) {
                             ForEach(PanelCloseBehavior.allCases, id: \.self) { behavior in
                                 Text(behavior.title).tag(behavior)
                             }
@@ -1088,10 +855,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .controlSize(.small)
                         .frame(maxWidth: 220)
-                        .onChange(of: panelCloseBehavior) { _, newBehavior in
-                            preferences.panelCloseBehavior = newBehavior
-                            onSettingsChanged(.presentation)
-                        }
                     }
 
                     Divider().opacity(0.4)
@@ -1251,7 +1014,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Picker("", selection: $wideCardLayout) {
+                            Picker("", selection: bind(\.wideCardLayout, .presentation)) {
                                 ForEach(WideCardLayout.allCases, id: \.self) { layout in
                                     Text(layout.title).tag(layout)
                                 }
@@ -1259,17 +1022,9 @@ struct SettingsView: View {
                             .labelsHidden()
                             .controlSize(.small)
                             .frame(maxWidth: 160)
-                            .onChange(of: wideCardLayout) { _, newLayout in
-                                preferences.wideCardLayout = newLayout
-                                onSettingsChanged(.presentation)
-                            }
                         }
 
-                        SegmentedPresetRow(options: WideCardLayout.allCases, selection: $wideCardLayout)
-                            .onChange(of: wideCardLayout) { _, newLayout in
-                                preferences.wideCardLayout = newLayout
-                                onSettingsChanged(.presentation)
-                            }
+                        SegmentedPresetRow(options: WideCardLayout.allCases, selection: bind(\.wideCardLayout, .presentation))
                     }
 
                     Divider().opacity(0.4)
@@ -1283,14 +1038,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $tintMenuBarIcon)
+                        Toggle("", isOn: bind(\.tintMenuBarIcon, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                        .onChange(of: tintMenuBarIcon) { _, _ in
-                                preferences.tintMenuBarIcon = tintMenuBarIcon
-                                onSettingsChanged(.presentation)
-                            }
                     }
 
                     Divider().opacity(0.4)
@@ -1355,14 +1106,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $launchAtLogin)
+                        Toggle("", isOn: bind(\.launchAtLogin, .launchAtLogin))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: launchAtLogin) { _, _ in
-                                preferences.launchAtLogin = launchAtLogin
-                                onSettingsChanged(.launchAtLogin)
-                            }
                     }
 
                     Divider().opacity(0.4)
@@ -1418,14 +1165,11 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $nightTariffEnabled)
+                        Toggle("", isOn: bind(\.nightTariffEnabled))
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: nightTariffEnabled) { _, _ in
-                                preferences.nightTariffEnabled = nightTariffEnabled
-                            }
                     }
-                    if nightTariffEnabled {
+                    if preferences.nightTariffEnabled {
                         HStack(spacing: 4) {
                             TextField("2.00", text: $nightElectricityPrice)
                                 .textFieldStyle(.roundedBorder)
@@ -1441,25 +1185,19 @@ struct SettingsView: View {
                             Text(L10n.text("/kWh from"))
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                            Stepper(value: $nightTariffStartHour, in: 0...23) {
-                                Text(String(format: "%02d:00", nightTariffStartHour))
+                            Stepper(value: bind(\.nightTariffStartHour), in: 0...23) {
+                                Text(String(format: "%02d:00", preferences.nightTariffStartHour))
                                     .font(.system(size: 11, design: .monospaced))
                             }
                             .controlSize(.small)
-                            .onChange(of: nightTariffStartHour) { _, _ in
-                                preferences.nightTariffStartHour = nightTariffStartHour
-                            }
                             Text(L10n.text("to"))
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                            Stepper(value: $nightTariffEndHour, in: 0...23) {
-                                Text(String(format: "%02d:00", nightTariffEndHour))
+                            Stepper(value: bind(\.nightTariffEndHour), in: 0...23) {
+                                Text(String(format: "%02d:00", preferences.nightTariffEndHour))
                                     .font(.system(size: 11, design: .monospaced))
                             }
                             .controlSize(.small)
-                            .onChange(of: nightTariffEndHour) { _, _ in
-                                preferences.nightTariffEndHour = nightTariffEndHour
-                            }
                         }
                         if !isValidElectricityPrice(nightElectricityPrice) {
                             inlineValidation(L10n.text("Enter a night rate between 0.01 and 1,000."))
@@ -1477,13 +1215,10 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: $requireBiometrics)
+                        Toggle("", isOn: bind(\.requireBiometricsForRemoteControls))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
-                            .onChange(of: requireBiometrics) { _, _ in
-                                preferences.requireBiometricsForRemoteControls = requireBiometrics
-                            }
                             .accessibilityLabel(L10n.text("Require device-owner authentication"))
                     }
                 }
@@ -1491,158 +1226,12 @@ struct SettingsView: View {
         }
     }
 
-    private var updaterCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "arrow.down.circle.fill", title: L10n.text("Hisingen Updates"), color: .blue)
-                Text(L10n.text("Updates are downloaded from Hisingen’s signed update feed and verified before installation."))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-
-                HStack {
-                    Label(L10n.text("Stable channel"), systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        onSettingsChanged(.checkForUpdates)
-                    } label: {
-                        Label(L10n.text("Check Now"), systemImage: "arrow.clockwise")
-                    }
-                    .controlSize(.small)
-                }
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(L10n.text("Automatically check for updates"))
-                            .font(.system(size: 12, weight: .medium))
-                        Text(L10n.text("Check quietly once a day while Hisingen is running"))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $automaticallyChecksForUpdates)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .accessibilityLabel(L10n.text("Automatically check for updates"))
-                        .onChange(of: automaticallyChecksForUpdates) { _, value in
-                            preferences.automaticallyChecksForUpdates = value
-                            if !value { automaticallyDownloadsUpdates = false; preferences.automaticallyDownloadsUpdates = false }
-                            onSettingsChanged(.updater)
-                        }
-                }
-
-                Divider().opacity(0.4)
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(L10n.text("Automatically download updates"))
-                            .font(.system(size: 12, weight: .medium))
-                        Text(L10n.text("Download verified updates in the background; installation still uses macOS confirmation."))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $automaticallyDownloadsUpdates)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .accessibilityLabel(L10n.text("Automatically download updates"))
-                        .disabled(!automaticallyChecksForUpdates)
-                        .onChange(of: automaticallyDownloadsUpdates) { _, value in
-                            preferences.automaticallyDownloadsUpdates = value
-                            onSettingsChanged(.updater)
-                        }
-                }
-            }
-        }
-    }
-
-
-    /// Up/down editor for the Charging card's detail-row order. Rows not listed here keep
-    /// their natural position after the ordered ones.
-    private var chargingStatOrderEditor: some View {
-        let titles: [String: String] = [
-            "connection": "Charger Connection", "type": "Charging Type", "draw": "Current Draw",
-            "limit": "Current Limit", "voltage": "Voltage", "target": "Target Limit",
-            "powerModule": "Power Module", "timeToTarget": "Time to Target",
-            "timeToMinSoc": "Time to Min SOC", "avgConsumption": "Avg Consumption",
-            "avgSinceCharge": "Avg Since Last Charge", "energySinceCharge": "Energy Since Charge",
-        ]
-        return Card {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    CardHeader(symbol: "list.number", title: L10n.text("Charging Stat Order"), color: .indigo)
-                    Spacer()
-                    if !chargingStatOrder.isEmpty {
-                        Button(L10n.text("Reset")) {
-                            chargingStatOrder = []
-                            preferences.chargingStatOrder = []
-                            onSettingsChanged(.presentation)
-                        }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                    }
-                }
-                Text(L10n.text("Reorders the detail rows on the Charging card. Unlisted rows keep their default position below."))
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
-                ForEach(Array(chargingStatOrder.enumerated()), id: \.element) { index, id in
-                    HStack {
-                        Text(titles[id] ?? id).font(.system(size: 11))
-                        Spacer()
-                        Button {
-                            guard index > 0 else { return }
-                            chargingStatOrder.swapAt(index, index - 1)
-                            preferences.chargingStatOrder = chargingStatOrder
-                            onSettingsChanged(.presentation)
-                        } label: { Image(systemName: "arrow.up") }
-                        .buttonStyle(.borderless)
-                        .disabled(index == 0)
-                        Button {
-                            guard index < chargingStatOrder.count - 1 else { return }
-                            chargingStatOrder.swapAt(index, index + 1)
-                            preferences.chargingStatOrder = chargingStatOrder
-                            onSettingsChanged(.presentation)
-                        } label: { Image(systemName: "arrow.down") }
-                        .buttonStyle(.borderless)
-                        .disabled(index == chargingStatOrder.count - 1)
-                    }
-                    .padding(.vertical, 1)
-                }
-                // Remaining unlisted rows, offered for adoption into the order.
-                ForEach(unorderedStatIDs(titles: titles), id: \.self) { pending in
-                    HStack {
-                        Text(pending).font(.system(size: 10.5)).foregroundStyle(.secondary)
-                        Spacer()
-                        Button(L10n.text("Add")) {
-                            let known = ["connection","type","draw","limit","voltage","target","powerModule","timeToTarget","timeToMinSoc","avgConsumption","avgSinceCharge","energySinceCharge"]
-                            let key = known.first { titles[$0] == pending } ?? pending
-                            chargingStatOrder.append(key)
-                            preferences.chargingStatOrder = chargingStatOrder
-                            onSettingsChanged(.presentation)
-                        }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                    }
-                }
-            }
-        }
-    }
-
-    private func unorderedStatIDs(titles: [String: String]) -> [String] {
-        let all = ["connection","type","draw","limit","voltage","target","powerModule",
-                   "timeToTarget","timeToMinSoc","avgConsumption","avgSinceCharge","energySinceCharge"]
-        return Set(all).subtracting(chargingStatOrder).map { titles[$0] ?? $0 }.sorted()
-    }
 
     private var featureQuickActions: some View {
         HStack(spacing: 8) {
             Button {
-                let recommended = FeatureSelection.default
-                features = recommended
-                preferences.features = recommended
+                preferences.features = FeatureSelection.default
+                prefsTick &+= 1
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
@@ -1657,9 +1246,8 @@ struct SettingsView: View {
             .controlSize(.small)
 
             Button {
-                let all = FeatureSelection(enabled: Set(AppFeature.safeBulkEnableCases))
-                features = all
-                preferences.features = all
+                preferences.features = FeatureSelection(enabled: Set(AppFeature.safeBulkEnableCases))
+                prefsTick &+= 1
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
@@ -1687,270 +1275,6 @@ struct SettingsView: View {
         }
     }
 
-
-    private var remoteControlsCard: some View {
-        let isVolvo = preferences.activeBrand == .volvo
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
-
-                Text(isVolvo
-                     ? L10n.text("Climate is available with the standard API subscription. Lock, locate, engine-start, and location permissions require approval for your Volvo developer application and a new sign-in.")
-                     : L10n.text("Climate, locks, windows, cabin cleaning, charging and timers are dispatched through Polestar's command service, and software installation through its OTA scheduler."))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-
-                VStack(spacing: 4) {
-                    if isVolvo {
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.text("Approved Volvo permissions"))
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(L10n.text("Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in."))
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { preferences.volvoRestrictedScopesEnabled },
-                                set: { enabled in
-                                    preferences.volvoRestrictedScopesEnabled = enabled
-                                    onSettingsChanged(.features)
-                                }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.text("Authorize Remote Commands"))
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(L10n.text("Opens your browser to sign in for remote commands. Hisingen never sees your Polestar password for this step, and this is separate from the account sign-in above."))
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                onSettingsChanged(.polestarCommandAuthorization)
-                            } label: {
-                                Text(L10n.text("Authorize…"))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    featureToggleRow(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop))
-                    featureToggleRow(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock and unlock", isSupported: supportsCapability(.locks) && (!isVolvo || preferences.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : nil)
-                    featureToggleRow(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo && supportsCapability(.chargeTarget), badgeText: isVolvo ? "Read-Only in API" : nil)
-                    featureToggleRow(.remoteSchedules, symbol: "calendar.badge.clock", title: "Charging & Climate Timers", detail: "Create and edit charge windows and departure timers", isSupported: !isVolvo && (supportsCapability(.chargingSchedule) || supportsCapability(.climateTimers)), badgeText: isVolvo ? "Not in API" : nil)
-                    featureToggleRow(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo && supportsCapability(.windows), badgeText: isVolvo ? "Not in API" : nil)
-                    featureToggleRow(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: supportsCapability(.honkAndFlash) && (!isVolvo || preferences.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : nil)
-                    featureToggleRow(.remotePreCleaning, symbol: "sparkles", title: "Cabin Air Cleaning", detail: "PM2.5 pre-cleaning filtration", isSupported: !isVolvo && supportsCapability(.preCleaning), badgeText: isVolvo ? "In-Car Only" : nil)
-                    featureToggleRow(.remoteOTA, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software Controls", detail: "Install or cancel a pending software update", isSupported: !isVolvo && supportsCapability(.softwareInstallControl), badgeText: isVolvo ? "Not in API" : nil)
-                }
-            }
-        }
-    }
-
-    private func supportsCapability(_ capability: VehicleCapability) -> Bool {
-        guard let state else { return true }
-        return state.capabilityProfile.support(for: capability).permitsRequest
-    }
-
-
-    private var vehicleDataCard: some View {
-        let brand = preferences.activeBrand
-        let isVolvo = brand == .volvo
-        let brandName = brand.displayName
-        return Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
-
-                let warrantyVIN = state?.vin ?? preferences.vin
-                if !warrantyVIN.isEmpty, state?.warrantyInfo == nil {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(L10n.text("Warranty in-service date"))
-                                    .font(.system(size: 11, weight: .medium))
-                                Text(L10n.text("Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents."))
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            Toggle("", isOn: $hasWarrantyInServiceDate)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                                .controlSize(.mini)
-                                .accessibilityLabel(L10n.text("Warranty in-service date"))
-                                .onChange(of: hasWarrantyInServiceDate) { _, enabled in
-                                    preferences.setWarrantyInServiceDate(enabled ? warrantyInServiceDate : nil, for: warrantyVIN)
-                                    onSettingsChanged(.presentation)
-                                }
-                        }
-                        if hasWarrantyInServiceDate {
-                            DatePicker(
-                                L10n.text("In-Service Date"),
-                                selection: $warrantyInServiceDate,
-                                in: ...Date(),
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.compact)
-                            .controlSize(.small)
-                            .onChange(of: warrantyInServiceDate) { _, date in
-                                preferences.setWarrantyInServiceDate(date, for: warrantyVIN)
-                                onSettingsChanged(.presentation)
-                            }
-                        }
-                    }
-                    .padding(8)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                }
-
-                if !warrantyVIN.isEmpty, state?.powertrain.hasElectricRange == true {
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(L10n.text("Exact vehicle references"))
-                                    .font(.system(size: 11, weight: .medium))
-                                Text(L10n.text("Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates."))
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer(minLength: 8)
-                            InformationButton(message: L10n.text("User-entered reference data is always labelled as such. It does not become provider telemetry or a measured battery value."))
-                        }
-                        HStack {
-                            Text(L10n.text("Usable battery capacity"))
-                                .font(.system(size: 10.5))
-                            Spacer()
-                            TextField(L10n.text("Automatic"), text: $usableBatteryCapacityOverride)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 70)
-                                .multilineTextAlignment(.trailing)
-                                .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
-                            Text("kWh").font(.system(size: 9)).foregroundStyle(.secondary)
-                        }
-                        HStack {
-                            Text(L10n.text("WLTP reference range"))
-                                .font(.system(size: 10.5))
-                            Spacer()
-                            TextField(L10n.text("Automatic"), text: $wltpRangeOverride)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 70)
-                                .multilineTextAlignment(.trailing)
-                                .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
-                            Text("km").font(.system(size: 9)).foregroundStyle(.secondary)
-                        }
-                        if let specificationValidationMessage {
-                            inlineValidation(specificationValidationMessage)
-                        }
-                        HStack {
-                            Spacer()
-                            Button(L10n.text("Apply References")) {
-                                saveSpecificationOverride(vin: warrantyVIN)
-                            }
-                            .controlSize(.small)
-                            if !usableBatteryCapacityOverride.isEmpty || !wltpRangeOverride.isEmpty {
-                                Button(L10n.text("Reset")) {
-                                    usableBatteryCapacityOverride = ""
-                                    wltpRangeOverride = ""
-                                    saveSpecificationOverride(vin: warrantyVIN)
-                                }
-                                .controlSize(.small)
-                            }
-                        }
-                    }
-                    .padding(8)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                }
-
-                subsectionHeader("Vehicle & Identity")
-                VStack(spacing: 4) {
-                    featureToggleRow(.vehicleIdentity, symbol: "car.side", title: "Vehicle Identity", detail: "Model, year, license plate & VIN")
-                    featureToggleRow(.ownerGreeting, symbol: "person.text.rectangle", title: "Owner Greeting", detail: L10n.format("Show the %@ ID first name", brandName), isSupported: !isVolvo, badgeText: isVolvo ? "N/A on Volvo" : nil)
-                    featureToggleRow(.vehicleImage, symbol: "photo.artframe", title: "Studio Vehicle Image", detail: L10n.format("Render high-resolution %@ visual", brandName))
-                    featureToggleRow(.vehicleAvailability, symbol: "antenna.radiowaves.left.and.right", title: "Vehicle Availability", detail: "Show online state and command availability")
-                }
-
-                subsectionHeader("Charging & Energy")
-                VStack(spacing: 4) {
-                    featureToggleRow(.chargingDetails, symbol: "powerplug.fill", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
-                    featureToggleRow(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times", isSupported: !isVolvo, badgeText: isVolvo ? "Deprecated in API v2" : nil)
-                    featureToggleRow(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Battery state, module health & energy usage")
-                }
-
-                subsectionHeader("Status & Security")
-                VStack(spacing: 4) {
-                    featureToggleRow(.exteriorStatus, symbol: "door.left.hand.open", title: "Exterior Doors & Windows", detail: "Open doors, windows, trunk & lock alerts")
-                    featureToggleRow(.tyreAndWarnings, symbol: "circle.grid.2x2", title: "Tyre Pressures & Warnings", detail: "Pressure monitoring and system alerts")
-                    featureToggleRow(.vehicleHealth, symbol: "speedometer", title: "Odometer & Service", detail: "Mileage, service intervals & fluid levels")
-                }
-
-                subsectionHeader("Climate & Air")
-                VStack(spacing: 4) {
-                    featureToggleRow(.climateStatus, symbol: "thermometer.medium", title: "Climate Status & Timers", detail: "Live interior status and scheduled timers")
-                    featureToggleRow(.airQuality, symbol: "wind", title: "Cabin Air Quality", detail: "AQI & particulate matter sensors", isSupported: !isVolvo, badgeText: isVolvo ? "In-Car Only" : nil)
-                }
-
-                subsectionHeader("Location & Weather")
-                VStack(spacing: 4) {
-                    featureToggleRow(.vehicleLocation, symbol: "location.fill", title: "Vehicle Location & Maps", detail: "Parking GPS coordinates and Apple Maps")
-                    featureToggleRow(.vehicleWeather, symbol: "cloud.sun.fill", title: "Vehicle Weather", detail: "Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo")
-                }
-
-                subsectionHeader("Advanced Diagnostics")
-                VStack(spacing: 4) {
-                    featureToggleRow(.tripMeters, symbol: "chart.xyaxis.line", title: "Trip Meters", detail: "Manual and automatic trip computers")
-                    featureToggleRow(.connectivityDiagnostics, symbol: "antenna.radiowaves.left.and.right", title: "Connectivity", detail: "Vehicle network & signal diagnostics", isSupported: !isVolvo, badgeText: isVolvo ? "Enterprise Only" : nil)
-                    featureToggleRow(.softwareUpdates, symbol: "arrow.triangle.2.circlepath", title: "Vehicle Software & OTA", detail: L10n.format("%@ software version and update status", brandName))
-                }
-
-                subsectionHeader("App Integration")
-                VStack(spacing: 4) {
-                    featureToggleRow(.multipleVehicles, symbol: "car.2.fill", title: "Vehicle Switcher", detail: "Show controls for moving between vehicles on the same account")
-                    featureToggleRow(.updateChecks, symbol: "arrow.down.circle", title: "App Update Checks", detail: "Allow checks against Hisingen’s signed stable update feed")
-                    featureToggleRow(.vehicleErrors, symbol: "exclamationmark.bubble", title: "Vehicle Service Errors", detail: "Fetch charging and climate errors reported by the vehicle service")
-                    featureToggleRow(.realTimeUpdates, symbol: "dot.radiowaves.left.and.right", title: "Real-Time Updates", detail: "Use live server streaming when supported, with polling as fallback", isSupported: !isVolvo, badgeText: isVolvo ? "Polling Only" : nil)
-                }
-            }
-        }
-    }
-
-    private func saveSpecificationOverride(vin: String) {
-        func parsed(_ text: String, range: ClosedRange<Double>) -> Double? {
-            guard let value = NumberParsing.decimal(from: text),
-                  range.contains(value) else { return nil }
-            return value
-        }
-        let capacityText = usableBatteryCapacityOverride.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rangeText = wltpRangeOverride.trimmingCharacters(in: .whitespacesAndNewlines)
-        let capacity = capacityText.isEmpty ? nil : parsed(capacityText, range: 5...200)
-        let referenceRange = rangeText.isEmpty ? nil : parsed(rangeText, range: 50...1_200)
-        guard capacityText.isEmpty || capacity != nil else {
-            specificationValidationMessage = L10n.text("Usable battery capacity must be between 5 and 200 kWh.")
-            return
-        }
-        guard rangeText.isEmpty || referenceRange != nil else {
-            specificationValidationMessage = L10n.text("WLTP reference range must be between 50 and 1,200 km.")
-            return
-        }
-        specificationValidationMessage = nil
-        let value = VehicleSpecificationOverride(
-            usableBatteryCapacityKwh: capacity,
-            wltpRangeKm: referenceRange
-        )
-        preferences.setVehicleSpecificationOverride(value.isEmpty ? nil : value, for: vin)
-        onSettingsChanged(.presentation)
-    }
 
     private func isValidElectricityPrice(_ text: String) -> Bool {
         SettingsValidation.isValidElectricityPrice(text)
@@ -1995,591 +1319,8 @@ struct SettingsView: View {
         }
     }
 
-    private func subsectionHeader(_ title: String) -> some View {
-        Text(L10n.text(title))
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(.tertiary)
-            .textCase(.uppercase)
-            .tracking(0.3)
-            .padding(.top, 6)
-    }
-
-    private func featureToggleRow(
-        _ feature: AppFeature,
-        symbol: String,
-        title: String,
-        detail: String,
-        isSupported: Bool = true,
-        badgeText: String? = nil
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(isSupported ? .secondary : .tertiary)
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(L10n.text(title))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(isSupported ? .primary : .secondary)
-                    if let badgeText {
-                        Text(L10n.text(badgeText))
-                            .font(.system(size: 8, weight: .semibold))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Text(L10n.text(detail))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary.opacity(isSupported ? 1.0 : 0.7))
-            }
-            Spacer()
-            Toggle("", isOn: Binding(
-                get: { isSupported && features.contains(feature) },
-                set: { enabled in
-                    guard isSupported else { return }
-                    features.set(feature, enabled: enabled)
-                    preferences.features = features
-                    onSettingsChanged(.features)
-                }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .labelsHidden()
-            .disabled(!isSupported)
-            .accessibilityLabel(L10n.text(title))
-            .accessibilityHint(L10n.text(detail))
-        }
-        .padding(.vertical, 3)
-        .opacity(isSupported ? 1.0 : 0.55)
-    }
-
-    private func degradedNotice(symbol: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 10))
-                .foregroundStyle(HisingenTheme.semanticWarning)
-            Text(text)
-                .font(.system(size: 9.5))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .background(HisingenTheme.semanticWarning.opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-
-    private var capabilitiesCard: AnyView {
-        guard let state else { return AnyView(EmptyView()) }
-        let profile = state.capabilityProfile
-        let items = VehicleCapability.displayed.filter { capabilityFilter.matches(profile.support(for: $0)) }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
-                Text(L10n.format("Capability assessment for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Picker(L10n.text("Capability filter"), selection: $capabilityFilter) {
-                        ForEach(CapabilityFilter.allCases) { filter in
-                            Text(filter.title).tag(filter)
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .accessibilityLabel(L10n.text("Capability filter"))
-
-                    Spacer()
-
-                    Button {
-                        exportCapabilities(state: state)
-                    } label: {
-                        Label(L10n.text("Export Matrix"), systemImage: "square.and.arrow.up")
-                    }
-                    .controlSize(.small)
-                }
-
-                if let capabilityExportFeedback {
-                    Label(capabilityExportFeedback.message, systemImage: capabilityExportFeedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(capabilityExportFeedback.isError ? Color.red : HisingenTheme.semanticGood)
-                }
-
-                // A degraded dashboard should explain itself here rather than only in the
-                // unified log — the cached snapshot keeps very little telemetry, so cards
-                // going quiet is otherwise indistinguishable from an unsupported vehicle.
-                if state.isCachedSnapshot {
-                    degradedNotice(
-                        symbol: "internaldrive",
-                        text: L10n.text("Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.")
-                    )
-                } else if !state.unavailableFeatures.isEmpty {
-                    degradedNotice(
-                        symbol: "exclamationmark.arrow.triangle.2.circlepath",
-                        text: L10n.format(
-                            "The last refresh could not read: %@",
-                            state.unavailableFeatures.map(\.title).sorted().joined(separator: ", ")
-                        )
-                    )
-                }
-
-                VStack(spacing: 6) {
-                    ForEach(items, id: \.self) { cap in
-                        let support = profile.support(for: cap)
-                        HStack {
-                            Text(cap.title)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(HisingenTheme.ink)
-                            Spacer()
-                            let color: Color = {
-                                switch support {
-                                case .supported: return HisingenTheme.semanticGood
-                                case .vehicleManaged: return .blue
-                                case .unavailable: return HisingenTheme.semanticWarning
-                                case .backendDependent: return .secondary
-                                }
-                            }()
-                            Pill(text: support.displayName, color: color, symbol: support.symbolName)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-
-                if items.isEmpty {
-                    Text(L10n.text("No capabilities match this filter."))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 8)
-                }
-
-                Text(L10n.text("\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications."))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        })
-    }
-
-    private func exportCapabilities(state: VehicleState) {
-        let rows = VehicleCapability.displayed.map { capability in
-            "\(csvCell(capability.title)),\(csvCell(state.capabilityProfile.support(for: capability).displayName))"
-        }
-        let csv = (["capability,support"] + rows).joined(separator: "\n") + "\n"
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "capabilities_\(state.vin.prefix(8)).csv"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try csv.write(to: url, atomically: true, encoding: .utf8)
-                capabilityExportFeedback = (L10n.text("Capability matrix exported."), false)
-            } catch {
-                capabilityExportFeedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
-            }
-        }
-    }
-
-    private func csvCell(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
-    }
-
-    private var notificationsCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bell.badge", title: L10n.text("Notifications"), color: .orange)
-
-                if notificationPermission == .denied {
-                    HStack(spacing: 8) {
-                        Image(systemName: "bell.slash.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(HisingenTheme.semanticWarning)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Notifications Blocked in System Settings"))
-                                .font(.system(size: 11, weight: .semibold))
-                            Text(L10n.text("These toggles won't alert you until notifications are allowed for Hisingen."))
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        } label: {
-                            Text(L10n.text("Open Settings"))
-                                .font(.system(size: 10.5, weight: .medium))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                    }
-                    .padding(8)
-                    .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                    .accessibilityElement(children: .combine)
-                }
-
-                VStack(spacing: 4) {
-                    featureToggleRow(
-                        .notifications,
-                        symbol: "bell.badge.fill",
-                        title: "Notifications",
-                        detail: "Master switch for every local alert below"
-                    )
-
-                    notificationRow(
-                        symbol: "bolt.badge.clock.fill",
-                        title: "Charging Started",
-                        detail: "Alert when vehicle starts charging",
-                        isOn: $notifyChargingStarted,
-                        persist: { preferences.notifyChargingStarted = $0 }
-                    )
-                    notificationRow(
-                        symbol: "battery.100.bolt",
-                        title: "Charging Complete",
-                        detail: "Alert when target state of charge is reached",
-                        isOn: $notifyChargingComplete,
-                        persist: { preferences.notifyChargingComplete = $0 }
-                    )
-                    notificationRow(
-                        symbol: "exclamationmark.triangle.fill",
-                        title: "Charging Interrupted",
-                        detail: "Alert if charging stops unexpectedly",
-                        isOn: $notifyChargingProblem,
-                        persist: { preferences.notifyChargingProblem = $0 }
-                    )
-                    notificationRow(
-                        symbol: "battery.25",
-                        title: "Low Battery Warning",
-                        detail: "Alert when battery falls below threshold",
-                        isOn: $notifyLowBattery,
-                        persist: { preferences.notifyLowBattery = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "arrow.triangle.2.circlepath",
-                        title: "Software Updates",
-                        detail: "Alert when vehicle software becomes available or finishes installing",
-                        isOn: $notifySoftwareUpdates,
-                        persist: { preferences.notifySoftwareUpdates = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "exclamationmark.triangle.fill",
-                        title: "Vehicle Warnings & Alarm",
-                        detail: "Alert for new service, tyre, light, 12 V, fluid, or alarm warnings",
-                        isOn: $notifyVehicleWarnings,
-                        persist: { preferences.notifyVehicleWarnings = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "door.left.hand.open",
-                        title: "Open Door or Window",
-                        detail: L10n.format("Alert after an opening has been left open for %d minutes", openingsAlertDelayMinutes),
-                        isOn: $notifyOpeningsLeftOpen,
-                        persist: { preferences.notifyOpeningsLeftOpen = $0 }
-                    )
-                    if notifyOpeningsLeftOpen {
-                        notificationThresholdRow(
-                            title: L10n.text("Open-alert delay"),
-                            selection: $openingsAlertDelayMinutes,
-                            values: [5, 10, 15, 30, 60],
-                            label: { L10n.format("%d min", $0) },
-                            persist: { preferences.openingsAlertDelayMinutes = $0 }
-                        )
-                    }
-
-                    notificationRow(
-                        symbol: "wrench.and.screwdriver.fill",
-                        title: "Service Due Soon",
-                        detail: "Alert at 30 days, 1,000 km, or a provider service warning",
-                        isOn: $notifyServiceDue,
-                        persist: { preferences.notifyServiceDue = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "clock.badge.exclamationmark",
-                        title: "Stale Vehicle Data",
-                        detail: "Alert when provider telemetry remains older than its freshness limit",
-                        isOn: $notifyStaleTelemetry,
-                        persist: { preferences.notifyStaleTelemetry = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "bolt.trianglebadge.exclamationmark.fill",
-                        title: "Unusually Slow Charging",
-                        detail: "Alert below 2 kW for 15 minutes while actively charging",
-                        isOn: $notifySlowCharging,
-                        persist: { preferences.notifySlowCharging = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "powerplug.fill",
-                        title: "Plug-In Reminder",
-                        detail: L10n.format("Alert once at %d%% or below while unplugged and not charging", plugInReminderThreshold),
-                        isOn: $notifyPlugInReminder,
-                        persist: { preferences.notifyPlugInReminder = $0 }
-                    )
-                    if notifyPlugInReminder {
-                        notificationThresholdRow(
-                            title: L10n.text("Plug-in battery threshold"),
-                            selection: $plugInReminderThreshold,
-                            values: Array(stride(from: 10, through: 80, by: 10)),
-                            label: { "\($0)%" },
-                            persist: { preferences.plugInReminderThreshold = $0 }
-                        )
-                    }
-
-                    notificationRow(
-                        symbol: "cable.connector",
-                        title: "Cable Connect / Disconnect",
-                        detail: "Confirm when a charge cable is plugged in or unplugged",
-                        isOn: $notifyChargerConnection,
-                        persist: { preferences.notifyChargerConnection = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "windshield.front.and.heat.waves",
-                        title: "Climate Start / Stop",
-                        detail: "Alert when cabin preconditioning starts or stops",
-                        isOn: $notifyClimateChanges,
-                        persist: { preferences.notifyClimateChanges = $0 }
-                    )
-
-                    if notifyLowBattery {
-                        HStack(spacing: 8) {
-                            Image(systemName: "slider.horizontal.below.rectangle")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 16)
-                            Text(L10n.text("Alert Threshold"))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("", selection: $lowBatteryThreshold) {
-                                ForEach(stride(from: 5, through: 50, by: 5).map { $0 }, id: \.self) { v in
-                                    Text("\(v)%").tag(v)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 80)
-                            .onChange(of: lowBatteryThreshold) { _, _ in
-                                preferences.lowBatteryThreshold = lowBatteryThreshold
-                                onSettingsChanged(.notifications)
-                            }
-                        }
-                        .padding(.leading, 12)
-                        .padding(.vertical, 2)
-                    }
-
-                    Divider().opacity(0.4)
-                        .padding(.vertical, 2)
-
-                    notificationRow(
-                        symbol: "cloud.rain.fill",
-                        title: "Rain Alert (Windows Open)",
-                        detail: "Alert if rain starts while windows or sunroof are open",
-                        isOn: $notifyRainWithWindows,
-                        persist: { preferences.notifyRainWithWindowsOpen = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "lock.shield.fill",
-                        title: "Evening Unlocked Reminder",
-                        detail: L10n.format("Alert if parked and unlocked after %02d:00", eveningUnlockedStartHour),
-                        isOn: $notifyEveningUnlocked,
-                        persist: { preferences.notifyEveningUnlocked = $0 }
-                    )
-                    if notifyEveningUnlocked {
-                        notificationThresholdRow(
-                            title: L10n.text("Evening reminder starts"),
-                            selection: $eveningUnlockedStartHour,
-                            values: Array(18...23),
-                            label: { String(format: "%02d:00", $0) },
-                            persist: { preferences.eveningUnlockedStartHour = $0 }
-                        )
-                    }
-
-                    Divider().opacity(0.4)
-                        .padding(.vertical, 2)
-
-                    notificationRow(
-                        symbol: "speaker.wave.2.fill",
-                        title: "Notification Sounds",
-                        detail: "Play a sound on urgent alerts — alarms, warnings and charging problems",
-                        isOn: $notifySounds,
-                        persist: { preferences.notifySounds = $0 }
-                    )
-
-                    notificationRow(
-                        symbol: "moon.zzz.fill",
-                        title: "Quiet Hours",
-                        detail: "Hold non-urgent alerts until the morning; security alerts always come through",
-                        isOn: $quietHoursEnabled,
-                        persist: { preferences.quietHoursEnabled = $0 }
-                    )
-                    if quietHoursEnabled {
-                        HStack(spacing: 8) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 16)
-                            Text(L10n.text("Window"))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("", selection: $quietHoursStartHour) {
-                                ForEach(0..<24, id: \.self) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 76)
-                            Text(L10n.text("to"))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Picker("", selection: $quietHoursEndHour) {
-                                ForEach(0..<24, id: \.self) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 76)
-                        }
-                        .padding(.leading, 12)
-                        .padding(.vertical, 2)
-                        .onChange(of: quietHoursStartHour) { _, value in
-                            preferences.quietHoursStartHour = value
-                            onSettingsChanged(.notifications)
-                        }
-                        .onChange(of: quietHoursEndHour) { _, value in
-                            preferences.quietHoursEndHour = value
-                            onSettingsChanged(.notifications)
-                        }
-                    }
-
-                    notificationRow(
-                        symbol: "app.badge.fill",
-                        title: "Warning Badge",
-                        detail: "Show a dock badge while any vehicle reports warnings or an alarm",
-                        isOn: $showWarningBadge,
-                        persist: { preferences.showWarningBadge = $0 }
-                    )
-
-                    if !settingsVehicleVIN.isEmpty {
-                        let nickname = preferences.vehicleNickname(for: settingsVehicleVIN)
-                        let carLabel = nickname.isEmpty ? String(settingsVehicleVIN.suffix(6)) : String(nickname.prefix(24))
-                        notificationRow(
-                            symbol: "bell.slash.fill",
-                            title: "Mute This Vehicle",
-                            detail: "Silence banners for \(carLabel) while telemetry keeps updating",
-                            isOn: $muteActiveVehicle,
-                            persist: { enabled in
-                                preferences.setMuted(enabled, for: settingsVehicleVIN)
-                                Notifier.shared?.vehicleMuteDidChange(vin: settingsVehicleVIN)
-                            }
-                        )
-                    }
-
-                    Button {
-                        Notifier.shared?.sendTestNotification()
-                    } label: {
-                        Label(L10n.text("Send Test Notification"), systemImage: "bell.and.waves.left.and.right")
-                            .font(.system(size: 10.5, weight: .medium))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Divider().opacity(0.4)
-                        .padding(.vertical, 2)
-
-                    notificationRow(
-                        symbol: "eye.slash.fill",
-                        title: "Private Notification Banners",
-                        detail: "Hide license plate and battery % from lock screen",
-                        isOn: $privateNotificationDetails,
-                        persist: { preferences.privateNotificationDetails = $0 }
-                    )
-                }
-            }
-        }
-    }
-
-    private func notificationRow(
-        symbol: String,
-        title: String,
-        detail: String,
-        isOn: Binding<Bool>,
-        persist: @escaping @MainActor (Bool) -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.text(title))
-                    .font(.system(size: 11, weight: .medium))
-                Text(L10n.text(detail))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Toggle("", isOn: isOn)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .accessibilityLabel(L10n.text(title))
-                .accessibilityHint(L10n.text(detail))
-                .onChange(of: isOn.wrappedValue) { _, value in
-                    persist(value)
-                    onSettingsChanged(.notifications)
-                }
-        }
-        .padding(.vertical, 3)
-    }
-
-    private func notificationThresholdRow(
-        title: String,
-        selection: Binding<Int>,
-        values: [Int],
-        label: @escaping (Int) -> String,
-        persist: @escaping @MainActor (Int) -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            Text(title).font(.system(size: 10.5)).foregroundStyle(.secondary)
-            Spacer()
-            Picker("", selection: selection) {
-                ForEach(values, id: \.self) { value in Text(label(value)).tag(value) }
-            }
-            .labelsHidden()
-            .controlSize(.small)
-            .frame(maxWidth: 90)
-            .accessibilityLabel(title)
-            .onChange(of: selection.wrappedValue) { _, value in
-                persist(value)
-                onSettingsChanged(.notifications)
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.vertical, 2)
-    }
-
-    // Database storage/maintenance/export UI lives in `SettingsDatabaseCard` so this file
-    // stays focused on preference sections rather than data management.
+    // `SettingsNotificationsCard`, the capability matrix in `SettingsCapabilityMatrixCard`,
+    // and the updater in `SettingsUpdatesCard` — this file keeps the remaining sections.
 
     private var privacyDashboardCard: some View {
         Card {
@@ -2599,12 +1340,12 @@ struct SettingsView: View {
                 )
                 KVRow(
                     L10n.text("Screenshot redaction"),
-                    privacyRedactionEnabled ? L10n.text("Enabled") : L10n.text("Disabled"),
+                    preferences.privacyRedactionEnabled ? L10n.text("Enabled") : L10n.text("Disabled"),
                     symbol: "eye.slash.fill"
                 )
                 KVRow(
                     L10n.text("Remote-command authentication"),
-                    requireBiometrics ? L10n.text("Required") : L10n.text("Not required"),
+                    preferences.requireBiometricsForRemoteControls ? L10n.text("Required") : L10n.text("Not required"),
                     symbol: "person.badge.key.fill"
                 )
 
@@ -2737,8 +1478,12 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var versionFooter: some View {
+/// App name, version/build, and author links at the foot of the About section.
+@MainActor
+struct SettingsVersionFooter: View {
+    var body: some View {
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         return VStack(spacing: 6) {
@@ -2832,241 +1577,6 @@ struct SettingsStudioRenderPreview: View {
                 } else {
                     artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
                 }
-            }
-        }
-    }
-}
-
-@MainActor
-struct SettingsFleetThumbnailView: View {
-    let vin: String
-    let brandIcon: String
-    let isActive: Bool
-    let imageCache: CarImageCache
-    @State private var artwork: VehicleArtworkStore.Artwork?
-
-    var body: some View {
-        Group {
-            if let cgImage = artwork?.image {
-                Image(decorative: cgImage, scale: 1.0)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 44, height: 26)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: brandIcon)
-                        .font(.system(size: 12))
-                        .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
-                }
-            }
-        }
-        .task(id: vin) {
-            guard imageCache.hasImage(for: vin) else { return }
-            let store = VehicleArtworkStore.shared
-            let budget = 128
-            let source = VehicleArtworkStore.source(vin: vin, angle: 0)
-            if let data = imageCache.image(for: vin) {
-                if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
-                    artwork = cached
-                } else {
-                    artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
-                }
-            }
-        }
-    }
-}
-
-@MainActor
-struct FleetVehicleCardRow: View {
-    let vin: String
-    let isActive: Bool
-    let state: VehicleState?
-    let cachedSnapshots: [String: VehicleState]
-    let database: VehicleDatabase
-    let imageCache: CarImageCache
-    let onSettingsChanged: (SettingsChange) -> Void
-    @Environment(\.preferencesStore) private var preferences
-    @State private var isHovered = false
-
-    var body: some View {
-        let vehicleState = (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
-        let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
-        let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
-        let displayTitle = preferences.formattedVehicleTitle(
-            vin: vin,
-            modelName: vehicleState?.modelName,
-            modelYear: vehicleState?.modelYear,
-            registrationNo: vehicleState?.registrationNo,
-            fallbackBrand: brand
-        )
-
-        VStack(alignment: .leading, spacing: 8) {
-            // Clickable header area
-            HStack(spacing: 8) {
-                // Vehicle Thumbnail or Icon
-                SettingsFleetThumbnailView(vin: vin, brandIcon: brandIcon, isActive: isActive, imageCache: imageCache)
-
-                VStack(alignment: .leading, spacing: 1.5) {
-                    HStack(spacing: 6) {
-                        Text(displayTitle)
-                            .font(.system(size: 11, weight: .semibold))
-                        if isActive {
-                            Text(L10n.text("ACTIVE"))
-                                .font(.system(size: 8, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
-                                .foregroundStyle(HisingenTheme.accent)
-                        }
-                    }
-                    HStack(spacing: 4) {
-                        Text("VIN: \(vin)")
-                            .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                        if let vehicleState {
-                            Text("· " + vehicleState.freshnessDescription)
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Spacer()
-
-                if !isActive {
-                    Button {
-                        onSettingsChanged(.selectVehicle(vin))
-                    } label: {
-                        Text(L10n.text("Switch To"))
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .controlSize(.small)
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if !isActive {
-                    onSettingsChanged(.selectVehicle(vin))
-                }
-            }
-
-            if let vehicleState {
-                HStack(spacing: 12) {
-                    if let battery = vehicleState.batteryPercentage {
-                        HStack(spacing: 4) {
-                            Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
-                            Text(String(format: "%.0f%%", battery))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            if vehicleState.isCharging, let power = vehicleState.chargingPowerWatts, power > 0 {
-                                Text(Format.kilowatts(watts: power))
-                                    .font(.system(size: 8.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else if let fuel = vehicleState.fuelLevelPercent {
-                        HStack(spacing: 4) {
-                            Image(systemName: "fuelpump.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(Color.secondary)
-                            Text(String(format: "%.0f%%", fuel))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        }
-                    }
-
-                    if let range = vehicleState.primaryRangeKm {
-                        HStack(spacing: 3) {
-                            Image(systemName: "gauge.with.needle.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(.secondary)
-                            Text(Format.distance(km: range, unit: preferences.distanceUnit))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if let isLocked = vehicleState.exteriorStatus?.isLocked {
-                        HStack(spacing: 3) {
-                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
-                            Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding(.leading, 6)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !isActive {
-                        onSettingsChanged(.selectVehicle(vin))
-                    }
-                }
-            }
-
-            // Nickname & Theme Controls
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Text(L10n.text("Nickname:"))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.secondary)
-
-                    TextField(L10n.text("Nickname"), text: Binding(
-                        get: { preferences.vehicleNickname(for: vin) },
-                        set: { preferences.setVehicleNickname($0, for: vin) }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.mini)
-                    .frame(maxWidth: 110)
-                }
-
-                HStack(spacing: 4) {
-                    Text(L10n.text("Theme:"))
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.secondary)
-
-                    Picker("", selection: Binding(
-                        get: { preferences.theme(for: vin, brand: brand) },
-                        set: { newTheme in
-                            preferences.setTheme(newTheme, for: vin, brand: brand)
-                            if isActive {
-                                preferences.appTheme = newTheme
-                                preferences.syncAppThemeStorageKey()
-                            }
-                            onSettingsChanged(.presentation)
-                        }
-                    )) {
-                        ForEach(AppTheme.allCases, id: \.self) { t in
-                            Text(t.title).tag(t)
-                        }
-                    }
-                    .labelsHidden()
-                    .controlSize(.mini)
-                    .frame(maxWidth: 130)
-                }
-            }
-            .padding(.leading, 6)
-        }
-        .padding(9)
-        .background(
-            Color.primary.opacity(isActive ? 0.05 : (isHovered ? 0.045 : 0.025)),
-            in: RoundedRectangle(cornerRadius: 8)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : (isHovered && !isActive ? HisingenTheme.accent.opacity(0.25) : Color.clear), lineWidth: 1)
-        )
-        .onHover { hovering in
-            if !isActive {
-                isHovered = hovering
             }
         }
     }

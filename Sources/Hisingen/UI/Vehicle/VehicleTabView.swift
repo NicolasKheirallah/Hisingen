@@ -496,7 +496,8 @@ struct VehicleTabView: View {
                 .onChange(of: state.isCharging) { _, charging in
                     guard charging, !reduceMotion else { return }
                     chargingJustStarted = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.5))
                         chargingJustStarted = false
                     }
                 }

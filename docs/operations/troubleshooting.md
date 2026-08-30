@@ -112,7 +112,7 @@ See the maintainer runbooks below ("An API response schema changes," "Polestar c
 
 ## CI build fails
 
-Check, in order: `make doctor`'s output (toolchain mismatch is the most common cause after a runner image update); whether the failure is `-strict-concurrency=complete`-specific (an actor-isolation mistake that only shows up with the flag on — reproduce locally with the same flags, see [development/development-workflow.md](../development/development-workflow.md#local-validation-exactly-what-ci-runs)); bundle-validation assertions (a signature/`Info.plist`/`LSUIElement` regression).
+Check, in order: `make doctor`'s output (toolchain mismatch is the most common cause after a runner image update — the Swift 6 language mode needs a 6.0+ toolchain); whether the failure is a Swift 6 actor-isolation error (reproduce locally with a plain `swift build`, see [development/development-workflow.md](../development/development-workflow.md#local-validation-exactly-what-ci-runs)); bundle-validation assertions (a signature/`Info.plist`/`LSUIElement` regression).
 
 ## Notarization fails
 

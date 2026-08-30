@@ -43,12 +43,12 @@ Read the specific doc for the area you're touching, not just this workflow page 
 
 ```bash
 make doctor
-swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-swift test --disable-xctest --enable-swift-testing -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
-make app SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+swift build
+swift test --disable-xctest --enable-swift-testing --skip Live
+make app
 ```
 
-Running with the strict-concurrency flags locally catches actor-isolation mistakes before pushing — CI runs on both `macos-14` and `macos-15`, so if you have access to only one, it's still worth running this locally rather than finding out from CI. See [operations/ci.md](../operations/ci.md).
+Complete concurrency checking and the Swift 6 language mode are declared in `Package.swift`, so a plain `swift build` catches actor-isolation mistakes — no extra flags. CI runs the build-and-test matrix on `macos-15` (the deployment target); running it locally first is still worth it rather than finding out from CI. See [operations/ci.md](../operations/ci.md).
 
 ## Commit/PR expectations
 

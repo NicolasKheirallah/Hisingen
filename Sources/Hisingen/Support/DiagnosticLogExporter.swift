@@ -273,8 +273,9 @@ enum DiagnosticLogExporter {
         var size = 0
         sysctlbyname("hw.model", nil, &size, nil, 0)
         guard size > 0 else { return "unknown" }
-        var model = [CChar](repeating: 0, count: size)
+        var model = [UInt8](repeating: 0, count: size)
         sysctlbyname("hw.model", &model, &size, nil, 0)
-        return String(cString: model)
+        let bytes = model[..<(model.firstIndex(of: 0) ?? model.endIndex)]
+        return String(decoding: bytes, as: UTF8.self)
     }
 }

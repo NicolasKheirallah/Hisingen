@@ -80,8 +80,6 @@ jobs:
         run: >-
           swift test --disable-xctest --enable-swift-testing
           --skip Live
-          -Xswiftc -strict-concurrency=complete
-          -Xswiftc -warn-concurrency
 
       - name: Configure code signing identity
         env:
@@ -114,8 +112,7 @@ jobs:
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
-          REQUIRE_SPARKLE_UPDATER=true make app-universal OUTPUT_DIR=. IDENTITY="$IDENTITY" \
-            SWIFT_FLAGS="-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency"
+          REQUIRE_SPARKLE_UPDATER=true make app-universal OUTPUT_DIR=. IDENTITY="$IDENTITY"
 
       - name: Verify signature and architectures
         run: |

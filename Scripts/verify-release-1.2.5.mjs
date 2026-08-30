@@ -48,7 +48,7 @@ if (process.argv.includes("--committed")) {
   const committedFiles = execFileSync("git", ["show", "--pretty=format:", "--name-only", "HEAD"], {
     encoding: "utf8",
   });
-  for (const path of ["CHANGELOG.md", "Resources/Info.plist", "Sources/Hisingen/UI/SettingsView.swift"]) {
+  for (const path of ["CHANGELOG.md", "Resources/Info.plist", "Sources/Hisingen/UI/Settings/SettingsView.swift"]) {
     requireMatch(committedFiles.split(/\r?\n/).includes(path), `HEAD does not contain ${path}`);
   }
   if (failures.length) {

@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 import PackageDescription
 import Foundation
 
@@ -27,9 +27,17 @@ private func selectedDeveloperDirectory() -> String? {
 private let usesStandaloneCommandLineTools = selectedDeveloperDirectory() == commandLineTools
 private let testingFrameworks = "\(commandLineTools)/Library/Developer/Frameworks"
 private let testingLibraries = "\(commandLineTools)/Library/Developer/usr/lib"
-private let testSwiftSettings: [SwiftSetting] = usesStandaloneCommandLineTools
+
+/// Complete concurrency checking is enforced for every build path — `swift build`, Xcode,
+/// IDE indexing, `make run` — rather than only when the CI/Makefile pass the CLI flag.
+/// The Swift 6 language mode itself is set per target below.
+private let concurrencySwiftSettings: [SwiftSetting] = [
+    .enableUpcomingFeature("StrictConcurrency")
+]
+
+private let testSwiftSettings: [SwiftSetting] = concurrencySwiftSettings + (usesStandaloneCommandLineTools
     ? [.unsafeFlags(["-F", testingFrameworks])]
-    : []
+    : [])
 private let testLinkerSettings: [LinkerSetting] = usesStandaloneCommandLineTools
     ? [.unsafeFlags([
         "-F\(testingFrameworks)",
@@ -42,7 +50,7 @@ let package = Package(
     name: "Hisingen",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v15)
     ],
     dependencies: [
         // Sparkle supplies the hardened, signature-verifying installer rather than
@@ -56,7 +64,8 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "Sources/Hisingen",
-            exclude: ["Resources"]
+            exclude: ["Resources"],
+            swiftSettings: concurrencySwiftSettings
         ),
         .testTarget(
             name: "HisingenTests",

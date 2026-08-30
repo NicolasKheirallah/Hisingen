@@ -458,6 +458,16 @@ final class PreferencesStore {
     var notifyEveningUnlocked: Bool { get { boolDefaultTrue("notify_evening_unlocked") } set { d.set(newValue, forKey: "notify_evening_unlocked") } }
     var notifyChargerConnection: Bool { get { boolDefaultTrue("notify_charger_connection") } set { d.set(newValue, forKey: "notify_charger_connection") } }
     var notifyClimateChanges: Bool { get { boolDefaultTrue("notify_climate_changes") } set { d.set(newValue, forKey: "notify_climate_changes") } }
+
+    /// True when at least one individual alert type is on. Used to decide whether asking the
+    /// system for notification authorization is worthwhile.
+    var anyNotificationAlertEnabled: Bool {
+        notifyChargingStarted || notifyChargingComplete || notifyChargingProblem
+            || notifyLowBattery || notifySoftwareUpdates || notifyVehicleWarnings
+            || notifyRainWithWindowsOpen || notifyEveningUnlocked || notifyOpeningsLeftOpen
+            || notifyServiceDue || notifyStaleTelemetry || notifySlowCharging
+            || notifyPlugInReminder || notifyChargerConnection || notifyClimateChanges
+    }
     var openingsAlertDelayMinutes: Int { get { let value = d.integer(forKey: "notify_openings_delay_minutes"); return min(max(value == 0 ? 15 : value, 5), 60) } set { d.set(min(max(newValue, 5), 60), forKey: "notify_openings_delay_minutes") } }
     var plugInReminderThreshold: Int { get { let value = d.integer(forKey: "notify_plugin_threshold"); return min(max(value == 0 ? 40 : value, 10), 80) } set { d.set(min(max(newValue, 10), 80), forKey: "notify_plugin_threshold") } }
     var eveningUnlockedStartHour: Int { get { let value = d.object(forKey: "notify_evening_unlocked_hour") as? Int; return min(max(value ?? 21, 18), 23) } set { d.set(min(max(newValue, 18), 23), forKey: "notify_evening_unlocked_hour") } }

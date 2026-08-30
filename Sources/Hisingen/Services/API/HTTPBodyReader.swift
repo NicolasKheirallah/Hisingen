@@ -6,6 +6,14 @@ enum HTTPBodyReader {
     /// selects between `PolestarError`/`VolvoError` rather than always throwing `PolestarError`
     /// (which previously meant a Volvo `catch let error as VolvoError` could never match a
     /// too-large-response or network failure that actually originated here).
+    ///
+    /// Reads the body from a single request through `URLSession.AsyncBytes` with a hard byte
+    /// cap, so no more than `limit` bytes are ever buffered even if the server omits or lies
+    /// about `Content-Length`. `AsyncBytes` only exposes per-byte iteration (one suspension
+    /// per byte), so a 64 KB staging buffer keeps `Data` from reallocating on every byte on
+    /// multi-megabyte payloads. A second `URLSession.data(for:)` fast path is deliberately not
+    /// used here: it would re-send the request, which is unsafe for the POST commands that
+    /// also flow through this reader.
     static func data(
         for request: URLRequest,
         using session: URLSession,
@@ -20,9 +28,6 @@ enum HTTPBodyReader {
             }
             var data = Data()
             data.reserveCapacity(min(max(0, Int(response.expectedContentLength)), limit))
-            // `AsyncBytes` only exposes per-byte iteration, so each element costs one
-            // suspension. Batching into a staging buffer keeps the hard DoS cap while
-            // avoiding a Data-reallocation per byte on multi-megabyte payloads.
             var pending = [UInt8]()
             pending.reserveCapacity(64 * 1_024)
             for try await byte in bytes {
@@ -56,5 +61,3 @@ enum HTTPBodyReader {
         }
     }
 }
-
-

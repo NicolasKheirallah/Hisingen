@@ -105,6 +105,34 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func anyNotificationAlertEnabledTracksEveryIndividualToggle() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // Every alert type ships default-on.
+        XCTAssertTrue(preferences.anyNotificationAlertEnabled)
+
+        let flags: [ReferenceWritableKeyPath<PreferencesStore, Bool>] = [
+            \.notifyChargingStarted, \.notifyChargingComplete, \.notifyChargingProblem,
+            \.notifyLowBattery, \.notifySoftwareUpdates, \.notifyVehicleWarnings,
+            \.notifyRainWithWindowsOpen, \.notifyEveningUnlocked, \.notifyOpeningsLeftOpen,
+            \.notifyServiceDue, \.notifyStaleTelemetry, \.notifySlowCharging,
+            \.notifyPlugInReminder, \.notifyChargerConnection, \.notifyClimateChanges,
+        ]
+
+        for flag in flags { preferences[keyPath: flag] = false }
+        XCTAssertFalse(preferences.anyNotificationAlertEnabled,
+                       "with every alert type off, nothing is enabled")
+
+        // Each flag on its own must be enough — catches a flag dropped from the OR chain.
+        for flag in flags {
+            for other in flags { preferences[keyPath: other] = false }
+            preferences[keyPath: flag] = true
+            XCTAssertTrue(preferences.anyNotificationAlertEnabled)
+        }
+    }
+
+    @Test
     func retentionAndNotificationThresholdsAreBounded() throws {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }

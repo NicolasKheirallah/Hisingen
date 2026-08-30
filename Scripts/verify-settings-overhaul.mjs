@@ -1,10 +1,10 @@
 import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
-const settings = read("Sources/Hisingen/UI/SettingsView.swift");
-const databaseCard = read("Sources/Hisingen/UI/SettingsDatabaseCard.swift");
+const settings = read("Sources/Hisingen/UI/Settings/SettingsView.swift");
+const databaseCard = read("Sources/Hisingen/UI/Settings/SettingsDatabaseCard.swift");
 const preferences = read("Sources/Hisingen/Services/Persistence/PreferencesStore.swift");
-const account = read("Sources/Hisingen/UI/AccountCredentialsForm.swift");
+const account = read("Sources/Hisingen/UI/Settings/AccountCredentialsForm.swift");
 const feature = read("Sources/Hisingen/Domain/AppFeature.swift");
 
 const checks = [

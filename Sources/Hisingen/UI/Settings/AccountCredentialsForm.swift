@@ -504,7 +504,8 @@ struct AccountCredentialsForm: View {
                 testConnectionResult = (false, L10n.text("Couldn't save the password to the Keychain. Please try again."))
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+        Task {
+            try? await Task.sleep(for: .seconds(1.8))
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                 showSavedFeedback = false
             }

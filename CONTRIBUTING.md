@@ -13,7 +13,7 @@ Security vulnerabilities must be reported privately via [SECURITY.md](SECURITY.m
 
 ## Development setup
 
-Requirements: macOS 14+, Xcode 16 (or a compatible toolchain), Git.
+Requirements: macOS 15+, Xcode 16 (or a compatible toolchain), Git.
 
 ```bash
 git clone https://github.com/NicolasKheirallah/Hisingen.git

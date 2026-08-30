@@ -74,11 +74,11 @@ struct HistoryInsightsAggregatesTests {
         // Legacy samples (recorded before the `chargingType` column existed) carry `nil`, so
         // the peak-power heuristic is the only signal available.
         let legacy = [chargingSample(1, minutesAfterStart: 0, soc: 20, powerKw: 11)]
-        XCTAssertEqual(HistoryInsights.chargingType(from: legacy, peakPowerKw: 11), .ac)
-        XCTAssertEqual(HistoryInsights.chargingType(from: legacy, peakPowerKw: 22), .ac)
-        XCTAssertEqual(HistoryInsights.chargingType(from: legacy, peakPowerKw: 22.01), .dc)
-        XCTAssertEqual(HistoryInsights.chargingType(from: legacy, peakPowerKw: 150), .dc)
-        XCTAssertEqual(HistoryInsights.chargingType(from: legacy, peakPowerKw: nil), .unknown)
+        #expect(HistoryInsights.chargingType(from: legacy, peakPowerKw: 11) == .ac)
+        #expect(HistoryInsights.chargingType(from: legacy, peakPowerKw: 22) == .ac)
+        #expect(HistoryInsights.chargingType(from: legacy, peakPowerKw: 22.01) == .dc)
+        #expect(HistoryInsights.chargingType(from: legacy, peakPowerKw: 150) == .dc)
+        #expect(HistoryInsights.chargingType(from: legacy, peakPowerKw: nil) == .unknown)
     }
 
     @Test
@@ -92,7 +92,7 @@ struct HistoryInsightsAggregatesTests {
                                      soc: 20 + Double($0), powerKw: 30, voltageVolts: nil,
                                      currentAmps: nil, chargingType: "ac")
         }
-        XCTAssertEqual(HistoryInsights.chargingType(from: samples, peakPowerKw: 30), .ac)
+        #expect(HistoryInsights.chargingType(from: samples, peakPowerKw: 30) == .ac)
     }
 
     @Test
@@ -104,7 +104,7 @@ struct HistoryInsightsAggregatesTests {
                                      soc: 20, powerKw: 50, voltageVolts: nil, currentAmps: nil,
                                      chargingType: type)
         }
-        XCTAssertEqual(HistoryInsights.chargingType(from: samples, peakPowerKw: 50), .dc)
+        #expect(HistoryInsights.chargingType(from: samples, peakPowerKw: 50) == .dc)
     }
 
     @Test
@@ -117,8 +117,8 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(2, minutesAfterStart: 20, soc: 90, powerKw: 50),
         ]
         let curve = HistoryInsights.chargingCurve(from: samples)
-        let duration = try XCTUnwrap(HistoryInsights.tenToEightyDuration(from: curve))
-        XCTAssertEqual(duration, 17.5 * 60, accuracy: 1)
+        let duration = try #require(HistoryInsights.tenToEightyDuration(from: curve))
+        #expect(abs(duration - 17.5 * 60) <= 1)
     }
 
     @Test
@@ -128,7 +128,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(2, minutesAfterStart: 10, soc: 60, powerKw: 50),
         ]
         let curve = HistoryInsights.chargingCurve(from: samples)
-        XCTAssertNil(HistoryInsights.tenToEightyDuration(from: curve))
+        #expect(HistoryInsights.tenToEightyDuration(from: curve) == nil)
     }
 
     @Test
@@ -140,8 +140,8 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(4, minutesAfterStart: 60, soc: 98, powerKw: 0.3),
         ]
         let curve = HistoryInsights.chargingCurve(from: samples)
-        let tail = try XCTUnwrap(HistoryInsights.idleTailDuration(from: curve))
-        XCTAssertEqual(tail, 15 * 60, accuracy: 1)
+        let tail = try #require(HistoryInsights.idleTailDuration(from: curve))
+        #expect(abs(tail - 15 * 60) <= 1)
     }
 
     @Test
@@ -151,7 +151,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(2, minutesAfterStart: 10, soc: 70, powerKw: 45),
         ]
         let curve = HistoryInsights.chargingCurve(from: samples)
-        XCTAssertNil(HistoryInsights.idleTailDuration(from: curve))
+        #expect(HistoryInsights.idleTailDuration(from: curve) == nil)
     }
 
     @Test
@@ -162,7 +162,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 20, soc: 60, powerKw: 30),
         ]
-        XCTAssertNil(HistoryInsights.estimatedChargingLossPct(from: impossible, packCapacityKwh: 60))
+        #expect(HistoryInsights.estimatedChargingLossPct(from: impossible, packCapacityKwh: 60) == nil)
 
         // 30 kW for 60 minutes = 30 kWh input; SoC rises 20% of a 60 kWh pack = 12 kWh stored.
         // Loss = 1 - 12/30 = 60%, outside the plausible 0...40% band, so also nil.
@@ -170,7 +170,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 60, soc: 60, powerKw: 30),
         ]
-        XCTAssertNil(HistoryInsights.estimatedChargingLossPct(from: implausible, packCapacityKwh: 60))
+        #expect(HistoryInsights.estimatedChargingLossPct(from: implausible, packCapacityKwh: 60) == nil)
 
         // 30 kW for 24 minutes = 12 kWh input; SoC rises 20% of a 60 kWh pack = 12 kWh stored.
         // Loss = 0%, a plausible (if optimistic) result.
@@ -178,8 +178,8 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 24, soc: 60, powerKw: 30),
         ]
-        let loss = try XCTUnwrap(HistoryInsights.estimatedChargingLossPct(from: realistic, packCapacityKwh: 60))
-        XCTAssertEqual(loss, 0, accuracy: 0.5)
+        let loss = try #require(HistoryInsights.estimatedChargingLossPct(from: realistic, packCapacityKwh: 60))
+        #expect(abs(loss - 0) <= 0.5)
     }
 
     @Test
@@ -196,13 +196,13 @@ struct HistoryInsightsAggregatesTests {
             HistoricalChargingSample(id: 2, sessionId: "s", vin: "VIN", timestamp: sessionStart.addingTimeInterval(3_600), soc: 50, powerKw: 10, voltageVolts: nil, currentAmps: nil, chargingType: nil),
             HistoricalChargingSample(id: 3, sessionId: "s", vin: "VIN", timestamp: sessionStart.addingTimeInterval(2 * 3_600), soc: 80, powerKw: 10, voltageVolts: nil, currentAmps: nil, chargingType: nil),
         ]
-        let result = try XCTUnwrap(HistoryInsights.tariffAwareCost(
+        let result = try #require(HistoryInsights.tariffAwareCost(
             from: samples, dayRatePerKwh: 3, nightRatePerKwh: 1,
             nightStartHour: 22, nightEndHour: 6, calendar: calendar))
         // 23:00-00:00 interval (night) = 10 kWh, 00:00-01:00 interval (still night, before 06:00) = 10 kWh.
-        XCTAssertEqual(result.nightEnergyKwh, 20, accuracy: 0.01)
-        XCTAssertEqual(result.dayEnergyKwh, 0, accuracy: 0.01)
-        XCTAssertEqual(result.cost, 20, accuracy: 0.01)
+        #expect(abs(result.nightEnergyKwh - 20) <= 0.01)
+        #expect(abs(result.dayEnergyKwh - 0) <= 0.01)
+        #expect(abs(result.cost - 20) <= 0.01)
     }
 
     @Test
@@ -211,9 +211,9 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 20, powerKw: 10),
             chargingSample(2, minutesAfterStart: 60, soc: 40, powerKw: 10),
         ]
-        let result = try XCTUnwrap(HistoryInsights.tariffAwareCost(
+        let result = try #require(HistoryInsights.tariffAwareCost(
             from: samples, dayRatePerKwh: 2, nightRatePerKwh: 0.5, nightStartHour: 3, nightEndHour: 3))
-        XCTAssertEqual(result.nightEnergyKwh, 0, accuracy: 0.01)
+        #expect(abs(result.nightEnergyKwh - 0) <= 0.01)
     }
 
     // MARK: - Charging aggregates
@@ -222,8 +222,8 @@ struct HistoryInsightsAggregatesTests {
     func testSessionsPerWeek() {
         let sessions = [session("a", hoursAfterStart: 0, energyKwh: 10), session("b", hoursAfterStart: 7 * 24, energyKwh: 10)]
         // Exactly one week apart, two sessions -> 2 sessions / 1 week.
-        XCTAssertEqual(HistoryInsights.sessionsPerWeek(from: sessions) ?? 0, 2, accuracy: 0.01)
-        XCTAssertNil(HistoryInsights.sessionsPerWeek(from: [session("a", hoursAfterStart: 0, energyKwh: 10)]))
+        #expect(abs((HistoryInsights.sessionsPerWeek(from: sessions) ?? 0) - 2) <= 0.01)
+        #expect(HistoryInsights.sessionsPerWeek(from: [session("a", hoursAfterStart: 0, energyKwh: 10)]) == nil)
     }
 
     @Test
@@ -240,9 +240,9 @@ struct HistoryInsightsAggregatesTests {
                                       locationName: nil, createdAt: start),
         ]
         let byTime = HistoryInsights.energyByTimeOfDay(from: sessions, calendar: calendar)
-        XCTAssertEqual(byTime[.morning] ?? 0, 10, accuracy: 0.01)
-        XCTAssertEqual(byTime[.evening] ?? 0, 30, accuracy: 0.01)
-        XCTAssertNil(byTime[.night])
+        #expect(abs((byTime[.morning] ?? 0) - 10) <= 0.01)
+        #expect(abs((byTime[.evening] ?? 0) - 30) <= 0.01)
+        #expect(byTime[.night] == nil)
     }
 
     // MARK: - Efficiency: seasonal & trend slope
@@ -258,9 +258,9 @@ struct HistoryInsightsAggregatesTests {
                                       latitude: nil, longitude: nil),
         ]
         let seasonal = HistoryInsights.seasonalEfficiency(from: records)
-        XCTAssertEqual(seasonal.coldAverage ?? 0, 24, accuracy: 0.01)
-        XCTAssertEqual(seasonal.warmAverage ?? 0, 16, accuracy: 0.01)
-        XCTAssertNil(seasonal.mildAverage)
+        #expect(abs((seasonal.coldAverage ?? 0) - 24) <= 0.01)
+        #expect(abs((seasonal.warmAverage ?? 0) - 16) <= 0.01)
+        #expect(seasonal.mildAverage == nil)
     }
 
     @Test
@@ -271,14 +271,14 @@ struct HistoryInsightsAggregatesTests {
             HistoryInsights.EfficiencyPoint(id: Int64(index), timestamp: start.addingTimeInterval(Double(index) * 10 * 86_400),
                                             kwhPer100Km: 15 + Double(index))
         }
-        let slope = try XCTUnwrap(HistoryInsights.efficiencyTrendSlopePerDay(from: points))
-        XCTAssertEqual(slope, 0.1, accuracy: 0.001) // 1 kWh/100km per 10 days = 0.1 per day
+        let slope = try #require(HistoryInsights.efficiencyTrendSlopePerDay(from: points))
+        #expect(abs(slope - 0.1) <= 0.001) // 1 kWh/100km per 10 days = 0.1 per day
     }
 
     @Test
     func testEfficiencyTrendSlopeNilWithFewPoints() {
         let points = (0..<3).map { HistoryInsights.EfficiencyPoint(id: Int64($0), timestamp: start, kwhPer100Km: 18) }
-        XCTAssertNil(HistoryInsights.efficiencyTrendSlopePerDay(from: points))
+        #expect(HistoryInsights.efficiencyTrendSlopePerDay(from: points) == nil)
     }
 
     // MARK: - Odometer: rate & monthly mileage
@@ -289,7 +289,7 @@ struct HistoryInsightsAggregatesTests {
             HistoryInsights.OdometerPoint(id: 1, timestamp: start, odometerKm: 10_000),
             HistoryInsights.OdometerPoint(id: 2, timestamp: start.addingTimeInterval(10 * 86_400), odometerKm: 10_300),
         ]
-        XCTAssertEqual(HistoryInsights.averageKmPerDay(from: points) ?? 0, 30, accuracy: 0.01)
+        #expect(abs((HistoryInsights.averageKmPerDay(from: points) ?? 0) - 30) <= 0.01)
     }
 
     @Test
@@ -302,8 +302,8 @@ struct HistoryInsightsAggregatesTests {
             HistoryInsights.OdometerPoint(id: 2, timestamp: calendar.date(from: feb)!, odometerKm: 1_500),
         ]
         let monthly = HistoryInsights.monthlyMileage(from: points, calendar: calendar)
-        XCTAssertEqual(monthly.count, 1)
-        XCTAssertEqual(monthly.first?.distanceKm ?? 0, 500, accuracy: 0.01)
+        #expect(monthly.count == 1)
+        #expect(abs((monthly.first?.distanceKm ?? 0) - 500) <= 0.01)
     }
 
     // MARK: - Trip aggregates
@@ -312,15 +312,15 @@ struct HistoryInsightsAggregatesTests {
     func testLongestTripPicksMaxDistance() {
         let trips = [trip("a", daysAfterStart: 0, distanceKm: 5, durationMinutes: 10),
                      trip("b", daysAfterStart: 1, distanceKm: 40, durationMinutes: 30)]
-        XCTAssertEqual(HistoryInsights.longestTrip(from: trips)?.id, "b")
+        #expect(HistoryInsights.longestTrip(from: trips)?.id == "b")
     }
 
     @Test
     func testAverageSpeedKmh() {
         let fast = trip("a", daysAfterStart: 0, distanceKm: 60, durationMinutes: 60)
-        XCTAssertEqual(HistoryInsights.averageSpeedKmh(fast) ?? 0, 60, accuracy: 0.01)
+        #expect(abs((HistoryInsights.averageSpeedKmh(fast) ?? 0) - 60) <= 0.01)
         let tooShort = trip("b", daysAfterStart: 0, distanceKm: 1, durationMinutes: 0.1)
-        XCTAssertNil(HistoryInsights.averageSpeedKmh(tooShort))
+        #expect(HistoryInsights.averageSpeedKmh(tooShort) == nil)
     }
 
     @Test
@@ -329,8 +329,8 @@ struct HistoryInsightsAggregatesTests {
             trip("t\(index)", daysAfterStart: Double(index), distanceKm: 10, durationMinutes: 20,
                 consumption: 25 - Double(index), temperature: Double(index) * 5)
         }
-        let correlation = try XCTUnwrap(HistoryInsights.temperatureConsumptionCorrelation(from: trips))
-        XCTAssertTrue(correlation < -0.9)
+        let correlation = try #require(HistoryInsights.temperatureConsumptionCorrelation(from: trips))
+        #expect(correlation < -0.9)
     }
 
     @Test
@@ -340,11 +340,11 @@ struct HistoryInsightsAggregatesTests {
                      trip("b", daysAfterStart: 0.2, distanceKm: 15, durationMinutes: 10),
                      trip("c", daysAfterStart: 1, distanceKm: 20, durationMinutes: 10)]
         let daily = HistoryInsights.dailyDistance(from: trips, calendar: calendar)
-        XCTAssertEqual(daily.count, 2)
-        XCTAssertEqual(daily.first?.distanceKm ?? 0, 25, accuracy: 0.01)
+        #expect(daily.count == 2)
+        #expect(abs((daily.first?.distanceKm ?? 0) - 25) <= 0.01)
         let weekly = HistoryInsights.weeklyDistance(from: trips, calendar: calendar)
-        XCTAssertEqual(weekly.count, 1)
-        XCTAssertEqual(weekly.first?.distanceKm ?? 0, 45, accuracy: 0.01)
+        #expect(weekly.count == 1)
+        #expect(abs((weekly.first?.distanceKm ?? 0) - 45) <= 0.01)
     }
 
     // MARK: - Battery health trend & projection
@@ -353,14 +353,14 @@ struct HistoryInsightsAggregatesTests {
     func testBatteryHealthTrendRecoversNegativeSlope() {
         let records = (0..<5).map { batteryHealth(Int64($0), odometerKm: Double($0) * 10_000, sohPct: 100 - Double($0)) }
         let trend = HistoryInsights.batteryHealthTrend(from: records)
-        XCTAssertEqual(trend.stateOfHealthPctPer10kKm ?? 0, -1, accuracy: 0.01)
+        #expect(abs((trend.stateOfHealthPctPer10kKm ?? 0) - -1) <= 0.01)
     }
 
     @Test
     func testProjectedStateOfHealthUsesTrend() throws {
         let records = (0..<5).map { batteryHealth(Int64($0), odometerKm: Double($0) * 10_000, sohPct: 100 - Double($0)) }
-        let projected = try XCTUnwrap(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 60_000))
-        XCTAssertEqual(projected, 94, accuracy: 0.1)
+        let projected = try #require(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 60_000))
+        #expect(abs(projected - 94) <= 0.1)
     }
 
     @Test
@@ -368,7 +368,7 @@ struct HistoryInsightsAggregatesTests {
         // A wildly steep synthetic slope projected far out would fall below 0%, which should
         // come back nil rather than a nonsensical negative "health".
         let records = [batteryHealth(1, odometerKm: 0, sohPct: 100), batteryHealth(2, odometerKm: 1_000, sohPct: 50)]
-        XCTAssertNil(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 100_000))
+        #expect(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 100_000) == nil)
     }
 
     // MARK: - Air quality trend
@@ -378,8 +378,8 @@ struct HistoryInsightsAggregatesTests {
         let records = [airQuality(1, daysAfterStart: 1, index: 20), airQuality(2, daysAfterStart: 0, index: 10),
                        airQuality(3, daysAfterStart: 0.5, index: nil)]
         let points = HistoryInsights.airQualityTrend(from: records)
-        XCTAssertEqual(points.map(\.id), [2, 1])
-        XCTAssertTrue(points.first!.timestamp < points.last!.timestamp)
+        #expect(points.map(\.id) == [2, 1])
+        #expect(points.first!.timestamp < points.last!.timestamp)
     }
 
     // MARK: - Command statistics
@@ -392,18 +392,18 @@ struct HistoryInsightsAggregatesTests {
             command("3", minutesAfterStart: 2, name: "climate", status: "failed"),
         ]
         let stats = HistoryInsights.commandStatistics(from: commands)
-        XCTAssertEqual(stats.totalCount, 3)
-        XCTAssertEqual(stats.successCount, 2)
-        XCTAssertEqual(stats.successRatePct ?? 0, 66.66, accuracy: 0.1)
-        XCTAssertEqual(stats.mostUsedCommand, "lock")
+        #expect(stats.totalCount == 3)
+        #expect(stats.successCount == 2)
+        #expect(abs((stats.successRatePct ?? 0) - 66.66) <= 0.1)
+        #expect(stats.mostUsedCommand == "lock")
     }
 
     @Test
     func testCommandStatisticsEmptyInput() {
         let stats = HistoryInsights.commandStatistics(from: [])
-        XCTAssertEqual(stats.totalCount, 0)
-        XCTAssertNil(stats.successRatePct)
-        XCTAssertNil(stats.mostUsedCommand)
+        #expect(stats.totalCount == 0)
+        #expect(stats.successRatePct == nil)
+        #expect(stats.mostUsedCommand == nil)
     }
 
     // MARK: - Data coverage
@@ -412,12 +412,12 @@ struct HistoryInsightsAggregatesTests {
     func testDataCoverageConfidenceLevels() {
         let now = start.addingTimeInterval(20 * 86_400)
         let dense = (0..<25).map { start.addingTimeInterval(Double($0) * 86_400) }
-        XCTAssertEqual(HistoryInsights.dataCoverage(timestamps: dense, now: now).confidence, .high)
+        #expect(HistoryInsights.dataCoverage(timestamps: dense, now: now).confidence == .high)
 
         let sparse = (0..<2).map { start.addingTimeInterval(Double($0) * 86_400) }
-        XCTAssertEqual(HistoryInsights.dataCoverage(timestamps: sparse, now: now).confidence, .insufficient)
+        #expect(HistoryInsights.dataCoverage(timestamps: sparse, now: now).confidence == .insufficient)
 
-        XCTAssertEqual(HistoryInsights.dataCoverage(timestamps: []).sampleCount, 0)
+        #expect(HistoryInsights.dataCoverage(timestamps: []).sampleCount == 0)
     }
 
     // MARK: - Chart-gap segmentation
@@ -432,16 +432,16 @@ struct HistoryInsightsAggregatesTests {
             Point(timestamp: start.addingTimeInterval(30 * 86_400 + 3_600)),
         ]
         let runs = HistoryInsights.segments(of: points, maxGap: 3 * 86_400, timestamp: \.timestamp)
-        XCTAssertEqual(runs.count, 2)
-        XCTAssertEqual(runs[0].count, 2)
-        XCTAssertEqual(runs[1].count, 2)
+        #expect(runs.count == 2)
+        #expect(runs[0].count == 2)
+        #expect(runs[1].count == 2)
     }
 
     @Test
     func testSegmentsEmptyInput() {
         struct Point { let timestamp: Date }
         let runs = HistoryInsights.segments(of: [Point](), maxGap: 86_400, timestamp: \.timestamp)
-        XCTAssertTrue(runs.isEmpty)
+        #expect(runs.isEmpty)
     }
 
     // MARK: - Bucketing helpers
@@ -453,9 +453,9 @@ struct HistoryInsightsAggregatesTests {
         components.year = 2_026; components.month = 3; components.day = 18; components.hour = 14; components.minute = 30
         let date = calendar.date(from: components)!
         let day = HistoryInsights.dayBucket(date, calendar: calendar)
-        XCTAssertEqual(calendar.component(.hour, from: day), 0)
+        #expect(calendar.component(.hour, from: day) == 0)
         let month = HistoryInsights.monthBucket(date, calendar: calendar)
-        XCTAssertEqual(calendar.component(.day, from: month), 1)
-        XCTAssertEqual(calendar.component(.month, from: month), 3)
+        #expect(calendar.component(.day, from: month) == 1)
+        #expect(calendar.component(.month, from: month) == 3)
     }
 }

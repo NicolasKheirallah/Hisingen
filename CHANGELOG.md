@@ -3,6 +3,34 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-30
+
+### Changed
+
+- Minimum supported macOS is now **15 Sequoia** (was 14 Sonoma).
+- The project builds in the **Swift 6 language mode** with complete concurrency
+  checking declared in `Package.swift` (`swift-tools-version:6.0`); Xcode 16 or a
+  Swift 6.0+ toolchain is now required to build from source. The strict-concurrency
+  compiler flags previously passed only in CI are now enforced on every build.
+- CI runs the build-and-test matrix on `macos-15` (the deployment target) instead
+  of a `macos-14` + `macos-15` pair.
+- Replaced the remaining `DispatchQueue.main.asyncAfter` timers in view and
+  notification code with structured-concurrency `Task.sleep`.
+- Broke the ~1,100-line `AppDelegate` "god object" apart into a composition root
+  plus focused units, each talking to the shell through a narrow context
+  protocol and with behaviour unchanged: `VehicleSessionController` (brand
+  switching, stored-session resume, and the `RefreshCoordinator` lifecycle and
+  callback wiring), `SignInCoordinator` (the three interactive OAuth flows and
+  their callback routing), `URLCommandRouter` (`hisingen://` deep links plus the
+  `GetURL` Apple Event), `GarageScanner` (the background fleet-refresh loop),
+  `UpdateController`, `LaunchAtLoginController`, `MainMenuController`,
+  `ConnectionTester`, `DockWarningBadge`, `RemoteResultPresenter`, and a
+  `HistoryRetention` prune helper; the slow-charging anomaly check and the
+  notification-authorization gate moved into `Notifier`. `AppDelegate` is now
+  ~460 lines and does little beyond wiring its collaborators together.
+- Finished migrating the test suite off XCTest assertions to Swift Testing
+  (`#expect` / `#require`).
+
 ## [1.2.5] - 2026-08-29
 
 ### Added

@@ -7,11 +7,11 @@ final class VehicleDatabase: @unchecked Sendable {
 
     let db: SQLiteDatabase
     private let logger = AppLog.logger("database")
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
-    /// ISO-8601 rendering shared by every backup/exporter path (previously one
-    /// `ISO8601DateFormatter` per exporter function).
-    private let isoFormatter = ISO8601DateFormatter()
+    // JSON coders and date formatters are created per operation rather than shared: this type
+    // is `@unchecked Sendable` and its methods run on many threads, and `saveSnapshot` encodes
+    // outside the SQLite lock, so a shared `JSONEncoder`/`ISO8601DateFormatter` was an
+    // unsynchronised mutable instance (the backup path even reconfigured a shared encoder).
+    // Allocation cost is negligible next to the SQLite round trips these sit beside.
 
     var storageAvailable: Bool { db.isOpen }
 
@@ -319,10 +319,22 @@ final class VehicleDatabase: @unchecked Sendable {
             if !columnExists(table: "charging_samples", column: "charging_type") {
                 try? db.execute(sql: "ALTER TABLE charging_samples ADD COLUMN charging_type TEXT;")
             }
-            // Existing installations contain rows produced by the old inferred/Volvo-capacity
-            // implementation. Keep them quarantined rather than presenting them as measurements.
-            try? db.execute(sql: "UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';")
-            try? db.execute(sql: "PRAGMA user_version = 1;")
+            let v1ColumnsReady = columnExists(table: "battery_health_history", column: "measurement_source")
+                && columnExists(table: "telemetry_logs", column: "avg_consumption_unit")
+                && columnExists(table: "charging_samples", column: "charging_type")
+            if v1ColumnsReady {
+                // Quarantine rows from the old inferred/Volvo-capacity implementation, then
+                // record the version — in one statement group so a failed UPDATE (`sqlite3_exec`
+                // stops at the first error) never lets `user_version` advance past the
+                // quarantine. Previously the bump ran unconditionally and a transient failure
+                // skipped the quarantine forever. Mirrors the v2 block below.
+                try? db.execute(sql: """
+                    UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';
+                    PRAGMA user_version = 1;
+                    """)
+            } else {
+                logger.error("Battery-health schema migration remains incomplete; it will retry next launch")
+            }
         }
 
         // v2: explicit charging-session lifecycle and versioned summary provenance.
@@ -428,7 +440,7 @@ final class VehicleDatabase: @unchecked Sendable {
     func saveSnapshot(_ state: VehicleState) {
         let data: Data
         do {
-            data = try encoder.encode(state.cacheableCopy)
+            data = try JSONEncoder().encode(state.cacheableCopy)
         } catch {
             logger.error("Could not encode vehicle snapshot for persistence: \(error, privacy: .public)")
             return
@@ -466,7 +478,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> VehicleState? in
             guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
-            guard var state = try? decoder.decode(VehicleState.self, from: blob) else { return nil }
+            guard var state = try? JSONDecoder().decode(VehicleState.self, from: blob) else { return nil }
             if let fetchedAt = stmt.columnDate(at: 1) {
                 // Drop expired snapshots older than 7 days
                 if Date().timeIntervalSince(fetchedAt) > 7 * 24 * 60 * 60 {
@@ -1894,6 +1906,7 @@ extension VehicleDatabase {
         SELECT vin, command_name, status, executed_at, duration_ms, error_message
         FROM remote_commands_log ORDER BY executed_at DESC;
         """
+        let iso = ISO8601DateFormatter()
         return (try? db.query(sql: sql) { _ in } process: { stmt -> [BackupCommandAudit] in
             var list: [BackupCommandAudit] = []
             while stmt.step() {
@@ -1903,7 +1916,7 @@ extension VehicleDatabase {
                       let executedAt = stmt.columnDate(at: 3) else { continue }
                 list.append(BackupCommandAudit(
                     vin: vin, command: command, status: status,
-                    executedAt: isoFormatter.string(from: executedAt),
+                    executedAt: iso.string(from: executedAt),
                     durationMs: stmt.columnInt64(at: 4).map(Int.init),
                     errorMessage: stmt.columnText(at: 5)))
             }
