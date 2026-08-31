@@ -38,33 +38,30 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>7</string>
+	<string>8</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 Nicolas Kheirallah. Not affiliated with Polestar or Volvo Cars.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
-	<!-- Sparkle 2 uses this HTTPS appcast and Ed25519 key to authenticate updates. The
-	 public key is injected into production bundles by the release workflow; it is never
-	 a private signing key. Local builds intentionally leave the updater disabled. -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Nicolas Kheirallah. Not affiliated with Polestar or Volvo Cars.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://nicolaskheirallah.github.io/Hisingen/updates/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>__SPARKLE_PUBLIC_ED_KEY__</string>
-	<key>SUEnableAutomaticChecks</key>
+	<key>SURequireSignedFeed</key>
 	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
-	<true/>
-	<key>SURequireSignedFeed</key>
 	<true/>
 </dict>
 </plist>
