@@ -10,35 +10,44 @@ import Foundation
 /// Polestar ID password for this flow.
 @MainActor
 final class PolestarCommandSignInPresenter: NSObject {
+    private var flow: PolestarBrowserFlow?
+    private var flowID: UUID?
     private var pendingContinuation: CheckedContinuation<URL, Error>?
 
     func signIn(authorizeURL: URL) async throws -> URL {
+        try Task.checkCancellation()
+        cancel()
+        let id = UUID()
+        flowID = id
+        flow = PolestarBrowserFlow(authorizeURL: authorizeURL,
+                                  redirectURI: URL(string: "polestar-explore://explore.polestar.com")!)
         NSApp.activate(ignoringOtherApps: true)
-
-        return try await withCheckedThrowingContinuation { continuation in
-            if let existing = self.pendingContinuation {
-                self.pendingContinuation = nil
-                existing.resume(throwing: PolestarError.authenticationRequired(.callbackRejected))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pendingContinuation = continuation
+                if !NSWorkspace.shared.open(authorizeURL) { cancel() }
             }
-            self.pendingContinuation = continuation
-
-            let opened = NSWorkspace.shared.open(authorizeURL)
-            if !opened {
-                self.pendingContinuation = nil
-                continuation.resume(throwing: PolestarError.authenticationRequired(.callbackRejected))
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard self?.flowID == id else { return }
+                self?.cancel(with: CancellationError())
             }
         }
     }
 
     func handleCallbackURL(_ url: URL) {
-        guard let continuation = pendingContinuation else { return }
+        guard flow?.accepts(url) == true, let continuation = pendingContinuation else { return }
         pendingContinuation = nil
+        flow = nil
+        flowID = nil
         continuation.resume(returning: url)
     }
 
     func cancel(with error: Error? = nil) {
         guard let continuation = pendingContinuation else { return }
         pendingContinuation = nil
+        flow = nil
+        flowID = nil
         continuation.resume(throwing: error ?? PolestarError.authenticationRequired(.callbackRejected))
     }
 }

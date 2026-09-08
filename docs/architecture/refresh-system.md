@@ -1,6 +1,6 @@
 # Refresh System
 
-`RefreshCoordinator` (`Services/Refresh/RefreshCoordinator.swift`, `@MainActor`) owns the entire polling lifecycle for one `VehicleProviding` instance. `AppDelegate` constructs a fresh one every time the active brand changes.
+`RefreshCoordinator` (`Services/Refresh/RefreshCoordinator.swift`, `@MainActor`) owns the polling lifecycle for one `VehicleProviding` instance. `VehicleSessionController` constructs a fresh coordinator when the active brand changes. Credential resolution and restoration live in `SessionManager`; the coordinator owns retry timing and cancellation.
 
 ## Cadence
 
@@ -59,17 +59,18 @@ All three triggers converge on exactly one network call.
 | `.manual` | `AppDelegate`'s `onRefresh` closure (menu-bar click, context-menu "Refresh", or footer button) |
 | `.wake` | `NSWorkspace.didWakeNotification` |
 | `.networkRestored` | `NWPathMonitor` flipping from unavailable to available |
-| `.vehicleChanged` | After a successful `selectCar(vin:)` |
 
 `refreshIfStale()` — called from `applicationDidBecomeActive` — is a sixth, softer path: it only issues a refresh if `Date().timeIntervalSince(latest.fetchedAt) >= RefreshPolicy.regularInterval(isCharging:)`, i.e. bringing the app to the foreground doesn't force a network call if the current data isn't old enough to need one yet.
 
 ## Vehicle switching
 
-`selectCar(vin:)`: no-ops if the VIN is already selected; otherwise bumps `generation` (invalidating any in-flight fetch for the old vehicle), resets `failureCount`, cancels the current task/timer, persists the new VIN to `Preferences`, immediately shows `stateStore.snapshot(for: vin)` if one exists (else shows the loading state), calls `api.selectCar(vin:features:)`, and on success issues a `.vehicleChanged` refresh.
+`selectCar(vin:)` no-ops when that VIN is already settled. Otherwise it cancels superseded work, records the requested VIN, and displays its cached snapshot while fetching `api.fetchVehicleState(vin:features:)`. The provider prepares that vehicle internally. Success applies the fetched state directly; a transient `notConfigured` preparation failure receives bounded retries. Selecting a vehicle does not schedule a full garage scan.
 
 ## Credential changes
 
-`credentialsChanged(email:password:preferredVIN:)`: cancels current work and resets failure/backoff state. If the *account itself* changed (case/whitespace-normalized email comparison), it wipes `VehicleStateStore` entirely (`stateStore.clear()`), clears in-memory `latest`/`cars`/`lastError`, and fires `onCleared`. It then calls `api.resetSession()` and re-runs `beginSession`.
+The app calls `VehicleSessionController.credentialsDidChange(for:)` once. That operation adopts the brand, asks the shell to reconcile settings, and restarts the coordinator. The caller does not retain or pass a previous-brand flag.
+
+`RefreshCoordinator.credentialsChanged(preferredVIN:)` cancels work and resets failure/backoff state. A changed account email clears the previous account's snapshots and in-memory fleet; durable history follows the existing erase-history preference. It resets the provider and invokes `SessionManager.restore` with the credential-change intent. After successful restoration, later retries use routine resume and re-read the stored token, including any token rotated by the provider.
 
 ## Sleep / wake and network loss / restoration
 

@@ -55,7 +55,7 @@ struct PreferenceBinder {
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
     var state: VehicleState? = nil
-    var cachedSnapshots: [String: VehicleState] = [:]
+    var fleet = FleetSnapshot()
     var database: VehicleDatabase = VehicleDatabase.shared
     var imageCache: CarImageCache = CarImageCache.shared
     let onSettingsChanged: (SettingsChange) -> Void
@@ -169,9 +169,7 @@ struct SettingsView: View {
                     if shows(.accounts) {
                         accountCard
                         SettingsFleetCard(
-                            state: state,
-                            cachedSnapshots: cachedSnapshots,
-                            database: database,
+                            fleet: fleet,
                             imageCache: imageCache,
                             binder: binder
                         )

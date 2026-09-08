@@ -12,6 +12,7 @@ enum CommandClientAuthorization: Sendable, Equatable {
     /// A command-client refresh token exists but could not be exchanged right now (offline,
     /// IdP 5xx, rate limit). The authorization is probably still valid.
     case unavailable
+    case storageFailure
 }
 
 extension PolestarAPI {
@@ -21,10 +22,16 @@ extension PolestarAPI {
     }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
+        try Task.checkCancellation()
+        guard !webAuthorizationInProgress else { throw CancellationError() }
         clearAccountState()
+        try keychain.deleteCommandSessionToken()
+        let epoch = sessionEpoch
         _ = redirectDelegate.takeCallback()
         try await discoverOIDCConfiguration()
+        try requireSession(epoch)
         let authorization = try await obtainAuthorizationCode(email: email, password: password)
+        try requireSession(epoch)
         try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
         // Remote-command authorization (the command client) is a separate, explicit step the
         // user triggers from Settings — see `beginCommandAuthorization()`/
@@ -34,6 +41,7 @@ extension PolestarAPI {
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+        try requireSession(epoch)
     }
 
     /// Resolves the command-client access token, refreshing silently from the stored refresh
@@ -43,7 +51,7 @@ extension PolestarAPI {
     /// (`SignInCoordinator.beginPolestarCommandAuthorization()`, surfaced as "Authorize Remote
     /// Commands" in Settings).
     ///
-    /// The three-way result lets the caller tell the user the truth: `.notAuthorized` is a
+    /// The result lets the caller tell the user the truth: `.notAuthorized` is a
     /// dead end that a Settings visit fixes, `.unavailable` is a transient failure (offline,
     /// IdP 5xx) that a later retry recovers from on its own. A dead refresh token is cleared
     /// here so it is not re-tried on every subsequent command.
@@ -53,6 +61,7 @@ extension PolestarAPI {
     /// replay fails while both paths then persist different rotated tokens (last writer
     /// wins, orphaning the other).
     func commandClientAuthorization() async -> CommandClientAuthorization {
+        guard !commandAuthorizationInProgress else { return .notAuthorized }
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return .authorized(token) }
         if let existing = commandRefreshTask {
@@ -68,22 +77,32 @@ extension PolestarAPI {
         ])
         let currentSession = session
         let requestEpoch = sessionEpoch
+        let commandEpoch = commandAuthorizationEpoch
         let taskID = UUID()
         let task = Task { [logger] () -> CommandClientAuthorization in
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession)
-                guard self.sessionEpoch == requestEpoch else { return .unavailable }
-                self.applyCommandToken(token, fallbackRefresh: refresh)
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else { return .unavailable }
+                // Rotation already happened at the server, even if userinfo is unavailable.
+                self.commandRefreshToken = token.refreshToken ?? refresh
+                try await self.verifyCommandAccount(accessToken: token.accessToken)
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else {
+                    return .unavailable
+                }
+                try self.applyCommandToken(token, fallbackRefresh: refresh)
                 return .authorized(token.accessToken)
             } catch let error as PolestarError where error.requiresAuthentication {
-                guard self.sessionEpoch == requestEpoch else { return .unavailable }
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else { return .unavailable }
                 // The refresh token itself is dead (invalid_grant / 401). Retrying it every
                 // command just re-fails; drop it so the UI flips to "not authorized" and the
                 // user is pointed at "Authorize Remote Commands" once.
                 logger.warning("Polestar command-token refresh rejected; clearing stored authorization")
                 self.clearCommandAuthorization()
                 return .notAuthorized
+            } catch is KeychainError {
+                logger.error("Polestar command authorization could not be saved to Keychain")
+                return .storageFailure
             } catch {
                 // Transient: offline, 5xx, rate limit, decode. The authorization is probably
                 // still good — keep the stored refresh token and let a later command retry.
@@ -102,20 +121,33 @@ extension PolestarAPI {
         return await task.value
     }
 
-    private func applyCommandToken(_ token: TokenResponseDTO, fallbackRefresh: String) {
-        commandAccessToken = token.accessToken
+    private func applyCommandToken(_ token: TokenResponseDTO, fallbackRefresh: String) throws {
         commandRefreshToken = token.refreshToken ?? fallbackRefresh
         commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        if let refreshed = token.refreshToken { try? keychain.saveCommandSessionToken(refreshed) }
+        // Keep a rotated token in memory even when durable storage is temporarily locked.
+        // Do not advertise a usable command session until its persistence succeeds.
+        commandAccessToken = nil
+        try saveCommandToken(token.refreshToken ?? fallbackRefresh)
+        commandAccessToken = token.accessToken
     }
 
-    /// Drops every trace of the command-client session — in memory and in the Keychain — so
-    /// `PreferencesStore.hasPolestarCommandAuthorization` and the Settings card reflect that
-    /// remote commands need re-authorizing. Used when the refresh token is rejected.
-    func clearCommandAuthorization() {
+    /// Invalidates in-flight grants and memory state; restoration may still use the Keychain.
+    func invalidateCommandAuthorization() {
+        commandAuthorizationEpoch &+= 1
+        commandAuthorizationInProgress = false
+        commandRefreshTask?.cancel()
+        commandRefreshTask = nil
+        commandRefreshTaskID = nil
+        commandPendingVerifier = nil
+        commandPendingState = nil
+        commandPendingSince = nil
         commandAccessToken = nil
         commandRefreshToken = nil
         commandTokenExpiry = nil
+    }
+
+    func clearCommandAuthorization() {
+        invalidateCommandAuthorization()
         try? keychain.deleteCommandSessionToken()
     }
 
@@ -127,86 +159,131 @@ extension PolestarAPI {
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+        try Task.checkCancellation()
+        guard !webAuthorizationInProgress else { throw CancellationError() }
         guard !token.isEmpty else { throw PolestarError.authenticationRequired(.noStoredSession) }
         clearAccountState(keepRefreshToken: true)
+        let epoch = sessionEpoch
         if let commandRefresh = (try? keychain.readCommandSessionToken()) ?? nil, !commandRefresh.isEmpty {
             commandRefreshToken = commandRefresh
         }
         try await discoverOIDCConfiguration()
+        try requireSession(epoch)
         refreshToken = token
         do {
             try await refreshAccessToken(force: true)
         } catch let error as PolestarError where error.requiresAuthentication {
+            try requireSession(epoch)
             refreshToken = nil
             throw error
         }
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+        try requireSession(epoch)
         logger.info("Stored Polestar session restored")
     }
 
-    func resetSession() async {
-        accessToken = nil
-        refreshToken = nil
-        tokenExpiry = nil
-        commandAccessToken = nil
-        commandRefreshToken = nil
-        commandTokenExpiry = nil
-        // A stale pending PKCE pair surviving sign-out would let a later callback matching
-        // the old state complete a flow the user never restarted.
-        commandPendingVerifier = nil
-        commandPendingState = nil
-        commandPendingSince = nil
-        refreshTask?.cancel()
-        refreshTask = nil
-        refreshTaskID = nil
-        commandRefreshTask?.cancel()
-        commandRefreshTask = nil
-        commandRefreshTaskID = nil
-        cancelImageDownloads()
+    private func resetLocalSession() {
         clearAccountState()
         session.invalidateAndCancel()
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
+    }
+
+    func resetSession() async {
+        resetLocalSession()
         await grpc.invalidateDiscoveredHost()
     }
 
     func signOut() async throws {
-        let commandToRevoke = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        if let commandToRevoke, let endpoint = revocationEndpoint {
-            var request = URLRequest(url: endpoint)
-            request.httpMethod = "POST"
-            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            request.httpBody = Self.formBody([
-                "client_id": commandClientID, "token": commandToRevoke, "token_type_hint": "refresh_token"
-            ])
-            _ = try? await perform(request, limit: 64_000, operation: "command session revocation")
+        let tokens = [
+            (commandClientID, commandRefreshToken ?? (try? keychain.readCommandSessionToken())),
+            (oidcClientID, refreshToken ?? (try? keychain.readSessionToken()))
+        ]
+        let endpoint = revocationEndpoint
+        let revocationConfiguration = session.configuration
+        resetLocalSession()
+        var storageError: Error?
+        for delete in [keychain.deleteCommandSessionToken, keychain.deleteSessionToken, keychain.deletePassword] {
+            do { try delete() } catch { storageError = storageError ?? error }
         }
-        try? keychain.deleteCommandSessionToken()
-        if let tokenToRevoke = refreshToken, let endpoint = revocationEndpoint {
-            do {
+        // Local state is gone before the first suspension. Revocation owns a separate
+        // transport and never touches a session that starts while the server responds.
+        await grpc.invalidateDiscoveredHost()
+        if let endpoint {
+            let revocationSession = URLSession(configuration: revocationConfiguration)
+            defer { revocationSession.invalidateAndCancel() }
+            for (clientID, token) in tokens {
+                guard let token else { continue }
                 var request = URLRequest(url: endpoint)
+                request.timeoutInterval = 10
                 request.httpMethod = "POST"
                 request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
                 request.httpBody = Self.formBody([
-                    "client_id": oidcClientID, "token": tokenToRevoke, "token_type_hint": "refresh_token"
+                    "client_id": clientID, "token": token, "token_type_hint": "refresh_token"
                 ])
-                let (_, response) = try await perform(request, limit: 64_000, operation: "session revocation")
-                try validateHTTP(response, operation: "session revocation")
-            } catch {
-                logger.warning("Polestar session revocation failed; clearing local credentials")
+                _ = try? await HTTPBodyReader.data(for: request, using: revocationSession, limit: 64_000, operation: "session revocation", provider: .polestar)
             }
         }
-        await resetSession()
-        do {
-            try keychain.deleteSessionToken()
-        } catch {
-            try? keychain.deletePassword()
-            throw error
+        if let storageError { throw storageError }
+    }
+
+    func cancelAuthorization(state: String?) {
+        guard let state else { return }
+        if webPendingState == state { clearAccountState() }
+        if commandPendingState == state { invalidateCommandAuthorization() }
+    }
+
+    func requireSession(_ epoch: Int) throws {
+        try Task.checkCancellation()
+        guard epoch == sessionEpoch else { throw CancellationError() }
+    }
+
+    struct AccountIdentity: Decodable {
+        let sub: String
+        let email: String?
+        let emailVerified: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case sub, email
+            case emailVerified = "email_verified"
         }
-        try keychain.deletePassword()
+
+        func matches(_ other: Self) -> Bool {
+            if !sub.isEmpty, sub == other.sub { return true }
+            // Pairwise subjects may differ between the web and mobile clients.
+            return emailVerified == true && other.emailVerified == true
+                && email?.isEmpty == false && email == other.email
+        }
+    }
+
+    func verifyCommandAccount(accessToken commandToken: String) async throws {
+        let epoch = sessionEpoch
+        try await refreshTokenIfNeeded()
+        try requireSession(epoch)
+        guard let baseToken = accessToken, let endpoint = userinfoEndpoint else {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
+        func identity(token: String) async throws -> AccountIdentity {
+            var request = URLRequest(url: endpoint)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await HTTPBodyReader.data(for: request, using: session, limit: 64_000, operation: "account verification", provider: .polestar)
+            guard let response = response as? HTTPURLResponse else {
+                throw PolestarError.incompatibleAPI(operation: "account verification")
+            }
+            try validateHTTP(response, operation: "account verification")
+            let identity = try JSONDecoder().decode(AccountIdentity.self, from: data)
+            guard !identity.sub.isEmpty else { throw PolestarError.authenticationRequired(.callbackRejected) }
+            return identity
+        }
+        let base = try await identity(token: baseToken)
+        let command = try await identity(token: commandToken)
+        try requireSession(epoch)
+        guard base.matches(command) else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
     }
 
     func resolvedVIN(preferred: String?) -> String? {
@@ -214,10 +291,9 @@ extension PolestarAPI {
         return cars.first?.vin
     }
 
-    func selectCar(vin: String, features: FeatureSelection) async throws {
-        guard cars.contains(where: { $0.vin == vin }) else { throw PolestarError.notConfigured }
-        try await applyCarInfo(vin: vin)
-        if features.contains(.vehicleImage) { await fetchCarImage(vin: vin) }
-        if features.contains(.ownerGreeting), ownerFirstName == nil { await fetchOwnerInfo() }
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {
+        imagePreparationAttempts[vin] = nil
+        ownerInfoPrepared = false
+        try await prepareVehicle(vin: vin, features: features)
     }
 }

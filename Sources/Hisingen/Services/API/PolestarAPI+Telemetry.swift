@@ -1,12 +1,40 @@
 import Foundation
 
 extension PolestarAPI {
+    func prepareVehicle(vin: String, features: FeatureSelection) async throws {
+        try await refreshTokenIfNeeded()
+        let epoch = sessionEpoch
+        try await applyCarInfo(vin: vin)
+        try Task.checkCancellation()
+        guard sessionEpoch == epoch else { throw CancellationError() }
+        if features.contains(.vehicleImage) {
+            let angle = await MainActor.run { preferences.carRenderAngle.rawValue }
+            let previous = imagePreparationAttempts[vin]
+            if previous?.angle != angle || (previous?.retryAt ?? .distantPast) <= Date() {
+                await fetchCarImage(vin: vin)
+                try Task.checkCancellation()
+                guard sessionEpoch == epoch else { throw CancellationError() }
+                // Missing artwork may be transient; retry without querying metadata on every frame.
+                let retryAt = carImages[vin] == nil ? Date().addingTimeInterval(300) : Date.distantFuture
+                imagePreparationAttempts[vin] = (angle, retryAt)
+            }
+        }
+        if features.contains(.ownerGreeting), !ownerInfoPrepared {
+            if ownerFirstName == nil { await fetchOwnerInfo() }
+            try Task.checkCancellation()
+            guard sessionEpoch == epoch else { throw CancellationError() }
+            ownerInfoPrepared = true
+        }
+    }
+
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         try await fetchVehicleStateImplementation(vin: vin, features: features)
     }
 
     func fetchVehicleStateImplementation(vin: String, features: FeatureSelection) async throws -> VehicleState {
-        try await refreshTokenIfNeeded()
+        let epoch = sessionEpoch
+        try await prepareVehicle(vin: vin, features: features)
+        try requireSession(epoch)
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
@@ -120,11 +148,10 @@ extension PolestarAPI {
         async let chargeLocationsTask: OptionalCapability<[ChargeLocationSnapshot]> = optionalCapability(
             .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
         ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
-        // GetMyCars runs whenever softwareUpdates or remoteOTA is enabled — it provides the
-        // authoritative installed version and OTA capability flags.
+        // MyCars supplies identity fallbacks and the installed version independently of OTA discovery.
         async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
             .softwareUpdates, key: "my-cars",
-            enabled: features.contains(.softwareUpdates) || features.contains(.remoteOTA), vin: vin
+            enabled: features.contains(.softwareUpdates) || features.contains(.remoteOTA) || features.contains(.vehicleIdentity), vin: vin
         ) { try await self.grpc.fetchMyCars(vin: vin, accessToken: serviceToken) }
 
         let extras = try await batteryExtrasTask
@@ -184,7 +211,8 @@ extension PolestarAPI {
             if features.contains(.remoteWindows) { optionalResults.append((.remoteWindows, exterior.unavailable)) }
         }
         if needsSoftware {
-            if features.contains(.softwareUpdates) { optionalResults.append((.softwareUpdates, software.unavailable)) }
+            let hasInstalledVersion = otaCapabilities.value?.installedSoftwareVersion?.isEmpty == false
+            if features.contains(.softwareUpdates) { optionalResults.append((.softwareUpdates, software.unavailable && !hasInstalledVersion)) }
             if features.contains(.remoteOTA) { optionalResults.append((.remoteOTA, software.unavailable)) }
         }
         if needsSchedules {
@@ -250,6 +278,10 @@ extension PolestarAPI {
             )
         }()
 
+        let capacityKwh = [battery?.reportedBatteryCapacityKwh?.value, extras?.reportedBatteryCapacityKwh]
+            .compactMap { $0 }
+            .first { $0 > 0 }
+
         var state = VehicleState(
             batteryPercentage: batteryPercentage,
             rangeKm: range,
@@ -265,8 +297,8 @@ extension PolestarAPI {
             availability: vehicleAvailability,
 
 
-            modelName: carIdentity.modelName,
-            modelYear: features.contains(.vehicleIdentity) ? carIdentity.modelYear : nil,
+            modelName: carIdentity.modelName ?? otaCapabilities.value?.identity?.modelName,
+            modelYear: features.contains(.vehicleIdentity) ? (carIdentity.modelYear ?? otaCapabilities.value?.identity?.modelYear) : nil,
             registrationNo: features.contains(.vehicleIdentity) ? carIdentity.registrationNo : nil,
             vin: vin,
             ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
@@ -286,7 +318,12 @@ extension PolestarAPI {
             tripMeterAutomaticKm: trips.value?.automaticTripKm,
             connectivity: connectivity.value,
             airQuality: air.value,
-            batteryDiagnostics: features.contains(.batteryDiagnostics) ? extras?.diagnostics : nil,
+            batteryDiagnostics: features.contains(.batteryDiagnostics)
+                ? extras.map { diag -> BatteryDiagnostics in
+                    var enriched = diag.diagnostics
+                    enriched.unknownWireFields = diag.unknownFields
+                    return enriched
+                } : nil,
             weather: features.contains(.vehicleWeather) ? weather.value : nil,
             location: features.contains(.vehicleLocation) ? location.value : nil,
             unavailableFeatures: unavailable,
@@ -296,18 +333,22 @@ extension PolestarAPI {
             vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
             dataWarnings: warnings
         )
+        state.reportedBatteryCapacityKwh = capacityKwh
         state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
+        // Odometer average speeds arrive per trip period, with explicit km/h units; keep
+        // them out of the blended `averageSpeedKmH` (Volvo statistics) so sources never
+        // overwrite each other.
+        state.tripComputer.manualAverageSpeedKmH = trips.value?.manualAverageSpeedKmH
+        state.tripComputer.automaticAverageSpeedKmH = trips.value?.automaticAverageSpeedKmH
+        // Engine hours to service is a real service-interval input (upstream Health field 2),
+        // distinct from the GraphQL-engineHours Volvo path; GraphQL keeps precedence.
+        if let engineHours = c3Health.value?.engineHoursToService, state.engineHoursToService == nil {
+            state.engineHoursToService = engineHours
+        }
 
-        // Merge GetMyCars OTA capabilities: retain its backend-reported software version when
-        // GetSoftwareInfo only reports the rollout target. The field is undocumented and the
-        // UI deliberately labels it unverified rather than treating it as authoritative.
-        if let otaCaps = otaCapabilities.value {
-            state.otaCapabilities = otaCaps
-            if var sw = state.softwareInfo, sw.installedVersion == nil,
-               let installed = otaCaps.installedSoftwareVersion {
-                sw.installedVersion = installed
-                state.softwareInfo = sw
-            }
+        state.otaCapabilities = otaCapabilities.value
+        if needsSoftware {
+            state.softwareInfo = Self.mergingSoftwareInfo(software.value, myCars: otaCapabilities.value)
         }
         state.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
         state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
@@ -320,7 +361,15 @@ extension PolestarAPI {
         state.chargingCurrentLimitAmps = ampLimit.value
         state.chargeLocations = chargeLocations.value ?? []
         state.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
+        try requireSession(epoch)
         return state
+    }
+
+    static func mergingSoftwareInfo(_ ota: VehicleSoftwareInfo?, myCars: VehicleOTACapabilities?) -> VehicleSoftwareInfo? {
+        guard let installed = myCars?.installedSoftwareVersion, !installed.isEmpty else { return ota }
+        var software = ota ?? VehicleSoftwareInfo()
+        software.installedVersion = installed
+        return software
     }
 
     static func telematicsQuery(features: FeatureSelection) -> String {
@@ -339,6 +388,7 @@ extension PolestarAPI {
             battery {
               vin batteryChargeLevelPercentage estimatedDistanceToEmptyKm
               chargingStatusV2 estimatedChargingTimeToFullMinutes
+              reportedBatteryCapacityKwh
               timestamp { seconds }
             }
             \(odometerSelection)

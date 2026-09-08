@@ -75,17 +75,96 @@ struct PolestarGRPCDiagnosticsTests {
         let grpc = PolestarGRPC(defaultsSuiteName: suite)
         let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
 
-        let first = await grpc.readStatusFailure(status: "12", path: path)
+        let base = URL(string: "https://backend.example")!
+        let otherBase = URL(string: "https://other.example")!
+        let key = PolestarGRPC.readCapabilityKey(path: path, vin: "VIN-A", base: base)
+        let first = await grpc.readStatusFailure(status: "12", path: path, vin: "VIN-A", base: base)
         #expect({ if case PolestarError.grpcUnimplemented = first { return true } else { return false } }())
-        #expect(await grpc.unimplementedReadPaths.contains(path))
+        #expect(await grpc.unimplementedReadPaths.contains(key))
+
+        #expect(await grpc.isReadPathUnimplemented(path, vin: "VIN-A", base: base))
+        #expect(await !grpc.isReadPathUnimplemented(path, vin: "VIN-B", base: base))
+        #expect(await !grpc.isReadPathUnimplemented(path, vin: "VIN-A", base: otherBase))
 
         // A transient status is not remembered.
-        _ = await grpc.readStatusFailure(status: "14", path: "/x/Y")
+        _ = await grpc.readStatusFailure(status: "14", path: "/x/Y", vin: "VIN-A", base: base)
         #expect(await !grpc.unimplementedReadPaths.contains("/x/Y"))
 
         // A fresh actor restores the bounded negative capability from disk.
         let restored = PolestarGRPC(defaultsSuiteName: suite)
-        #expect(await restored.unimplementedReadPaths.contains(path))
-        #expect(await restored.unimplementedReadPathExpirations[path] != nil)
+        #expect(await restored.unimplementedReadPaths.contains(key))
+        #expect(await restored.unimplementedReadPathExpirations[key] != nil)
+    }
+    @Test
+    func endpointFallbackRejectsAuthenticationRateLimitingAndCancellation() {
+        for error: Error in [PolestarError.authenticationRequired(.expiredSession),
+                             PolestarError.rateLimited(retryAfter: 60),
+                             PolestarError.server(statusCode: 503),
+                             PolestarError.network(URLError(.notConnectedToInternet)),
+                             CancellationError(), URLError(.cancelled)] {
+            #expect(!PolestarGRPC.canTryAlternativeEndpoint(after: error))
+        }
+        #expect(PolestarGRPC.canTryAlternativeEndpoint(after: PolestarError.grpcUnimplemented(service: "test")))
+        #expect(PolestarGRPC.canTryAlternativeEndpoint(after: PolestarError.client(statusCode: 404)))
+    }
+
+    @Test
+    func legacyUnscopedFailuresDoNotSuppressVehicles() async {
+        let suite = "HisingenPolestarGRPCDiagnostics.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["/test/Read": Date().addingTimeInterval(3600).timeIntervalSince1970],
+                     forKey: "polestar_unimplemented_grpc_paths_v2")
+        let grpc = PolestarGRPC(defaultsSuiteName: suite)
+        #expect(await grpc.unimplementedReadPaths.isEmpty)
+    }
+
+    @Test(arguments: [401, 429])
+    func locationAndWeatherStopAfterRequestLevelFailure(status: Int) async {
+        for weather in [false, true] {
+            let token = "\(status)-\(UUID())"
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [CapabilityFailureTransport.self]
+            let transport = URLSession(configuration: config)
+            defer { transport.invalidateAndCancel() }
+            let grpc = PolestarGRPC(defaultsSuiteName: "HisingenPolestarGRPCDiagnostics.\(UUID())", session: transport)
+            do {
+                if weather { _ = try await grpc.fetchWeather(vin: "VIN-A", accessToken: token) }
+                else { _ = try await grpc.fetchLocation(vin: "VIN-A", accessToken: token) }
+                Issue.record("Request-level failure was swallowed")
+            } catch let error as PolestarError {
+                if status == 401 { #expect(error.requiresAuthentication) }
+                else if case .rateLimited(let retryAfter) = error { #expect(retryAfter == 60) }
+                else { Issue.record("429 did not preserve rate limiting") }
+            } catch { Issue.record("Unexpected error: \(error)") }
+            #expect(CapabilityFailureTransport.counts.value(token) == 1)
+        }
+    }
+
+}
+
+private final class CapabilityFailureCounts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [String: Int] = [:]
+    func increment(_ token: String) { lock.lock(); defer { lock.unlock() }; counts[token, default: 0] += 1 }
+    func value(_ token: String) -> Int { lock.lock(); defer { lock.unlock() }; return counts[token, default: 0] }
+}
+
+private final class CapabilityFailureTransport: URLProtocol, @unchecked Sendable {
+    static let counts = CapabilityFailureCounts()
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let token = String((request.value(forHTTPHeaderField: "Authorization") ?? "").dropFirst(7))
+        let discovery = request.url?.host == "cnepmob.volvocars.com"
+        let status = discovery ? 200 : (token.hasPrefix("401-") ? 401 : 429)
+        if !discovery { Self.counts.increment(token) }
+        let data = discovery ? Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8) : Data()
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                                       headerFields: ["Retry-After": "60"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
     }
 }

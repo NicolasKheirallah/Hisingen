@@ -177,7 +177,8 @@ struct AccountCredentialsForm: View {
     }
 
     private var isBrandConnected: Bool {
-        preferences.hasResumableSession(for: selectedBrand)
+        if selectedBrand == .polestar { return preferences.hasSessionToken(for: .polestar) }
+        return preferences.hasResumableSession(for: selectedBrand)
     }
 
     private var isActiveBrand: Bool {

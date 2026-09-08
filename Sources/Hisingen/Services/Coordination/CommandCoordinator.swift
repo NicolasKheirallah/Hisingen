@@ -107,6 +107,8 @@ final class CommandCoordinator {
                     case .disabledBySettings: return RemoteCommandError.disabled.localizedDescription
                     case .unavailableUntilRefresh: return RemoteCommandError.missingContext.localizedDescription
                     case .unavailableWhileBusy: return RemoteCommandError.busy.localizedDescription
+                    case .notVehicleOwner: return availability.shortReason
+                        ?? RemoteCommandError.unsupported.localizedDescription
                     default: return RemoteCommandError.unsupported.localizedDescription
                     }
                 }(),
@@ -284,6 +286,8 @@ final class CommandCoordinator {
                 exterior.openings.append(OpeningReading(opening: .tailgate,
                                                         state: isOpening ? .open : .closed))
             }
+            // Only the open/closed state is optimistically known. The tailgate's own
+            // lock status (`isTailgateLocked`) is vehicle-reported only and stays as-is.
             current.exteriorStatus = exterior
         case .setChargeTarget(let target):
             current.chargeTargetPercentage = target

@@ -43,6 +43,14 @@ final class SignInCoordinator {
     private let volvoPresenter = VolvoSignInPresenter()
     private let polestarCommandPresenter = PolestarCommandSignInPresenter()
     private let polestarWebPresenter = PolestarWebSignInPresenter()
+    private var polestarSignInTask: Task<Void, Never>?
+
+    func cancelPolestarSignIn() {
+        polestarSignInTask?.cancel()
+        polestarSignInTask = nil
+        polestarWebPresenter.cancel(with: CancellationError())
+        polestarCommandPresenter.cancel(with: CancellationError())
+    }
     private let resultPresenter: RemoteResultPresenter
     private weak var context: (any SignInCoordinatorContext)?
 
@@ -229,15 +237,19 @@ final class SignInCoordinator {
             )
             return
         }
-        Task { [weak self] in
+        cancelPolestarSignIn()
+        polestarSignInTask = Task { [weak self] in
             guard let self else { return }
+            var authorizationState: String?
             do {
                 let authorizeURL = try await polestarAPI.beginCommandAuthorization()
+                authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
                 let callbackURL = try await polestarCommandPresenter.signIn(authorizeURL: authorizeURL)
                 try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
                 // Persistent banner through the Notifier pipeline — the transient
                 // `RemoteResultPresenter` variant self-cleans after 5 s, which reads as
                 // "did it actually go through?" for a step this easy to miss.
+                try Task.checkCancellation()
                 context?.presentSignInNotice(
                     title: L10n.text("Remote commands authorized"),
                     body: L10n.text("Polestar remote commands are now available."),
@@ -247,6 +259,8 @@ final class SignInCoordinator {
                 // it so "Authorize…" becomes "Re-authorize…" without the user reopening Settings.
                 context?.refreshSettingsSurface()
             } catch {
+                await polestarAPI.cancelAuthorization(state: authorizationState)
+                guard !Task.isCancelled else { return }
                 let mapped = error as? LocalizedError
                 logger.error("Polestar command authorization failed: \(String(describing: error), privacy: .public)")
                 resultPresenter.present(
@@ -264,10 +278,13 @@ final class SignInCoordinator {
     /// `WKWebView` window when headless PingFederate login is rejected with an interactive
     /// challenge (such as 2FA, CAPTCHA, or a Terms of Service update).
     func beginPolestarWebSignIn() {
-        Task { [weak self] in
+        cancelPolestarSignIn()
+        polestarSignInTask = Task { [weak self] in
             guard let self else { return }
+            var authorizationState: String?
             do {
                 let (authorizeURL, redirectURI) = try await polestarAPI.beginWebAuthorization()
+                authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
                 let callbackURL = try await polestarWebPresenter.signIn(
                     authorizeURL: authorizeURL,
                     redirectURI: redirectURI
@@ -278,6 +295,7 @@ final class SignInCoordinator {
                     preferredVIN: vin.isEmpty ? nil : vin,
                     features: preferences.features
                 )
+                try Task.checkCancellation()
                 context?.activateBrandAfterSignIn(.polestar)
                 context?.dismissSettingsAfterSignIn()
                 resultPresenter.present(
@@ -286,6 +304,8 @@ final class SignInCoordinator {
                     success: true
                 )
             } catch {
+                await polestarAPI.cancelAuthorization(state: authorizationState)
+                guard !Task.isCancelled else { return }
                 let mapped = error as? LocalizedError
                 logger.error("Polestar interactive web sign-in failed: \(String(describing: error), privacy: .public)")
                 resultPresenter.present(

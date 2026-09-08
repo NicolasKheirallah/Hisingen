@@ -192,6 +192,13 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
     var manualTripKm: Double?
     var automaticTripKm: Double?
     var averageSpeedKmH: Double?
+    /// Average speed over the manual trip-meter period (`Odometer.average_speed_km_per_hour`,
+    /// field 5), in km/h. Separate from the blended `averageSpeedKmH` so the two sources
+    /// never overwrite each other. Defaults keep older persisted snapshots decodable.
+    var manualAverageSpeedKmH: Int? = nil
+    /// Average speed over the automatic trip-meter period
+    /// (`Odometer.average_speed_km_per_hour_automatic`, field 6), in km/h.
+    var automaticAverageSpeedKmH: Int? = nil
     var electricRangeKm: Int?
     var electricDistanceKm: Double?
     var fuelDistanceKm: Double?
@@ -263,6 +270,14 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     var primaryRangeKm: Int? {
         totalCombinedRangeKm ?? rangeKm ?? fuelRangeKm
+    }
+
+    /// Whether the backend explicitly reports the signed-in account as the vehicle's owner.
+    /// Tri-state on purpose: `false` only when `GetMyCars` returned `userIsOwner == false`;
+    /// `nil` (absent flag, Volvo, or pre-capability snapshot) means unknown and must never
+    /// block a command.
+    var accountOwnsVehicle: Bool? {
+        otaCapabilities?.userIsOwner
     }
 
     var primaryEnergyFraction: Double? {
@@ -360,6 +375,14 @@ struct VehicleState: Codable, Equatable, Sendable {
         get { tripComputer.averageSpeedKmH }
         set { tripComputer.averageSpeedKmH = newValue }
     }
+    var tripManualAverageSpeedKmH: Int? {
+        get { tripComputer.manualAverageSpeedKmH }
+        set { tripComputer.manualAverageSpeedKmH = newValue }
+    }
+    var tripAutomaticAverageSpeedKmH: Int? {
+        get { tripComputer.automaticAverageSpeedKmH }
+        set { tripComputer.automaticAverageSpeedKmH = newValue }
+    }
     var tripComputerElectricRangeKm: Int? {
         get { tripComputer.electricRangeKm }
         set { tripComputer.electricRangeKm = newValue }
@@ -442,7 +465,9 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt = battery.reportedAt ?? vehicleReportedAt
         case .exterior(let exterior, let reportedAt):
             exteriorStatus = exterior.merging(previous: exteriorStatus)
-            vehicleReportedAt = reportedAt ?? vehicleReportedAt
+            // Prefer the vehicle's own exterior timestamp; the frame callback's received-at
+            // time is only a fallback when the backend reported none.
+            vehicleReportedAt = (exterior.reportedAt ?? reportedAt) ?? vehicleReportedAt
         }
         fetchedAt = receivedAt
         isCachedSnapshot = false
@@ -1280,6 +1305,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.electricDistanceKm = electricDistanceKm ?? previous.electricDistanceKm
         merged.fuelDistanceKm = fuelDistanceKm ?? previous.fuelDistanceKm
         merged.regeneratedEnergyKwh = regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh
+        merged.tripComputer.manualAverageSpeedKmH = tripComputer.manualAverageSpeedKmH
+            ?? previous.tripComputer.manualAverageSpeedKmH
+        merged.tripComputer.automaticAverageSpeedKmH = tripComputer.automaticAverageSpeedKmH
+            ?? previous.tripComputer.automaticAverageSpeedKmH
         merged.frontBrakePadStatus = frontBrakePadStatus ?? previous.frontBrakePadStatus
         merged.rearBrakePadStatus = rearBrakePadStatus ?? previous.rearBrakePadStatus
         merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId

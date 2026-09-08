@@ -5,12 +5,17 @@ struct GrpcHealthReport: Equatable, Sendable {
     let daysToService: Int?
     let distanceToServiceKm: Int?
     let serviceWarning: Bool
+    let engineHoursToService: Int?
+    let reportedAt: Date?
 }
 
 struct GrpcOdometerReport: Equatable, Sendable {
     let odometerKm: Int?
     let manualTripKm: Double?
     let automaticTripKm: Double?
+    let manualAverageSpeedKmH: Int?
+    let automaticAverageSpeedKmH: Int?
+    let reportedAt: Date?
 }
 
 extension PolestarGRPC {
@@ -56,7 +61,8 @@ extension PolestarGRPC {
                                               vin: vin, accessToken: accessToken)
             if let payload = Self.message(body, field: 3) {
                 let result = Self.parseOdometer(payload)
-                if result.odometerKm != nil || result.manualTripKm != nil || result.automaticTripKm != nil {
+                if result.odometerKm != nil || result.manualTripKm != nil || result.automaticTripKm != nil
+                    || result.manualAverageSpeedKmH != nil || result.automaticAverageSpeedKmH != nil {
                     return result
                 }
             }
@@ -82,14 +88,18 @@ extension PolestarGRPC {
         do {
             let body = try await firstMessage(path: Self.softwarePath, message: request,
                                               vin: vin, accessToken: accessToken)
-            if let payload = Self.message(body, field: 1) {
+            if let payload = Self.message(body, field: 1), !payload.isEmpty {
                 rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
                 let parsed = Self.parseSoftware(payload)
                 otaSoftwareStates[vin] = parsed.state
                 otaRawSoftwareStates[vin] = parsed.rawState
                 info = parsed
             }
-        } catch { firstError = error }
+        } catch {
+            try Task.checkCancellation()
+            guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
+            firstError = error
+        }
 
         // `Scheduler`: 1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by.
         // This is a second source of the software id — it stays populated for a scheduled
@@ -97,6 +107,10 @@ extension PolestarGRPC {
         // "cancel a scheduled installation" reachable.
         var scheduledAt: Date?
         var scheduleSetBy: ScheduleSetBy?
+        // `relative_time` is minutes-until-install (the same bound `Schedule` enforces,
+        // 2…10080). The backend answers -2 when nothing is scheduled, which must not be
+        // surfaced as a countdown.
+        var relativeMinutes: Int?
         do {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
@@ -105,6 +119,10 @@ extension PolestarGRPC {
                 let fields = Protobuf.fields(scheduler)
                 scheduledAt = Self.timestamp(Self.message(fields, field: 3))
                 rememberSoftwareID(Self.string(fields, 4), vin: vin)
+                if let rawRelative = Self.varint(fields, 2) {
+                    let signed = Int(bitPattern: UInt(truncatingIfNeeded: rawRelative))
+                    if signed > 0 { relativeMinutes = signed }
+                }
                 if let setByValue = Self.varint(fields, 5), let setBy = ScheduleSetBy(rawValue: Int(setByValue)) {
                     scheduleSetBy = setBy
                 }
@@ -113,6 +131,8 @@ extension PolestarGRPC {
                 }
             }
         } catch {
+            try Task.checkCancellation()
+            if PolestarAPI.isGlobalFailure(error) { throw error }
             if firstError == nil { firstError = error }
         }
 
@@ -120,6 +140,7 @@ extension PolestarGRPC {
             var merged = info
             merged.scheduledAt = info.scheduledAt ?? scheduledAt
             merged.scheduleSetBy = scheduleSetBy
+            merged.scheduleRelativeMinutes = relativeMinutes ?? info.scheduleRelativeMinutes
             return merged
         }
         if let scheduledAt {
@@ -127,10 +148,11 @@ extension PolestarGRPC {
             // genuinely unknown here. Report the schedule and leave every version field nil
             // rather than inventing one.
             return VehicleSoftwareInfo(state: .scheduled, scheduledAt: scheduledAt,
-                                       scheduleSetBy: scheduleSetBy)
+                                       scheduleSetBy: scheduleSetBy,
+                                       scheduleRelativeMinutes: relativeMinutes)
         }
         if let firstError { throw firstError }
-        return nil
+        return VehicleSoftwareInfo(noUpdateAvailable: true)
     }
 
     private func rememberSoftwareID(_ id: String, vin: String) {
@@ -197,11 +219,19 @@ extension PolestarGRPC {
             if let timer = Self.message(body, field: 1), let parsed = Self.parseGlobalChargeTimer(timer) {
                 schedules.append(parsed)
             }
-        } catch { errors.append(error) }
+        } catch {
+            try Task.checkCancellation()
+            if PolestarAPI.isGlobalFailure(error) { throw error }
+            errors.append(error)
+        }
         do {
             let body = try await chargeLocationsBody(vin: vin, accessToken: accessToken)
             schedules.append(contentsOf: Self.parseChargeLocationSchedules(body))
-        } catch { errors.append(error) }
+        } catch {
+            try Task.checkCancellation()
+            if PolestarAPI.isGlobalFailure(error) { throw error }
+            errors.append(error)
+        }
 
 
         if schedules.isEmpty, errors.count == 2 {
@@ -326,7 +356,7 @@ extension PolestarGRPC {
     /// version (`consumerSoftwareVersion`) — which `GetSoftwareInfo` does not provide during
     /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
-        let body = try await firstMessage(path: Self.myCarsPath, message: Data(),
+        let body = try await firstMessage(path: Self.myCarsPath, message: Self.myCarsRequest(vin: vin),
                                           vin: vin, accessToken: accessToken)
         let capabilities = Self.parseMyCars(body, vin: vin)
         // Cache the backend-reported charging bounds so command validation can use the same
@@ -419,6 +449,8 @@ extension PolestarGRPC {
                     if let parsed = Self.parseAirQuality(candidate) { return parsed }
                 }
             } catch {
+                try Task.checkCancellation()
+                guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
                 if firstError == nil { firstError = error }
             }
         }
@@ -513,7 +545,8 @@ extension PolestarGRPC {
                     }
                 }
             } catch {
-                continue
+                try Task.checkCancellation()
+                guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
             }
         }
         return nil
@@ -521,7 +554,7 @@ extension PolestarGRPC {
 
 
     func fetchWeather(vin: String, accessToken: String) async throws -> VehicleWeather? {
-        if let location = try? await fetchLocation(vin: vin, accessToken: accessToken),
+        if let location = try await fetchLocation(vin: vin, accessToken: accessToken),
            let lat = location.latitude, let lon = location.longitude,
            abs(lat) > 0.001, abs(lon) > 0.001 {
             if let weather = await fetchOpenMeteoWeather(latitude: lat, longitude: lon) {
@@ -553,7 +586,8 @@ extension PolestarGRPC {
                     }
                 }
             } catch {
-                continue
+                try Task.checkCancellation()
+                guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
             }
         }
         return nil
@@ -641,8 +675,21 @@ extension PolestarGRPC {
         var readings: [OpeningReading] = []
         var locked: Bool?
         var alarm: Bool?
+        // `Exterior.tailgate_lock` (field 16) is an independent LockStatus in the upstream
+        // schema — it says whether the tailgate itself is locked, which is not derivable
+        // from field 12 (whether the tailgate is open) and must not be inferred from it.
+        var tailgateLocked: Bool?
+        var reportedAt: Date?
         if isDigitalTwin {
+            if let value = varint(fields, 15) {
+                alarm = value == 2 ? true : (value == 1 ? false : nil)
+            }
             if let value = varint(fields, 2) { locked = value == 2 ? true : (value == 1 ? false : nil) }
+            if let value = varint(fields, 16) { tailgateLocked = value == 2 ? true : (value == 1 ? false : nil) }
+            // Only the digital-twin shape has `Timestamp timestamp = 1`; in the legacy
+            // shape field 1 is the central-lock message, so reading it as a timestamp
+            // there would fabricate a bogus reading time.
+            reportedAt = timestamp(message(fields, field: 1))
             let mapping: [(Int, VehicleOpening)] = [
                 (3, .frontLeftDoor), (4, .frontRightDoor), (5, .rearLeftDoor), (6, .rearRightDoor),
                 (7, .frontLeftWindow), (8, .frontRightWindow), (9, .rearLeftWindow), (10, .rearRightWindow),
@@ -689,8 +736,10 @@ extension PolestarGRPC {
                 if (field == 5 || field == 6), varint(statusFields, 3) == 1 { alarm = true }
             }
         }
-        guard !readings.isEmpty || locked != nil || alarm != nil else { return nil }
-        return ExteriorSnapshot(openings: readings, isLocked: locked, alarmTriggered: alarm)
+        guard !readings.isEmpty || locked != nil || alarm != nil || tailgateLocked != nil else { return nil }
+        return ExteriorSnapshot(openings: readings, isLocked: locked, alarmTriggered: alarm,
+                                isTailgateLocked: tailgateLocked,
+                                reportedAt: reportedAt)
     }
 
     static func parseHealth(_ data: Data) -> GrpcHealthReport {
@@ -742,26 +791,25 @@ extension PolestarGRPC {
         }
         var lightFailures: [String] = []
         let lightDescriptions: [Int: String] = [
-            14: L10n.text("Left low beam"),
-            15: L10n.text("Right low beam"),
-            16: L10n.text("Left high beam"),
-            17: L10n.text("Right high beam"),
-            18: L10n.text("Left front indicator"),
-            19: L10n.text("Right front indicator"),
-            20: L10n.text("Left rear indicator"),
-            21: L10n.text("Right rear indicator"),
-            22: L10n.text("Left daytime running light"),
-            23: L10n.text("Right daytime running light"),
-            24: L10n.text("Left position light"),
-            25: L10n.text("Right position light"),
-            26: L10n.text("Left brake light"),
-            27: L10n.text("Right brake light"),
-            28: L10n.text("Center brake light"),
-            29: L10n.text("Left reversing light"),
-            30: L10n.text("Right reversing light"),
-            31: L10n.text("Left fog light"),
-            32: L10n.text("Right fog light"),
-            33: L10n.text("Rear fog light"),
+            14: L10n.text("Left brake light"),
+            15: L10n.text("Center brake light"),
+            16: L10n.text("Right brake light"),
+            17: L10n.text("Front fog light"),
+            18: L10n.text("Rear fog light"),
+            19: L10n.text("Front-left position light"),
+            20: L10n.text("Front-right position light"),
+            21: L10n.text("Rear-left position light"),
+            22: L10n.text("Rear-right position light"),
+            23: L10n.text("Left high beam"),
+            24: L10n.text("Right high beam"),
+            25: L10n.text("Left low beam"),
+            26: L10n.text("Right low beam"),
+            27: L10n.text("Left daytime running light"),
+            28: L10n.text("Right daytime running light"),
+            30: L10n.text("Left front indicator"),
+            31: L10n.text("Right front indicator"),
+            32: L10n.text("Left rear indicator"),
+            33: L10n.text("Right rear indicator"),
             34: L10n.text("License plate light"),
             35: L10n.text("Side marker light")
         ]
@@ -797,7 +845,12 @@ extension PolestarGRPC {
             ),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),
-            serviceWarning: warnings.contains(.service)
+            serviceWarning: warnings.contains(.service),
+            // Field 2 is `engine_hours_to_service` in the upstream Health schema. The
+            // ServiceWarning enum includes ENGINE_HOURS_* triggers, so this is a real
+            // service-interval input even on a battery-electric vehicle.
+            engineHoursToService: positiveInt(varint(fields, 2)),
+            reportedAt: timestamp(message(fields, field: 1))
         )
     }
 
@@ -806,7 +859,10 @@ extension PolestarGRPC {
         return GrpcOdometerReport(
             odometerKm: positiveInt(varint(fields, 2)).map { $0 / 1_000 },
             manualTripKm: positive(numeric(fields, 3)),
-            automaticTripKm: positive(numeric(fields, 4))
+            automaticTripKm: positive(numeric(fields, 4)),
+            manualAverageSpeedKmH: positiveInt(varint(fields, 5)),
+            automaticAverageSpeedKmH: positiveInt(varint(fields, 6)),
+            reportedAt: timestamp(message(fields, field: 1))
         )
     }
 
@@ -815,7 +871,10 @@ extension PolestarGRPC {
         return GrpcOdometerReport(
             odometerKm: positive(numeric(fields, 17)).map { Int($0.rounded()) },
             manualTripKm: positive(numeric(fields, 18)),
-            automaticTripKm: positive(numeric(fields, 19))
+            automaticTripKm: positive(numeric(fields, 19)),
+            manualAverageSpeedKmH: nil,
+            automaticAverageSpeedKmH: nil,
+            reportedAt: nil
         )
     }
 
@@ -865,7 +924,11 @@ extension PolestarGRPC {
             scheduledAt: timestamp(schedule),
             updatedAt: timestamp(message(fields, field: 10)),
             installedVersion: describesInstalled ? advertisedVersion : nil,
-            latestAvailableVersion: describesInstalled ? nil : advertisedVersion
+            latestAvailableVersion: describesInstalled ? nil : advertisedVersion,
+            qbCode: string(fields, 3).nilIfEmpty,
+            originator: string(fields, 11).nilIfEmpty,
+            shortDescription: description.flatMap { string($0, 2).nilIfEmpty },
+            longDescription: description.flatMap { string($0, 3).nilIfEmpty }
         )
     }
 
@@ -903,6 +966,9 @@ extension PolestarGRPC {
     static func parseErrors(_ data: Data) -> [VehicleChronosError] {
         let fields = Protobuf.fields(data)
         var errors: [VehicleChronosError] = []
+        // Outer identity fields (1 id, 2 vin) captured so backend records stay traceable.
+        let recordID = string(fields, 1).nilIfEmpty
+        let recordVin = string(fields, 2).nilIfEmpty
 
         let serviceMap: [(field: Int, service: VehicleChronosError.Service)] = [
             (3, .ampLimit), (4, .chargeLocation), (5, .chargeNow),
@@ -915,7 +981,8 @@ extension PolestarGRPC {
             let errorCode = VehicleChronosError.Code(rawValue: errorCodeInt) ?? .unknown
             let actionCode = subFields.first(where: { $0.number == 2 && $0.wire == 0 }).map { Int($0.varint) }
             errors.append(VehicleChronosError(service: service, errorCode: errorCode,
-                                               actionCode: actionCode))
+                                               actionCode: actionCode,
+                                               recordID: recordID, vin: recordVin))
         }
         return errors
     }
@@ -927,6 +994,10 @@ extension PolestarGRPC {
     ///  10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions, 9: amperageLimitSettings,
     ///  8: targetChargeLevelSettings, 15: supportsChargeNow, 29: supportsPlugAndCharge}`,
     /// `34: AirPurification{1: supportsRemoteStart}`, `16: honkFlashType (enum)`.
+    static func myCarsRequest(vin: String) -> Data {
+        vehicleRequest(vin)
+    }
+
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
         let outer = Protobuf.fields(data)
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
@@ -954,6 +1025,10 @@ extension PolestarGRPC {
             let supportsWindowsControl = locksData?.first(where: { $0.number == 5 })?.varint == 1
             let supportsTrunkControl = locksData?.first(where: { $0.number == 7 })?.varint == 1
             let supportsTrunkUnlock = locksData?.first(where: { $0.number == 10 })?.varint == 1
+            // Sunroof remote control (field 6) — captured as tri-state: nil when the field
+            // is absent so older vehicles don't read as "unsupported".
+            let supportsSunroofControl: Bool? = locksData?.first(where: { $0.number == 6 })
+                .map { $0.varint == 1 }
 
             // Nested Charging message (field 35)
             let chargingData = message(car, field: 35).map(Protobuf.fields)
@@ -991,6 +1066,9 @@ extension PolestarGRPC {
 
             return VehicleOTACapabilities(
                 installedSoftwareVersion: installedVersion,
+                identity: VehicleBackendIdentity(modelName: string(car, 6).nilIfEmpty,
+                                                 modelYear: string(car, 7).nilIfEmpty,
+                                                 market: string(car, 10).nilIfEmpty),
                 supportsFullOtaUpdates: supportsFullOtaUpdates,
                 supportsRemoteOtaInstallSchedule: supportsRemoteOtaInstallSchedule,
                 supportsCloudBasedOtaDownloadConsent: supportsCloudBasedOtaDownloadConsent,
@@ -1009,7 +1087,11 @@ extension PolestarGRPC {
                 targetChargeLevelPercentageMinLimit: targetChargeLevelPercentageMinLimit,
                 supportsWindowsControl: supportsWindowsControl,
                 supportsAirPurificationRemoteStart: supportsAirPurificationRemoteStart,
-                supportsPlugAndCharge: supportsPlugAndCharge
+                supportsPlugAndCharge: supportsPlugAndCharge,
+                supportsSunroofControl: supportsSunroofControl,
+                userIsLinked: varint(myCar, 2).map { $0 != 0 },
+                userIsOwner: varint(myCar, 3).map { $0 != 0 },
+                registrationPlate: string(myCar, 4).nilIfEmpty
             )
         }
         return nil

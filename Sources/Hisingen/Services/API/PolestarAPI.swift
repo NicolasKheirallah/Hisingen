@@ -44,6 +44,10 @@ actor PolestarAPI {
     let commandClientID = "lp8dyrd_10"
     let commandRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
 
+    var commandAuthorizationEpoch = 0
+    var commandAuthorizationInProgress = false
+    var webAuthorizationInProgress = false
+    var saveCommandToken: @Sendable (String) throws -> Void
     var commandAccessToken: String?
     var commandRefreshToken: String?
     var commandTokenExpiry: Date?
@@ -77,6 +81,8 @@ actor PolestarAPI {
 
     private(set) var cars: [CarSummary] = []
     var selectedVIN: String?
+    var imagePreparationAttempts: [String: (angle: Int, retryAt: Date)] = [:]
+    var ownerInfoPrepared = false
 
     /// Discovery metadata for one vehicle, keyed by VIN.
     ///
@@ -134,6 +140,7 @@ actor PolestarAPI {
 
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore) {
         self.keychain = keychain
+        self.saveCommandToken = { try keychain.saveCommandSessionToken($0) }
         self.imageCache = imageCache
         self.preferences = preferences
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
@@ -321,12 +328,18 @@ actor PolestarAPI {
     /// Builds the web client's authorization URL for an in-app `WKWebView` when headless PingFederate
     /// login is rejected with an interactive challenge (CAPTCHA, 2FA, Terms acceptance, etc.).
     func beginWebAuthorization() async throws -> (authorizeURL: URL, redirectURI: URL) {
+        try Task.checkCancellation()
+        clearAccountState()
+        try keychain.deleteCommandSessionToken()
+        let epoch = sessionEpoch
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
+        try requireSession(epoch)
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
+        webAuthorizationInProgress = true
         webPendingVerifier = verifier
         webPendingState = state
         guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
@@ -352,13 +365,18 @@ actor PolestarAPI {
         guard let verifier = webPendingVerifier, let expectedState = webPendingState else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
-        webPendingVerifier = nil
-        webPendingState = nil
         guard callbackURL.scheme == oidcRedirectURL.scheme,
               callbackURL.host == oidcRedirectURL.host,
               Self.normalizedPath(callbackURL) == Self.normalizedPath(oidcRedirectURL) else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        guard Self.queryValue("state", from: callbackURL) == expectedState else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        let epoch = sessionEpoch
+        defer { if epoch == sessionEpoch { webAuthorizationInProgress = false } }
+        webPendingVerifier = nil
+        webPendingState = nil
         if let error = Self.queryValue("error", from: callbackURL) {
             throw PolestarError.permissionDenied(operation: error)
         }
@@ -370,6 +388,7 @@ actor PolestarAPI {
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+        try requireSession(epoch)
         logger.info("Polestar web-client token acquired via interactive web sign-in")
     }
 
@@ -386,12 +405,19 @@ actor PolestarAPI {
     /// process, and `completeCommandAuthorization` rejects any callback whose `state` does not
     /// match `commandPendingState`. This is the same exposure the official Polestar app carries.
     func beginCommandAuthorization() async throws -> URL {
+        try Task.checkCancellation()
+        invalidateCommandAuthorization()
+        let epoch = sessionEpoch
+        let commandEpoch = commandAuthorizationEpoch
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
+        try requireSession(epoch)
+        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
+        commandAuthorizationInProgress = true
         commandPendingVerifier = verifier
         commandPendingState = state
         commandPendingSince = Date()
@@ -418,9 +444,6 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         let startedAt = commandPendingSince
-        commandPendingVerifier = nil
-        commandPendingState = nil
-        commandPendingSince = nil
         // A flow the user began and walked away from should not stay completable indefinitely —
         // a much later `polestar-explore://` callback matching this state is more likely stale
         // or hostile than a legitimate resumption.
@@ -428,9 +451,19 @@ actor PolestarAPI {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         guard callbackURL.scheme == commandRedirectURL.scheme,
-              callbackURL.host == commandRedirectURL.host else {
+              callbackURL.host == commandRedirectURL.host,
+              Self.normalizedPath(callbackURL) == Self.normalizedPath(commandRedirectURL) else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        guard Self.queryValue("state", from: callbackURL) == expectedState else {
+            throw PolestarError.authenticationRequired(.callbackRejected)
+        }
+        let epoch = sessionEpoch
+        let commandEpoch = commandAuthorizationEpoch
+        defer { if commandEpoch == commandAuthorizationEpoch { commandAuthorizationInProgress = false } }
+        commandPendingVerifier = nil
+        commandPendingState = nil
+        commandPendingSince = nil
         if let error = Self.queryValue("error", from: callbackURL) {
             throw PolestarError.permissionDenied(operation: error)
         }
@@ -440,21 +473,18 @@ actor PolestarAPI {
         }
         let token = try await exchangeCode(code, verifier: verifier,
                                            clientID: commandClientID, redirectURI: commandRedirectURL)
-        // Without a refresh token the authorization works for ~1 h and then silently stops,
-        // with nothing to refresh from and nothing durable for the next launch. Keep any
-        // refresh token we already hold rather than nulling it, and refuse outright when there
-        // is nothing durable at all so the user knows to retry instead of hitting a silent
-        // expiry later.
-        let durableRefresh = token.refreshToken ?? commandRefreshToken
-            ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        guard let durableRefresh, !durableRefresh.isEmpty else {
-            logger.error("Polestar command authorization returned no refresh token; not persisting")
+        try requireSession(epoch)
+        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
+        try await verifyCommandAccount(accessToken: token.accessToken)
+        try requireSession(epoch)
+        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
+        guard let durableRefresh = token.refreshToken, !durableRefresh.isEmpty else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        try saveCommandToken(durableRefresh)
         commandAccessToken = token.accessToken
         commandRefreshToken = durableRefresh
         commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        if let refresh = token.refreshToken { try? keychain.saveCommandSessionToken(refresh) }
         logger.info("Polestar command-client token acquired via browser sign-in")
     }
 
@@ -478,8 +508,10 @@ actor PolestarAPI {
     }
 
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
+        let epoch = sessionEpoch
         let token = try await exchangeCode(code, verifier: verifier,
                                            clientID: oidcClientID, redirectURI: oidcRedirectURL)
+        try requireSession(epoch)
         try apply(token)
     }
 
@@ -761,9 +793,8 @@ actor PolestarAPI {
             guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                   Self.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
             cars = [CarSummary(vin: manualVIN, title: manualVIN)]
-            // A manually entered VIN has no discovery metadata; drop any stale identity
-            // so telemetry reads report "unknown" instead of another car's details.
-            identities.removeValue(forKey: manualVIN)
+            // An empty identity records successful discovery without borrowing another car's metadata.
+            identities[manualVIN] = .empty
             selectedVIN = manualVIN
             return
         }
@@ -782,7 +813,8 @@ actor PolestarAPI {
             accountCars.first(where: { $0.vin == wanted })
         } ?? accountCars.first
         guard let vin = selected?.vin else { throw PolestarError.notConfigured }
-        try applyCarInfo(vin: vin, from: accountCars)
+        for car in accountCars { applyCarInfo(car) }
+        selectedVIN = vin
     }
 
     private func fetchAppBackendCars(token: String) async throws -> [ConsumerCarDTO] {
@@ -796,6 +828,7 @@ actor PolestarAPI {
                 exterior { name }
                 interior { name }
                 wheels { name }
+                packages { name }
               }
             }
           }
@@ -860,14 +893,8 @@ actor PolestarAPI {
         guard accessToken != nil else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
-        // A VIN we already hold discovery metadata for needs no round trip: selecting it is
-        // just a pointer move. Full discovery runs only the first time a vehicle is seen
-        // (and after sign-out clears identity state). This matters because discovery is two
-        // provider requests and switching used to pay it repeatedly — once for the switch,
-        // again for the garage scan's other-car fetch, and again for its re-select — enough
-        // sustained volume to trip rate limits right after the user switched cars.
+        // All discovered identities are retained by VIN, so preparing a sibling needs no discovery.
         if identities[vin] != nil, cars.contains(where: { $0.vin == vin }) {
-            selectedVIN = vin
             return
         }
         try await fetchCarInfo(preferredVIN: vin)
@@ -878,10 +905,8 @@ actor PolestarAPI {
         guard cars.contains(where: { $0.vin == vin }) else { throw PolestarError.notConfigured }
     }
 
-    private func applyCarInfo(vin: String, from accountCars: [ConsumerCarDTO]) throws {
-        guard let car = accountCars.first(where: { $0.vin == vin }) else {
-            throw PolestarError.notConfigured
-        }
+    private func applyCarInfo(_ car: ConsumerCarDTO) {
+        guard let vin = car.vin else { return }
         identities[vin] = CarIdentity(
             internalVehicleIdentifier: car.internalVehicleIdentifier,
             modelName: car.modelName,
@@ -893,10 +918,10 @@ actor PolestarAPI {
             upholsteryName: car.upholsteryName,
             wheelsName: car.wheelsName,
             packageNames: car.packageNames)
-        selectedVIN = vin
     }
 
     func fetchOwnerInfo() async {
+        let epoch = sessionEpoch
         guard let token = accessToken, let userinfoEndpoint else { return }
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -905,12 +930,15 @@ actor PolestarAPI {
                   provider: .polestar, recordDiagnostics: true),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
+        guard epoch == sessionEpoch, !Task.isCancelled else { return }
         ownerFirstName = info.givenName ?? info.firstName
         market = info.market?.isEmpty == false ? info.market : nil
     }
 
     func fetchCarImage(vin: String) async {
+        let epoch = sessionEpoch
         let requestedAngle = await MainActor.run { preferences.carRenderAngle.rawValue }
+        guard epoch == sessionEpoch, !Task.isCancelled else { return }
         if let cached = imageCache.image(for: vin, angle: requestedAngle) {
             carImages[vin] = cached
         }
@@ -940,6 +968,7 @@ actor PolestarAPI {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
               let images = payload["getCarImages"] as? [String: Any] else { return }
+        guard epoch == sessionEpoch, !Task.isCancelled else { return }
         let transparent = images["transparent"] as? [[String: Any]] ?? []
         let opaque = images["opaque"] as? [[String: Any]] ?? []
         let pool = transparent.isEmpty ? opaque : transparent
@@ -956,6 +985,7 @@ actor PolestarAPI {
                   http.statusCode == 200,
                   http.mimeType?.hasPrefix("image/") == true,
                   bytes.count <= 5_000_000 {
+                guard epoch == sessionEpoch, !Task.isCancelled else { return }
                 carImages[vin] = bytes
                 let angle = (pick?["angle"] as? Int) ?? requestedAngle
                 imageCache.save(bytes, for: vin, angle: angle)
@@ -963,6 +993,7 @@ actor PolestarAPI {
             }
         }
 
+        guard epoch == sessionEpoch, !Task.isCancelled else { return }
         for other in pool {
             guard let otherAngle = other["angle"] as? Int,
                   let otherUrlStr = other["url"] as? String,
@@ -1038,17 +1069,19 @@ actor PolestarAPI {
 
     func clearAccountState(keepRefreshToken: Bool = false) {
         sessionEpoch &+= 1
+        cancelImageDownloads()
+        webAuthorizationInProgress = false
+        invalidateCommandAuthorization()
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskID = nil
-        commandRefreshTask?.cancel()
-        commandRefreshTask = nil
-        commandRefreshTaskID = nil
         accessToken = nil
         tokenExpiry = nil
         if !keepRefreshToken { refreshToken = nil }
         cars = []
         identities = [:]
+        imagePreparationAttempts = [:]
+        ownerInfoPrepared = false
         carImages = [:]
         selectedVIN = nil
         ownerFirstName = nil
@@ -1115,7 +1148,7 @@ actor PolestarAPI {
         url.path == "/" ? "" : url.path
     }
 
-    private static func queryValue(_ name: String, from url: URL?) -> String? {
+    static func queryValue(_ name: String, from url: URL?) -> String? {
         guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         return components.queryItems?.first(where: { $0.name == name })?.value
     }
@@ -1196,6 +1229,9 @@ actor PolestarAPI {
     }
 
     static func isGlobalFailure(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let error = error as? URLError, error.code == .cancelled { return true }
+        if case PolestarError.network(let error) = error, error.code == .cancelled { return true }
         guard let error = error as? PolestarError else { return false }
         switch error {
         case .authenticationRequired, .rateLimited: return true
@@ -1217,16 +1253,28 @@ actor PolestarAPI {
         }
     }
 
-    static func capabilityCacheLifetime(_ feature: AppFeature, key: String) -> TimeInterval {
-        if key == "climate-status" {
-            return 15
+    static func capabilityReadingKey(_ feature: AppFeature, key: String? = nil) -> String {
+        if let key { return key }
+        switch feature {
+        case .remoteLocks, .remoteWindows: return AppFeature.exteriorStatus.rawValue
+        case .remoteOTA: return AppFeature.softwareUpdates.rawValue
+        case .remoteSchedules: return AppFeature.chargingSchedule.rawValue
+        case .remotePreCleaning: return AppFeature.airQuality.rawValue
+        default: return feature.rawValue
         }
-        if feature == .exteriorStatus || feature == .airQuality || feature == .vehicleLocation {
+    }
+
+    static func capabilityCacheLifetime(_ feature: AppFeature, key: String) -> TimeInterval {
+        let reading = capabilityReadingKey(feature, key: key == feature.rawValue ? nil : key)
+        if reading == "climate-status" { return 15 }
+        if reading == "amp-limit" || [AppFeature.exteriorStatus, .airQuality, .vehicleLocation,
+                                       .tripMeters, .connectivityDiagnostics].map(\.rawValue).contains(reading) {
             return 30
         }
-        if feature == .vehicleWeather {
-            return 300
-        }
+        if reading == "climate-timers" || reading == "charge-locations"
+            || reading == AppFeature.chargingSchedule.rawValue { return 60 }
+        if [AppFeature.vehicleWeather, .tyreAndWarnings, .vehicleHealth, .vehicleErrors]
+            .map(\.rawValue).contains(reading) { return 300 }
         return 60 * 60
     }
 

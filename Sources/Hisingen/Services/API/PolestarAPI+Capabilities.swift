@@ -8,9 +8,15 @@ extension PolestarAPI {
     }
 
     func optionalBattery(enabled: Bool, vin: String, token: String) async throws -> GrpcBatteryExtras? {
+        try Task.checkCancellation()
         guard enabled else { return nil }
-        do { return try await grpc.fetchBattery(vin: vin, accessToken: token) }
-        catch {
+        let epoch = sessionEpoch
+        do {
+            let value = try await grpc.fetchBattery(vin: vin, accessToken: token)
+            try requireSession(epoch)
+            return value
+        } catch {
+            try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             logger.debug("Optional live battery service unavailable")
             return nil
@@ -18,9 +24,15 @@ extension PolestarAPI {
     }
 
     func optionalAvailability(enabled: Bool, vin: String, token: String) async throws -> VehicleAvailability {
+        try Task.checkCancellation()
         guard enabled else { return .unknown }
-        do { return try await grpc.fetchAvailability(vin: vin, accessToken: token) }
-        catch {
+        let epoch = sessionEpoch
+        do {
+            let value = try await grpc.fetchAvailability(vin: vin, accessToken: token)
+            try requireSession(epoch)
+            return value
+        } catch {
+            try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             logger.debug("Optional availability service unavailable")
             return .unknown
@@ -28,17 +40,21 @@ extension PolestarAPI {
     }
 
     func targetSOC(enabled: Bool, vin: String, token: String) async throws -> Int? {
+        try Task.checkCancellation()
         guard enabled else { return nil }
+        let epoch = sessionEpoch
         if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
             return cached.value
         }
         let value: Int?
         do { value = try await grpc.fetchTargetSoc(vin: vin, accessToken: token) }
         catch {
+            try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             logger.debug("Optional target SOC service unavailable")
             value = nil
         }
+        try requireSession(epoch)
         targetCache[vin] = (value, Date())
         return value
     }
@@ -50,17 +66,20 @@ extension PolestarAPI {
         vin: String,
         operation: @Sendable () async throws -> Value?
     ) async throws -> OptionalCapability<Value> {
+        try Task.checkCancellation()
+        let epoch = sessionEpoch
         guard enabled else { return OptionalCapability(value: nil, unavailable: false) }
-        let cacheKey = key ?? feature.rawValue
+        let cacheKey = Self.capabilityReadingKey(feature, key: key)
         let scopedCacheKey = "\(vin)|\(cacheKey)"
         if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
             return OptionalCapability(value: cached.value as? Value, unavailable: false)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-            return OptionalCapability(value: nil, unavailable: false)
+            return OptionalCapability(value: nil, unavailable: true)
         }
         do {
             let value = try await operation()
+            try requireSession(epoch)
             capabilityBackoff[vin]?[cacheKey] = nil
             if value != nil {
                 capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
@@ -70,11 +89,12 @@ extension PolestarAPI {
             }
             return OptionalCapability(value: value, unavailable: false)
         } catch {
+            try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             let interval: TimeInterval
             // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle —
             // treat it like `incompatibleAPI` and stay away for hours, not minutes. (The gRPC
-            // layer also skips it outright for the rest of the process via `unimplementedReadPaths`.)
+            // layer also remembers the specific backend/VIN/path for 24 hours.)
             if case PolestarError.incompatibleAPI = error { interval = 6 * 60 * 60 }
             else if case PolestarError.grpcUnimplemented = error { interval = 6 * 60 * 60 }
             else if case PolestarError.invalidResponse = error { interval = 60 * 60 }

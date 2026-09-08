@@ -221,7 +221,7 @@ private actor StubProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { vins.first }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         vehicle(vin: vin, brand: brand)
     }

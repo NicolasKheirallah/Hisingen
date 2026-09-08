@@ -21,6 +21,71 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(merged.isLocked, true)
     }
 
+    /// Exterior field 16 is an independent `LockStatus tailgate_lock` upstream — it is not
+    /// derivable from field 12 (whether the tailgate is open) and must not be inferred.
+    @Test
+    func testTailgateLockDecodesIndependentlyOfTailgateOpenState() throws {
+        // Locked tailgate (2) with the tailgate open (1): two independent facts.
+        var payload = Data()
+        payload.append(Protobuf.intField(2, 2))
+        payload.append(Protobuf.intField(12, 1))
+        payload.append(Protobuf.intField(16, 2))
+        let exterior = try XCTUnwrap(PolestarGRPC.parseExterior(payload))
+        XCTAssertEqual(exterior.isTailgateLocked, true)
+        XCTAssertEqual(exterior.isTailgateOpen, true)
+        XCTAssertEqual(exterior.isLocked, true)
+
+        // Absent field 16 stays nil; enum 0/99 (unspecified/out of range) also stay nil.
+        let absent = try XCTUnwrap(PolestarGRPC.parseExterior(Protobuf.intField(2, 2)))
+        XCTAssertNil(absent.isTailgateLocked)
+        for raw in [0, 99] {
+            let unknown = try XCTUnwrap(PolestarGRPC.parseExterior(Protobuf.intField(2, 2) + Protobuf.intField(16, raw)))
+            XCTAssertNil(unknown.isTailgateLocked)
+        }
+    }
+
+    @Test
+    func testExteriorTimestampRetainedOnDigitalTwinShapeOnly() throws {
+        var payload = Data()
+        payload.append(Protobuf.messageField(1, timestamp(seconds: 1_780_000_000)))
+        payload.append(Protobuf.intField(2, 2))
+        payload.append(Protobuf.intField(3, 2))
+        let digitalTwin = try XCTUnwrap(PolestarGRPC.parseExterior(payload))
+        XCTAssertEqual(digitalTwin.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+
+        // Legacy shape: field 1 is the central-lock message, not a timestamp, so no
+        // reported time is fabricated there.
+        var legacy = Data()
+        var lock = Data()
+        lock.append(Protobuf.intField(1, 2))
+        legacy.append(Protobuf.messageField(1, lock))
+        var doorStatus = Data()
+        doorStatus.append(Protobuf.intField(2, 2))
+        var doors = Data()
+        doors.append(Protobuf.messageField(1, doorStatus))
+        legacy.append(Protobuf.messageField(2, doors))
+        let legacySnapshot = try XCTUnwrap(PolestarGRPC.parseExterior(legacy))
+        XCTAssertNil(legacySnapshot.reportedAt)
+        XCTAssertEqual(legacySnapshot.isLocked, true)
+    }
+
+    @Test
+    func testExteriorMergeCarriesTailgateLockAndReportedAt() throws {
+        let first = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .tailgate, state: .closed)],
+            isLocked: true, alarmTriggered: false, isTailgateLocked: true,
+            reportedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let second = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .frontLeftDoor, state: .closed)],
+            isLocked: nil, alarmTriggered: nil, isTailgateLocked: nil, reportedAt: nil
+        )
+        let merged = second.merging(previous: first)
+        XCTAssertEqual(merged.isTailgateLocked, true)
+        XCTAssertEqual(merged.reportedAt, Date(timeIntervalSince1970: 1_000))
+        XCTAssertEqual(merged.isLocked, true)
+    }
+
     @Test
     func testHealthParsesWarningsAndOnlyPositiveTyreMeasurements() {
         var payload = Data()
@@ -279,6 +344,27 @@ struct VehicleCapabilityParsingTests {
         XCTAssertEqual(diagnostics.energyUsedSinceChargeWh, 12_400)
     }
 
+    /// `Odometer` fields 5/6 are `average_speed_km_per_hour` / `average_speed_km_per_hour_automatic`
+    /// in the upstream schema (kildahldev cross-check, pypolestar PR 79); field 1 is the reading
+    /// timestamp. Since-charge fields 7/8 are schema-verified but were absent in the reference
+    /// capture, so they stay unparsed rather than named.
+    @Test
+    func testOdometerAverageSpeedsAndTimestampDecodeWithUnits() {
+        var odometer = Data()
+        odometer.append(Protobuf.messageField(1, timestamp(seconds: 1_780_000_000)))
+        odometer.append(Protobuf.intField(5, 62))
+        odometer.append(Protobuf.intField(6, 71))
+        let report = PolestarGRPC.parseOdometer(odometer)
+        XCTAssertEqual(report.manualAverageSpeedKmH, 62)
+        XCTAssertEqual(report.automaticAverageSpeedKmH, 71)
+        XCTAssertEqual(report.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+        // Absent fields stay nil — omission is never a zero speed.
+        let empty = PolestarGRPC.parseOdometer(Data())
+        XCTAssertNil(empty.manualAverageSpeedKmH)
+        XCTAssertNil(empty.automaticAverageSpeedKmH)
+        XCTAssertNil(empty.reportedAt)
+    }
+
     @Test
     func testVehicleStateCacheDecodesBeforeCapabilityFieldsExisted() throws {
         let original = vehicle()
@@ -393,17 +479,39 @@ struct VehicleCapabilityParsingTests {
 
     @Test
     func testHealthParsesSpecificLightFailures() {
+        // Labels follow the upstream Health schema: 14 = left brake light, 23 = left high
+        // beam, 26 = right low beam. Field 29 does not exist in the schema (the wire jumps
+        // 28 → 30), so no lamp is ever named for it.
         var payload = Data()
-        payload.append(Protobuf.intField(14, 2)) // Left low beam
-        payload.append(Protobuf.intField(17, 2)) // Right high beam
-        payload.append(Protobuf.intField(26, 2)) // Left brake light
+        payload.append(Protobuf.intField(14, 2)) // Left brake light
+        payload.append(Protobuf.intField(23, 2)) // Left high beam
+        payload.append(Protobuf.intField(26, 2)) // Right low beam
         let report = PolestarGRPC.parseHealth(payload)
         XCTAssertTrue(report.details.warnings.contains(.exteriorLight))
         XCTAssertTrue(report.details.reportedWarnings.contains(.exteriorLight))
         XCTAssertEqual(report.details.lightFailures.count, 3)
-        XCTAssertTrue(report.details.lightFailures.contains("Left low beam"))
-        XCTAssertTrue(report.details.lightFailures.contains("Right high beam"))
         XCTAssertTrue(report.details.lightFailures.contains("Left brake light"))
+        XCTAssertTrue(report.details.lightFailures.contains("Left high beam"))
+        XCTAssertTrue(report.details.lightFailures.contains("Right low beam"))
+    }
+
+    /// Health field 2 is `engine_hours_to_service` upstream, and the ServiceWarning enum
+    /// carries ENGINE_HOURS_* triggers — a real service-interval input even for a BEV.
+    @Test
+    func testHealthEngineHoursToServiceAndTimestampDecode() {
+        var payload = Data()
+        payload.append(Protobuf.messageField(1, timestamp(seconds: 1_780_000_000)))
+        payload.append(Protobuf.intField(2, 4_320))
+        payload.append(Protobuf.intField(3, 24))
+        payload.append(Protobuf.intField(4, 2_400))
+        let report = PolestarGRPC.parseHealth(payload)
+        XCTAssertEqual(report.engineHoursToService, 4_320)
+        XCTAssertEqual(report.daysToService, 24)
+        XCTAssertEqual(report.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+        // Absent field 2 stays nil; an explicit 0 is not promoted either.
+        let empty = PolestarGRPC.parseHealth(Protobuf.intField(3, 10))
+        XCTAssertNil(empty.engineHoursToService)
+        XCTAssertNil(empty.reportedAt)
     }
 
     @Test
@@ -586,6 +694,10 @@ struct VehicleCapabilityParsingTests {
         data.append(Protobuf.intField(1, hour))
         data.append(Protobuf.intField(2, minute))
         return data
+    }
+
+    private func timestamp(seconds: Int) -> Data {
+        Protobuf.intField(1, seconds)
     }
 }
 

@@ -2022,3 +2022,5 @@
 // English fallback values pending translation
 "Erase local history on sign out" = "Erase local history on sign out";
 "Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session." = "Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session.";
+
+"No update available" = "Kein Update verfügbar";

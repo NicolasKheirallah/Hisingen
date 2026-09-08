@@ -5,15 +5,17 @@ import Testing
 @MainActor
 struct PolestarWebSignInTests {
 
-    private func makeAPI() -> PolestarAPI {
+    private func makeAPI() async -> PolestarAPI {
         let keyService = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
         let keychain = KeychainStore(service: keyService)
-        return PolestarAPI(keychain: keychain)
+        let api = PolestarAPI(keychain: keychain)
+        await api.seedWebTestEndpoint()
+        return api
     }
 
     @Test
     func testBeginWebAuthorizationURLConstruction() async throws {
-        let api = makeAPI()
+        let api = await makeAPI()
 
         let (authURL, redirectURI) = try await api.beginWebAuthorization()
         XCTAssertEqual(redirectURI.absoluteString, "https://www.polestar.com/sign-in-callback")
@@ -33,7 +35,7 @@ struct PolestarWebSignInTests {
 
     @Test
     func testCompleteWebAuthorizationRejectsStateMismatch() async throws {
-        let api = makeAPI()
+        let api = await makeAPI()
         _ = try await api.beginWebAuthorization()
 
         let forgedCallback = URL(string: "https://www.polestar.com/sign-in-callback?code=testcode&state=wrongstate")!
@@ -52,10 +54,11 @@ struct PolestarWebSignInTests {
 
     @Test
     func testCompleteWebAuthorizationHandlesErrorParam() async throws {
-        let api = makeAPI()
-        _ = try await api.beginWebAuthorization()
+        let api = await makeAPI()
+        let (authorizeURL, _) = try await api.beginWebAuthorization()
+        let state = try #require(PolestarAPI.queryValue("state", from: authorizeURL))
 
-        let errorCallback = URL(string: "https://www.polestar.com/sign-in-callback?error=access_denied")!
+        let errorCallback = URL(string: "https://www.polestar.com/sign-in-callback?error=access_denied&state=\(state)")!
         do {
             try await api.completeWebAuthorization(callbackURL: errorCallback)
             XCTFail("Should have thrown permissionDenied")
@@ -67,5 +70,11 @@ struct PolestarWebSignInTests {
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
+    }
+}
+
+private extension PolestarAPI {
+    func seedWebTestEndpoint() {
+        authorizationEndpoint = URL(string: "https://polestarid.eu.polestar.com/as/authorization.oauth2")!
     }
 }

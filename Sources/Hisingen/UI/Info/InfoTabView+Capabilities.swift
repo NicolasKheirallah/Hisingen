@@ -41,6 +41,22 @@ extension InfoTabView {
                     if caps.supportsPlugAndCharge {
                         KVRow(L10n.text("Plug & Charge"), L10n.text("Supported"), symbol: "plug")
                     }
+                    if let sunroof = caps.supportsSunroofControl {
+                        KVRow(L10n.text("Sunroof Remote Control"),
+                              sunroof ? L10n.text("Reported supported") : L10n.text("Not reported"),
+                              symbol: "sun.max.trianglebadge.exclamationmark")
+                    }
+                    if let plate = caps.registrationPlate?.trimmingCharacters(in: .whitespacesAndNewlines), !plate.isEmpty {
+                        KVRow(L10n.text("Backend Registration Plate"), plate, symbol: "rectangle.inset.filled.badge.record")
+                    }
+                    if let linked = caps.userIsLinked {
+                        KVRow(L10n.text("Account Linked To Vehicle"),
+                              linked ? L10n.text("Yes") : L10n.text("No"), symbol: "person.2")
+                    }
+                    if let owner = caps.userIsOwner {
+                        KVRow(L10n.text("Account Owns Vehicle"),
+                              owner ? L10n.text("Yes") : L10n.text("No"), symbol: "person.crop.square.badge.checkmark")
+                    }
                     if caps.hasPerformanceSoftwareUpgrade {
                         KVRow(L10n.text("Performance Software Upgrade"), L10n.text("Available"), symbol: "gauge.with.needle.100percent.high")
                     }

@@ -155,6 +155,11 @@ struct BatteryDTO: Decodable {
 
     let estimatedChargingTimeToFullMinutes: FlexibleInt?
 
+    /// Backend-reported usable pack capacity in kWh (observed 78.0 on a MY2023 Polestar 2).
+    /// Feeds `VehicleState.reportedBatteryCapacityKwh`, which anchors battery-health estimates
+    /// and charge-energy calculations to the provider's own figure instead of a model table.
+    let reportedBatteryCapacityKwh: FlexibleDouble?
+
     let timestamp: TimestampDTO?
 }
 
@@ -312,11 +317,20 @@ struct TokenResponseDTO: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String?
     let expiresIn: Int
+    /// `token_type` from the IdP response. Always `Bearer` in practice; captured so a change
+    /// in grant type (e.g. a switch to DPoP-style tokens) becomes visible in diagnostics
+    /// instead of silently ignored.
+    let tokenType: String?
+    /// OIDC identity token. Present in live responses but unused for vehicle calls; captured
+    /// so its presence/absence is diagnosable. Never persisted or logged.
+    let idToken: String?
 
     private enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
+        case tokenType = "token_type"
+        case idToken = "id_token"
     }
 
     init(from decoder: Decoder) throws {
@@ -324,6 +338,8 @@ struct TokenResponseDTO: Decodable, Sendable {
         accessToken = try container.decode(String.self, forKey: .accessToken)
         refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
         expiresIn = try container.decode(FlexibleInt.self, forKey: .expiresIn).value
+        tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
+        idToken = try container.decodeIfPresent(String.self, forKey: .idToken)
     }
 }
 

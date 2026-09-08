@@ -11,7 +11,7 @@ extension InfoTabView {
         let latest = sw.latestAvailableVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasNewer = (latest?.isEmpty == false) && latest != installed
         let failed = sw.hasActionableFailure()
-        let stateLabel = (sw.rawState?.displayName ?? sw.state.displayName)
+        let stateLabel = sw.statusDisplayName
 
         var rows: [KVRow] = []
         if let installed, !installed.isEmpty {
@@ -33,6 +33,25 @@ extension InfoTabView {
         if let seconds = sw.estimatedInstallDurationSeconds, seconds > 0 {
             rows.append(KVRow(L10n.text("Estimated Install Time"),
                               Format.shortDuration(minutes: seconds / 60), symbol: "timer"))
+        }
+        if let relative = sw.scheduleRelativeMinutes, relative > 0 {
+            rows.append(KVRow(L10n.text("Installs In"),
+                              L10n.format("%d min", relative), symbol: "hourglass"))
+        }
+        if let qb = sw.qbCode?.trimmingCharacters(in: .whitespacesAndNewlines), !qb.isEmpty {
+            rows.append(KVRow(L10n.text("Build Code"), qb, symbol: "qrcode",
+                              info: L10n.text("Backend build-identification code. Often empty or redundant with the version string.")))
+        }
+        if let originator = sw.originator?.trimmingCharacters(in: .whitespacesAndNewlines), !originator.isEmpty {
+            rows.append(KVRow(L10n.text("Originator"), originator, symbol: "person.badge.key",
+                              info: L10n.text("Who authored the software schedule, as reported by the backend.")))
+        }
+        if let short = sw.shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !short.isEmpty {
+            rows.append(KVRow(L10n.text("Summary"), short, symbol: "doc.plaintext"))
+        }
+        if let long = sw.longDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !long.isEmpty {
+            rows.append(KVRow(L10n.text("Release Notes"),
+                              VehicleTabView.strippedReleaseNotes(long), symbol: "doc.richtext"))
         }
         if let updatedAt = sw.updatedAt {
             rows.append(KVRow(L10n.text("Status Reported"), Format.dateTimeFormatter.string(from: updatedAt), symbol: "clock"))
@@ -163,6 +182,13 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill",
                               info: L10n.text("Vehicle Calculation. Total high-voltage energy used by powertrain and HVAC since the last charge.")))
         }
+        for field in diag.unknownWireFields.sorted(by: { $0.field < $1.field }) {
+            let label = field.isBinary
+                ? L10n.format("Field %d (raw)", field.field)
+                : L10n.format("Field %d", field.field)
+            rows.append(KVRow(label, field.value, symbol: "curlybraces",
+                              info: L10n.text("Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.")))
+        }
         return rows
     }
 
@@ -188,6 +214,18 @@ extension InfoTabView {
         if let autoKm = state.tripMeterAutomaticKm {
             rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
         }
+        if let speed = state.tripManualAverageSpeedKmH, speed > 0 {
+            rows.append(KVRow(L10n.text("Average Speed (TM)"),
+                              Format.speed(kmH: speed, unit: preferences.distanceUnit),
+                              symbol: "gauge.with.needle",
+                              info: L10n.text("Vehicle Calculation. Average speed over the manual trip-meter period, reported by the odometer service.")))
+        }
+        if let speed = state.tripAutomaticAverageSpeedKmH, speed > 0 {
+            rows.append(KVRow(L10n.text("Average Speed (AT)"),
+                              Format.speed(kmH: speed, unit: preferences.distanceUnit),
+                              symbol: "gauge.with.needle",
+                              info: L10n.text("Vehicle Calculation. Average speed over the automatic trip-meter period, reported by the odometer service.")))
+        }
         if let electricKm = state.electricDistanceKm, electricKm > 0 {
             rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
         }
@@ -199,6 +237,11 @@ extension InfoTabView {
         }
         if let speed = state.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
+        }
+        if let speed = state.tripAutomaticAverageSpeedKmH, speed > 0 {
+            rows.append(KVRow(L10n.text("Average Speed (AT)"),
+                              Format.speed(kmH: speed, unit: preferences.distanceUnit),
+                              symbol: "gauge.with.needle.fill"))
         }
         if let odo = state.odometerKm {
             rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))

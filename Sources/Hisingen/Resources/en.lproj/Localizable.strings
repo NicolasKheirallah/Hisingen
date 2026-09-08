@@ -2027,3 +2027,5 @@
 "Alert if parked and unlocked after %02d:00" = "Alert if parked and unlocked after %02d:00";
 "The selected settings archive is larger than 1 MB." = "The selected settings archive is larger than 1 MB.";
 "Settings imported." = "Settings imported.";
+
+"No update available" = "No update available";

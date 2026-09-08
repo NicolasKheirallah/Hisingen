@@ -146,6 +146,42 @@ struct ExteriorSnapshot: Codable, Equatable, Sendable {
     var openings: [OpeningReading]
     var isLocked: Bool?
     var alarmTriggered: Bool?
+    /// Independent tailgate-lock status from `Exterior.tailgate_lock` (field 16).
+    /// Distinct from `isLocked` (central lock) and from `isTailgateOpen`; `nil` when
+    /// the backend did not report it. Defaults to `nil` so snapshots persisted before
+    /// this field existed still decode.
+    var isTailgateLocked: Bool? = nil
+    /// When the vehicle reported this exterior reading (`Exterior.timestamp`, field 1).
+    /// Only meaningful on the digital-twin response shape; `nil` otherwise and for
+    /// older persisted snapshots.
+    var reportedAt: Date? = nil
+
+    init(
+        openings: [OpeningReading],
+        isLocked: Bool?,
+        alarmTriggered: Bool?,
+        isTailgateLocked: Bool? = nil,
+        reportedAt: Date? = nil
+    ) {
+        self.openings = openings
+        self.isLocked = isLocked
+        self.alarmTriggered = alarmTriggered
+        self.isTailgateLocked = isTailgateLocked
+        self.reportedAt = reportedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case openings, isLocked, alarmTriggered, isTailgateLocked, reportedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        openings = try c.decode([OpeningReading].self, forKey: .openings)
+        isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
+        alarmTriggered = try c.decodeIfPresent(Bool.self, forKey: .alarmTriggered)
+        isTailgateLocked = try c.decodeIfPresent(Bool.self, forKey: .isTailgateLocked)
+        reportedAt = try c.decodeIfPresent(Date.self, forKey: .reportedAt)
+    }
 
     /// Whether the tailgate is currently open (or ajar).
     var isTailgateOpen: Bool {
@@ -178,7 +214,9 @@ struct ExteriorSnapshot: Codable, Equatable, Sendable {
         return ExteriorSnapshot(
             openings: merged,
             isLocked: isLocked ?? previous.isLocked,
-            alarmTriggered: alarmTriggered ?? previous.alarmTriggered
+            alarmTriggered: alarmTriggered ?? previous.alarmTriggered,
+            isTailgateLocked: isTailgateLocked ?? previous.isTailgateLocked,
+            reportedAt: reportedAt ?? previous.reportedAt
         )
     }
 }
@@ -403,6 +441,26 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     let updatedAt: Date?
     var installedVersion: String?
     var latestAvailableVersion: String?
+    /// True only after a successful OTA read reports no pending update.
+    var noUpdateAvailable: Bool?
+    /// Backend build-identification code (`CarSoftwareInfo` field 3). Observed empty or
+    /// redundant; captured so its presence stays visible.
+    var qbCode: String? = nil
+    /// Originator/author of the software schedule (`CarSoftwareInfo` field 11, observed
+    /// `SYSTEM`). Unconfirmed semantics; captured raw.
+    var originator: String? = nil
+    /// Short description from `CarSoftwareInfo` field 2 sub-field 2, when reported.
+    var shortDescription: String? = nil
+    /// Long (HTML) release description from `CarSoftwareInfo` field 2 sub-field 3. Observed
+    /// wrapped in `<textblock>` tags in live captures; stored verbatim.
+    var longDescription: String? = nil
+    /// Minutes-until-installation from `SchedulerService/GetSchedule` field 2
+    /// (`relative_time`). The backend encodes "idle/no schedule" as -2 on this field.
+    var scheduleRelativeMinutes: Int? = nil
+
+    var statusDisplayName: String {
+        noUpdateAvailable == true ? L10n.text("No update available") : (rawState?.displayName ?? state.displayName)
+    }
 
     init(
         version: String? = nil,
@@ -414,7 +472,13 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         scheduleSetBy: ScheduleSetBy? = nil,
         updatedAt: Date? = nil,
         installedVersion: String? = nil,
-        latestAvailableVersion: String? = nil
+        latestAvailableVersion: String? = nil,
+        noUpdateAvailable: Bool? = nil,
+        qbCode: String? = nil,
+        originator: String? = nil,
+        shortDescription: String? = nil,
+        longDescription: String? = nil,
+        scheduleRelativeMinutes: Int? = nil
     ) {
         self.version = version
         self.title = title
@@ -426,6 +490,12 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
         self.installedVersion = installedVersion
         self.latestAvailableVersion = latestAvailableVersion
+        self.noUpdateAvailable = noUpdateAvailable
+        self.qbCode = qbCode
+        self.originator = originator
+        self.shortDescription = shortDescription
+        self.longDescription = longDescription
+        self.scheduleRelativeMinutes = scheduleRelativeMinutes
     }
 
     /// Failed OTA states are backend event records, not a durable vehicle fault. Only surface
@@ -671,6 +741,11 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
     }
 
+    /// Whether a one-tap pre-clean toggle may be shown for this reading: the backend reported
+    /// a running status (6) at all, so the card reflects an actual purifier rather than a
+    /// guessed one. Command sending is still gated by capability profile and feature flags.
+    var canTogglePreCleaning: Bool { cleaningState != .unknown }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         cleaningState = try c.decode(AirCleaningState.self, forKey: .cleaningState)
@@ -711,6 +786,17 @@ enum ChargerPowerState: String, Codable, Sendable {
     }
 }
 
+/// One undecoded protobuf field from a Polestar response, preserved so nothing on the wire
+/// disappears silently. Semantics are intentionally unknown — values are shown raw in the
+/// diagnostics surfaces and reclassified as they are identified by live probing.
+struct PolestarRawWireField: Codable, Equatable, Sendable {
+    let field: Int
+    let wire: Int
+    let value: String
+    /// True when `value` is a hex dump of the bytes rather than a decoded scalar.
+    let isBinary: Bool
+}
+
 struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let timeToTargetMinutes: Int?
     let timeToMinimumSOCMinutes: Int?
@@ -721,6 +807,42 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// persisted snapshots without the key still decode.
     var averageConsumptionAutomatic: Double? = nil
     let energyUsedSinceChargeWh: Double?
+    /// Undecoded wire fields the battery service sent, captured raw by the provider layer
+    /// and surfaced in the battery-diagnostics card. Empty for Volvo and for snapshots
+    /// persisted before capture existed.
+    var unknownWireFields: [PolestarRawWireField] = []
+
+    init(timeToTargetMinutes: Int?, timeToMinimumSOCMinutes: Int?, chargerPowerState: ChargerPowerState,
+         averageConsumption: Double?, averageConsumptionSinceCharge: Double?,
+         averageConsumptionAutomatic: Double? = nil, energyUsedSinceChargeWh: Double?,
+         unknownWireFields: [PolestarRawWireField] = []) {
+        self.timeToTargetMinutes = timeToTargetMinutes
+        self.timeToMinimumSOCMinutes = timeToMinimumSOCMinutes
+        self.chargerPowerState = chargerPowerState
+        self.averageConsumption = averageConsumption
+        self.averageConsumptionSinceCharge = averageConsumptionSinceCharge
+        self.averageConsumptionAutomatic = averageConsumptionAutomatic
+        self.energyUsedSinceChargeWh = energyUsedSinceChargeWh
+        self.unknownWireFields = unknownWireFields
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case timeToTargetMinutes, timeToMinimumSOCMinutes, chargerPowerState
+        case averageConsumption, averageConsumptionSinceCharge, averageConsumptionAutomatic
+        case energyUsedSinceChargeWh, unknownWireFields
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        timeToTargetMinutes = try c.decodeIfPresent(Int.self, forKey: .timeToTargetMinutes)
+        timeToMinimumSOCMinutes = try c.decodeIfPresent(Int.self, forKey: .timeToMinimumSOCMinutes)
+        chargerPowerState = try c.decode(ChargerPowerState.self, forKey: .chargerPowerState)
+        averageConsumption = try c.decodeIfPresent(Double.self, forKey: .averageConsumption)
+        averageConsumptionSinceCharge = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionSinceCharge)
+        averageConsumptionAutomatic = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionAutomatic)
+        energyUsedSinceChargeWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedSinceChargeWh)
+        unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields) ?? []
+    }
 }
 
 struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
@@ -1024,6 +1146,22 @@ struct VehicleChronosError: Codable, Equatable, Sendable {
     /// Optional action code from the `Action` enum (field 2), when the sub-error has one
     /// (ChargeNow and ChargeLocation carry an action).
     let actionCode: Int?
+    /// Outer `GetErrorsResponse` field 1 — the backend record identity. Optional so
+    /// persisted snapshots without it still decode.
+    let recordID: String?
+    /// Outer `GetErrorsResponse` field 2 — VIN the record belongs to.
+    let vin: String?
+
+    /// Human label for the optional action code (ChargeNow/ChargeLocation sub-errors).
+    var actionDisplayName: String? {
+        guard let actionCode else { return nil }
+        switch actionCode {
+        case 0: return L10n.text("No action")
+        case 1: return L10n.text("Retry the request")
+        case 2: return L10n.text("Change the setting")
+        default: return L10n.format("Action %d", actionCode)
+        }
+    }
 
     enum Service: Int, Codable, Sendable {
         case ampLimit = 3
@@ -1067,14 +1205,24 @@ struct VehicleChronosError: Codable, Equatable, Sendable {
         }
     }
 
-    init(service: Service, errorCode: Code, actionCode: Int? = nil) {
+    init(service: Service, errorCode: Code, actionCode: Int? = nil,
+         recordID: String? = nil, vin: String? = nil) {
         self.service = service
         self.errorCode = errorCode
         self.actionCode = actionCode
+        self.recordID = recordID
+        self.vin = vin
     }
 }
 
+struct VehicleBackendIdentity: Codable, Equatable, Sendable {
+    let modelName: String?
+    let modelYear: String?
+    let market: String?
+}
+
 struct VehicleOTACapabilities: Codable, Equatable, Sendable {
+    let identity: VehicleBackendIdentity?
     /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
     /// installed version from the `Car.consumerSoftwareVersion` field — `GetSoftwareInfo`
     /// does not report the installed version during a rollout, only the target.
@@ -1119,8 +1267,19 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     let supportsAirPurificationRemoteStart: Bool
     /// Whether the vehicle supports plug & charge.
     let supportsPlugAndCharge: Bool
+    /// Whether the vehicle accepts remote sunroof open/close (`Locks.supportsSunroofControl`,
+    /// wire field 36→6). Optional so persisted snapshots from before this field decode.
+    let supportsSunroofControl: Bool?
+    /// Whether this account is linked to the vehicle (`MyCar.userIsLinked`, wire field 2).
+    let userIsLinked: Bool?
+    /// Whether this account owns the vehicle (`MyCar.userIsOwner`, wire field 3).
+    let userIsOwner: Bool?
+    /// Registration plate as reported by the backend (`MyCar.registrationPlate`, wire
+    /// field 4). Distinct source from the GraphQL `registrationNo`.
+    let registrationPlate: String?
 
     init(installedSoftwareVersion: String? = nil,
+         identity: VehicleBackendIdentity? = nil,
          supportsFullOtaUpdates: Bool = false,
          supportsRemoteOtaInstallSchedule: Bool = false,
          supportsCloudBasedOtaDownloadConsent: Bool = false,
@@ -1139,8 +1298,13 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
          targetChargeLevelPercentageMinLimit: Int = 0,
          supportsWindowsControl: Bool = false,
          supportsAirPurificationRemoteStart: Bool = false,
-         supportsPlugAndCharge: Bool = false) {
+         supportsPlugAndCharge: Bool = false,
+         supportsSunroofControl: Bool? = nil,
+         userIsLinked: Bool? = nil,
+         userIsOwner: Bool? = nil,
+         registrationPlate: String? = nil) {
         self.installedSoftwareVersion = installedSoftwareVersion
+        self.identity = identity
         self.supportsFullOtaUpdates = supportsFullOtaUpdates
         self.supportsRemoteOtaInstallSchedule = supportsRemoteOtaInstallSchedule
         self.supportsCloudBasedOtaDownloadConsent = supportsCloudBasedOtaDownloadConsent
@@ -1160,6 +1324,10 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
         self.supportsWindowsControl = supportsWindowsControl
         self.supportsAirPurificationRemoteStart = supportsAirPurificationRemoteStart
         self.supportsPlugAndCharge = supportsPlugAndCharge
+        self.supportsSunroofControl = supportsSunroofControl
+        self.userIsLinked = userIsLinked
+        self.userIsOwner = userIsOwner
+        self.registrationPlate = registrationPlate
     }
 }
 

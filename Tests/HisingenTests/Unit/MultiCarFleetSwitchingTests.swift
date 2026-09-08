@@ -110,7 +110,7 @@ struct MultiCarFleetSwitchingTests {
         cachedSnapshots[Self.volvoVin1] = vehicle(vin: Self.volvoVin1, brand: .volvo)
         cachedSnapshots[Self.volvoVin2] = vehicle(vin: Self.volvoVin2, brand: .volvo)
 
-        let available = StatusItemController.availableVehicleVINs(cars: cars, cachedSnapshots: cachedSnapshots)
+        let available = FleetSnapshot(cars: cars, snapshots: cachedSnapshots).vehicles
         XCTAssertEqual(available.count, 4)
         XCTAssertTrue(available.contains(Self.polestarVin1))
         XCTAssertTrue(available.contains(Self.polestarVin2))
@@ -162,7 +162,7 @@ private actor MockFleetProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { vins.first }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState { vehicle(vin: vin, brand: brand) }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         RemoteCommandResult(outcome: .completed, message: nil)

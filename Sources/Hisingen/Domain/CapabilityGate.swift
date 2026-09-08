@@ -7,6 +7,10 @@ enum CommandAvailability: Equatable, Sendable {
     case unimplementedByProvider
     case unavailableWhileBusy
     case unavailableUntilRefresh
+    /// The backend explicitly reports the signed-in account is not the vehicle's owner
+    /// (`GetMyCars.userIsOwner == false`). Distinct from "unknown" — an absent flag never
+    /// blocks a command.
+    case notVehicleOwner
 
     var isAvailable: Bool { self == .available }
 
@@ -27,6 +31,8 @@ enum CommandAvailability: Equatable, Sendable {
             return L10n.text("Another remote command is still running.")
         case .unavailableUntilRefresh:
             return L10n.text("Refresh vehicle data before sending a command.")
+        case .notVehicleOwner:
+            return L10n.text("The vehicle reports this account as not being its owner. Owner commands are disabled.")
         }
     }
 }
@@ -44,6 +50,7 @@ struct CapabilityGate: Sendable {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard command.isImplemented(by: brand) else { return .unimplementedByProvider }
         guard state.capabilityProfile.permits(command.requiredCapability) else { return .unsupportedByVehicle }
+        guard state.accountOwnsVehicle != false else { return .notVehicleOwner }
         guard Date().timeIntervalSince(state.fetchedAt) < 10 * 60 else { return .unavailableUntilRefresh }
         guard !commandInProgress else { return .unavailableWhileBusy }
         return .available

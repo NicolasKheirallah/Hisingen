@@ -38,7 +38,7 @@ sequenceDiagram
 Notes on that sequence:
 
 - **The UI renders twice before real data arrives.** Once immediately with whatever `VehicleStateStore` has cached for the active VIN (so the menu bar never shows a blank icon), then again once `RefreshCoordinator` produces a live `VehicleState`.
-- **`resumeStoredSession()` branches per brand.** For Polestar it needs `Preferences.email` non-empty and either a Keychain session token or a Keychain password. For Volvo it needs client ID (Preferences) + client secret + VCC API key + session token (all Keychain), and it `configure()`s `VolvoAPI` inside a `Task` before starting the coordinator, since that's an async call.
+- **Stored-session resume goes through `SessionManager`.** The session controller starts the coordinator with a preferred VIN. The coordinator delegates credential resolution and provider configuration to `SessionManager.restore`, which is also used by connection tests and dormant-brand scans. A Polestar token can restore without an email; password authentication requires both. Volvo requires its developer credentials and session token, with built-in developer keys used when no override exists.
 - **If no session can be resumed**, `RefreshCoordinator` never starts and `HisingenContentView` renders `WelcomeSignInView` instead of the tab bar.
 - **`cacheDormantBrandSnapshot()`** exists so that if the user has both a Polestar and a Volvo session stored, switching brands shows the other brand's last-known snapshot immediately instead of a blank/loading state.
 

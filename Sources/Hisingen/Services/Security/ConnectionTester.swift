@@ -31,13 +31,8 @@ final class ConnectionTester {
         }
         let start = Date()
         do {
-            let providerCars: [CarSummary]
-            switch brand {
-            case .polestar:
-                providerCars = try await sessionManager.restorePolestarSession(api: polestarAPI, preferences: preferences)
-            case .volvo:
-                providerCars = try await sessionManager.restoreVolvoSession(api: volvoAPI, preferences: preferences)
-            }
+            let provider: any VehicleProviding = brand == .volvo ? volvoAPI : polestarAPI
+            let providerCars = try await sessionManager.restore(api: provider, preferences: preferences)
             guard !providerCars.isEmpty else {
                 return (false, L10n.text("Signed in, but no vehicles were returned."))
             }

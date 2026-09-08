@@ -15,6 +15,10 @@ struct GrpcBatteryExtras: Codable, Equatable, Sendable {
     let chargingCurrentAmps: Int?
     let chargingVoltageVolts: Int?
     let diagnostics: BatteryDiagnostics
+    /// Backend-reported usable pack capacity in kWh (field 12 in live captures).
+    let reportedBatteryCapacityKwh: Double?
+    /// Every wire field this parser does not decode semantically, captured raw.
+    let unknownFields: [PolestarRawWireField]
 }
 
 struct PolestarInFlightRequest<Value: Sendable>: Sendable {
@@ -53,13 +57,13 @@ actor PolestarGRPC {
     /// server expects an ongoing connection.
     var useStreaming = false
 
-    /// Full gRPC paths (`service/Method`) that answered a read with status 12 UNIMPLEMENTED.
-    /// Not deployed for this backend/vehicle, so they are skipped for 24 hours rather than
+    /// Backend/VIN/path keys that answered a read with status 12 UNIMPLEMENTED.
+    /// They are skipped for this vehicle and backend for 24 hours rather than
     /// re-attempted — and failing — on every refresh. The expiry lets a newly deployed backend
     /// capability recover without requiring the user to clear defaults.
     var unimplementedReadPaths: Set<String>
     var unimplementedReadPathExpirations: [String: Date]
-    private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v2"
+    private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v3"
     private static let legacyUnimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
     private static let unimplementedReadPathTTL: TimeInterval = 24 * 60 * 60
     private let defaults: UserDefaults
@@ -88,23 +92,37 @@ actor PolestarGRPC {
 
     /// Applies `readStatusError` and, for UNIMPLEMENTED, remembers the path so it is not
     /// retried. Call from every read helper's non-zero-status branch.
-    func readStatusFailure(status: String, path: String) -> PolestarError {
+    func readStatusFailure(status: String, path: String, vin: String, base: URL) -> PolestarError {
         let error = Self.readStatusError(status: status, path: path)
+        let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
         if case .grpcUnimplemented = error,
-           unimplementedReadPaths.insert(path).inserted {
-            unimplementedReadPathExpirations[path] = Date().addingTimeInterval(Self.unimplementedReadPathTTL)
+           unimplementedReadPaths.insert(key).inserted {
+            unimplementedReadPathExpirations[key] = Date().addingTimeInterval(Self.unimplementedReadPathTTL)
             persistUnimplementedReadPaths()
         }
         return error
     }
 
-    private func isReadPathUnimplemented(_ path: String) -> Bool {
-        guard unimplementedReadPaths.contains(path) else { return false }
-        if let expiry = unimplementedReadPathExpirations[path], expiry > Date() { return true }
-        unimplementedReadPaths.remove(path)
-        unimplementedReadPathExpirations[path] = nil
+    static func readCapabilityKey(path: String, vin: String, base: URL) -> String {
+        "\(base.absoluteString)|\(vin)|\(path)"
+    }
+
+    func isReadPathUnimplemented(_ path: String, vin: String, base: URL) -> Bool {
+        let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
+        guard unimplementedReadPaths.contains(key) else { return false }
+        if let expiry = unimplementedReadPathExpirations[key], expiry > Date() { return true }
+        unimplementedReadPaths.remove(key)
+        unimplementedReadPathExpirations[key] = nil
         persistUnimplementedReadPaths()
         return false
+    }
+
+    static func canTryAlternativeEndpoint(after error: Error) -> Bool {
+        switch error as? PolestarError {
+        case .grpcUnimplemented, .incompatibleAPI: return true
+        case .client(let status): return status == 404 || status == 405
+        default: return false
+        }
     }
 
     private func persistUnimplementedReadPaths() {
@@ -274,25 +292,22 @@ actor PolestarGRPC {
     }
     let session: URLSession
 
-    init(defaultsSuiteName: String? = nil) {
+    init(defaultsSuiteName: String? = nil, session: URLSession? = nil) {
         self.defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
         let defaults = self.defaults
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
-        session = URLSession(configuration: config)
+        self.session = session ?? URLSession(configuration: config)
         let now = Date()
         let persisted = (defaults.dictionary(forKey: Self.unimplementedReadPathsKey)
             as? [String: Double] ?? [:]).compactMapValues { epoch -> Date? in
                 let expiry = Date(timeIntervalSince1970: epoch)
                 return expiry > now ? expiry : nil
             }
-        var expirations = persisted
-        // One-time migration of the former unbounded set: retain its suppression benefit,
-        // but give every entry a recovery horizon.
-        for path in defaults.stringArray(forKey: Self.legacyUnimplementedReadPathsKey) ?? [] {
-            expirations[path] = now.addingTimeInterval(Self.unimplementedReadPathTTL)
-        }
+        let expirations = persisted
+        // Old entries have no vehicle or backend scope and cannot be reused safely.
+        defaults.removeObject(forKey: "polestar_unimplemented_grpc_paths_v2")
         defaults.removeObject(forKey: Self.legacyUnimplementedReadPathsKey)
         unimplementedReadPathExpirations = expirations
         unimplementedReadPaths = Set(expirations.keys)
@@ -452,10 +467,11 @@ actor PolestarGRPC {
 
     func firstMessage(path: String, message: Data, vin: String,
                       accessToken: String, host: GRPCHost = .c3) async throws -> Data {
-        if isReadPathUnimplemented(path) {
+        try Task.checkCancellation()
+        let base = try await resolvedHost(host, accessToken: accessToken)
+        if isReadPathUnimplemented(path, vin: vin, base: base) {
             throw PolestarError.grpcUnimplemented(service: path.split(separator: "/").first.map(String.init) ?? path)
         }
-        let base = try await resolvedHost(host, accessToken: accessToken)
         var request = URLRequest(url: base.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
@@ -483,11 +499,11 @@ actor PolestarGRPC {
             if http.statusCode == 401 || http.statusCode == 403 {
                 throw PolestarError.authenticationRequired(.expiredSession)
             }
-            guard http.statusCode == 200 else {
-                throw PolestarError.server(statusCode: http.statusCode)
-            }
+            if let failure = PolestarError.httpFailure(
+                statusCode: http.statusCode, retryAfter: PolestarAPI.retryAfter(from: http), operation: path
+            ) { throw failure }
             if let grpcStatus, grpcStatus != "0" {
-                throw readStatusFailure(status: grpcStatus, path: path)
+                throw readStatusFailure(status: grpcStatus, path: path, vin: vin, base: base)
             }
 
             var header = [UInt8]()
@@ -684,6 +700,10 @@ actor PolestarGRPC {
     }
 
 
+    /// Wire fields of the battery message whose meaning is not yet established. Kept in one
+    /// place so the unknown-field capture and the coverage doc stay in agreement.
+    static let unmappedBatteryFields: Set<Int> = [8, 12, 14, 15, 20, 21, 22, 23, 24, 25, 27, 28]
+
     static func parseBattery(_ data: Data) -> GrpcBatteryExtras {
         var reportedAt: Date?
         var battery: Double?, range: Int?, minutes: Int?
@@ -693,6 +713,8 @@ actor PolestarGRPC {
         var timeToTarget: Int?, timeToMinimumSOC: Int?
         var averageConsumption: Double?, averageSinceCharge: Double?, energySinceCharge: Double?
         var powerState: ChargerPowerState = .unknown
+        var capacityKwh: Double?
+        var unknownFields: [PolestarRawWireField] = []
         for field in Protobuf.fields(data) {
             switch field.number {
             case 1 where field.wire == 2:
@@ -758,7 +780,13 @@ actor PolestarGRPC {
                 case 5: powerState = .fault
                 default: break
                 }
-            default: break
+            case 12 where field.wire == 1:
+                // Live-observed capacity field; kept raw (not range-filtered) so a future
+                // change of meaning is visible rather than clamped away.
+                capacityKwh = Protobuf.double(from: field.data)
+            default:
+                guard Self.unmappedBatteryFields.contains(field.number) else { break }
+                unknownFields.append(Self.rawField(field))
             }
         }
         return GrpcBatteryExtras(reportedAt: reportedAt,
@@ -778,7 +806,31 @@ actor PolestarGRPC {
                                     averageConsumption: averageConsumption.flatMap { $0 > 0 ? $0 : nil },
                                     averageConsumptionSinceCharge: averageSinceCharge.flatMap { $0 > 0 ? $0 : nil },
                                     energyUsedSinceChargeWh: energySinceCharge.flatMap { $0 > 0 ? $0 : nil }
-                                 ))
+                                 ),
+                                 reportedBatteryCapacityKwh: capacityKwh.flatMap { $0 > 0 ? $0 : nil },
+                                 unknownFields: unknownFields)
+    }
+
+    /// Preserves an undecoded field as inspectable text: scalars as their value, wire-type 2
+    /// as a hex dump. Nothing here is interpreted; this exists so live captures can be
+    /// classified later and so support bundles show what the backend actually sent.
+    static func rawField(_ field: Protobuf.Field) -> PolestarRawWireField {
+        switch field.wire {
+        case 0:
+            return PolestarRawWireField(field: field.number, wire: field.wire,
+                                value: String(field.varint), isBinary: false)
+        case 1:
+            return PolestarRawWireField(field: field.number, wire: field.wire,
+                                value: String(describing: Protobuf.double(from: field.data) ?? 0),
+                                isBinary: false)
+        case 5:
+            return PolestarRawWireField(field: field.number, wire: field.wire,
+                                value: String(describing: Protobuf.float(from: field.data) ?? 0),
+                                isBinary: false)
+        default:
+            let hex = field.data.map { String(format: "%02x", $0) }.joined()
+            return PolestarRawWireField(field: field.number, wire: field.wire, value: hex, isBinary: true)
+        }
     }
 
     private static func unavailableReason(_ value: UInt64?) -> String? {
@@ -789,7 +841,15 @@ actor PolestarGRPC {
         case 4: return L10n.text("Software update in progress")
         case 5: return L10n.text("Tracking in progress")
         case 6: return L10n.text("Service mode")
-        default: return nil
+        // Transport-level value observed in live captures; shown raw so it stays visible.
+        case 7: return L10n.text("Transport error")
+        default:
+            // An unmapped reason is preserved as its number rather than dropped, so a new
+            // backend value is diagnosable instead of rendering as "just unavailable".
+            if let value, value > 6 {
+                return L10n.format("Unknown reason (%d)", Int(value))
+            }
+            return nil
         }
     }
 }

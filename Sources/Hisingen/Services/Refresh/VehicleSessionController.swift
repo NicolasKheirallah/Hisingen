@@ -6,25 +6,19 @@ import Foundation
 /// the shell owns the status item, notifier, and mini-panel that a refresh has to poke.
 @MainActor
 protocol VehicleSessionControllerContext: AnyObject {
-    /// The shell's cached snapshot for a VIN — used by brand resolution and to re-seed the
-    /// display when switching brands.
-    func cachedSnapshot(forVIN vin: String) -> VehicleState?
     /// Re-render everything from the controller's current state.
     func sessionStateDidChange()
 
     func showLoading()
     func setActiveVIN(_ vin: String?)
-    func setFleet(_ cars: [CarSummary], activeVIN: String?)
-    /// Back-fill the shell's snapshot cache from persistence for any car it does not have yet.
-    func fillSnapshotCache(for cars: [CarSummary])
-    /// Cache dormant-brand snapshots (launch, and after a brand switch).
-    func cacheFleetSnapshots()
 
     /// A fresh telemetry snapshot arrived: mini-panel, anomaly check, notifier, snapshot cache.
     func didReceiveVehicleState(_ state: VehicleState)
     func authenticationRequired()
     func authenticationSucceeded()
     func vehicleSwitchDidPause()
+    /// Reconcile settings after brand adoption and before restarting the session.
+    func sessionCredentialsDidChange()
     /// A session was (re)established — schedule the background garage scan.
     func sessionDidEstablish()
 }
@@ -42,8 +36,10 @@ final class VehicleSessionController {
     private let stateStore: VehicleStateStore
     private let imageCache: CarImageCache
     private let sessionManager: SessionManager
-    private let polestarAPI: PolestarAPI
-    private let volvoAPI: VolvoAPI
+    private let fleetStore: FleetStore
+    private let observesEnvironment: Bool
+    private let polestarAPI: any VehicleProviding
+    private let volvoAPI: any VehicleProviding
     private weak var context: (any VehicleSessionControllerContext)?
 
     private var refreshCoordinator: RefreshCoordinator
@@ -69,18 +65,22 @@ final class VehicleSessionController {
          stateStore: VehicleStateStore,
          imageCache: CarImageCache,
          sessionManager: SessionManager,
-         polestarAPI: PolestarAPI,
-         volvoAPI: VolvoAPI) {
+         polestarAPI: any VehicleProviding,
+         volvoAPI: any VehicleProviding, fleetStore: FleetStore,
+         observesEnvironment: Bool = true) {
         self.context = context
         self.preferences = preferences
         self.stateStore = stateStore
         self.imageCache = imageCache
         self.sessionManager = sessionManager
+        self.fleetStore = fleetStore
+        self.observesEnvironment = observesEnvironment
         self.polestarAPI = polestarAPI
         self.volvoAPI = volvoAPI
         let provider: any VehicleProviding = preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
         self.refreshCoordinator = RefreshCoordinator(
-            api: provider, stateStore: stateStore, imageCache: imageCache, preferences: preferences)
+            api: provider, stateStore: stateStore, observesEnvironment: observesEnvironment,
+            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager)
         connectCoordinator()
     }
 
@@ -93,19 +93,18 @@ final class VehicleSessionController {
         let vin = preferences.vin(for: preferences.activeBrand)
         let nickname = preferences.vehicleNickname(for: vin)
         if !vin.isEmpty {
-            context?.setFleet(
+            setFleet(
                 [CarSummary(vin: vin, title: nickname.isEmpty ? preferences.activeBrand.displayName : nickname)],
                 activeVIN: vin)
         }
         sessionValid = authenticated
-        latest = vin.isEmpty ? nil : stateStore.snapshot(for: vin)
+        latest = vin.isEmpty ? nil : fleetStore.snapshot(for: vin)
         context?.sessionStateDidChange()
     }
 
-    /// Kicks off the stored-session restore and caches dormant-brand snapshots.
+    /// Kicks off stored-session restoration.
     func resume() {
         resumeStoredSession()
-        context?.cacheFleetSnapshots()
     }
 
     // MARK: - Passthroughs
@@ -128,10 +127,7 @@ final class VehicleSessionController {
 
     func resolvedBrand(for vin: String) -> VehicleBrand {
         let upper = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if let snapshot = context?.cachedSnapshot(forVIN: upper) {
-            return snapshot.model.brand
-        }
-        if let snapshot = stateStore.snapshot(for: upper) {
+        if let snapshot = fleetStore.snapshot(for: upper) {
             return snapshot.model.brand
         }
         if !preferences.vin(for: .volvo).isEmpty && upper == preferences.vin(for: .volvo).uppercased() {
@@ -175,62 +171,17 @@ final class VehicleSessionController {
         resumeStoredSession()
     }
 
-    /// Settings "Polestar credentials changed", phase 1: adopt the Polestar brand. Returns
-    /// whether the active brand actually changed — phase 2 needs that, and it must be sampled
-    /// *before* the switch. The caller runs its own launch-at-login / notifier / updater
-    /// reconciliation between the two phases, exactly as the pre-extraction code did.
-    @discardableResult
-    func switchToPolestarForCredentialChange() -> Bool {
-        let switchedFromAnotherBrand = preferences.activeBrand != .polestar
-        switchActiveBrand(to: .polestar)
-        return switchedFromAnotherBrand
-    }
-
-    /// Settings "Polestar credentials changed", phase 2: either resume from a stored token or
-    /// push the freshly entered credentials into the coordinator.
-    func resumeAfterCredentialChange(switchedFromAnotherBrand: Bool) {
-        // Deliberately reads the raw stored password rather than
-        // `sessionManager.polestarCredentials()` — that helper suppresses the password whenever
-        // a token exists, but here a freshly saved password must take priority over any stale
-        // token so the coordinator actually exercises it.
-        let password = ((try? Keychain.readPassword()) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
-        if switchedFromAnotherBrand, password == nil {
-            resumeStoredSession()
-        } else {
-            refreshCoordinator.credentialsChanged(
-                email: preferences.email,
-                password: password,
-                preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin
-            )
-        }
+    /// Adopts the account, reconciles app settings, then restarts with the new credentials.
+    func credentialsDidChange(for brand: VehicleBrand) {
+        switchActiveBrand(to: brand)
+        context?.sessionCredentialsDidChange()
+        refreshCoordinator.credentialsChanged(
+            preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin)
     }
 
     private func resumeStoredSession(targetVin: String? = nil) {
-        let vinToUse = targetVin ?? (preferences.vin.isEmpty ? nil : preferences.vin)
-        switch preferences.activeBrand {
-        case .polestar:
-            guard !preferences.email.isEmpty else { return }
-            let (sessionToken, password) = sessionManager.polestarCredentials()
-            guard sessionToken != nil || password != nil else { return }
-            refreshCoordinator.start(
-                email: preferences.email, password: password, sessionToken: sessionToken,
-                preferredVIN: vinToUse
-            )
-        case .volvo:
-            guard let credentials = sessionManager.volvoCredentials(preferences: preferences) else { return }
-            Task { [weak self] in
-                guard let self else { return }
-                await volvoAPI.configure(clientID: credentials.clientID,
-                                          clientSecret: credentials.clientSecret,
-                                          vccApiKey: credentials.apiKey)
-
-                guard preferences.activeBrand == .volvo else { return }
-                refreshCoordinator.start(
-                    email: "", password: nil, sessionToken: credentials.sessionToken,
-                    preferredVIN: vinToUse
-                )
-            }
-        }
+        refreshCoordinator.start(
+            preferredVIN: targetVin ?? (preferences.vin.isEmpty ? nil : preferences.vin))
     }
 
     private func switchActiveBrand(to brand: VehicleBrand, targetVin: String? = nil, force: Bool = false) {
@@ -244,16 +195,21 @@ final class VehicleSessionController {
         sessionValid = preferences.hasResumableSession(for: brand)
         let vin = preferences.vin(for: brand)
         let nick = preferences.vehicleNickname(for: vin)
-        latest = vin.isEmpty ? nil : (context?.cachedSnapshot(forVIN: vin) ?? stateStore.snapshot(for: vin))
+        latest = vin.isEmpty ? nil : fleetStore.snapshot(for: vin)
         lastError = nil
-        context?.setFleet(
+        setFleet(
             vin.isEmpty ? [] : [CarSummary(vin: vin, title: nick.isEmpty ? brand.displayName : nick)],
             activeVIN: vin.isEmpty ? nil : vin)
         refreshCoordinator = RefreshCoordinator(
-            api: activeProvider, stateStore: stateStore, imageCache: imageCache, preferences: preferences)
+            api: activeProvider, stateStore: stateStore, observesEnvironment: observesEnvironment,
+            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager)
         connectCoordinator()
         context?.sessionStateDidChange()
-        context?.cacheFleetSnapshots()
+    }
+
+    private func setFleet(_ cars: [CarSummary], activeVIN: String?) {
+        fleetStore.updateCars(cars)
+        context?.setActiveVIN(activeVIN)
     }
 
     // MARK: - RefreshCoordinator wiring
@@ -268,8 +224,7 @@ final class VehicleSessionController {
         }
         refreshCoordinator.onCars = { [weak self] cars, vin in
             guard let self else { return }
-            self.context?.setFleet(cars, activeVIN: vin)
-            self.context?.fillSnapshotCache(for: cars)
+            self.setFleet(cars, activeVIN: vin)
         }
         // The garage scan belongs to session establishment only. It previously hung off
         // `onCars`, which vehicle switches also fired — so every switch scheduled a full scan
@@ -313,10 +268,11 @@ final class VehicleSessionController {
         }
         let clearVehicles: () -> Void = { [weak self] in
             guard let self else { return }
+            self.fleetStore.forget(brand: self.preferences.activeBrand)
             self.latest = nil
             self.lastError = nil
             self.sessionValid = false
-            self.context?.setFleet([], activeVIN: nil)
+            self.setFleet([], activeVIN: nil)
             self.context?.sessionStateDidChange()
         }
         refreshCoordinator.onSignedOut = clearVehicles

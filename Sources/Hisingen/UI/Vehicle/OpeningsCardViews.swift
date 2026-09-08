@@ -85,6 +85,7 @@ struct OpeningChipView: View {
 struct DoorsAndOpeningsCardView: View {
     let ext: ExteriorSnapshot
     let isLocked: Bool?
+    var isTailgateLocked: Bool? = nil
 
     @State private var hoveredOpening: VehicleOpening? = nil
 
@@ -118,6 +119,13 @@ struct DoorsAndOpeningsCardView: View {
                             text: isLocked ? L10n.text("All Closed & Locked") : L10n.text("All Closed"),
                             color: isLocked ? HisingenTheme.semanticGood : .secondary,
                             symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                        )
+                    }
+                    if let isTailgateLocked {
+                        Pill(
+                            text: isTailgateLocked ? L10n.text("Tailgate locked") : L10n.text("Tailgate unlocked"),
+                            color: isTailgateLocked ? HisingenTheme.semanticGood : .orange,
+                            symbol: isTailgateLocked ? "lock.fill" : "lock.open.fill"
                         )
                     }
                 }

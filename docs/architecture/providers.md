@@ -20,18 +20,21 @@
 protocol VehicleProviding: Sendable {
     var brand: VehicleBrand { get }
     var cars: [CarSummary] { get async }
+    var hasWarmSession: Bool { get async }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws
     func resetSession() async
     func signOut() async throws
     func resolvedVIN(preferred: String?) async -> String?
-    func selectCar(vin: String, features: FeatureSelection) async throws
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
 }
 ```
 
-Nine methods. `PolestarAPI` and `VolvoAPI` each conform via a one-line `extension` in `VehicleProviding.swift` — the protocol itself carries no default implementations. This is the entire seam: everything above it (`RefreshCoordinator`, `AppDelegate`, all of `UI/`) only ever calls through this interface, and never imports a Polestar- or Volvo-specific type.
+`PolestarAPI` and `VolvoAPI` are the two production adapters at this seam. Refresh, vehicle switching, and garage scanning fetch directly by VIN without a preceding selection call. Polestar prepares identity, artwork, and owner information inside the fetch implementation; discovery retains identities for every returned vehicle. Volvo already loads details by VIN. Explicit metadata reload remains a separate operation.
+
+`VehicleSessionController` owns the user's selected brand and VIN. `SessionManager.restore` owns stored credential resolution, Volvo configuration, and authentication fallback for foreground refresh, connection tests, and dormant-brand scans. Routine resume prefers the stored token; a credential change prefers a newly stored Polestar password. Only authentication failures permit password fallback, and a successful password sign-in deletes the stored password. Interactive browser sign-in remains in `SignInCoordinator`.
 
 ## What's genuinely shared
 
@@ -59,3 +62,19 @@ Documented honestly rather than smoothed over:
 ## Adding a third provider
 
 See [development/adding-a-provider.md](../development/adding-a-provider.md) for what implementing `VehicleProviding` for a new brand actually requires, and which of the "shared" pieces above you get for free.
+
+### Polestar authentication lifecycle
+
+Interactive web and command grants invalidate earlier work before issuing a new PKCE request. Session and command generations prevent late token responses from overwriting a newer login. Background restoration waits until the interactive web flow has finished or been cancelled.
+
+Command access is enabled only after authenticated userinfo responses identify the same account for both clients: matching subjects, or matching verified email addresses when subjects are pairwise. Identity checks fail closed if neither comparison is available. Stored command sessions are verified again after restoration. Refresh-token rotation is retained in memory when verification or Keychain persistence is temporarily unavailable; storage failures are reported to the caller.
+
+Sign-out clears local tokens, passwords, pending requests, and displayed account state before attempting remote revocation. Revocation uses a separate transport and cannot clear a later login.
+
+The embedded browser owns an isolated cookie store per attempt. If a website login lands on polestar.com without returning the app's callback, it retries the original authorization URL once using the same cookies, state, and PKCE challenge. This addresses the lost browser handoff reported in [issue #19](https://github.com/NicolasKheirallah/Hisingen/issues/19); confirmation against an affected account remains necessary. A stored password alone does not mark the Settings account as connected.
+
+### Polestar capability reads
+
+Optional reads check the session generation before returning data or updating caches. Cancellation does not create capability backoff, and a capability remains unavailable while its backoff is active. Exterior status, trip meters, connectivity, and charging-current limits use 30-second caches; climate status uses 15 seconds, schedules use 60 seconds, and slower metadata retains longer lifetimes. Feature aliases share the cache for the underlying reading.
+
+Location and weather endpoint fallbacks stop on authentication, rate limiting, cancellation, and transport failures. Unsupported endpoints can try an alternative. HTTP 429 preserves Retry-After. Persistent UNIMPLEMENTED records are scoped by backend URL, VIN, and RPC path, expire after 24 hours, and do not inherit the former unscoped records.

@@ -23,14 +23,12 @@ struct RefreshCoordinatorTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            clearPasswordAfterSession: {},
-            readStoredSessionToken: { nil },
-            readStoredPassword: { nil }
+            sessionManager: SessionManager(readToken: { _ in "test-session" },
+                                           readPassword: { nil }, clearPassword: {})
         )
         await withCheckedContinuation { continuation in
             coordinator.onState = { _ in continuation.resume() }
-            coordinator.start(email: "test@example.invalid", password: nil,
-                              sessionToken: "test-session", preferredVIN: "YSMTEST")
+            coordinator.start(preferredVIN: "YSMTEST")
             coordinator.refreshNow()
             coordinator.refreshNow()
         }
@@ -58,10 +56,8 @@ struct RefreshCoordinatorTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            clearPasswordAfterSession: {},
-            // Simulates the Keychain-backed token that outlives a successful session.
-            readStoredSessionToken: { storedToken },
-            readStoredPassword: { nil },
+            sessionManager: SessionManager(readToken: { _ in storedToken },
+                                           readPassword: { nil }, clearPassword: {}),
             // Collapse production backoff (minutes at the top of its curve) so the
             // expiry→recovery cycle completes in milliseconds.
             retryDelay: { _, _, _ in 0.05 }
@@ -69,8 +65,7 @@ struct RefreshCoordinatorTests {
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             coordinator.onState = { _ in continuation.resume() }
-            coordinator.start(email: "test@example.invalid", password: nil,
-                              sessionToken: nil, preferredVIN: "YSMTEST")
+            coordinator.start(preferredVIN: "YSMTEST")
         }
 
         // Simulate mid-run access-token expiry: the next fetch fails as an auth problem and
@@ -98,7 +93,7 @@ private actor MockVehicleProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? cars.first?.vin }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         fetchCount += 1
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -126,7 +121,7 @@ private actor RecoveryMockProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? "YSMTEST" }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else {

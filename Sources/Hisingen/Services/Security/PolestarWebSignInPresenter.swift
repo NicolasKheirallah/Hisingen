@@ -11,29 +11,37 @@ import WebKit
 /// `WKNavigationDelegate` intercepts the redirect before the page navigates away, capturing the
 /// authorization code and resuming the async flow.
 @MainActor
-final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, NSWindowDelegate {
+final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     private var pendingContinuation: CheckedContinuation<URL, Error>?
     private var activeWindow: NSWindow?
-    private var expectedRedirectURI: URL?
+    private var flow: PolestarBrowserFlow?
+    private var activeWebView: WKWebView?
+    private var flowID: UUID?
 
     func signIn(authorizeURL: URL, redirectURI: URL) async throws -> URL {
-        expectedRedirectURI = redirectURI
-        return try await withCheckedThrowingContinuation { continuation in
-            if let existing = self.pendingContinuation {
-                self.pendingContinuation = nil
-                existing.resume(throwing: PolestarError.authenticationRequired(.callbackRejected))
+        try Task.checkCancellation()
+        cancel()
+        let id = UUID()
+        flowID = id
+        flow = PolestarBrowserFlow(authorizeURL: authorizeURL, redirectURI: redirectURI)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pendingContinuation = continuation
+                let window = createSignInWindow()
+                let webView = createWebView(frame: window.contentView?.bounds ?? .zero)
+                window.contentView?.addSubview(webView)
+                activeWindow = window
+                activeWebView = webView
+                webView.load(URLRequest(url: authorizeURL))
+                window.center()
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
             }
-            self.pendingContinuation = continuation
-
-            let window = self.createSignInWindow()
-            let webView = self.createWebView(frame: window.contentView?.bounds ?? .zero)
-            window.contentView?.addSubview(webView)
-            self.activeWindow = window
-
-            webView.load(URLRequest(url: authorizeURL))
-            window.center()
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard self?.flowID == id else { return }
+                self?.cancel(with: CancellationError())
+            }
         }
     }
 
@@ -52,22 +60,23 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, NSWindow
 
     private func createWebView(frame: NSRect) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: frame, configuration: configuration)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         return webView
-    }
-
-    private func isRedirectCallback(_ url: URL) -> Bool {
-        guard let expected = expectedRedirectURI else { return false }
-        return url.scheme == expected.scheme && url.host == expected.host
-            && PolestarAPI.normalizedPath(url) == PolestarAPI.normalizedPath(expected)
     }
 
     private func finish(with result: Result<URL, Error>) {
         guard let continuation = pendingContinuation else { return }
         pendingContinuation = nil
-        expectedRedirectURI = nil
+        flow = nil
+        flowID = nil
+        activeWebView?.stopLoading()
+        activeWebView?.navigationDelegate = nil
+        activeWebView?.uiDelegate = nil
+        activeWebView = nil
         if let window = activeWindow {
             self.activeWindow = nil
             window.delegate = nil
@@ -90,7 +99,11 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, NSWindow
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
-        if let target = navigationAction.request.url, isRedirectCallback(target) {
+        guard webView === activeWebView else {
+            decisionHandler(.cancel)
+            return
+        }
+        if let target = navigationAction.request.url, flow?.accepts(target) == true {
             decisionHandler(.cancel)
             finish(with: .success(target))
         } else {
@@ -98,10 +111,23 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, NSWindow
         }
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webView === activeWebView, let url = webView.url,
+              let retry = flow?.resumeAfterWebsiteLogin(at: url) else { return }
+        webView.load(URLRequest(url: retry))
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard webView === activeWebView else { return nil }
+        if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
+        return nil
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
-        if pendingContinuation != nil {
+        if let window = notification.object as? NSWindow, window === activeWindow {
             finish(with: .failure(PolestarError.authenticationRequired(.callbackRejected)))
         }
     }

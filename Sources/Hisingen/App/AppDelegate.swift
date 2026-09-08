@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = PreferencesStore()
     private let vehicleDatabase = VehicleDatabase()
     private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
+    private lazy var fleetStore = FleetStore(stateStore: stateStore, preferences: preferences)
     private let reverseGeocoder = ReverseGeocoder()
     private lazy var miniPanel = ChargingMiniPanelController(preferences: preferences)
     private let imageCache = CarImageCache()
@@ -52,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onRemoteCommand: { [weak self] command in self?.performRemoteCommand(command) },
              database: vehicleDatabase,
              reverseGeocoder: reverseGeocoder, imageCache: imageCache,
-             preferences: preferences
+             preferences: preferences, fleetStore: fleetStore
         )
         statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
         statusController.onOpenUpdate = { [weak self] in self?.updateController.checkNow() }
@@ -98,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
-            polestarAPI: polestarAPI, volvoAPI: volvoAPI)
+            polestarAPI: polestarAPI, volvoAPI: volvoAPI, fleetStore: fleetStore)
         signInCoordinator = SignInCoordinator(
             context: self, preferences: preferences,
             polestarAPI: polestarAPI, volvoAPI: volvoAPI)
@@ -113,12 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             hasResumableSession: { [preferences] brand in preferences.hasResumableSession(for: brand) },
             restoreDormantSession: { [sessionManager, polestarAPI, volvoAPI, preferences] brand in
-                switch brand {
-                case .polestar:
-                    _ = try await sessionManager.restorePolestarSession(api: polestarAPI, preferences: preferences)
-                case .volvo:
-                    _ = try await sessionManager.restoreVolvoSession(api: volvoAPI, preferences: preferences)
-                }
+                let provider: any VehicleProviding = brand == .volvo ? volvoAPI : polestarAPI
+                try await sessionManager.restore(api: provider, preferences: preferences)
             })
         urlRouter = URLCommandRouter(context: self)
         updateController = UpdateController(context: self, preferences: preferences)
@@ -132,18 +129,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         calendarPreconditioning.start()
         if !initiallyAuthenticated {
             statusController.openPopover()
-        }
-    }
-
-    /// Caches dormant-brand snapshots so the fleet list and brand switches have data without a
-    /// round trip. Also the `VehicleSessionControllerContext` witness.
-    func cacheFleetSnapshots() {
-        for brand in VehicleBrand.allCases {
-            let vin = preferences.vin(for: brand)
-            if !vin.isEmpty, statusController.cachedSnapshots[vin] == nil,
-               let snapshot = stateStore.snapshot(for: vin) {
-                statusController.cachedSnapshots[vin] = snapshot
-            }
         }
     }
 
@@ -181,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func signOut() {
+        signInCoordinator.cancelPolestarSignIn()
         commandCoordinator.cancelPendingWork()
         SpotlightIndexer.removeAll()
         vehicleSession.signOut()
@@ -220,12 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func settingsChanged(_ change: SettingsChange) {
         switch change {
         case .credentials:
-            let switchedFromAnotherBrand = vehicleSession.switchToPolestarForCredentialChange()
-            launchAtLoginController.reconcile(userInitiated: true)
-            notifier.featureSelectionDidChange()
-            notifier.requestAuthorizationIfAnyAlertEnabled()
-            updateController.applyConfiguration()
-            vehicleSession.resumeAfterCredentialChange(switchedFromAnotherBrand: switchedFromAnotherBrand)
+            vehicleSession.credentialsDidChange(for: .polestar)
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             signInCoordinator.beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .polestarCommandAuthorization:
@@ -381,7 +362,7 @@ extension AppDelegate: GarageScanContext {
 
     func garageScanDidCaptureState(_ state: VehicleState) {
         stateStore.save(state)
-        statusController.cachedSnapshots[state.vin] = state
+        fleetStore.retain(state)
         notifier.vehicleStateDidUpdate(state)
     }
 
@@ -445,10 +426,6 @@ extension AppDelegate: UpdateControllerContext {
 // MARK: - VehicleSessionControllerContext
 
 extension AppDelegate: VehicleSessionControllerContext {
-    func cachedSnapshot(forVIN vin: String) -> VehicleState? {
-        statusController?.cachedSnapshots[vin]
-    }
-
     func sessionStateDidChange() {
         render()
     }
@@ -461,24 +438,11 @@ extension AppDelegate: VehicleSessionControllerContext {
         statusController.activeVin = vin
     }
 
-    func setFleet(_ cars: [CarSummary], activeVIN: String?) {
-        statusController.cars = cars
-        statusController.activeVin = activeVIN
-    }
-
-    func fillSnapshotCache(for cars: [CarSummary]) {
-        var snapshots = statusController.cachedSnapshots
-        for car in cars where snapshots[car.vin] == nil {
-            if let snapshot = stateStore.snapshot(for: car.vin) { snapshots[car.vin] = snapshot }
-        }
-        statusController.cachedSnapshots = snapshots
-    }
-
     func didReceiveVehicleState(_ state: VehicleState) {
         miniPanel.update(state: state)
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
-        statusController.cachedSnapshots[state.vin] = state
+        fleetStore.retain(state)
     }
 
     func authenticationRequired() {
@@ -498,5 +462,12 @@ extension AppDelegate: VehicleSessionControllerContext {
 
     func sessionDidEstablish() {
         garageScanner.schedulePass(after: 8)
+    }
+
+    func sessionCredentialsDidChange() {
+        launchAtLoginController.reconcile(userInitiated: true)
+        notifier.featureSelectionDidChange()
+        notifier.requestAuthorizationIfAnyAlertEnabled()
+        updateController.applyConfiguration()
     }
 }

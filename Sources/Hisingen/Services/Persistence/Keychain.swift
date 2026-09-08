@@ -361,7 +361,11 @@ struct KeychainStore: Sendable {
     }
 
     private func save(_ value: String, account: String) throws {
+        try saveDurably(value, account: account)
         memoryCache.set(cacheKey(account: account), value: value)
+    }
+
+    private func saveDurably(_ value: String, account: String) throws {
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: value)
             return

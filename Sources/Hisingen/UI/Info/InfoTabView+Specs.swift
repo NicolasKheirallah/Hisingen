@@ -95,6 +95,17 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: .purple)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                if let climate = state.climateStatus {
+                    CabinThermalMatrix(
+                        driverSeatLevel: climate.driverSeatHeatingLevel,
+                        passengerSeatLevel: climate.passengerSeatHeatingLevel,
+                        steeringWheelLevel: climate.steeringWheelHeatingLevel,
+                        interiorTemperatureCelsius: climate.interiorTemperatureCelsius,
+                        requestedTemperatureCelsius: climate.requestedTemperatureCelsius,
+                        activity: climate.activity
+                    )
+                    .padding(.top, 4)
+                }
             }
         })
     }
@@ -253,7 +264,7 @@ extension InfoTabView {
                     if let pno = state.pno34, !pno.isEmpty {
                         KVRow(L10n.text("Factory Spec (PNO34)"), pno, symbol: "tag.fill")
                     }
-                    if let market = state.accountMarket, !market.isEmpty {
+                    if let market = state.otaCapabilities?.identity?.market ?? state.accountMarket, !market.isEmpty {
                         KVRow(L10n.text("Market Delivery"), market, symbol: "globe")
                     }
                     if state.availability == .available {
@@ -263,8 +274,72 @@ extension InfoTabView {
                         KVRow(L10n.text("Backend-Reported Software"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard", info: L10n.text("Unverified value from an undocumented Polestar backend field; compare it with the version shown in the vehicle."))
                     }
                 }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        let panel = NSSavePanel()
+                        panel.allowedContentTypes = [.commaSeparatedText]
+                        panel.nameFieldStringValue = "Hisingen-Factory-Passport-\(state.vin.suffix(6)).csv"
+                        guard panel.runModal() == .OK, let url = panel.url else { return }
+                        do {
+                            try Self.factoryPassportCSV(state: state, preferences: preferences)
+                                .write(to: url, atomically: true, encoding: .utf8)
+                        } catch {
+                            reportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+                        }
+                    } label: {
+                        Label(L10n.text("Export Factory Passport (CSV)"), systemImage: "square.and.arrow.down")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help(L10n.text("Exports the factory identity and specification as a CSV file."))
+                }
+                .padding(.top, 4)
             }
         }
+    }
+
+    /// Machine-readable factory identity ("window sticker"). Values come exclusively from
+    /// what the providers reported for this VIN — an absent field exports as an empty cell,
+    /// never a placeholder — so the file is honest about what is and is not known.
+    static func factoryPassportCSV(state: VehicleState, preferences: PreferencesStore) -> String {
+        func csvField(_ value: String?) -> String {
+            guard let value, !value.isEmpty else { return "" }
+            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+            return value.contains(",") || value.contains("\"") || value.contains("\n")
+                ? "\"\(escaped)\"" : value
+        }
+        let model = [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " ")
+        let paint = state.externalColour
+        let interior = state.upholstery
+        let wheels = state.wheels
+        let packages = state.packages.joined(separator: "; ")
+        let nickname = preferences.vehicleNickname(for: state.vin)
+        let market = state.otaCapabilities?.identity?.market ?? state.accountMarket
+        var rows: [[String]] = [
+            ["Field", "Value"],
+            ["VIN", state.vin],
+            ["Nickname", nickname],
+            ["Model", model],
+            ["Registration No", state.registrationNo ?? ""],
+            ["Internal Vehicle ID", state.internalVehicleIdentifier ?? ""],
+            ["Factory Spec (PNO34)", state.pno34 ?? ""],
+            ["Factory Build Week", state.formattedBuildWeek ?? state.structureWeek ?? ""],
+            ["Market", market ?? ""],
+            ["Exterior Paint", paint ?? ""],
+            ["Upholstery", interior ?? ""],
+            ["Wheels", wheels ?? ""],
+            ["Factory Packages", packages],
+        ]
+        rows.append(contentsOf: state.packages.enumerated().map { index, name in
+            ["Package \(index + 1)", name]
+        })
+        rows.append(["Exported", Format.dateTimeFormatter.string(from: Date())])
+        return rows
+            .map { $0.map(csvField).joined(separator: ",") }
+            .joined(separator: "\n") + "\n"
     }
 
     // MARK: - Warranty & protection

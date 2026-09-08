@@ -15,7 +15,9 @@ protocol VehicleProviding: Sendable {
     func resetSession() async
     func signOut() async throws
     func resolvedVIN(preferred: String?) async -> String?
-    func selectCar(vin: String, features: FeatureSelection) async throws
+    /// Explicitly reload optional metadata; ordinary fetches prepare their VIN internally.
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
+    /// Requires a session, but no prior vehicle-selection call.
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
 }
@@ -31,4 +33,3 @@ protocol VehicleLiveStreaming: Sendable {
 
 extension PolestarAPI: VehicleProviding {}
 extension VolvoAPI: VehicleProviding {}
-

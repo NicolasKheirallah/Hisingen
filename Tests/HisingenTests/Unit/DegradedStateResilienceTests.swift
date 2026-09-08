@@ -222,9 +222,8 @@ struct AuthFailureReschedulingTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            clearPasswordAfterSession: {},
-            readStoredSessionToken: { nil },
-            readStoredPassword: { nil }
+            sessionManager: SessionManager(readToken: { _ in "test-session" },
+                                           readPassword: { nil }, clearPassword: {})
         )
         defer { coordinator.stop() }
 
@@ -235,8 +234,7 @@ struct AuthFailureReschedulingTests {
                 resumed = true
                 continuation.resume()
             }
-            coordinator.start(email: "test@example.invalid", password: nil,
-                              sessionToken: "test-session", preferredVIN: "YSMTEST")
+            coordinator.start(preferredVIN: "YSMTEST")
         }
 
         XCTAssertNotNil(coordinator.lastError)
@@ -254,7 +252,7 @@ private actor AuthFailingProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? cars.first?.vin }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         throw PolestarError.authenticationRequired(.expiredSession)
     }

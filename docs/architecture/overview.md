@@ -47,6 +47,8 @@ Hisingen is a single-process, single-target macOS app. There is no separate back
 
 Everything above `VehicleProviding` is written once and works for either brand. Everything below it — request construction, DTOs, wire-format decoding, capability heuristics, error mapping — is duplicated per provider because Polestar and Volvo genuinely have nothing in common at the wire level (GraphQL + hand-rolled gRPC vs. REST/OAuth2). See [providers.md](providers.md) for how clean that boundary actually is in practice.
 
+Fleet membership and snapshot lookup live in `FleetStore`. It retains per-brand discovery lists and in-memory telemetry, loads missing snapshots through `VehicleStateStore`, and produces a `FleetSnapshot` for presentation. The active display state overrides retained snapshots without persisting optimistic command values. Settings, the menu-bar switcher, and fleet tooltips read this same interface; settings applies the saved garage order while the overview sorts snapshots by brand and model. Account clearing invalidates only that brand's retained fleet.
+
 ## Where to go next
 
 - [system-context.md](system-context.md) — what Hisingen talks to and why

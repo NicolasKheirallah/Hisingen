@@ -39,18 +39,19 @@ final class StatusItemController: NSObject {
     private let reverseGeocoder: ReverseGeocoder
     private let imageCache: CarImageCache
     private let preferences: PreferencesStore
+    private let fleetStore: FleetStore
+    private var fleet: FleetSnapshot { fleetStore.snapshot(activeState: latestState) }
 
     var updateVersion: String?
     var checkingForUpdates = false
     /// Whether the popover is currently on screen. Callers outside AppKit view code use
     /// this to decide between in-panel feedback (banners) and system notifications.
     var isPopoverVisible: Bool { popover.isShown }
-    var cars: [CarSummary] = []
+    private var cars: [CarSummary] { fleet.cars }
     var activeVin: String?
     var diagnostics: DiagnosticsSnapshot?
 
 
-    var cachedSnapshots: [String: VehicleState] = [:]
     var onSelectCar: ((String) -> Void)?
     var remoteCommandInProgress = false
     /// `RemoteCommand.identifier` of the command currently in flight, or `nil`. Lets the
@@ -102,7 +103,7 @@ final class StatusItemController: NSObject {
          database: VehicleDatabase = VehicleDatabase(),
          reverseGeocoder: ReverseGeocoder = ReverseGeocoder(),
          imageCache: CarImageCache = CarImageCache(),
-         preferences: PreferencesStore) {
+         preferences: PreferencesStore, fleetStore: FleetStore) {
         self.onRefresh = onRefresh
         self.onSettings = onSettings
         self.onCheckForUpdates = onCheckForUpdates
@@ -111,6 +112,7 @@ final class StatusItemController: NSObject {
         self.reverseGeocoder = reverseGeocoder
         self.imageCache = imageCache
         self.preferences = preferences
+        self.fleetStore = fleetStore
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         super.init()
@@ -308,7 +310,7 @@ final class StatusItemController: NSObject {
         if vins.count > 1 || otherBrandResumable {
             let switchMenu = NSMenu()
             for (index, vin) in vins.enumerated() {
-                let snapshot = cachedSnapshots[vin] ?? (vin == latestState?.vin ? latestState : nil)
+                let snapshot = fleet.snapshot(for: vin)
                 let name: String = {
                     if let snapshot {
                         return preferences.formattedVehicleTitle(
@@ -331,7 +333,7 @@ final class StatusItemController: NSObject {
                 item.target = self
                 switchMenu.addItem(item)
             }
-            if otherBrandResumable, !vins.contains(where: { cachedSnapshots[$0]?.model.brand == otherBrand }) {
+            if otherBrandResumable, !vins.contains(where: { fleet.snapshot(for: $0)?.model.brand == otherBrand }) {
                 if !vins.isEmpty { switchMenu.addItem(.separator()) }
                 let label = preferences.lastVehicleLabel(for: otherBrand)
                 let item = NSMenuItem(
@@ -700,24 +702,8 @@ final class StatusItemController: NSObject {
         showPopover()
     }
 
-    static func availableVehicleVINs(cars: [CarSummary], cachedSnapshots: [String: VehicleState]) -> [String] {
-        var set = Set<String>()
-        var list: [String] = []
-        for car in cars {
-            if set.insert(car.vin).inserted {
-                list.append(car.vin)
-            }
-        }
-        for (vin, _) in cachedSnapshots {
-            if set.insert(vin).inserted {
-                list.append(vin)
-            }
-        }
-        return list
-    }
-
     var availableVehicleVINs: [String] {
-        Self.availableVehicleVINs(cars: cars, cachedSnapshots: cachedSnapshots)
+        fleet.vehicles
     }
 
     private func selectCar(_ vin: String) {
@@ -823,11 +809,12 @@ final class StatusItemController: NSObject {
     }
 
     private func updateFleetToolTip(activeState: VehicleState?) {
+        let fleet = fleetStore.snapshot(activeState: activeState)
         var lines: [String] = []
         let currentVin = activeState?.vin ?? activeVin ?? preferences.vin
-        let vins = availableVehicleVINs
+        let vins = fleet.vehicles
         for vin in vins {
-            let state = (vin == activeState?.vin ? activeState : nil) ?? cachedSnapshots[vin]
+            let state = fleet.snapshot(for: vin)
             let name = preferences.formattedVehicleTitle(
                 vin: vin,
                 modelName: state?.modelName,
@@ -921,9 +908,8 @@ final class StatusItemController: NSObject {
             state: latestState,
             error: latestError,
             authenticated: authenticated,
-            cars: cars,
             activeVin: activeVin,
-            cachedSnapshots: cachedSnapshots,
+            fleet: fleet,
             remoteCommandInProgress: remoteCommandInProgress,
             inFlightRemoteCommandID: inFlightRemoteCommandID,
             lastRemoteCommandFeedback: lastRemoteCommandFeedback,

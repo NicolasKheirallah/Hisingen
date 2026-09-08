@@ -33,6 +33,8 @@ extension PolestarAPI {
                 throw RemoteCommandError.rejected(
                     L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
                 )
+            case .storageFailure:
+                throw PolestarError.secureStorage
             case .unavailable:
                 throw RemoteCommandError.rejected(
                     L10n.text("Couldn't confirm remote-command authorization with Polestar. Check your connection and try again.")

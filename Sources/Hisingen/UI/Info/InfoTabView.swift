@@ -14,6 +14,7 @@ struct InfoTabView: View {
     let reverseGeocoder: ReverseGeocoder
     var onRefresh: () -> Void = {}
     var onNavigateToHistory: () -> Void = {}
+    var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
 
     @State var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
     @State var addressText: String?
@@ -34,7 +35,8 @@ struct InfoTabView: View {
         imageCache: CarImageCache,
         reverseGeocoder: ReverseGeocoder,
         onRefresh: @escaping () -> Void = {},
-        onNavigateToHistory: @escaping () -> Void = {}
+        onNavigateToHistory: @escaping () -> Void = {},
+        onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in }
     ) {
         self.state = state
         self.database = database
@@ -42,6 +44,7 @@ struct InfoTabView: View {
         self.reverseGeocoder = reverseGeocoder
         self.onRefresh = onRefresh
         self.onNavigateToHistory = onNavigateToHistory
+        self.onRemoteCommand = onRemoteCommand
     }
 
     /// Everything the Info tab derives from the local SQLite store. Loaded once per VIN on a
@@ -144,7 +147,8 @@ struct InfoTabView: View {
         add(.overview, heroVisualSection)
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {
-            add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked))
+            add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked,
+                                                 isTailgateLocked: ext.isTailgateLocked))
         }
         if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
             add(.tyres, TireStatusCardView(tyres: tyres))
@@ -354,7 +358,7 @@ struct InfoTabView: View {
 
     private var softwareCardHasContent: Bool {
         guard let sw = state.softwareInfo else { return false }
-        return (sw.installedVersion?.isEmpty == false)
+        return sw.noUpdateAvailable == true || (sw.installedVersion?.isEmpty == false)
             || (sw.version?.isEmpty == false)
             || (sw.latestAvailableVersion?.isEmpty == false)
             || sw.state != .unknown
@@ -444,7 +448,7 @@ struct InfoTabView: View {
         }
         row(L10n.text("Factory Build Week"), state.formattedBuildWeek ?? state.structureWeek)
         row(L10n.text("Factory Spec (PNO34)"), state.pno34)
-        row(L10n.text("Market Delivery"), state.accountMarket)
+        row(L10n.text("Market Delivery"), state.otaCapabilities?.identity?.market ?? state.accountMarket)
         row(L10n.text("Backend-Reported Software"), state.softwareInfo?.installedVersion ?? state.softwareInfo?.version)
 
         if let days = state.daysToService {

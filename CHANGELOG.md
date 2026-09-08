@@ -3,6 +3,99 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-09-08
+
+### Added
+
+- Factory Passport export: the Info tab's Factory Build & Identity card can now export the
+  vehicle's factory identity and specification (VIN, model, year, registration, internal ID,
+  PNO34, build week, market, paint, upholstery, wheels, and one row per factory package) as a
+  CSV. Fields the backend did not report export as empty cells rather than placeholders.
+- Polestar raw wire-field capture: every battery-service field the app does not yet decode
+  semantically is preserved raw (`PolestarRawWireField`) into `BatteryDiagnostics` and shown in
+  the battery-diagnostics card, so previously invisible backend data is diagnosable instead of
+  silently dropped.
+- Polestar battery pack capacity from the wire: the C3 battery field 12 (observed 78.0 kWh) and
+  the GraphQL `reportedBatteryCapacityKwh` now feed `VehicleState.reportedBatteryCapacityKwh`,
+  anchoring battery-health and charge-energy estimates to the backend's own figure.
+- Polestar OTA release notes and build metadata: `CarSoftwareInfo` description short/long
+  fields, `qb_code`, and the schedule originator are decoded and surfaced (long descriptions
+  stripped of HTML) in the vehicle and Info software cards.
+- Polestar OTA schedule countdown: SchedulerService `relative_time` (minutes until install)
+  surfaces as an "Installs In" row; the backend's idle sentinel (−2) is never shown as a
+  countdown.
+- Polestar GetMyCars ownership and sunroof capabilities: `userIsLinked`, `userIsOwner`, the
+  backend registration plate, and the Locks sunroof-remote-control flag are decoded (tri-state;
+  absent flags never read as "unsupported") and shown in the capability inspector.
+- Polestar Chronos error record identity: GetErrors outer record id and VIN are retained for
+  support-bundle traceability, and the sub-error `Action` enum gets a human-readable label.
+- Cabin thermal overview: a 2D matrix in the Interior & Cabin card showing driver/passenger
+  seat and steering-wheel heating levels with the cabin-to-target temperature, including an
+  accessibility summary.
+- One-tap cabin pre-clean from the CleanZone air-quality card, routed through the standard
+  remote-command authorization pipeline and gated on the backend-reported purifier state.
+- Polestar owner gate: when GetMyCars explicitly reports `userIsOwner == false`, remote commands
+  are refused with a distinct explanation. An absent flag (unknown ownership, Volvo, or older
+  snapshots) never blocks a command.
+- Polestar token diagnostics: `token_type` and `id_token` from the IdP response are decoded
+  in-memory (never persisted or logged) so a grant-type change would be visible.
+- Polestar availability reason 7 now renders as "Transport error", and any future unmapped
+  availability reason renders as "Unknown reason (n)" instead of disappearing.
+- Polestar VDMS discovery now requests factory packages (`packages { name }`), completing the
+  exterior/interior/wheels metadata set.
+- A Polestar raw-output coverage document
+  ([docs/api/polestar-raw-output-coverage.md](docs/api/polestar-raw-output-coverage.md)) mapping
+  every consumed GraphQL and gRPC surface, its decode status, and its source references,
+  verified by `Scripts/audit-polestar-coverage-doc.mjs`.
+- Polestar odometer average speeds (manual and automatic trip periods, km/h) from the
+  schema-verified Odometer fields 5/6, shown per trip meter with unit conversion, plus a
+  retained reading timestamp for odometer, health, and exterior responses.
+- Polestar independent tailgate-lock status from the schema-verified Exterior field 16,
+  displayed separately from the central lock and never inferred from the tailgate open state.
+- Polestar engine-hours-to-service from the schema-verified Health field 2, with the
+  health reading timestamp retained.
+- Polestar MyCars model, model-year, and delivery-market fallbacks, with VIN-matched
+  decoding and request ID/VIN fields in the request body.
+- Polestar digital-twin alarm status, including explicit idle, triggered, and unknown states.
+
+### Changed
+
+- Centralized fleet membership and retained snapshots in `FleetStore`, session restoration
+  in `SessionManager`, and credential-change handling in `VehicleSessionController`.
+  Vehicle fetches prepare their own VIN-specific metadata.
+- Polestar capability caches now follow the underlying reading across feature aliases.
+  Exterior status, trip meters, connectivity, and charging-current limits refresh after
+  30 seconds; climate status after 15 seconds; schedules after 60 seconds.
+- Unsupported Polestar RPCs are remembered per backend and VIN for 24 hours. Old unscoped
+  records are discarded, and unavailable status remains visible during capability backoff.
+
+### Fixed
+
+- Polestar exterior-light failure labels now match the upstream Health schema. The previous
+  mapping named the wrong lamps (field 14 reported as "left low beam" instead of "left brake
+  light") and labelled a field 29 that does not exist upstream.
+- Superseded Polestar sign-in and refresh responses can no longer overwrite a newer
+  session. Background restoration cannot replace an active interactive web login.
+- Command authorization verifies that command and telemetry tokens identify the same
+  account. Command-token storage failures reach callers, with rotated tokens retained
+  in memory for recovery.
+- Sign-out clears local credentials and displayed account state before remote revocation.
+  A delayed revocation cannot clear a subsequent login.
+- Replacing a Polestar browser sign-in closes the previous window and rejects stale
+  callbacks. Website landings without the app's OAuth callback retry the original request
+  once with the same login cookies, addressing the reported handoff in issue #19; live
+  confirmation of that browser-specific failure remains outstanding.
+- A saved Polestar password alone no longer marks the Settings account as connected.
+- Optional Polestar reads reject results from superseded sessions, and cancellation no
+  longer creates capability backoff. Location/weather fallbacks stop on authentication,
+  rate limiting, cancellation, and transport failures; HTTP 429 retains `Retry-After`.
+- MyCars installed software now reaches the software views even when OTA discovery is
+  unavailable, and remains distinct from a pending update's target version.
+- “No update available” is shown only after successful empty OTA and scheduler responses;
+  failed requests retain unknown status.
+- Keychain reads no longer return a newly written value from memory when its durable
+  write failed.
+
 ## [1.3.0] - 2026-08-30
 
 ### Added

@@ -148,20 +148,13 @@ enum RefreshPolicy {
 
 @MainActor
 final class RefreshCoordinator {
-    enum Trigger { case timer, manual, wake, networkRestored, vehicleChanged }
+    enum Trigger { case timer, manual, wake, networkRestored }
 
     private let api: any VehicleProviding
     private let stateStore: VehicleStateStore
     private let imageCache: CarImageCache
     private let preferences: PreferencesStore
-    private let clearPasswordAfterSession: () -> Void
-    /// Re-reads stored session credentials. After a successful session the coordinator
-    /// deliberately drops its in-memory copies (and deletes the password); when the access
-    /// token later expires mid-run, `beginSession` must recover the refresh token from here
-    /// instead of declaring `.noStoredSession` forever — which previously wedged refreshes
-    /// in a permanent authentication-failure loop until app restart.
-    private let readStoredSessionToken: () -> String?
-    private let readStoredPassword: () -> String?
+    private let sessionManager: SessionManager
     /// Computes the delay before the next attempt. Injectable so tests can collapse the
     /// production exponential backoff (which legitimately stretches to minutes) to zero.
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
@@ -186,9 +179,8 @@ final class RefreshCoordinator {
     private var liveStreamConnected = false
     private var liveStreamRetryAt: Date?
     private var sessionReady = false
-    private var pendingEmail = ""
-    private var pendingPassword: String?
-    private var pendingSessionToken: String?
+    private var accountEmail = ""
+    private var sessionIntent: SessionManager.Intent = .resume
     /// The selection this coordinator last started and has not yet resolved. Set when a
     /// switch begins, cleared only when it completes (or the session re-resolves the VIN).
     /// Because `preferences.vin` is written optimistically at switch start, this marker is
@@ -248,27 +240,14 @@ final class RefreshCoordinator {
          observesEnvironment: Bool = true,
          imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore,
-         clearPasswordAfterSession: (() -> Void)? = nil,
-         readStoredSessionToken: (() -> String?)? = nil,
-         readStoredPassword: (() -> String?)? = nil,
+         sessionManager: SessionManager = SessionManager(),
          retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay,
          selectionRetryDelay: TimeInterval = 2) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
         self.preferences = preferences
-        let brand = api.brand
-        self.clearPasswordAfterSession = clearPasswordAfterSession ?? {
-            if brand == .polestar { try? Keychain.deletePassword() }
-        }
-        self.readStoredSessionToken = readStoredSessionToken ?? {
-            brand == .volvo
-                ? ((try? Keychain.readVolvoSessionToken()) ?? nil)
-                : ((try? Keychain.readSessionToken()) ?? nil)
-        }
-        self.readStoredPassword = readStoredPassword ?? {
-            brand == .volvo ? nil : ((try? Keychain.readPassword()) ?? nil)
-        }
+        self.sessionManager = sessionManager
         self.retryDelay = retryDelay
         self.selectionRetryDelay = selectionRetryDelay
         guard observesEnvironment else { return }
@@ -281,10 +260,8 @@ final class RefreshCoordinator {
         monitor.start(queue: monitorQueue)
     }
 
-    func start(email: String, password: String?, sessionToken: String?, preferredVIN: String?) {
-        pendingEmail = email
-        pendingPassword = password?.isEmpty == false ? password : nil
-        pendingSessionToken = sessionToken?.isEmpty == false ? sessionToken : nil
+    func start(preferredVIN: String?) {
+        accountEmail = preferences.email
         if let preferredVIN, let cached = stateStore.snapshot(for: preferredVIN) {
             latest = cached
             onState?(cached)
@@ -292,9 +269,9 @@ final class RefreshCoordinator {
         beginSession(preferredVIN: preferredVIN)
     }
 
-    func credentialsChanged(email: String, password: String?, preferredVIN: String?) {
-        let oldAccount = pendingEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let newAccount = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    func credentialsChanged(preferredVIN: String?) {
+        let oldAccount = accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let newAccount = preferences.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let accountChanged = !oldAccount.isEmpty && oldAccount != newAccount
         cancelCurrentWork()
         requestedSelectionVIN = nil
@@ -302,9 +279,8 @@ final class RefreshCoordinator {
         failureCount = 0
         rateLimitedUntil = nil
         sessionReady = false
-        pendingEmail = email
-        pendingPassword = password?.isEmpty == false ? password : nil
-        pendingSessionToken = nil
+        accountEmail = preferences.email
+        sessionIntent = .credentialsChanged
         if accountChanged {
             let eraseHistory = preferences.eraseHistoryOnSignOut
             for car in cars {
@@ -364,7 +340,7 @@ final class RefreshCoordinator {
         onLoading?()
         task = Task {
             do {
-                try await api.selectCar(vin: vin, features: preferences.features)
+                try await api.reloadVehicleMetadata(vin: vin, features: preferences.features)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 refresh(trigger: .manual)
@@ -445,30 +421,27 @@ final class RefreshCoordinator {
 
     private func runSelection(vin: String) {
         let requestGeneration = generation
+        let started = Date()
+        refreshAttempts += 1
         task = Task {
             do {
-                try await api.selectCar(vin: vin, features: preferences.features)
+                let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
+                guard requestGeneration == generation, !Task.isCancelled else { return }
+                let providerCars = await api.cars
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 requestedSelectionVIN = nil
                 selectionRetryCount = 0
-                cars = await api.cars
+                cars = providerCars
                 onSelectionChanged?(vin)
-                // Deliberately NOT firing `onCars` here: it is a session-level event, and
-                // its shell-side handler schedules the garage scan — which after a switch
-                // meant two extra provider discoveries plus a full telemetry fan-out for
-                // the other car ~8 s later, tripping rate limits right when the user
-                // started interacting with the freshly selected vehicle.
-                refresh(trigger: .vehicleChanged)
+                // Selection does not establish a session or schedule a garage scan.
+                apply(state, latency: Date().timeIntervalSince(started))
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
                 let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
-                // Polestar models a concurrently flipped shared selection (e.g. the garage
-                // scan restoring the car it had captured at scan start) as `.notConfigured`.
-                // `handle` treats that error as permanent — invalidating the refresh loop
-                // and parking signed-in users on "Open Settings to sign in." until relaunch
-                // — so retry the selection briefly before declaring failure.
+                // Discovery may briefly omit a requested VIN. Bound retries before treating
+                // that preparation failure as terminal.
                 if case .notConfigured = mapped, selectionRetryCount < 2 {
                     selectionRetryCount += 1
                     scheduleSelectionRetry(vin: vin, after: selectionRetryDelay)
@@ -513,9 +486,8 @@ final class RefreshCoordinator {
         let carsToClear = cars.map(\.vin)
         cars = []
         lastError = nil
-        pendingEmail = ""
-        pendingPassword = nil
-        pendingSessionToken = nil
+        accountEmail = ""
+        sessionIntent = .resume
         requestedSelectionVIN = nil
         selectionRetryCount = 0
         rateLimitedUntil = nil
@@ -536,6 +508,8 @@ final class RefreshCoordinator {
                 stateStore.clear(vin: vin, eraseHistory: eraseHistory)
             }
         }
+        onSignedOut?()
+        publishDiagnostics()
         task = Task {
             do {
                 try await api.signOut()
@@ -546,7 +520,6 @@ final class RefreshCoordinator {
             }
             guard requestGeneration == generation, !Task.isCancelled else { return }
             task = nil
-            self.onSignedOut?()
             if let lastError { self.onError?(lastError) }
             self.publishDiagnostics()
         }
@@ -575,35 +548,8 @@ final class RefreshCoordinator {
         refreshAttempts += 1
         task = Task {
             do {
-                do {
-                    // Prefer the in-memory copy, then recover from the Keychain. Recovery is
-                    // what keeps routine access-token expiry from becoming a permanent
-                    // failure loop: after a successful session the pendings above are nil by
-                    // design, but the refresh token still lives in the Keychain.
-                    var sessionToken = pendingSessionToken ?? readStoredSessionToken()
-                    if sessionToken?.isEmpty == true { sessionToken = nil }
-                    if let sessionToken {
-                        try await api.restoreSession(
-                            token: sessionToken,
-                            preferredVIN: preferredVIN,
-                            features: preferences.features
-                        )
-                    } else {
-                        throw VehicleServiceError.authenticationRequired(provider: api.brand, reason: .noStoredSession)
-                    }
-                } catch {
-                    guard ServiceErrorPolicy.decision(error, provider: api.brand).error.requiresAuthentication else { throw error }
-
-                    var password = pendingPassword ?? readStoredPassword()
-                    if password?.isEmpty == true { password = nil }
-                    guard let password, !pendingEmail.isEmpty else { throw error }
-                    try await api.authenticate(
-                        email: pendingEmail,
-                        password: password,
-                        preferredVIN: preferredVIN,
-                        features: preferences.features
-                    )
-                }
+                try await sessionManager.restore(api: api, preferences: preferences,
+                                                 preferredVIN: preferredVIN, intent: sessionIntent)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 guard let vin = await api.resolvedVIN(preferred: preferredVIN) else {
                     throw VehicleServiceError.notConfigured
@@ -618,11 +564,7 @@ final class RefreshCoordinator {
                 onCars?(cars, vin)
                 onSessionEstablished?()
                 sessionReady = true
-                pendingSessionToken = nil
-
-
-                if pendingPassword != nil { clearPasswordAfterSession() }
-                pendingPassword = nil
+                sessionIntent = .resume
                 let intervalState = Self.signposter.beginInterval("fetchVehicleState")
                 do {
                     let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)

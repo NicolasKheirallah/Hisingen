@@ -197,6 +197,10 @@ final class PreferencesStore {
         let value = vin(for: brand); guard !value.isEmpty else { return brand.displayName }
         let nick = vehicleNickname(for: value); return nick.isEmpty ? value : nick
     }
+    func hasSessionToken(for brand: VehicleBrand) -> Bool {
+        brand == .polestar ? keychain.hasStoredPolestarSession : keychain.hasStoredVolvoSession
+    }
+
     func hasResumableSession(for brand: VehicleBrand) -> Bool {
         if let cached = cachedHasResumableSession[brand] { return cached }
         let result: Bool

@@ -678,7 +678,7 @@ private actor CommandContextProvider: VehicleProviding {
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred }
-    func selectCar(vin: String, features: FeatureSelection) async throws {}
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState { vehicle(vin: vin) }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         executedVINs.append(vin)

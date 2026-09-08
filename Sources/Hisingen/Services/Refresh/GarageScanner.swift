@@ -179,7 +179,6 @@ final class GarageScanner {
             // owns provider selection from that moment.
             if preferences.vin(for: brand) != selectedVIN { return .abort }
             if brand == originalBrand && car.vin == selectedVIN { continue }
-            try await provider.selectCar(vin: car.vin, features: preferences.features)
             let state = try await provider.fetchVehicleState(vin: car.vin, features: preferences.features)
             guard preferences.activeBrand == originalBrand,
                   preferences.vin(for: brand) == selectedVIN,
@@ -187,10 +186,6 @@ final class GarageScanner {
             vehiclesScannedThisPass += 1
             context.garageScanDidCaptureState(state)
         }
-        // No re-selection of the previously selected car at the end: telemetry and commands
-        // address vehicles explicitly by VIN, so the shared selection pointer carries no
-        // behavioural weight anymore — and re-selecting cost a full Polestar discovery round
-        // trip on every single scan.
         return .completed
     }
 }

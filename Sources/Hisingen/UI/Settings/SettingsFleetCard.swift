@@ -5,9 +5,7 @@ import SwiftUI
 /// banner. Extracted from `SettingsView`; reorder writes go through `PreferenceBinder`.
 @MainActor
 struct SettingsFleetCard: View {
-    let state: VehicleState?
-    let cachedSnapshots: [String: VehicleState]
-    let database: VehicleDatabase
+    let fleet: FleetSnapshot
     let imageCache: CarImageCache
     let binder: PreferenceBinder
 
@@ -26,20 +24,7 @@ struct SettingsFleetCard: View {
 
     var body: some View {
         let activeVin = prefs.vin
-        let order = prefs.garageVehicleOrder
-        var allVins: [String] = []
-        for brand in VehicleBrand.allCases {
-            let bVin = prefs.vin(for: brand)
-            if !bVin.isEmpty && !allVins.contains(bVin) { allVins.append(bVin) }
-        }
-        if !activeVin.isEmpty && !allVins.contains(activeVin) { allVins.append(activeVin) }
-        if let stateVin = state?.vin, !allVins.contains(stateVin) { allVins.append(stateVin) }
-        for vin in cachedSnapshots.keys where !allVins.contains(vin) { allVins.append(vin) }
-        allVins.sort {
-            let left = order.firstIndex(of: $0) ?? Int.max
-            let right = order.firstIndex(of: $1) ?? Int.max
-            return left == right ? $0 < $1 : left < right
-        }
+        let allVins = fleet.vehicles(orderedBy: prefs.garageVehicleOrder)
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -68,9 +53,7 @@ struct SettingsFleetCard: View {
                             FleetVehicleCardRow(
                                 vin: vin,
                                 isActive: vin == activeVin,
-                                state: state,
-                                cachedSnapshots: cachedSnapshots,
-                                database: database,
+                                vehicleState: fleet.snapshot(for: vin),
                                 imageCache: imageCache,
                                 onSettingsChanged: binder.notify
                             )
@@ -97,7 +80,7 @@ struct SettingsFleetCard: View {
 
     private func fleetSummaryBanner(vins: [String]) -> some View {
         let allStates: [VehicleState] = vins.compactMap { vin in
-            (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
+            fleet.snapshot(for: vin)
         }
 
         let totalRange = allStates.compactMap(\.primaryRangeKm).reduce(0, +)
@@ -218,16 +201,13 @@ struct SettingsFleetThumbnailView: View {
 struct FleetVehicleCardRow: View {
     let vin: String
     let isActive: Bool
-    let state: VehicleState?
-    let cachedSnapshots: [String: VehicleState]
-    let database: VehicleDatabase
+    let vehicleState: VehicleState?
     let imageCache: CarImageCache
     let onSettingsChanged: (SettingsChange) -> Void
     @Environment(\.preferencesStore) private var preferences
     @State private var isHovered = false
 
     var body: some View {
-        let vehicleState = (vin == state?.vin ? state : nil) ?? cachedSnapshots[vin] ?? VehicleStateStore(database: database).snapshot(for: vin)
         let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
         let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
         let displayTitle = preferences.formattedVehicleTitle(

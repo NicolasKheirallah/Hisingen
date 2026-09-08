@@ -14,6 +14,33 @@ private let livePolestarCredentialsConfigured: Bool = {
 /// and remote commands belong in an explicitly opted-in local tool, never here.
 @MainActor
 struct LivePolestarReadOnlyIntegrationTests {
+    @Test(.disabled(if: !livePolestarCredentialsConfigured || ProcessInfo.processInfo.environment["HISINGEN_RAW_CAPTURE_DIR"] == nil,
+                    "Raw response capture requires an explicit local output directory"))
+    func testRawReadResponseInventory() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let directory = URL(fileURLWithPath: try #require(environment["HISINGEN_RAW_CAPTURE_DIR"]), isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                               attributes: [.posixPermissions: 0o700])
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-raw.\(UUID())")
+        let api = PolestarAPI(keychain: keychain)
+        let startedAt = Date()
+        do {
+            try await api.authenticate(email: try #require(environment["HISINGEN_TEST_EMAIL"]),
+                                       password: try #require(environment["HISINGEN_TEST_PASSWORD"]),
+                                       preferredVIN: environment["HISINGEN_TEST_VIN"], features: .default)
+            let vin = try #require(await api.resolvedVIN(preferred: environment["HISINGEN_TEST_VIN"]))
+            try await api.captureReadResponses(vin: vin, directory: directory)
+            let logs = await APIDiagnosticLogStore.shared.snapshot().filter {
+                $0.provider == .polestar && $0.timestamp >= startedAt && $0.responsePayloadJSON != nil
+            }
+            try JSONEncoder().encode(logs).write(to: directory.appendingPathComponent("redacted-http.json"))
+            try await api.signOut()
+        } catch {
+            try? await api.signOut()
+            throw error
+        }
+    }
+
     @Test(.disabled(if: !livePolestarCredentialsConfigured,
                     "Live Polestar credentials are not configured"))
     func testAuthenticationDiscoveryFetchRestoreAndSignOut() async throws {
@@ -46,6 +73,9 @@ struct LivePolestarReadOnlyIntegrationTests {
             let state = try await api.fetchVehicleState(vin: vin, features: features)
             XCTAssertEqual(state.vin, vin)
             XCTAssertTrue(state.batteryPercentage != nil || state.rangeKm != nil)
+            if let installed = state.otaCapabilities?.installedSoftwareVersion, !installed.isEmpty {
+                #expect(state.softwareInfo?.installedVersion == installed)
+            }
             if let capabilities = state.otaCapabilities {
                 // Older `GetMyCars` schemas advertise charge-amperage / target-level support
                 // as a bare boolean with no numeric bounds — the limit fields are then 0
@@ -82,4 +112,31 @@ struct LivePolestarReadOnlyIntegrationTests {
         }
     }
 }
+private extension PolestarAPI {
+    func captureReadResponses(vin: String, directory: URL) async throws {
+        let token = try #require(accessToken)
+        let vehicle = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        let reads: [(String, String, Data)] = [
+            ("mycars", "/car_information.CarInformation/GetMyCars", vehicle),
+            ("battery", "/services.vehiclestates.battery.BatteryService/GetLatestBattery", vehicle),
+            ("health", "/services.vehiclestates.health.HealthService/GetHealth", Protobuf.stringField(2, vin)),
+            ("odometer", "/services.vehiclestates.odometer.OdometerService/GetOdometer", Protobuf.stringField(2, vin)),
+            ("exterior", "/services.vehiclestates.exterior.ExteriorService/GetLatestExterior", vehicle),
+            ("software", "/ota_mobcache.OtaDiscoveryService/GetSoftwareInfo", Protobuf.stringField(1, vin) + Protobuf.stringField(2, "en"))
+        ]
+        for (name, path, request) in reads {
+            do {
+                let body = try await grpc.firstMessage(path: path, message: request, vin: vin, accessToken: token)
+                let file = directory.appendingPathComponent(name + ".protobuf")
+                try body.write(to: file)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            } catch {
+                if Self.isGlobalFailure(error) { throw error }
+                let message = DiagnosticRedaction.redact(String(describing: error))
+                try Data(message.utf8).write(to: directory.appendingPathComponent(name + ".error.txt"))
+            }
+        }
+    }
+}
+
 #endif

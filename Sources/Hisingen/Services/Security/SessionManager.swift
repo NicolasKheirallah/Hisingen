@@ -1,75 +1,70 @@
 import Foundation
 
-/// Single home for per-brand credential resolution and provider session restore.
-///
-/// `AppDelegate` previously assembled the same Keychain reads + builtin-secret fallbacks in
-/// four places (launch resume, connection test, garage scan, settings change), and the copies
-/// had already diverged subtly. Every path that needs "restore this brand's session" goes
-/// through here so the rules exist exactly once:
-///
-/// - Polestar prefers the stored refresh token; the password is only used when no token
-///   exists (it is deleted after a successful session, by design).
-/// - Volvo requires client ID + secret + VCC API key *and* a session token; user-entered
-///   values take precedence over the built-in developer credentials.
+/// Credential precedence and provider configuration for every session restoration path.
 @MainActor
 final class SessionManager {
-    struct VolvoCredentials {
-        let clientID: String
-        let clientSecret: String
-        let apiKey: String
-        let sessionToken: String
-    }
+    enum Intent { case resume, credentialsChanged }
 
-    /// Polestar refresh token and/or password. `token` is nil when absent; `password` is only
-    /// populated when there is no token to restore from.
-    func polestarCredentials() -> (token: String?, password: String?) {
-        let storedToken = ((try? Keychain.readSessionToken()) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
-        let password = storedToken == nil ? (((try? Keychain.readPassword()) ?? nil).flatMap { $0.isEmpty ? nil : $0 }) : nil
-        return (storedToken, password)
-    }
+    private let readToken: (VehicleBrand) -> String?
+    private let readPassword: () -> String?
+    private let clearPassword: () -> Void
+    private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
-    func volvoCredentials(preferences: PreferencesStore) -> VolvoCredentials? {
-        let clientID = !preferences.volvoClientID.isEmpty ? preferences.volvoClientID : BuiltinVolvoSecrets.clientID
-        let clientSecret = ((try? Keychain.readVolvoClientSecret()) ?? nil)
-            ?? (BuiltinVolvoSecrets.clientSecret.isEmpty ? nil : BuiltinVolvoSecrets.clientSecret)
-        let apiKey = ((try? Keychain.readVolvoApiKey()) ?? nil)
-            ?? (BuiltinVolvoSecrets.vccApiKey.isEmpty ? nil : BuiltinVolvoSecrets.vccApiKey)
-        guard let sessionToken = ((try? Keychain.readVolvoSessionToken()) ?? nil), !sessionToken.isEmpty,
-              let clientSecret, !clientSecret.isEmpty,
-              let apiKey, !apiKey.isEmpty, !clientID.isEmpty else { return nil }
-        return VolvoCredentials(clientID: clientID, clientSecret: clientSecret, apiKey: apiKey, sessionToken: sessionToken)
+    init(readToken: @escaping (VehicleBrand) -> String? = { brand in
+        brand == .volvo ? try? Keychain.readVolvoSessionToken() : try? Keychain.readSessionToken()
+    }, readPassword: @escaping () -> String? = { try? Keychain.readPassword() },
+         clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
+         configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = SessionManager.configureProvider) {
+        self.readToken = readToken
+        self.readPassword = readPassword
+        self.clearPassword = clearPassword
+        self.configure = configure
     }
 
     @discardableResult
-    func restorePolestarSession(api: PolestarAPI, preferences: PreferencesStore) async throws -> [CarSummary] {
-        let preferredVIN = preferences.vin(for: .polestar)
-        let vin = preferredVIN.isEmpty ? nil : preferredVIN
-        let (token, password) = polestarCredentials()
-        if let token {
-            try await api.restoreSession(token: token, preferredVIN: vin, features: preferences.features)
-        } else if let password, !preferences.email.isEmpty {
-            try await api.authenticate(email: preferences.email, password: password,
-                                       preferredVIN: vin, features: preferences.features)
+    func restore(api: any VehicleProviding, preferences: PreferencesStore,
+                 preferredVIN: String? = nil, intent: Intent = .resume) async throws -> [CarSummary] {
+        let brand = api.brand
+        let storedVIN = preferences.vin(for: brand)
+        let vin = preferredVIN ?? (storedVIN.isEmpty ? nil : storedVIN)
+        let email = preferences.email
+        let features = preferences.features
+        let token = readToken(brand).flatMap { $0.isEmpty ? nil : $0 }
+        let password = brand == .polestar ? readPassword().flatMap { $0.isEmpty ? nil : $0 } : nil
+        let missingSession = VehicleServiceError.authenticationRequired(provider: brand, reason: .noStoredSession)
+        guard token != nil || (password != nil && !email.isEmpty) else { throw missingSession }
+        try await configure(api, preferences)
+        try Task.checkCancellation()
+
+        if intent == .credentialsChanged, let password, !email.isEmpty {
+            try await api.authenticate(email: email, password: password, preferredVIN: vin, features: features)
+            try Task.checkCancellation()
+            clearPassword()
         } else {
-            throw VehicleServiceError.authenticationRequired(provider: .polestar, reason: .noStoredSession)
+            do {
+                guard let token else { throw missingSession }
+                try await api.restoreSession(token: token, preferredVIN: vin, features: features)
+            } catch {
+                try Task.checkCancellation()
+                guard ServiceErrorPolicy.decision(error, provider: brand).error.requiresAuthentication,
+                      let password, !email.isEmpty else { throw error }
+                try await api.authenticate(email: email, password: password, preferredVIN: vin, features: features)
+                try Task.checkCancellation()
+                clearPassword()
+            }
         }
+        try Task.checkCancellation()
         return await api.cars
     }
 
-    @discardableResult
-    func restoreVolvoSession(api: VolvoAPI, preferences: PreferencesStore) async throws -> [CarSummary] {
-        guard let credentials = volvoCredentials(preferences: preferences) else {
+    private static func configureProvider(_ api: any VehicleProviding, preferences: PreferencesStore) async throws {
+        guard let volvo = api as? VolvoAPI else { return }
+        let clientID = preferences.volvoClientID.isEmpty ? BuiltinVolvoSecrets.clientID : preferences.volvoClientID
+        let secret = (try? Keychain.readVolvoClientSecret()) ?? BuiltinVolvoSecrets.clientSecret
+        let apiKey = (try? Keychain.readVolvoApiKey()) ?? BuiltinVolvoSecrets.vccApiKey
+        guard !clientID.isEmpty, !secret.isEmpty, !apiKey.isEmpty else {
             throw VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
         }
-        await api.configure(clientID: credentials.clientID,
-                            clientSecret: credentials.clientSecret,
-                            vccApiKey: credentials.apiKey)
-        let preferredVIN = preferences.vin(for: .volvo)
-        try await api.restoreSession(
-            token: credentials.sessionToken,
-            preferredVIN: preferredVIN.isEmpty ? nil : preferredVIN,
-            features: preferences.features
-        )
-        return await api.cars
+        await volvo.configure(clientID: clientID, clientSecret: secret, vccApiKey: apiKey)
     }
 }

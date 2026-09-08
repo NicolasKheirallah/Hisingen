@@ -133,7 +133,10 @@ extension VolvoAPI {
         return cars.first?.vin
     }
 
-    func selectCar(vin: String, features: FeatureSelection) async throws {
-        selectedVIN = vin
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {
+        try await refreshTokenIfNeeded()
+        guard cars.contains(where: { $0.vin == vin }) else { throw VolvoError.notConfigured }
+        // Fetch already loads details by VIN; dropping the entry makes this an explicit reload.
+        vehicleDetailsCache[vin] = nil
     }
 }

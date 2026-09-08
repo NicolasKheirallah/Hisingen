@@ -6,9 +6,9 @@ struct HisingenContentView: View {
     let state: VehicleState?
     let error: String?
     let authenticated: Bool
-    let cars: [CarSummary]
+    private var cars: [CarSummary] { fleet.cars }
     let activeVin: String?
-    let cachedSnapshots: [String: VehicleState]
+    let fleet: FleetSnapshot
     let remoteCommandInProgress: Bool
     let inFlightRemoteCommandID: String?
     let lastRemoteCommandFeedback: RemoteCommandFeedback?
@@ -60,8 +60,8 @@ struct HisingenContentView: View {
     }
 
     init(
-        state: VehicleState?, error: String?, authenticated: Bool, cars: [CarSummary],
-        activeVin: String?, cachedSnapshots: [String: VehicleState],
+        state: VehicleState?, error: String?, authenticated: Bool,
+        activeVin: String?, fleet: FleetSnapshot,
         remoteCommandInProgress: Bool,
         inFlightRemoteCommandID: String? = nil,
         lastRemoteCommandFeedback: RemoteCommandFeedback? = nil,
@@ -83,9 +83,8 @@ struct HisingenContentView: View {
         self.state = state
         self.error = error
         self.authenticated = authenticated
-        self.cars = cars
         self.activeVin = activeVin
-        self.cachedSnapshots = cachedSnapshots
+        self.fleet = fleet
         self.remoteCommandInProgress = remoteCommandInProgress
         self.inFlightRemoteCommandID = inFlightRemoteCommandID
         self.lastRemoteCommandFeedback = lastRemoteCommandFeedback
@@ -136,7 +135,7 @@ struct HisingenContentView: View {
             if settingsMode || (!authenticated && selectedTab == .settings) {
                 SettingsView(notificationPermission: notificationPermission,
                              state: state,
-                             cachedSnapshots: cachedSnapshots,
+                             fleet: fleet,
                              database: database, imageCache: imageCache,
                              onSettingsChanged: { change in
                                  if case .closeSettings = change {
@@ -154,7 +153,7 @@ struct HisingenContentView: View {
                 if selectedTab == .settings {
                     SettingsView(notificationPermission: notificationPermission,
                                  state: state,
-                                 cachedSnapshots: cachedSnapshots,
+                                 fleet: fleet,
                                  database: database, imageCache: imageCache,
                                  onSettingsChanged: { change in
                                      if case .closeSettings = change {
@@ -184,7 +183,8 @@ struct HisingenContentView: View {
                                             onNavigateToHistory: {
                                                 withAnimation { selectedTab = .history }
                                                 tabSelection.wrappedValue = .history
-                                            })
+                                            },
+                                            onRemoteCommand: onRemoteCommand)
                                     .id(state.vin)
                             case .history:
                                 HistoryDashboardView(state: state, database: database)
@@ -230,9 +230,7 @@ struct HisingenContentView: View {
     }
 
     private var garageStates: [VehicleState] {
-        var values = cachedSnapshots
-        if let state { values[state.vin] = state }
-        return values.values.sorted {
+        fleet.vehicles.compactMap { fleet.snapshot(for: $0) }.sorted {
             if $0.model.brand != $1.model.brand { return $0.model.brand.rawValue < $1.model.brand.rawValue }
             return ($0.modelName ?? $0.vin) < ($1.modelName ?? $1.vin)
         }
@@ -339,7 +337,7 @@ struct HisingenContentView: View {
 
     private func vehicleMenuLabel(_ car: CarSummary) -> String {
         let isActive = car.vin == activeVin
-        let snapshot = isActive ? state : cachedSnapshots[car.vin]
+        let snapshot = fleet.snapshot(for: car.vin)
         let baseTitle: String = {
             if let snap = snapshot {
                 return preferences.formattedVehicleTitle(
@@ -408,7 +406,7 @@ struct HisingenContentView: View {
     private func otherBrandMenuLabel() -> String {
         let name = preferences.lastVehicleLabel(for: otherBrand)
         let vin = preferences.vin(for: otherBrand)
-        if !vin.isEmpty, let battery = cachedSnapshots[vin]?.batteryPercentage {
+        if !vin.isEmpty, let battery = fleet.snapshot(for: vin)?.batteryPercentage {
             return L10n.format("Switch to %@ (%@ · %d%%)…", otherBrand.displayName, name, Int(battery))
         }
         return L10n.format("Switch to %@ (%@)…", otherBrand.displayName, name)
@@ -426,7 +424,7 @@ struct HisingenContentView: View {
                     registrationNo: state.registrationNo
                 )
             }
-            if let snap = cachedSnapshots[currentVin] {
+            if let snap = fleet.snapshot(for: currentVin) {
                 return preferences.formattedVehicleTitle(
                     vin: snap.vin,
                     modelName: snap.modelName,

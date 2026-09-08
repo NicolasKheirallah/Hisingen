@@ -1022,6 +1022,12 @@ struct VehicleTabView: View {
             if let km = state.tripMeterAutomaticKm {
                 rows.append(KVRow(L10n.text("Auto Trip Meter"), Format.distance(km: Int(km.rounded()), unit: preferences.distanceUnit), symbol: "a.circle"))
             }
+            if let speed = state.tripManualAverageSpeedKmH, speed > 0 {
+                rows.append(KVRow(L10n.text("Average Speed (TM)"), Format.speed(kmH: speed, unit: preferences.distanceUnit), symbol: "gauge.with.needle"))
+            }
+            if let speed = state.tripAutomaticAverageSpeedKmH, speed > 0 {
+                rows.append(KVRow(L10n.text("Average Speed (AT)"), Format.speed(kmH: speed, unit: preferences.distanceUnit), symbol: "gauge.with.needle"))
+            }
             if let speed = state.averageSpeedKmH, speed > 0 {
                 rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle"))
             }
@@ -1317,10 +1323,8 @@ struct VehicleTabView: View {
             })
         }
         var rows: [KVRow] = []
-        // installedVersion and latestAvailableVersion are mutually exclusive: Polestar's backend
-        // only ever reports one version string at a time, either what's currently on the car or
-        // the pending update target, never both — so don't fall back to `version` for whichever
-        // one is nil, that would just re-duplicate the other row's value.
+        // MyCars supplies the installed version independently of the pending OTA target.
+        // Keep the two sources separate instead of filling either row from the generic version.
         if let installed = software.installedVersion {
             rows.append(KVRow(
                 L10n.text("Backend-Reported Version"),
@@ -1339,9 +1343,16 @@ struct VehicleTabView: View {
         if let title = software.title {
             rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text"))
         }
+        if let short = software.shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !short.isEmpty, short != software.title {
+            rows.append(KVRow(L10n.text("Summary"), short, symbol: "doc.plaintext"))
+        }
+        if let relative = software.scheduleRelativeMinutes, relative > 0 {
+            rows.append(KVRow(L10n.text("Installs In"),
+                              L10n.format("%d min", relative), symbol: "hourglass"))
+        }
         let statusText = software.state == .failed && !software.hasActionableFailure()
             ? L10n.text("Past event — no current action required")
-            : (software.rawState?.displayName ?? software.state.displayName)
+            : software.statusDisplayName
         rows.append(KVRow(L10n.text("Update Status"),
                           statusText,
                           symbol: "arrow.triangle.2.circlepath",
@@ -1437,8 +1448,46 @@ struct VehicleTabView: View {
                         }
                     }
                 }
+                if let long = software.longDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !long.isEmpty {
+                    Divider().opacity(0.4)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.text("Release notes"))
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(HisingenTheme.ink)
+                        Text(Self.strippedReleaseNotes(long))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let qb = software.qbCode?.trimmingCharacters(in: .whitespacesAndNewlines), !qb.isEmpty,
+                   qb.lowercased() != software.latestAvailableVersion?.lowercased(),
+                   qb.lowercased() != software.installedVersion?.lowercased() {
+                    Divider().opacity(0.4)
+                    Text(L10n.format("Build code: %@", qb))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                if let originator = software.originator?.trimmingCharacters(in: .whitespacesAndNewlines), !originator.isEmpty {
+                    Divider().opacity(0.4)
+                    Text(L10n.format("Schedule originator: %@", originator))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
         })
+    }
+
+    /// The backend wraps release notes in `<textblock>` tags and embeds plain HTML. Strip
+    /// the tags so the notes read as text; anything malformed degrades to the raw string.
+    nonisolated static func strippedReleaseNotes(_ html: String) -> String {
+        var text = html
+        if let open = text.range(of: "<textblock>"), let close = text.range(of: "</textblock>"),
+           open.lowerBound < close.lowerBound {
+            text = String(text[open.upperBound..<close.lowerBound])
+        }
+        text = text.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        return text.replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var diagnosticsCard: AnyView? {
@@ -1522,7 +1571,10 @@ struct VehicleTabView: View {
                 VStack(spacing: 6) {
                     ForEach(errors.indices, id: \.self) { i in
                         let e = errors[i]
-                        KVRow(L10n.text(e.service.displayName), e.errorCode.displayName,
+                        let detail = [e.errorCode.displayName, e.actionDisplayName]
+                            .compactMap { $0 }
+                            .joined(separator: " — ")
+                        KVRow(L10n.text(e.service.displayName), detail,
                               symbol: "exclamationmark.circle",
                               valueWarning: e.errorCode != .unspecified)
                     }

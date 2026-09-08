@@ -359,6 +359,27 @@ extension InfoTabView {
                               info: L10n.text("A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
                     }
 
+                    if air.canTogglePreCleaning {
+                        Button {
+                            onRemoteCommand(air.cleaningState == .on ? .stopPreCleaning : .startPreCleaning)
+                        } label: {
+                            Label(
+                                air.cleaningState == .on
+                                    ? L10n.text("Stop Air Cleaning")
+                                    : L10n.text("Clean Cabin Air (PM2.5 Pre-Clean)"),
+                                systemImage: air.cleaningState == .on ? "stop.circle" : "sparkles"
+                            )
+                            .font(.system(size: 11, weight: .medium))
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                        .accessibilityLabel(air.cleaningState == .on
+                                            ? L10n.text("Stop cabin air purification")
+                                            : L10n.text("Start cabin air purification"))
+                    }
+
                     airQualityTrendChart
                 }
             }

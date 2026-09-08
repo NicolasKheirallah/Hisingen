@@ -34,9 +34,8 @@ struct MultiVehicleSelectionTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            clearPasswordAfterSession: {},
-            readStoredSessionToken: { nil },
-            readStoredPassword: { nil },
+            sessionManager: SessionManager(readToken: { _ in "test-session" },
+                                           readPassword: { nil }, clearPassword: {}),
             retryDelay: { _, _, _ in 0.01 },
             selectionRetryDelay: selectionRetryDelay
         )
@@ -89,8 +88,7 @@ struct MultiVehicleSelectionTests {
         var switchPendingFlags: [Bool] = []
         coordinator.onDiagnostics = { switchPendingFlags.append($0.vehicleSwitchPending) }
 
-        coordinator.start(email: "test@example.invalid", password: nil,
-                          sessionToken: "test-session", preferredVIN: Self.vinA)
+        coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
         XCTAssertEqual(preferences.vin, Self.vinA)
 
@@ -134,8 +132,7 @@ struct MultiVehicleSelectionTests {
         await provider.setFailingVIN(Self.vinB)
         let coordinator = makeCoordinator(provider: provider, defaults: defaults, preferences: preferences)
 
-        coordinator.start(email: "test@example.invalid", password: nil,
-                          sessionToken: "test-session", preferredVIN: Self.vinA)
+        coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
 
         coordinator.selectCar(vin: Self.vinB)
@@ -174,8 +171,7 @@ struct MultiVehicleSelectionTests {
         var surfacedErrors: [VehicleServiceError] = []
         coordinator.onError = { surfacedErrors.append($0) }
 
-        coordinator.start(email: "test@example.invalid", password: nil,
-                          sessionToken: "test-session", preferredVIN: Self.vinA)
+        coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
 
         // The first selectCar fails with notConfigured (the shape Polestar reports when the
@@ -200,8 +196,7 @@ struct MultiVehicleSelectionTests {
         let provider = TwoCarProvider(vins: [Self.vinA, Self.vinB])
         let coordinator = makeCoordinator(provider: provider, defaults: defaults, preferences: preferences)
 
-        coordinator.start(email: "test@example.invalid", password: nil,
-                          sessionToken: "test-session", preferredVIN: Self.vinA)
+        coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
         let selectsBefore = await provider.selectCount
         let fetchesBefore = await provider.fetchCount
@@ -242,7 +237,9 @@ private actor TwoCarProvider: VehicleProviding {
         return vins.first
     }
 
-    func selectCar(vin: String, features: FeatureSelection) async throws {
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
+
+    private func prepare(vin: String) throws {
         selectCount += 1
         if vin == failingVIN {
             if failOnlyOnce { failingVIN = nil } else { selectionOrder.append(vin) }
@@ -252,6 +249,7 @@ private actor TwoCarProvider: VehicleProviding {
     }
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        if fetchCount > 0 { try prepare(vin: vin) }
         fetchCount += 1
         try await Task.sleep(nanoseconds: 20_000_000)
         return vehicle(vin: vin)
