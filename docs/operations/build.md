@@ -7,9 +7,10 @@
 | `make doctor` | Runs `Scripts/doctor.sh` — verifies the selected Xcode/CLT toolchain is internally consistent (compiler, SDK, SwiftPM all compatible) before attempting a build. |
 | `make build` | (depends on `doctor`) `swift build -c release $(SWIFT_FLAGS)`. |
 | `make universal` | (depends on `doctor`) Builds arm64 and x86_64 release binaries into **separate scratch build directories** (`.build-arm64`, `.build-x86_64` — avoiding SwiftPM artifact reuse across architectures), then `lipo -create`s them into one universal binary and verifies both architectures are present. |
-| `make app` | (depends on `build`, skippable via `SKIP_BUILD=1`) Lints `Info.plist`, assembles `releases/Hisingen.app`, injects updater configuration, embeds and signs `Sparkle.framework`, adds the framework runtime path, then signs the app. Prefers a valid Developer ID certificate, then Apple Development, then Hisingen Development; hardened-runtime signing (`--options runtime --timestamp`) when `IDENTITY` contains "Developer ID". Ad-hoc signing requires explicit `IDENTITY=-`. |
+| `make app` | (depends on `build`, skippable via `SKIP_BUILD=1`) Lints `Info.plist`, assembles `releases/Hisingen.app`, injects updater configuration, embeds and signs `Sparkle.framework`, adds the framework runtime path, then signs the app. Prefers a valid Developer ID certificate, then Apple Development, then Hisingen Development; hardened-runtime signing (`--options runtime --timestamp`) when `IDENTITY` contains "Developer ID". Ad-hoc signing requires explicit `IDENTITY=-`. Developer ID-signed builds are then notarized and stapled by `Scripts/notarize.sh` (skipped automatically when no notarization credentials are configured; `NOTARIZE=never` forces a skip). |
 | `make app-universal` | (depends on `universal`) Equivalent to `make app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"` using the universal binary. |
-| `make dmg` | Requires `$(APP)` to already exist (fails with a clear message otherwise). Stages the app plus an `Applications` symlink and builds a UDZO disk image via `hdiutil create`. Deliberately **not** a dependency of `app` — re-running `app` after notarization would re-sign the bundle and void the notarization staple, so `dmg` must be invoked as a separate, later step. |
+| `make notarize` | Notarizes and staples an already-built `releases/Hisingen.app` and, when present, `releases/Hisingen.dmg` via `Scripts/notarize.sh` — for stapling a build that was made with credentials unavailable at the time. Fails if the app bundle does not exist. |
+| `make dmg` | Requires `$(APP)` to already exist (fails with a clear message otherwise). Stages the app plus an `Applications` symlink and builds a UDZO disk image via `hdiutil create`. When `IDENTITY` contains "Developer ID", the DMG itself is then signed and notarized/stapled by `Scripts/notarize.sh` (skipped automatically without credentials), matching the release workflow. Deliberately **not** a dependency of `app` — re-running `app` after notarization would re-sign the bundle and void the notarization staple, so `dmg` must be invoked as a separate, later step. |
 | `make run` | `swift run` — unbundled dev run, no launch-at-login, no stable signing identity. |
 | `make test` | (depends on `doctor`) Runs `Scripts/test.sh`. |
 | `make clean` | Removes `.build`, `.build-arm64`, `.build-x86_64`, local app/DMG/zip outputs in `releases/`, staging files, `SHA256SUMS`, and `notarize-app.zip`. |
@@ -32,6 +33,20 @@ jobs all use this one implementation.
 **`Scripts/configure-updater.sh`** — injects the HTTPS Sparkle feed URL and
 Ed25519 public key into the bundle plist. Distributable builds require the key,
 and it must decode to exactly 32 bytes.
+
+**`Scripts/notarize.sh`** (POSIX `sh`, `set -eu`) — notarizes and staples one
+artifact per invocation (a `.app` bundle or a `.dmg` image): compresses it with
+`ditto`, submits it to Apple's notary service with `xcrun notarytool submit --wait`
+(retrying transient failures up to `NOTARY_RETRIES`, default 3), then
+`stapler staple`/`stapler validate`, then a `spctl --assess` Gatekeeper check
+(`--type execute` for apps, `--type open` for images). Credentials come from
+`NOTARY_APPLE_ID`/`NOTARY_TEAM_ID`/`NOTARY_APP_PASSWORD` environment variables
+(the same names the release workflow's secrets use) or from a notarytool
+keychain profile (`NOTARYTOOL_PROFILE`, default `hisingen-notary`, created once
+with `xcrun notarytool store-credentials`). With `NOTARIZE=auto` (default) the
+script skips with a notice and exits 0 when no credentials are found, so
+development builds without Apple Developer Program access keep working;
+`NOTARIZE=require` fails instead, and `NOTARIZE=never` always skips.
 
 **`Scripts/verify-updater.mjs`** — checks updater configuration, framework
 packaging and load paths, release-pipeline controls, release-note extraction,

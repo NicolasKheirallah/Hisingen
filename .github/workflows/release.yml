@@ -111,6 +111,8 @@ jobs:
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          # notarization happens in the dedicated step below, not at build time
+          NOTARIZE: never
         run: |
           # Signs Hisingen.app with the Developer ID Application certificate
           # imported above, enabling Gatekeeper trust and notarization.

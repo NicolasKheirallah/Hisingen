@@ -18,7 +18,17 @@ AUTODETECTED_IDENTITY := $(shell sh Scripts/signing-identity.sh)
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
-.PHONY: all dist ci doctor build universal app app-universal dmg run test clean release setup-cert inject-secrets
+# Notarization. Developer ID-signed builds are submitted to Apple's notary
+# service and stapled right after signing (see Scripts/notarize.sh), matching
+# what the release workflow does in CI. Credentials come from a notarytool
+# keychain profile or the NOTARY_* environment variables. Set NOTARIZE=never
+# to skip, NOTARIZE=require to fail when credentials are missing.
+NOTARIZE ?= auto
+NOTARYTOOL_PROFILE ?= hisingen-notary
+export NOTARIZE
+export NOTARYTOOL_PROFILE
+
+.PHONY: all dist ci doctor build universal app app-universal dmg notarize run test clean release setup-cert inject-secrets
 
 ## Default target: build both .app bundle and .dmg installer
 all: app dmg
@@ -87,7 +97,8 @@ else
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
 	codesign --force --deep --options runtime --timestamp -s "$(IDENTITY)" $(APP)
-	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing (notarize + staple via the release workflow before distributing)."
+	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing."
+	sh Scripts/notarize.sh $(APP)
 else
 	codesign --force --deep -s "$(IDENTITY)" $(APP)
 	@echo "✅ Signed with stable local identity \"$(IDENTITY)\" — persistent across rebuilds (Keychain & Accessibility permissions remembered)."
@@ -98,6 +109,12 @@ endif
 
 app-universal: universal
 	$(MAKE) app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"
+
+## Notarize and staple an already-built app bundle and disk image
+notarize:
+	@if [ ! -d "$(APP)" ]; then echo "$(APP) not found — run 'make app' first" >&2; exit 1; fi
+	sh Scripts/notarize.sh $(APP)
+	@if [ -f "$(DMG)" ]; then sh Scripts/notarize.sh $(DMG); fi
 
 ## Package the existing bundle as a drag-to-Applications disk image.
 dmg:
@@ -111,6 +128,10 @@ dmg:
 	ln -s /Applications $(DMG_STAGING)/Applications
 	hdiutil create -volname Hisingen -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
 	rm -rf $(DMG_STAGING)
+ifneq (,$(findstring Developer ID,$(IDENTITY)))
+	codesign --force --timestamp -s "$(IDENTITY)" $(DMG)
+	sh Scripts/notarize.sh $(DMG)
+endif
 	@echo "Done → $(DMG)"
 
 ## Quick run without a bundle (launch-at-login disabled in this mode)

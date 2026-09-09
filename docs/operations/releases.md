@@ -95,6 +95,8 @@ If any of these fail, nothing is signed, notarized, or published.
 
 See [signing-and-notarization details below](#signing-and-notarization-detail). Both the `.app` and the `.dmg` are independently signed, notarized, and stapled — not just the app inside the DMG. The workflow's final verification step is deliberately paranoid: it mounts the *published* DMG and unzips the *published* zip and re-runs `codesign --verify`/`spctl --assess` on those extracted copies, not just on the build artifacts still sitting in the runner's working directory — catching a class of bug where packaging (zipping/DMG creation) subtly corrupts an otherwise-valid signature.
 
+The same bar applies to local pre-release builds: `Scripts/validate-release.sh` (run by `Scripts/release.sh` before anything is committed or tagged) now fails when a Developer ID-signed app or DMG has no notarization ticket stapled to it, so an unnotarized "signed but not trusted" build cannot reach a tag push unnoticed. Ad-hoc and development-identity artifacts are exempt — they are local-only by definition.
+
 ## Checksums
 
 `SHA256SUMS`, generated via `shasum -a 256` over the final DMG and zip, published alongside them as a release asset. Users can verify a download with:
@@ -233,7 +235,7 @@ A dated heading such as `## [1.2.4] - 2026-08-28` is supported and preferred.
 
 **Hardened runtime:** `make app`/`make app-universal` sign with `--options runtime --timestamp` whenever `IDENTITY` contains "Developer ID" — required for notarization to succeed.
 
-**Notarization:** `ditto` zips the app, `xcrun notarytool submit --wait` submits it to Apple and blocks until a result, then `stapler staple` attaches the notarization ticket so the app can be verified offline afterward, and `stapler validate` confirms the staple took. The DMG goes through the same submit/staple/validate sequence separately.
+**Notarization:** `ditto` zips the app, `xcrun notarytool submit --wait` submits it to Apple and blocks until a result, then `stapler staple` attaches the notarization ticket so the app can be verified offline afterward, and `stapler validate` confirms the staple took. The DMG goes through the same submit/staple/validate sequence separately. Local builds perform the same sequence through `Scripts/notarize.sh` whenever notarization credentials are configured (see [build.md](build.md)); without credentials the step skips, leaving the build Developer ID-signed but unstapled.
 
 **Gatekeeper assessment:** `spctl --assess` is run against both the app and the DMG as a final "would Gatekeeper actually let a user open this" check, not just a signature check.
 

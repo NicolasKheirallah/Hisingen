@@ -933,7 +933,7 @@ Both **Hisingen.app** and **Hisingen.dmg** are signed with a personal Apple Deve
 
 This means macOS Gatekeeper recognizes the app as trusted software from an identified developer — no security warnings, no right-click-to-open workaround.
 
-The same Developer ID signing is performed in the GitHub Actions release workflow: the certificate is imported into the CI runner's keychain, both the app bundle and the disk image are individually signed, submitted for notarization, stapled, and verified with `spctl` before publication. Every release also ships with SHA-256 checksums and GitHub build provenance attestations.
+The same Developer ID signing is performed in the GitHub Actions release workflow: the certificate is imported into the CI runner's keychain, both the app bundle and the disk image are individually signed, submitted for notarization, stapled, and verified with `spctl` before publication. Every release also ships with SHA-256 checksums and GitHub build provenance attestations. Locally, `make app`/`make dmg` follow the same submit/staple/validate sequence through `Scripts/notarize.sh` whenever notarization credentials are configured.
 
 ### Install
 
@@ -965,6 +965,16 @@ shasum -a 256 -c SHA256SUMS
 ```
 
 Run this in the folder containing the downloaded files. It should report `OK` for each one.
+
+### Verify the signature
+
+macOS checks the signature and notarization automatically at first launch. You can also verify it yourself — `codesign` and `spctl` ship with every Mac, no Xcode needed:
+
+```bash
+spctl -a -t exec -vv /Applications/Hisingen.app
+```
+
+This should report `accepted` with `source=Notarized Developer ID`. If macOS ever reports Hisingen as **"damaged"** or from an **unidentified developer**, re-download the DMG and check the checksum first — a corrupted or truncated download is almost always the cause. Don't strip the quarantine flag with `xattr` or work around Gatekeeper: a correctly notarized app opens without any workaround, and if the signature doesn't verify, the download itself is bad and should be replaced, not bypassed.
 
 [View all releases](https://github.com/NicolasKheirallah/Hisingen/releases)
 
@@ -1162,6 +1172,8 @@ Useful targets:
 | `make ci`      | Run the same validation CI performs              |
 | `make test`    | Run the test suite                               |
 | `make app`     | Build `releases/Hisingen.app`                    |
+| `make dmg`     | Package `releases/Hisingen.dmg` from the app     |
+| `make notarize`| Notarize and staple the built app and dmg        |
 | `make run`     | Build and launch a debug build                   |
 | `make clean`   | Remove build artifacts                           |
 
@@ -1171,6 +1183,8 @@ Then open the app:
 make app
 open releases/Hisingen.app
 ```
+
+When the app is signed with a **Developer ID** certificate, the build also submits it to Apple's notary service and staples the ticket, matching what the release workflow does in CI. Credentials are read from a notarytool keychain profile (set up once with `xcrun notarytool store-credentials hisingen-notary --apple-id <APPLE_ID> --team-id <TEAM_ID> --password <APP_PASSWORD>`) or from the `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID` and `NOTARY_APP_PASSWORD` environment variables. Without credentials the step skips automatically so development builds keep working; `make notarize` notarizes an already-built app, and `NOTARIZE=never make app` disables the step.
 
 Normal CI and the deterministic test suite don't need access to a real Polestar or Volvo account. If `.env.secrets` isn't present, the build injects empty placeholder credentials and compiles cleanly — the app then asks for your own Volvo credentials at sign-in. Live integration testing is kept separate from the deterministic test suite.
 
