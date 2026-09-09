@@ -58,8 +58,30 @@ test suites even though it runs the rest of the deterministic suite in full.
 
 ## Starting a release
 
-First add the release notes under `## [x.y.z] - YYYY-MM-DD` in the root
-[`CHANGELOG.md`](../../CHANGELOG.md). Then use either of the supported paths:
+### Automatic (default)
+
+After every green CI run on `main`, the **Auto Release** workflow
+(`auto-release.yml`) runs `Scripts/auto-release.sh`, which:
+
+1. Skips (no-op) when HEAD is already tagged, a newer commit landed on `main`
+   while CI ran, only release-bump commits exist since the last tag, or any new
+   commit message contains `[skip release]`.
+2. Otherwise bumps the patch version in `Info.plist`, appends a generated
+   `## [x.y.z] - YYYY-MM-DD` entry to `CHANGELOG.md` (commit subjects grouped
+   into `### Added`/`### Fixed`/`### Changed` by conventional prefix),
+   commits, tags `vX.Y.Z`, pushes both, and dispatches the release workflow
+   with the tag. Pushing the tag with `GITHUB_TOKEN` cannot trigger a workflow,
+   so the dispatch step is explicit and is why `release.yml` also accepts
+   `workflow_dispatch` with a `tag` input.
+
+The result: pushing to `main` and passing CI is a release, with no manual step.
+Escape hatches: `[skip release]` in a commit message skips the automation, and
+the manual paths below remain for minor/major bumps or curated release notes.
+
+### Manual paths
+
+Add the release notes under `## [x.y.z] - YYYY-MM-DD` in the root
+[`CHANGELOG.md`](../../CHANGELOG.md) first. Then use either of the supported paths:
 
 1. Run the **Prepare Release** workflow with an exact version or semantic bump.
    It validates monotonic versioning and the changelog entry, creates a
@@ -78,6 +100,9 @@ Both paths enforce version format and a matching changelog entry. The local path
 also requires a clean worktree, bumps both version fields, commits, and pushes
 the exact tag `release.yml` listens for. Manually tagging without first updating
 `Info.plist` and `CHANGELOG.md` will fail the release workflow before signing.
+`release.yml` also runs on `workflow_dispatch` with an explicit tag, which the
+auto-release flow uses; dispatching it by hand re-runs the release for an
+existing tag.
 
 ## Gating checks (in order, all must pass)
 

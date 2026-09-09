@@ -3,13 +3,19 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (vMAJOR.MINOR.PATCH)"
+        required: true
+        type: string
 
 permissions:
   contents: read
   actions: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,12 +28,15 @@ jobs:
       attestations: write
       id-token: write
     environment: production-release
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Validate build configuration
         env:
@@ -67,7 +76,7 @@ jobs:
           set -euo pipefail
           test -d "$DEVELOPER_DIR" || { echo "Missing Xcode at $DEVELOPER_DIR"; exit 1; }
           PLIST_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${TAG#v}"
           [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be vMAJOR.MINOR.PATCH"; exit 1; }
           test "$PLIST_VERSION" = "$TAG_VERSION" || { echo "Info.plist has $PLIST_VERSION but tag is $TAG_VERSION"; exit 1; }
           grep -Fq "## [$TAG_VERSION]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $TAG_VERSION"; exit 1; }
@@ -228,7 +237,7 @@ jobs:
           printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | base64 --decode > "$PRIVATE_KEY"
           chmod 600 "$PRIVATE_KEY"
           node Scripts/verify-sparkle-keypair.mjs "$PRIVATE_KEY"
-          sh Scripts/publish-appcast.sh "$SPARKLE_TOOLS_DIR" "${GITHUB_REF_NAME#v}" "$GITHUB_REF_NAME" Hisingen.app.zip updates "$PRIVATE_KEY"
+          sh Scripts/publish-appcast.sh "$SPARKLE_TOOLS_DIR" "${TAG#v}" "$TAG" Hisingen.app.zip updates "$PRIVATE_KEY"
           node Scripts/verify-updater.mjs appcast updates/appcast.xml
           test -s updates/Hisingen.app.md
           rm -f "$PRIVATE_KEY"
@@ -261,9 +270,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ASSET_NAMES=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+          ASSET_NAMES=$(gh release view "$TAG" --json assets --jq '.assets[].name')
           for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS appcast.xml Hisingen.app.md; do
-            echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $GITHUB_REF_NAME is missing uploaded asset: $artifact"; exit 1; }
+            echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $TAG is missing uploaded asset: $artifact"; exit 1; }
           done
 
       - name: Publish signed appcast to GitHub Pages source
@@ -276,11 +285,11 @@ jobs:
           EXISTING_SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH?ref=main" --jq .sha 2>/dev/null || true)
           if [ -n "$EXISTING_SHA" ]; then
             gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
-              -f message="chore(updates): publish ${GITHUB_REF_NAME} appcast" \
+              -f message="chore(updates): publish ${TAG} appcast" \
               -f content="$CONTENT" -f branch=main -f sha="$EXISTING_SHA"
           else
             gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
-              -f message="chore(updates): publish ${GITHUB_REF_NAME} appcast" \
+              -f message="chore(updates): publish ${TAG} appcast" \
               -f content="$CONTENT" -f branch=main
           fi
           gh workflow run pages.yml --ref main
@@ -296,6 +305,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build-and-release
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
@@ -315,7 +326,7 @@ jobs:
             exit 0
           fi
 
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           DMG_URL="https://github.com/NicolasKheirallah/Hisingen/releases/download/v${VERSION}/Hisingen.dmg"
           WORK_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-tap.XXXXXX")
           trap 'rm -rf "$WORK_DIR"' EXIT
