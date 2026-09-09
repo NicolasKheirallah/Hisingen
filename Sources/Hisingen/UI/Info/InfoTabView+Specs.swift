@@ -336,6 +336,10 @@ extension InfoTabView {
         rows.append(contentsOf: state.packages.enumerated().map { index, name in
             ["Package \(index + 1)", name]
         })
+        if let equipment = state.otaCapabilities?.equipment {
+            rows.append(contentsOf: equipment.details.map { [$0.title, $0.value] })
+            rows.append(["Equipment Source", "Polestar MyCars"])
+        }
         rows.append(["Exported", Format.dateTimeFormatter.string(from: Date())])
         return rows
             .map { $0.map(csvField).joined(separator: ",") }

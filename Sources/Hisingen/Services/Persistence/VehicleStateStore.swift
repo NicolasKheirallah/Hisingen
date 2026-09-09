@@ -17,6 +17,7 @@ final class VehicleStateStore {
     let database: VehicleDatabase
     private let preferences: PreferencesStore
     private let chargingSessionEngine: ChargingSessionEngine
+    private var parkedChargeLossDetector = ParkedChargeLossDetector()
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
          preferences: PreferencesStore? = nil) {
@@ -51,6 +52,12 @@ final class VehicleStateStore {
     }
 
     func save(_ state: VehicleState) {
+        if preferences.storeChargingHistory {
+            if let loss = parkedChargeLossDetector.ingest(state) { database.recordActivities([loss]) }
+        } else {
+            parkedChargeLossDetector.reset(vin: state.vin)
+        }
+        database.recordActivities(VehicleActivity.changes(from: database.loadSnapshot(for: state.vin), to: state))
         database.saveSnapshot(state)
 
         // Cabin AQI comes from Polestar's GetPreCleaning service. Do not persist a value on
@@ -181,6 +188,7 @@ final class VehicleStateStore {
     /// `eraseHistory` is set: the sign-out path passes the user's Settings → Privacy & Data
     /// choice, while the deliberate "Erase local vehicle data" action wipes directly.
     func clear(vin: String? = nil, eraseHistory: Bool = false) {
+        parkedChargeLossDetector.reset(vin: vin)
         if eraseHistory {
             database.wipeAll(for: vin)
         } else if let vin {

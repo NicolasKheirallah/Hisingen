@@ -17,7 +17,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 3
+    static let latestSchemaVersion = 4
 
     /// Whether the database file already existed when this process opened it. Gates the
     /// one-shot pre-migration backup and the corruption quarantine — neither is meaningful
@@ -425,6 +425,23 @@ final class VehicleDatabase: @unchecked Sendable {
                     """)
             } catch {
                 logger.error("Trip-classification schema migration remains incomplete: \(error, privacy: .public)")
+            }
+        }
+        if schemaVersion() == 3 {
+            do {
+                try db.withTransaction {
+                    try db.execute(sql: """
+                        CREATE TABLE IF NOT EXISTS vehicle_activity (
+                            id TEXT PRIMARY KEY, vin TEXT NOT NULL,
+                            timestamp REAL NOT NULL, payload BLOB NOT NULL
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_vehicle_activity_vin
+                            ON vehicle_activity(vin, timestamp DESC);
+                        PRAGMA user_version = 4;
+                        """)
+                }
+            } catch {
+                logger.error("Vehicle activity migration remains incomplete: \(error, privacy: .public)")
             }
         }
     }
@@ -1456,6 +1473,7 @@ final class VehicleDatabase: @unchecked Sendable {
             ("DELETE FROM charging_sessions WHERE started_at < ?;", "started_at", chargingSessionsOlderThanDays),
             ("DELETE FROM battery_health_history WHERE timestamp < ?;", "timestamp", batteryHealthOlderThanDays),
             ("DELETE FROM remote_commands_log WHERE executed_at < ?;", "executed_at", commandAuditsOlderThanDays),
+            ("DELETE FROM vehicle_activity WHERE timestamp < ?;", "timestamp", commandAuditsOlderThanDays),
             ("DELETE FROM air_quality_history WHERE timestamp < ?;", "timestamp", airQualityOlderThanDays),
             ("DELETE FROM connectivity_history WHERE timestamp < ?;", "timestamp", connectivityOlderThanDays),
             ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays),
@@ -1665,6 +1683,7 @@ final class VehicleDatabase: @unchecked Sendable {
         if let vin {
             let statements = [
                 "DELETE FROM vehicle_snapshots WHERE vin = ?;",
+                "DELETE FROM vehicle_activity WHERE vin = ?;",
                 "DELETE FROM charging_sessions WHERE vin = ?;",
                 "DELETE FROM battery_health_history WHERE vin = ?;",
                 "DELETE FROM telemetry_logs WHERE vin = ?;",
@@ -1689,6 +1708,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try db.withTransaction {
                 try db.execute(sql: """
                 DELETE FROM vehicle_snapshots;
+                DELETE FROM vehicle_activity;
                 DELETE FROM charging_sessions;
                 DELETE FROM charging_samples;
                 DELETE FROM battery_health_history;

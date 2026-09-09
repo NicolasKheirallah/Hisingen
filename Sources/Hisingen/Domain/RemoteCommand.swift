@@ -165,7 +165,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         }
     }
 
-    func adapted(to profile: VehicleCapabilityProfile) -> RemoteCommand {
+    func adapted(to profile: VehicleCapabilityProfile, settings: VehicleControlSettings? = nil) -> RemoteCommand {
         guard case .startClimate(let temperature, let frontLeft, let frontRight,
                                  let rearLeft, let rearRight, let steeringWheel) = self else {
             return self
@@ -173,11 +173,11 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         guard profile.permits(.climateStartStop) else { return self }
         return .startClimate(
             temperatureCelsius: profile.hasSelectableClimateTemperature ? temperature : 0,
-            frontLeftSeat: profile.hasSelectableSeatHeating ? frontLeft : .unspecified,
-            frontRightSeat: profile.hasSelectableSeatHeating ? frontRight : .unspecified,
-            rearLeftSeat: profile.hasSelectableSeatHeating ? rearLeft : .unspecified,
-            rearRightSeat: profile.hasSelectableSeatHeating ? rearRight : .unspecified,
-            steeringWheel: profile.hasSelectableSteeringWheelHeating ? steeringWheel : .unspecified
+            frontLeftSeat: profile.hasSelectableSeatHeating && settings?.frontSeatSettings != false ? frontLeft : .unspecified,
+            frontRightSeat: profile.hasSelectableSeatHeating && settings?.frontSeatSettings != false ? frontRight : .unspecified,
+            rearLeftSeat: profile.hasSelectableSeatHeating && settings?.rearSeatSettings != false ? rearLeft : .unspecified,
+            rearRightSeat: profile.hasSelectableSeatHeating && settings?.rearSeatSettings != false ? rearRight : .unspecified,
+            steeringWheel: profile.hasSelectableSteeringWheelHeating && settings?.steeringWheelSettings != false ? steeringWheel : .unspecified
         )
     }
 
@@ -399,4 +399,3 @@ enum RemoteCommandError: Error, LocalizedError, Equatable, Sendable {
         }
     }
 }
-

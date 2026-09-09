@@ -32,7 +32,6 @@ Sources/Hisingen/
 - **One shared vehicle domain, two providers.** `VehicleState`, `VehicleCapabilities`, `RemoteCommand` (Domain/) are brand-agnostic. `PolestarAPI` and `VolvoAPI` each implement the `VehicleProviding` protocol and map their own wire formats into that shared domain. See [architecture/providers.md](architecture/providers.md).
 - **Runtime capability probing, not model-name guessing.** Whether a vehicle supports a feature is a mix of a conservative static per-model table and live observations from real API responses, merged with a 6-hour staleness window. A failed request does not automatically mean "unsupported." See [architecture/capabilities.md](architecture/capabilities.md).
 - **`RefreshCoordinator` owns the polling loop.** One `@MainActor` class serializes timer, manual, wake, and network-recovery refreshes into a single in-flight task per generation, so none of them race each other. See [architecture/refresh-system.md](architecture/refresh-system.md).
-- **The Polestar backend is fully mapped.** `docs/api/polestar-backend-map.md` records every host, service, method and protobuf field observed against a live vehicle — including the two-OAuth-client allowlist rule that remote commands depend on. That map and its raw transcripts are internal-only reverse-engineering notes and are deliberately not published in this repository. `docs/api/volvo-backend-map.md` holds the equivalent leftovers for Volvo (real captured payloads, full IdP scope catalog) — also internal-only, since Volvo's official API is otherwise fully documented in `api/volvo.md`.
 - **Read-only unless you opt in.** No remote feature is enabled by default, and every non-routine command needs Touch ID. Dispatch is compiled into all builds as of [ADR-0009](adr/0009-remote-commands-compiled-into-all-builds.md), which removed the former `HISINGEN_EXPERIMENTAL_REMOTE` flag. See [domain/vehicle.md](domain/vehicle.md) and [security/threat-model.md](security/threat-model.md).
 - **VIN-scoped state everywhere it matters.** Caches, capability observations, charging baselines, and notification dedup state are all keyed by VIN. Credentials are keyed by brand, not by VIN — see [security/keychain.md](security/keychain.md).
 
@@ -43,7 +42,7 @@ Sources/Hisingen/
 | Polestar | Scraped PingFederate/OIDC login (undocumented) | GraphQL + hand-rolled gRPC (C3 / PCCS-Chronos) | [api/polestar.md](api/polestar.md) |
 | Volvo | OAuth2 PKCE against Volvo ID (documented) | REST — Connected Vehicle API v2, Energy API v2, Location API v1 | [api/volvo.md](api/volvo.md) |
 
-Both are documented in detail, including which parts are officially documented by the vendor versus reverse-engineered — see [api/overview.md](api/overview.md#api-confidence).
+Both are documented in detail, including API confidence levels — see [api/overview.md](api/overview.md#api-confidence).
 
 ## Where things live
 

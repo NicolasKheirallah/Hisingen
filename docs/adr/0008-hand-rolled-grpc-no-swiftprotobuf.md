@@ -22,7 +22,7 @@ Hisingen needs by hand — `Services/API/PolestarGRPC.swift`,
 - **`SwiftProtobuf` + `protoc`-generated Swift** — would mean less
   hand-written parsing code, but Polestar doesn't publish an official
   `.proto` schema, so the "generated" code would still be generated from a
-  reverse-engineered schema — and it adds a build-time code-gen step plus an
+  unofficial schema — and it adds a build-time code-gen step plus an
   external dependency to a project that's otherwise intentionally
   dependency-free (see [0002](0002-no-hisingen-backend.md) for the same
   minimal-footprint instinct applied to infrastructure).

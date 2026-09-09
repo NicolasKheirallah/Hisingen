@@ -11,6 +11,7 @@ enum CommandAvailability: Equatable, Sendable {
     /// (`GetMyCars.userIsOwner == false`). Distinct from "unknown" — an absent flag never
     /// blocks a command.
     case notVehicleOwner
+    case invalidSettings(String)
 
     var isAvailable: Bool { self == .available }
 
@@ -33,6 +34,7 @@ enum CommandAvailability: Equatable, Sendable {
             return L10n.text("Refresh vehicle data before sending a command.")
         case .notVehicleOwner:
             return L10n.text("The vehicle reports this account as not being its owner. Owner commands are disabled.")
+        case .invalidSettings(let reason): return reason
         }
     }
 }
@@ -49,8 +51,16 @@ struct CapabilityGate: Sendable {
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard command.isImplemented(by: brand) else { return .unimplementedByProvider }
+        if brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {
+            return .unsupportedByVehicle
+        }
         guard state.capabilityProfile.permits(command.requiredCapability) else { return .unsupportedByVehicle }
         guard state.accountOwnsVehicle != false else { return .notVehicleOwner }
+        let settings = state.otaCapabilities?.controlSettings ?? VehicleControlSettings()
+        let adaptedCommand = command.adapted(to: state.capabilityProfile, settings: settings)
+        if let reason = settings.rejection(for: adaptedCommand, state: state) {
+            return .invalidSettings(reason)
+        }
         guard Date().timeIntervalSince(state.fetchedAt) < 10 * 60 else { return .unavailableUntilRefresh }
         guard !commandInProgress else { return .unavailableWhileBusy }
         return .available

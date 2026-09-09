@@ -18,9 +18,10 @@ enum KeychainError: Error, LocalizedError {
 
 private final class InMemorySecretCache: @unchecked Sendable {
     private let lock = NSLock()
-    private var cache: [String: String] = [:]
+    enum Entry { case value(String?) }
+    private var cache: [String: Entry] = [:]
 
-    func get(_ key: String) -> String? {
+    func get(_ key: String) -> Entry? {
         lock.lock()
         defer { lock.unlock() }
         return cache[key]
@@ -29,11 +30,7 @@ private final class InMemorySecretCache: @unchecked Sendable {
     func set(_ key: String, value: String?) {
         lock.lock()
         defer { lock.unlock() }
-        if let value {
-            cache[key] = value
-        } else {
-            cache.removeValue(forKey: key)
-        }
+        cache[key] = .value(value)
     }
 }
 
@@ -67,9 +64,12 @@ struct KeychainStore: Sendable {
     let service: String
     private let memoryCache: InMemorySecretCache
     private let volvoBundleLock = NSLock()
+    private let operationLock = NSRecursiveLock()
+    private let security: any KeychainSecurity
 
-    init(service: String) {
+    init(service: String, security: any KeychainSecurity = SystemKeychainSecurity()) {
         self.service = service
+        self.security = security
         self.memoryCache = InMemorySecretCache()
     }
 
@@ -361,102 +361,106 @@ struct KeychainStore: Sendable {
     }
 
     private func save(_ value: String, account: String) throws {
-        try saveDurably(value, account: account)
+        operationLock.lock()
+        defer { operationLock.unlock() }
+        if isTestService {
+            Self.testStore.set(cacheKey(account: account), value: value)
+        } else {
+            let status = write(value, account: account, useDataProtection: true)
+            if status != errSecSuccess {
+                guard Self.dataProtectionUnavailable(status) else { throw KeychainError.status(status) }
+                let legacyStatus = write(value, account: account, useDataProtection: false)
+                guard legacyStatus == errSecSuccess else { throw KeychainError.status(legacyStatus) }
+            }
+        }
         memoryCache.set(cacheKey(account: account), value: value)
     }
 
-    private func saveDurably(_ value: String, account: String) throws {
-        if isTestService {
-            Self.testStore.set(cacheKey(account: account), value: value)
-            return
-        }
+    private static func dataProtectionUnavailable(_ status: OSStatus) -> Bool {
+        status == errSecMissingEntitlement || status == errSecNotAvailable
+    }
 
+    private func write(_ value: String, account: String, useDataProtection: Bool) -> OSStatus {
+        let query = baseQuery(account: account, useDataProtection: useDataProtection)
         let attributes: [String: Any] = [
             kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-
-        let dpQuery = baseQuery(account: account, useDataProtection: true)
-        let dpUpdate = SecItemUpdate(dpQuery as CFDictionary, attributes as CFDictionary)
-        if dpUpdate == errSecSuccess {
-            _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
-            return
+        let status = security.update(query, attributes: attributes)
+        guard status == errSecItemNotFound else { return status }
+        let addStatus = security.add(query.merging(attributes) { _, new in new })
+        // Another process may have created the item between update and add.
+        if addStatus == errSecDuplicateItem {
+            return security.update(query, attributes: attributes)
         }
-        if dpUpdate == errSecItemNotFound {
-            var dpAdd = dpQuery
-            attributes.forEach { dpAdd[$0.key] = $0.value }
-            let dpAddStatus = SecItemAdd(dpAdd as CFDictionary, nil)
-            if dpAddStatus == errSecSuccess {
-                _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
-                return
-            }
-        }
-
-        let legacyQuery = baseQuery(account: account, useDataProtection: false)
-        let legacyUpdate = SecItemUpdate(legacyQuery as CFDictionary, attributes as CFDictionary)
-        if legacyUpdate == errSecSuccess { return }
-        guard legacyUpdate == errSecItemNotFound else {
-            throw KeychainError.status(legacyUpdate)
-        }
-
-        var legacyAdd = legacyQuery
-        attributes.forEach { legacyAdd[$0.key] = $0.value }
-        let legacyAddStatus = SecItemAdd(legacyAdd as CFDictionary, nil)
-        guard legacyAddStatus == errSecSuccess else { throw KeychainError.status(legacyAddStatus) }
+        return addStatus
     }
 
     private func read(account: String) throws -> String? {
-        if let cached = memoryCache.get(cacheKey(account: account)) {
+        operationLock.lock()
+        defer { operationLock.unlock() }
+        if case .value(let cached) = memoryCache.get(cacheKey(account: account)) {
             return cached
         }
         if isTestService {
             return Self.testStore.get(cacheKey(account: account))
         }
 
-        var dpQuery = baseQuery(account: account, useDataProtection: true)
-        dpQuery[kSecReturnData as String] = true
-        dpQuery[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        let dpStatus = SecItemCopyMatching(dpQuery as CFDictionary, &item)
-        if dpStatus == errSecSuccess, let data = item as? Data, let result = String(data: data, encoding: .utf8) {
-            memoryCache.set(cacheKey(account: account), value: result)
+        func query(_ dataProtection: Bool) -> [String: Any] {
+            var result = baseQuery(account: account, useDataProtection: dataProtection)
+            result[kSecReturnData as String] = true
+            result[kSecMatchLimit as String] = kSecMatchLimitOne
             return result
         }
-
-        var legacyQuery = baseQuery(account: account, useDataProtection: false)
-        legacyQuery[kSecReturnData as String] = true
-        legacyQuery[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var legacyItem: CFTypeRef?
-        let legacyStatus = SecItemCopyMatching(legacyQuery as CFDictionary, &legacyItem)
-        if legacyStatus == errSecSuccess, let data = legacyItem as? Data, let result = String(data: data, encoding: .utf8) {
-            memoryCache.set(cacheKey(account: account), value: result)
-            // Migrate the legacy (file-based keychain) item into the data-protection
-            // keychain. The legacy copy is deleted only once the new write has verifiably
-            // succeeded — deleting first (or ignoring a failed save) permanently destroys
-            // the credential when the DP keychain is unavailable, which is exactly what
-            // happens when code-signing identities change between builds.
-            do {
-                try save(result, account: account)
-                _ = SecItemDelete(legacyQuery as CFDictionary)
-            } catch {
-                Self.logger.error("Keychain migration for \(account, privacy: .public) deferred: DP save failed, legacy item kept")
+        func decode(_ data: Data?) throws -> String {
+            guard let data, let value = String(data: data, encoding: .utf8) else {
+                throw KeychainError.status(errSecDecode)
             }
-            return result
+            return value
         }
 
-        return nil
+        let (dpStatus, dpData) = security.copy(query(true))
+        if dpStatus == errSecSuccess {
+            let value = try decode(dpData)
+            memoryCache.set(cacheKey(account: account), value: value)
+            return value
+        }
+        guard dpStatus == errSecItemNotFound || Self.dataProtectionUnavailable(dpStatus) else {
+            throw KeychainError.status(dpStatus)
+        }
+
+        let (legacyStatus, legacyData) = security.copy(query(false))
+        if legacyStatus == errSecItemNotFound {
+            memoryCache.set(cacheKey(account: account), value: nil)
+            return nil
+        }
+        guard legacyStatus == errSecSuccess else { throw KeychainError.status(legacyStatus) }
+        let value = try decode(legacyData)
+        // Never use the fallback writer for migration: its success might only mean
+        // that the legacy item was updated, leaving it as the sole durable copy.
+        if dpStatus == errSecItemNotFound,
+           write(value, account: account, useDataProtection: true) == errSecSuccess {
+            _ = security.delete(baseQuery(account: account, useDataProtection: false))
+        }
+        memoryCache.set(cacheKey(account: account), value: value)
+        return value
     }
 
     private func delete(account: String) throws {
-        memoryCache.set(cacheKey(account: account), value: nil)
+        operationLock.lock()
+        defer { operationLock.unlock() }
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: nil)
-            return
+        } else {
+            for dataProtection in [true, false] {
+                let status = security.delete(baseQuery(account: account, useDataProtection: dataProtection))
+                guard status == errSecSuccess || status == errSecItemNotFound
+                    || (dataProtection && Self.dataProtectionUnavailable(status)) else {
+                    throw KeychainError.status(status)
+                }
+            }
         }
-        _ = SecItemDelete(baseQuery(account: account, useDataProtection: true) as CFDictionary)
-        _ = SecItemDelete(baseQuery(account: account, useDataProtection: false) as CFDictionary)
+        memoryCache.set(cacheKey(account: account), value: nil)
     }
 }
 

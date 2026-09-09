@@ -109,13 +109,14 @@ final class CommandCoordinator {
                     case .unavailableWhileBusy: return RemoteCommandError.busy.localizedDescription
                     case .notVehicleOwner: return availability.shortReason
                         ?? RemoteCommandError.unsupported.localizedDescription
+                    case .invalidSettings(let reason): return reason
                     default: return RemoteCommandError.unsupported.localizedDescription
                     }
                 }(),
                 success: false)
             return
         }
-        let adapted = command.adapted(to: state.capabilityProfile)
+        let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
         let providerBrand = context.currentProvider().brand
         let vehicle = [state.modelName, state.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
@@ -188,7 +189,7 @@ final class CommandCoordinator {
             }
             context.presentResult(
                 title: L10n.text("Command sent"),
-                message: L10n.format("%@ — %@", command.outcomeDescription, detail),
+                message: L10n.format("%@ — %@", command.title, detail),
                 success: true
             )
             scheduleFollowUpRefresh(vin: vin)
@@ -232,74 +233,11 @@ final class CommandCoordinator {
         }
     }
 
-    /// Patches the visible state to what a command should have produced, so the lock icon or
-    /// climate row flips immediately instead of waiting for the follow-up refresh. In-memory
-    /// only: the patch is partly synthesized (e.g. an assumed 30-minute climate window), so it
-    /// must never be persisted as if the vehicle had reported it. `optimisticCommandLockUntil`
-    /// keeps stale responses from reverting the visible state until the real snapshot lands.
+    /// Keep the reported values until telemetry confirms the operation.
     private func applyOptimisticPatch(for command: RemoteCommand, outcome: RemoteCommandOutcome) {
-        guard let context else { return }
-        guard outcome == .completed || outcome == .accepted || outcome == .delivered,
-              var current = context.vehicleState else { return }
-        switch command {
-        case .startClimate(let temperature, _, _, _, _, _):
-            current.climateStatus = VehicleClimateStatus(
-                activity: .heating,
-                timeRemainingMinutes: 30,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
-            )
-        case .stopClimate:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .startPreCleaning:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .ventilating, timeRemainingMinutes: 10, timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .stopPreCleaning:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .lock, .lockReducedGuard, .unlock, .unlockTrunk:
-            guard var exterior = current.exteriorStatus else { return }
-            if command == .unlock, context.currentProvider().brand == .volvo {
-                // Volvo unlock is two-phase ("ready to unlock"); the door event completes it.
-                return
-            }
-            exterior.isLocked = (command == .lock || command == .lockReducedGuard)
-            current.exteriorStatus = exterior
-        case .openTailgate, .closeTailgate:
-            guard var exterior = current.exteriorStatus else { return }
-            let isOpening = command == .openTailgate
-            if let idx = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
-                exterior.openings[idx] = OpeningReading(opening: .tailgate,
-                                                        state: isOpening ? .open : .closed)
-            } else {
-                exterior.openings.append(OpeningReading(opening: .tailgate,
-                                                        state: isOpening ? .open : .closed))
-            }
-            // Only the open/closed state is optimistically known. The tailgate's own
-            // lock status (`isTailgateLocked`) is vehicle-reported only and stays as-is.
-            current.exteriorStatus = exterior
-        case .setChargeTarget(let target):
-            current.chargeTargetPercentage = target
-        case .setAmpLimit(let amps):
-            current.chargingCurrentLimitAmps = amps
-        default:
-            return
-        }
-        current.fetchedAt = Date()
-        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
+        guard let context, var current = context.vehicleState else { return }
         current.pendingCommand = PendingCommandSummary(
-            commandIdentifier: command.identifier, issuedAt: Date())
+            commandIdentifier: command.identifier, issuedAt: Date(), command: command)
         context.applyOptimisticState(current)
     }
 }

@@ -1222,6 +1222,10 @@ struct VehicleBackendIdentity: Codable, Equatable, Sendable {
 }
 
 struct VehicleOTACapabilities: Codable, Equatable, Sendable {
+    var honkFlashMode: VehicleHonkFlashMode? = nil
+    var equipment: VehicleEquipment? = nil
+    var advertisedCapabilities: [VehicleCapability: Bool]? = nil
+    var controlSettings: VehicleControlSettings? = nil
     let identity: VehicleBackendIdentity?
     /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
     /// installed version from the `Car.consumerSoftwareVersion` field — `GetSoftwareInfo`
@@ -1328,6 +1332,25 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
         self.userIsLinked = userIsLinked
         self.userIsOwner = userIsOwner
         self.registrationPlate = registrationPlate
+    }
+}
+
+enum VehicleHonkFlashMode: Int, Codable, Sendable {
+    case unspecified = 0
+    case none = 1
+    case combined = 2
+    case independent = 3
+    case flashOnly = 4
+    case hornOnly = 5
+
+    func permits(_ command: RemoteCommand) -> Bool? {
+        guard self != .unspecified else { return nil }
+        switch command {
+        case .honkAndFlash: return self == .combined || self == .independent
+        case .flashLights: return self == .independent || self == .flashOnly
+        case .honkHorn: return self == .independent || self == .hornOnly
+        default: return nil
+        }
     }
 }
 

@@ -221,7 +221,7 @@ struct ControlsTabView: View {
             ScheduleEditorSheet(state: state, initialKind: scheduleEditorKind, onRemoteCommand: onRemoteCommand)
         }
         .sheet(isPresented: $showAddLocation) {
-            ChargeLocationEditorSheet(defaultAmpLimit: ampLimit ?? 16) { alias, amps, soc, optimised in
+            ChargeLocationEditorSheet(defaultAmpLimit: ampLimit ?? 16, capabilities: state.otaCapabilities) { alias, amps, soc, optimised in
                 send(.createChargeLocationAtCar(
                     alias: alias, ampLimit: amps, minimumSoc: soc, optimisedCharging: optimised))
             }
@@ -242,7 +242,8 @@ struct ControlsTabView: View {
             Button(L10n.text("Cancel"), role: .cancel) { renamingLocation = nil }
         }
         .onAppear {
-            targetTemperature = preferences.remoteClimateTemperature
+            targetTemperature = min(climateTemperatureRange.upperBound,
+                                    max(climateTemperatureRange.lowerBound, preferences.remoteClimateTemperature))
             driverSeat = preferences.remoteDriverSeatHeating
             passengerSeat = preferences.remoteFrontRightSeatHeating
             rearLeftSeat = preferences.remoteRearLeftSeatHeating
@@ -255,6 +256,9 @@ struct ControlsTabView: View {
         // follow-up refresh landing mid-interaction can't fight the knob.
         .onChange(of: chargeTarget) { _, _ in chargeTargetDraft = nil }
         .onChange(of: ampLimit) { _, _ in ampLimitDraft = nil }
+        .onChange(of: climateTemperatureRange) { _, bounds in
+            targetTemperature = min(bounds.upperBound, max(bounds.lowerBound, targetTemperature))
+        }
     }
 
     private var anyCardDimmed: Bool {
@@ -520,7 +524,8 @@ struct ControlsTabView: View {
         case .celsius: nextCelsius = nextDisplay
         case .fahrenheit: nextCelsius = (nextDisplay - 32) * 5 / 9
         }
-        let clamped = min(30.0, max(16.0, (nextCelsius * 2).rounded() / 2))
+        let bounds = climateTemperatureRange
+        let clamped = min(bounds.upperBound, max(bounds.lowerBound, (nextCelsius * 2).rounded() / 2))
         targetTemperature = clamped
         preferences.remoteClimateTemperature = clamped
     }
@@ -579,11 +584,11 @@ struct ControlsTabView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(targetTemperature <= 16.0)
+                .disabled(targetTemperature <= climateTemperatureRange.lowerBound)
                 .accessibilityLabel(L10n.text("Decrease target temperature"))
 
                 HStack(spacing: 4) {
-                    ForEach([19, 20, 21, 22, 23], id: \.self) { temp in
+                    ForEach([19, 20, 21, 22, 23].filter { climateTemperatureRange.contains(Double($0)) }, id: \.self) { temp in
                         let isSelected = abs(targetTemperature - Double(temp)) < 0.25
                         Button {
                             targetTemperature = Double(temp)
@@ -611,7 +616,7 @@ struct ControlsTabView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(targetTemperature >= 30.0)
+                .disabled(targetTemperature >= climateTemperatureRange.upperBound)
                 .accessibilityLabel(L10n.text("Increase target temperature"))
             }
         }
@@ -667,7 +672,7 @@ struct ControlsTabView: View {
     private var seatAndSteeringControls: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                if profile.hasSelectableSeatHeating {
+                if profile.hasSelectableSeatHeating && state.otaCapabilities?.controlSettings?.frontSeatSettings != false {
                     SeatHeatingControl(title: L10n.text("Driver"), level: $driverSeat) {
                         preferences.remoteDriverSeatHeating = $0
                     }
@@ -679,7 +684,7 @@ struct ControlsTabView: View {
                     .disabled(isDisabled(Self.climateProbe))
                 }
 
-                if profile.hasSelectableSteeringWheelHeating {
+                if profile.hasSelectableSteeringWheelHeating && state.otaCapabilities?.controlSettings?.steeringWheelSettings != false {
                     SteeringHeatingControl(level: $steeringHeating) {
                         preferences.remoteSteeringWheelHeating = $0
                     }
@@ -687,7 +692,7 @@ struct ControlsTabView: View {
                 }
             }
 
-            if profile.hasSelectableSeatHeating {
+            if profile.hasSelectableSeatHeating && state.otaCapabilities?.controlSettings?.rearSeatSettings != false {
                 if showRearSeats {
                     HStack(spacing: 8) {
                         SeatHeatingControl(title: L10n.text("Rear left"), level: $rearLeftSeat) {
@@ -726,6 +731,10 @@ struct ControlsTabView: View {
             rearRightSeat: showRearSeats ? rearRightSeat : .unspecified,
             steeringWheel: steeringHeating
         )
+    }
+
+    private var climateTemperatureRange: ClosedRange<Double> {
+        state.otaCapabilities?.controlSettings?.temperatureRange ?? 16...30
     }
 
     private var climateStartStopButtons: some View {
@@ -827,7 +836,9 @@ struct ControlsTabView: View {
                     Button {
                         send(.setChargeTarget(target))
                     } label: {
-                        Text(Format.percent(Double(target)))
+                        Text(target == chargeBounds.dailyTarget
+                             ? L10n.format("Daily %@", Format.percent(Double(target)))
+                             : Format.percent(Double(target)))
                             .font(.system(size: 9.5, weight: selected ? .bold : .medium))
                             .padding(.vertical, 3)
                             .frame(maxWidth: .infinity)
@@ -1050,7 +1061,7 @@ struct ControlsTabView: View {
             Slider(value: Binding(
                 get: { locationAmpDraft ?? Double(location.ampLimit > 0 ? location.ampLimit : 16) },
                 set: { locationAmpDrafts[location.id] = $0 }
-            ), in: 6...32, step: 1, onEditingChanged: { editing in
+            ), in: Double(chargeBounds.amperageRange.lowerBound)...Double(chargeBounds.amperageRange.upperBound), step: 1, onEditingChanged: { editing in
                 guard !editing, let draft = locationAmpDrafts[location.id] else { return }
                 locationAmpDrafts[location.id] = nil
                 let rounded = Int(draft.rounded())
@@ -1238,8 +1249,9 @@ struct ControlsTabView: View {
 
                     if showLocate {
                         let caps = state.otaCapabilities
-                        let supportsHonk = caps?.supportsHonkAndFlash ?? true
-                        let supportsFlashOnly = caps?.supportsFlash ?? true
+                        let supportsCombined = caps?.honkFlashMode?.permits(.honkAndFlash) ?? true
+                        let supportsHonk = caps?.honkFlashMode?.permits(.honkHorn) ?? true
+                        let supportsFlashOnly = caps?.honkFlashMode?.permits(.flashLights) ?? true
 
                         if supportsFlashOnly {
                             Button {
@@ -1256,7 +1268,7 @@ struct ControlsTabView: View {
                             .disabled(isDisabled(.flashLights))
                         }
 
-                        if supportsHonk {
+                        if supportsCombined {
                             Button {
                                 send(.honkAndFlash)
                             } label: {
@@ -1269,7 +1281,8 @@ struct ControlsTabView: View {
                             }
                             .buttonStyle(.bordered)
                             .disabled(isDisabled(.honkAndFlash))
-
+                        }
+                        if supportsHonk {
                             Button {
                                 send(.honkHorn)
                             } label: {
@@ -1563,6 +1576,7 @@ struct ControlsTabView: View {
 @MainActor
 struct ChargeLocationEditorSheet: View {
     let defaultAmpLimit: Int
+    var capabilities: VehicleOTACapabilities? = nil
     let onSave: (_ alias: String, _ ampLimit: Int, _ minimumSoc: Int, _ optimisedCharging: Bool) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -1606,7 +1620,10 @@ struct ChargeLocationEditorSheet: View {
                             Spacer()
                             Text(Format.amps(Int(ampLimit.rounded()))).font(.system(size: 11, weight: .bold, design: .rounded))
                         }
-                        Slider(value: $ampLimit, in: 6...32, step: 1).tint(.orange)
+                        let bounds = VehicleChargeBounds(capabilities: capabilities).amperageRange
+                        Slider(value: $ampLimit, in: Double(bounds.lowerBound)...Double(bounds.upperBound), step: 1)
+                            .tint(.orange)
+                            .disabled(capabilities?.controlSettings?.locationAmperage == false)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1619,6 +1636,7 @@ struct ChargeLocationEditorSheet: View {
                     }
 
                     Toggle(L10n.text("Optimised charging"), isOn: $optimised)
+                        .disabled(capabilities?.controlSettings?.locationOptimization == false)
                         .font(.system(size: 11))
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -1635,7 +1653,8 @@ struct ChargeLocationEditorSheet: View {
                 Button(L10n.text("Save")) {
                     onSave(alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             ? L10n.text("Charge location") : alias.trimmingCharacters(in: .whitespacesAndNewlines),
-                           Int(ampLimit.rounded()), Int(minimumSoc.rounded()), optimised)
+                           capabilities?.controlSettings?.locationAmperage == false ? 0 : Int(ampLimit.rounded()),
+                           Int(minimumSoc.rounded()), optimised)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -1647,7 +1666,10 @@ struct ChargeLocationEditorSheet: View {
         }
         .frame(width: 360, height: 380)
         .background(HisingenTheme.canvas)
-        .onAppear { ampLimit = Double(min(32, max(6, defaultAmpLimit))) }
+        .onAppear {
+            let bounds = VehicleChargeBounds(capabilities: capabilities).amperageRange
+            ampLimit = Double(min(bounds.upperBound, max(bounds.lowerBound, defaultAmpLimit)))
+        }
     }
 }
 

@@ -179,7 +179,7 @@ The production application should not expose commands whose safety, authorizatio
 
 This ADR documents the architectural decision to compile supported remote-command implementations into normal builds and control their availability at runtime.
 
-It intentionally does **not** document provider reverse-engineering details.
+It intentionally does **not** document provider implementation details.
 
 Public ADRs and architecture documentation should not include unnecessary material such as:
 
@@ -216,7 +216,7 @@ rather than comments containing:
 - speculative provider internals; or
 - historical probing notes.
 
-Comments should describe the contract Hisingen relies on, not serve as a reverse-engineering notebook.
+Comments should describe the contract Hisingen relies on, not serve as an investigation notebook.
 
 ## Testing
 
@@ -346,7 +346,7 @@ Vehicle capabilities can differ by:
 - software version; and
 - provider policy.
 
-### Preserve reverse-engineering findings in this ADR
+### Preserve investigation findings in this ADR
 
 Rejected.
 

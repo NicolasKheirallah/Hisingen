@@ -9,11 +9,11 @@ struct SessionManagerTests {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         let provider = SessionTestProvider(brand: .polestar)
         var storedToken = "first"
         var passwordCleared = false
-        let manager = SessionManager(readToken: { _ in storedToken }, readPassword: { "password" },
+        let manager = SessionManager(readToken: { _ in storedToken }, readPassword: { Issue.record("A valid token must not read the password"); return "password" },
                                      clearPassword: { passwordCleared = true })
         try await manager.restore(api: provider, preferences: preferences)
         storedToken = "rotated"
@@ -23,15 +23,34 @@ struct SessionManagerTests {
     }
 
     @Test
+    func deniedTokenReadStopsWithoutPasswordFallback() async throws {
+        let suite = "SessionManagerTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
+        let provider = SessionTestProvider(brand: .polestar)
+        let manager = SessionManager(readToken: { _ in throw KeychainError.status(-128) },
+            readPassword: { Issue.record("Denied token access must not trigger a password prompt"); return nil })
+        do {
+            try await manager.restore(api: provider, preferences: preferences)
+            Issue.record("Expected Keychain access failure")
+        } catch {
+            #expect(error is KeychainError)
+        }
+        #expect(await provider.calls.isEmpty)
+    }
+
+    @Test
     func changedCredentialsUsePasswordBeforeAStoredToken() async throws {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         preferences.email = "new@example.invalid"
         let provider = SessionTestProvider(brand: .polestar)
         var cleared = false
-        let manager = SessionManager(readToken: { _ in "old-token" }, readPassword: { "new-password" },
+        let manager = SessionManager(readToken: { _ in Issue.record("Changed credentials must not read the old token"); return "old-token" }, readPassword: { "new-password" },
                                      clearPassword: { cleared = true })
         try await manager.restore(api: provider, preferences: preferences, intent: .credentialsChanged)
         #expect(await provider.calls == ["authenticate:new@example.invalid:new-password"])
@@ -43,14 +62,17 @@ struct SessionManagerTests {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         preferences.email = "person@example.invalid"
         let provider = SessionTestProvider(brand: .polestar)
         await provider.failRestore(with: authenticationFailure
             ? .authenticationRequired(provider: .polestar, reason: .expiredSession)
             : .rateLimited(retryAfter: 30))
         var cleared = false
-        let manager = SessionManager(readToken: { _ in "token" }, readPassword: { "password" },
+        let manager = SessionManager(readToken: { _ in "token" }, readPassword: {
+                                         #expect(authenticationFailure)
+                                         return "password"
+                                     },
                                      clearPassword: { cleared = true })
         do {
             try await manager.restore(api: provider, preferences: preferences)
@@ -72,7 +94,7 @@ struct SessionManagerTests {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         preferences.email = "person@example.invalid"
         let provider = SessionTestProvider(brand: .polestar)
         await provider.failAuthentication()
@@ -94,7 +116,7 @@ struct SessionManagerTests {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         preferences.activeBrand = .polestar
         preferences.setVin("VOLVO", for: .volvo)
         let provider = SessionTestProvider(brand: .volvo)

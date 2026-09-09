@@ -14,7 +14,7 @@ SPARKLE_FRAMEWORK = $(shell find .build .build-arm64 .build-x86_64 -type d -name
 # Code-signing identity resolution.
 # Auto-detects local developer certificate or provisions "Hisingen Development"
 # so macOS remembers Keychain & Accessibility permissions across rebuilds.
-AUTODETECTED_IDENTITY := $(shell security find-identity -p codesigning 2>/dev/null | grep -E '"(Developer ID Application|Apple Development|Hisingen Development)' | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+AUTODETECTED_IDENTITY := $(shell sh Scripts/signing-identity.sh)
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
@@ -81,8 +81,9 @@ ifeq ($(IDENTITY),-)
 	codesign --force --deep -s - $(APP)
 	@echo "⚠️  Self-signed (ad-hoc) build — this identity changes on every rebuild, so macOS will re-prompt for Keychain/Accessibility access each time you rebuild. Pass IDENTITY=\"<your cert name>\" or run 'make setup-cert' to avoid repeated prompts."
 else
-	@if ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$(IDENTITY)\""; then \
-		sh Scripts/setup-dev-cert.sh; \
+	@if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$(IDENTITY)\""; then \
+		if [ "$(IDENTITY)" = "Hisingen Development" ]; then sh Scripts/setup-dev-cert.sh; \
+		else echo "Requested signing identity is unavailable: $(IDENTITY)" >&2; exit 1; fi; \
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
 	codesign --force --deep --options runtime --timestamp -s "$(IDENTITY)" $(APP)
@@ -92,6 +93,7 @@ else
 	@echo "✅ Signed with stable local identity \"$(IDENTITY)\" — persistent across rebuilds (Keychain & Accessibility permissions remembered)."
 endif
 endif
+	codesign --verify --deep --strict $(APP)
 	@echo "Done → open $(APP)  (or move it to /Applications)"
 
 app-universal: universal

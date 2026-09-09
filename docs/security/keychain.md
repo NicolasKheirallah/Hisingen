@@ -31,8 +31,10 @@ Every write uses `kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDevi
 
 ## In-memory cache
 
-`InMemorySecretCache` — a process-global singleton guarded by an `NSLock`,
-caching every secret after first read and invalidated on save/delete. Cache keys
+`InMemorySecretCache` belongs to each `KeychainStore` and is guarded by an `NSLock`.
+It caches successful and missing reads and is updated after successful saves/deletes.
+A store serializes Security.framework operations so concurrent callers share the
+first read instead of opening multiple authorization requests. Cache keys
 combine the Keychain service and account, so isolated test services cannot
 collide with production items.
 
@@ -51,3 +53,19 @@ verify that deleting a draft cannot delete or replace its committed value.
 - Vehicle telemetry, capability observations, and charging history — stored in the local SQLite database via `VehicleStateStore`, never Keychain (they aren't credentials).
 - The Volvo Client ID — a public OAuth client identifier, stored in `Preferences`/`UserDefaults`.
 - Anything shared between the two brands — there is no cross-brand Keychain item; see [architecture/providers.md](../architecture/providers.md).
+
+## Updates and authorization prompts
+
+Package and install the `.app` with the same Developer ID identity on each update.
+The standalone SwiftPM binary is ad-hoc signed and must not replace the signed app.
+Switching from a self-signed development build can require one-time authorization
+for existing legacy items; signing cannot bypass the user's Keychain access controls.
+
+Data-protection access falls back to the legacy Keychain only when the item is
+missing or that storage is unavailable. Cancellation and access denial are errors,
+not missing credentials. Migration deletes the legacy item only after a write to
+data-protection storage itself succeeds, never after a fallback legacy write.
+Ordinary saves do not repeatedly issue legacy cleanup requests.
+Session restoration reads only the refresh token on the successful resume path;
+password and email reads are deferred until password authentication is needed.
+A Keychain denial does not trigger password fallback.

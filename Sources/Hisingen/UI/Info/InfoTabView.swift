@@ -53,6 +53,7 @@ struct InfoTabView: View {
     struct InfoAsyncData: Sendable {
         var recentTelemetry: [HistoricalTelemetryRecord] = []
         var recentCommands: [RemoteCommandAuditRecord] = []
+        var recentActivities: [VehicleActivity] = []
         var airQualityHistory: [AirQualityRecord] = []
         var connectivityHistory: [VehicleDatabase.ConnectivityRecord] = []
         var chargingSessions: [ChargingSession] = []
@@ -65,7 +66,7 @@ struct InfoTabView: View {
         case overview, doors, tyres, fluids, errors, software, location, weather
         case trip, powertrain, batteryHealth, batteryDiagnostics, airQuality
         case connectivity, service, warranty, exterior, interior, chargeLocations
-        case factoryBuild, capabilities, activity
+        case factoryBuild, capabilities, activity, freshness
 
         var title: String {
             switch self {
@@ -91,6 +92,7 @@ struct InfoTabView: View {
             case .factoryBuild: return L10n.text("Factory Build & Identity")
             case .capabilities: return L10n.text("Vehicle Capabilities")
             case .activity: return L10n.text("Activity History")
+            case .freshness: return L10n.text("Reading Freshness")
             }
         }
     }
@@ -123,7 +125,7 @@ struct InfoTabView: View {
                     ? preferred.rawValue
                     : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
             }
-            .task(id: state.vin) { await loadAsyncData() }
+            .task(id: "\(state.vin)|\(state.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
             .task(id: coordinateKey) { await resolveAddressIfNeeded() }
             .alert(
                 L10n.text("Something Went Wrong"),
@@ -145,6 +147,7 @@ struct InfoTabView: View {
         }
 
         add(.overview, heroVisualSection)
+        add(.freshness, readingFreshnessCard)
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {
             add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked,
@@ -179,7 +182,7 @@ struct InfoTabView: View {
         if state.airQuality != nil {
             add(.airQuality, airQualityCleanZoneCard)
         }
-        if state.connectivity?.wakeReason != nil || state.connectivity?.networkType != nil {
+        if state.connectivity != nil {
             add(.connectivity, connectivityWakeCard)
         }
         if serviceCardHasContent {
@@ -201,7 +204,7 @@ struct InfoTabView: View {
         } else if !capabilityProfileEntries.positive.isEmpty || !capabilityProfileEntries.negative.isEmpty {
             add(.capabilities, vehicleCapabilityCard)
         }
-        if !asyncData.recentTelemetry.isEmpty || !asyncData.recentCommands.isEmpty {
+        if !asyncData.recentTelemetry.isEmpty || !asyncData.recentCommands.isEmpty || !asyncData.recentActivities.isEmpty {
             add(.activity, activityHistoryCard)
         }
         return out
@@ -302,6 +305,7 @@ struct InfoTabView: View {
             var d = InfoAsyncData()
             d.recentTelemetry = db.recentTelemetry(for: vin, limit: 40)
             d.recentCommands = db.recentCommandAudits(for: vin, limit: 5)
+            d.recentActivities = db.recentActivities(for: vin, limit: 10)
             d.airQualityHistory = db.recentAirQuality(for: vin, limit: 500)
             d.connectivityHistory = db.recentConnectivity(for: vin, limit: 60)
             d.batteryHealthHistory = db.batteryHealthHistory(for: vin)

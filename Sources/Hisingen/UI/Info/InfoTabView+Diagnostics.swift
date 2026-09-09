@@ -87,17 +87,27 @@ extension InfoTabView {
     // MARK: - Vehicle errors (Chronos)
 
     var vehicleErrorsCard: some View {
-        let errors = state.vehicleErrors
+        let errors = VehicleDiagnosticGroup.grouped(state.vehicleErrors, vin: state.vin)
         guard !errors.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Vehicle Errors"), color: .red)
                 VStack(spacing: 6) {
-                    ForEach(errors.indices, id: \.self) { index in
-                        let error = errors[index]
-                        KVRow(error.service.displayName, error.errorCode.displayName,
-                              symbol: "exclamationmark.circle",
-                              valueWarning: error.errorCode != .unspecified)
+                    ForEach(errors) { group in
+                        DisclosureGroup {
+                            if let action = group.records.first?.actionDisplayName {
+                                KVRow(L10n.text("Backend Action"), action, symbol: "info.circle")
+                            }
+                            let identities = group.records.compactMap(\.recordID).sorted()
+                            if !identities.isEmpty {
+                                Text(identities.joined(separator: "\n"))
+                                    .font(.caption2).textSelection(.enabled)
+                            }
+                        } label: {
+                            KVRow(group.service.displayName,
+                                  L10n.format("%@ · %d records", group.code.displayName, group.records.count),
+                                  symbol: "exclamationmark.circle", valueWarning: group.code != .unspecified)
+                        }
                     }
                 }
                 Text(L10n.text("Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan."))
@@ -261,25 +271,34 @@ extension InfoTabView {
 
     var connectivityWakeCard: AnyView {
         let current = state.connectivity
-        guard current?.wakeReason != nil || current?.networkType != nil else {
+        guard current != nil else {
             return AnyView(EmptyView())
         }
         let history = asyncData.connectivityHistory
+        let signalHistory = history.filter { $0.signalBars.map { (0...4).contains($0) } == true }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "antenna.radiowaves.left.and.right",
                            title: L10n.text("Connectivity & Wake"), color: .cyan)
+                KVRow(L10n.text("Reported Connection"), current?.state.displayName ?? L10n.text("Unknown"), symbol: "network")
+                if let date = current?.updatedAt {
+                    KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: date), symbol: "clock")
+                }
+                Text(state.hasFreshReading(.connectivity)
+                     ? L10n.text("A reported connection does not guarantee that the vehicle can accept a command immediately.")
+                     : L10n.text("Connection data is old or has no timestamp. Current reachability is unknown."))
+                    .font(.caption2).foregroundStyle(.secondary)
                 if let reason = current?.wakeReason {
                     KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
                 }
                 if let network = current?.networkType {
                     KVRow(L10n.text("Network"), network, symbol: "dot.radiowaves.up.forward")
                 }
-                if let bars = current?.signalBars {
+                if let bars = current?.signalBars, (0...4).contains(bars) {
                     KVRow(L10n.text("Signal"), "\(bars)/4", symbol: "signalbars")
                 }
-                if history.count >= 3 {
-                    Chart(history.reversed()) { record in
+                if signalHistory.count >= 3 {
+                    Chart(signalHistory.reversed()) { record in
                         PointMark(
                             x: .value(L10n.text("Date"), record.timestamp),
                             y: .value(L10n.text("Signal"), record.signalBars ?? 0)
@@ -292,16 +311,16 @@ extension InfoTabView {
                     .frame(height: 70)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Signal strength history chart"))
-                    .accessibilityValue(chartAccessibilityValue(points: history.map { Double($0.signalBars ?? 0) }))
-                    let wakes = history.compactMap(\.wakeReason)
-                    if !wakes.isEmpty {
-                        KVRow(L10n.text("Recent Wake Reasons"),
-                              Dictionary(grouping: wakes, by: { $0 })
-                                  .map { "\($0.key) ×\($0.value.count)" }
-                                  .sorted()
-                                  .joined(separator: " · "),
-                              symbol: "clock.arrow.circlepath")
-                    }
+                    .accessibilityValue(chartAccessibilityValue(points: signalHistory.map { Double($0.signalBars ?? 0) }))
+                }
+                let wakes = history.compactMap(\.wakeReason)
+                if !wakes.isEmpty {
+                    KVRow(L10n.text("Recent Wake Reasons"),
+                          Dictionary(grouping: wakes, by: { $0 })
+                              .map { "\($0.key) ×\($0.value.count)" }
+                              .sorted()
+                              .joined(separator: " · "),
+                          symbol: "clock.arrow.circlepath")
                 }
             }
         })

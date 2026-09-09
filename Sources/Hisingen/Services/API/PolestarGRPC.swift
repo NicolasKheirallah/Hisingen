@@ -865,6 +865,23 @@ enum GRPCHost: Sendable {
 }
 
 enum Protobuf {
+    static func packedVarints(_ data: Data) -> [UInt64]? {
+        var result: [UInt64] = []
+        var value: UInt64 = 0
+        var shift = 0
+        for byte in data {
+            guard shift < 64, shift != 63 || byte <= 1 else { return nil }
+            value |= UInt64(byte & 0x7f) << shift
+            if byte & 0x80 == 0 {
+                result.append(value)
+                value = 0
+                shift = 0
+            } else {
+                shift += 7
+            }
+        }
+        return shift == 0 ? result : nil
+    }
 
     struct Field {
         let number: Int

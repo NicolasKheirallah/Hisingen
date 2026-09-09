@@ -745,23 +745,9 @@ extension PolestarGRPC {
     static func parseHealth(_ data: Data) -> GrpcHealthReport {
         let fields = Protobuf.fields(data)
         let warningFields = [9, 10, 11, 12]
-        // The backend omits proto3 zero/unset values, and a healthy car proves it live: every
-        // other category arrives as an explicit 1 (fluids 6–8/13, lights 14–35, battery 38)
-        // while the tyre-warning quadruple (9–12) is left out entirely. Within a payload that
-        // substantive, that omission means "nothing to report" — mapping it to `.unknown`
-        // pinned a healthy Polestar 2's tyre card at "Unknown" forever. An empty or truncated
-        // payload (no other category present) still stays unknown; see
-        // `testHealthDoesNotConvertAbsentFieldsIntoHealthyReadings`.
-        let substantivePayload = [6, 7, 8, 13, 38].contains { varint(fields, $0) != nil }
-            || (14...35).contains { varint(fields, $0) != nil }
-        // The documented positions are FL/FR/RL/RR at fields 39–42 (verified against
-        // Polestar 3-era captures). The reference Polestar 2 capture returned warning level
-        // only — but that is a backend/firmware fact for ONE car, not a platform law. Before
-        // giving up on numeric pressures, scan a bounded neighbouring window for a coherent
-        // quadruple: four CONSECUTIVE numeric fields whose values all sit in a plausible kPa
-        // band (150–400; cold-to-hot passenger-tyre range). Read-only and deterministic, so
-        // the worst case is identical to today's behaviour.
-        let pressureFields = Self.discoverPressureQuadruple(fields, window: 36...52)
+        // Polestar 5.11.1 Health: individual kPa readings are fields 39–42.
+        // Reference pressures at 43/44 and nested statuses must never become wheel readings.
+        let pressureFields = [39, 40, 41, 42]
         let positions = TyrePosition.allCases
         var tyres: [TyrePressure] = []
         for index in positions.indices {
@@ -770,10 +756,10 @@ extension PolestarGRPC {
             if let warningRaw {
                 warning = tyreWarning(warningRaw) ?? .unknown
             } else {
-                warning = substantivePayload ? .none : .unknown
+                warning = .unknown
             }
-            let pressure = pressureFields.flatMap { pFields in
-                numeric(fields, pFields[index]).flatMap { $0 > 0 ? $0 : nil }
+            let pressure = numeric(fields, pressureFields[index]).flatMap {
+                $0.isFinite && $0 > 0 ? $0 : nil
             }
             tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
         }
@@ -818,7 +804,14 @@ extension PolestarGRPC {
                 lightFailures.append(desc)
             }
         }
-        if (14...35).contains(where: { varint(fields, $0) != nil }) {
+        let nestedLights = message(fields, field: 46).map(Protobuf.fields) ?? []
+        for field in nestedLights where field.wire == 0 && field.varint == 2 {
+            if let name = VehicleLightCoverage.healthName(field.number), !lightFailures.contains(name) {
+                lightFailures.append(name)
+            }
+        }
+        if (14...35).contains(where: { varint(fields, $0) != nil })
+            || nestedLights.contains(where: { $0.wire == 0 && VehicleLightCoverage.healthName($0.number) != nil && (1...2).contains($0.varint) }) {
             reportedWarnings.append(.exteriorLight)
             if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
                 warnings.append(.exteriorLight)
@@ -1014,11 +1007,9 @@ extension PolestarGRPC {
             let supportsFullOtaUpdates = varint(car, 57) == 1
             let supportsCloudBasedOtaDownloadConsent = varint(car, 62) == 1
             let hasPerformanceSoftwareUpgrade = varint(car, 70) == 1
-            // Field 16: honkFlashType (enum): 0=UNSPECIFIED, 2=NONE, 3=HONK_AND_FLASH,
-            // 4=HONK_AND_OR_FLASH, 5=HONK, 6=FLASH
-            let honkFlashType = varint(car, 16) ?? 0
-            let supportsHonkAndFlash = honkFlashType == 3 || honkFlashType == 4
-            let supportsFlash = honkFlashType == 4 || honkFlashType == 6
+            let honkFlashMode = varint(car, 16).flatMap { VehicleHonkFlashMode(rawValue: Int($0)) }
+            let supportsHonkAndFlash = honkFlashMode?.permits(.honkAndFlash) == true
+            let supportsFlash = honkFlashMode?.permits(.flashLights) == true
 
             // Nested Locks message (field 36)
             let locksData = message(car, field: 36).map(Protobuf.fields)
@@ -1038,33 +1029,32 @@ extension PolestarGRPC {
             // return a scalar `true`; accept both wire shapes.
             let amperageSettings = message(chargingData ?? [], field: 9).map(Protobuf.fields)
             let targetSettings = message(chargingData ?? [], field: 8).map(Protobuf.fields)
-            let supportsGlobalChargeAmperageLimit = amperageSettings != nil
+            let supportsGlobalChargeAmperageLimit = amperageSettings.map { varint($0, 1) == 1 } == true
                 || chargingData?.first(where: { $0.number == 9 && $0.wire == 0 })?.varint == 1
-            let supportsTargetChargeLevel = targetSettings != nil
+            let supportsTargetChargeLevel = targetSettings.map { varint($0, 1) == 1 } == true
                 || chargingData?.first(where: { $0.number == 8 && $0.wire == 0 })?.varint == 1
             let supportsChargeNowTimerOverride = chargingData?.first(where: { $0.number == 15 })?.varint == 1
             let supportsPlugAndCharge = chargingData?.first(where: { $0.number == 29 })?.varint == 1
 
-            // Settings messages use field 1 for the lower bound and field 2 for the upper
-            // bound. Read those exact fields (rather than every plausible-looking varint)
-            // so a future enum or feature flag cannot silently become a slider limit.
+            // Polestar 5.11.1 generated settings schemas: field 1 is the support flag.
+            // See docs/testing/polestar-mycars-field-map.md for field numbers and provenance.
             let chargeAmperageMinLimit = plausibleLimit(
-                amperageSettings, field: 1, range: 2...64
+                amperageSettings, field: 3, range: 2...64
             )
             let advertisedAmpMaximum = plausibleLimit(
-                amperageSettings, field: 2, range: 2...64
+                amperageSettings, field: 4, range: 2...64
             )
             let chargeAmperageMaxLimit = advertisedAmpMaximum >= chargeAmperageMinLimit
                 ? advertisedAmpMaximum : 0
             let targetChargeLevelPercentageMinLimit = plausibleLimit(
-                targetSettings, field: 1, range: 20...100
+                targetSettings, field: 2, range: 20...100
             )
 
             // Nested AirPurification message (field 34)
             let airData = message(car, field: 34).map(Protobuf.fields)
             let supportsAirPurificationRemoteStart = airData?.first(where: { $0.number == 1 })?.varint == 1
 
-            return VehicleOTACapabilities(
+            var capabilities = VehicleOTACapabilities(
                 installedSoftwareVersion: installedVersion,
                 identity: VehicleBackendIdentity(modelName: string(car, 6).nilIfEmpty,
                                                  modelYear: string(car, 7).nilIfEmpty,
@@ -1093,8 +1083,111 @@ extension PolestarGRPC {
                 userIsOwner: varint(myCar, 3).map { $0 != 0 },
                 registrationPlate: string(myCar, 4).nilIfEmpty
             )
+            capabilities.honkFlashMode = honkFlashMode
+            capabilities.equipment = parseEquipment(car)
+            var advertised: [VehicleCapability: Bool] = [:]
+            func record(_ capability: VehicleCapability, _ fields: [Protobuf.Field]?, _ number: Int) {
+                if let raw = varint(fields ?? [], number) { advertised[capability] = raw != 0 }
+            }
+            record(.chargeTarget, targetSettings, 1)
+            record(.chargingCurrentLimit, amperageSettings, 1)
+            record(.chargingSchedule, chargingData, 11)
+            record(.chargingScheduleOverride, chargingData, 15)
+            record(.windows, locksData, 5)
+            record(.preCleaning, airData, 1)
+            record(.tyrePressureValues, car, 50)
+            record(.serviceWarnings, car, 87)
+            record(.engineStart, car, 27)
+            let climate = message(car, field: 37).map(Protobuf.fields)
+            let temperature = message(climate ?? [], field: 6).map(Protobuf.fields)
+            record(.climateTemperature, temperature, 1)
+            let frontSeats = varint(climate ?? [], 8).map { $0 != 0 }
+            let rearSeats = varint(climate ?? [], 9).map { $0 != 0 }
+            if frontSeats == true || rearSeats == true {
+                advertised[.seatHeating] = true
+            } else if frontSeats == false && rearSeats == false {
+                advertised[.seatHeating] = false
+            }
+            record(.steeringWheelHeating, climate, 10)
+            if let mode = honkFlashMode, mode != .unspecified {
+                advertised[.honkAndFlash] = mode != .none
+            }
+            capabilities.advertisedCapabilities = advertised
+            let timers = message(climate ?? [], field: 13).map(Protobuf.fields) ?? []
+            var settings = VehicleControlSettings()
+            settings.climateTimerMaximum = positiveInt(varint(timers, 7))
+            settings.repeatedClimateTimers = varint(timers, 2).map { $0 != 0 }
+            settings.singleClimateTimers = varint(timers, 8).map { $0 != 0 }
+            settings.chargeLocationMaximum = positiveInt(varint(chargingData ?? [], 16))
+            settings.locationAmperage = varint(amperageSettings ?? [], 2).map { $0 != 0 }
+            settings.locationOptimization = varint(chargingData ?? [], 4).map { $0 != 0 }
+            settings.temperatureMinimum = positiveInt(varint(temperature ?? [], 3))
+            settings.temperatureMaximum = positiveInt(varint(temperature ?? [], 2))
+            settings.frontSeatSettings = varint(climate ?? [], 8).map { $0 != 0 }
+            settings.rearSeatSettings = varint(climate ?? [], 9).map { $0 != 0 }
+            settings.steeringWheelSettings = varint(climate ?? [], 10).map { $0 != 0 }
+            capabilities.controlSettings = settings
+            return capabilities
         }
         return nil
+    }
+
+    private static func parseEquipment(_ car: [Protobuf.Field]) -> VehicleEquipment {
+        func nested(_ fields: [Protobuf.Field], _ number: Int) -> [Protobuf.Field] {
+            message(fields, field: number).map(Protobuf.fields) ?? []
+        }
+        func flag(_ fields: [Protobuf.Field], _ number: Int) -> Bool? {
+            varint(fields, number).map { $0 != 0 }
+        }
+        func integer(_ fields: [Protobuf.Field], _ number: Int) -> Int? {
+            varint(fields, number).flatMap(Int.init(exactly:))
+        }
+        func label(_ fields: [Protobuf.Field], _ number: Int, _ labels: [Int: String]) -> String? {
+            guard let value = integer(fields, number), value != 0 else { return nil }
+            return labels[value] ?? L10n.format("Unknown (%d)", value)
+        }
+        let propulsion = nested(car, 40)
+        let charging = nested(car, 35)
+        let target = nested(charging, 8)
+        let air = nested(car, 34)
+        let key = nested(car, 39)
+        var result = VehicleEquipment()
+        result.brand = label(car, 2, [1: "Volvo", 2: "Polestar"])
+        result.vehicleTypeCode = string(car, 5).nilIfEmpty
+        result.drivetrain = label(propulsion, 1, [1: "AWD", 2: "RWD", 3: "FWD"])
+        result.engine = label(propulsion, 6, [1: "Electric", 2: "Diesel", 3: "Petrol", 4: "Petrol hybrid", 5: "Diesel hybrid"])
+        result.driverSide = label(car, 46, [1: "Left", 2: "Right"])
+        result.infotainment = label(nested(car, 42), 6, [1: "None", 2: "MCA Sensus", 3: "SPA/CMA Sensus", 4: "Android", 5: "Geely Android"])
+        result.doorCount = integer(car, 43).flatMap { (1...10).contains($0) ? $0 : nil }
+        result.chargePort = label(charging, 2, [1: "None", 2: "Left", 3: "Right"])
+        result.batterySerial = string(charging, 3).nilIfEmpty
+        result.batteryCapacityKwh = numeric(propulsion, 5).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        result.digitalKey = label(key, 1, [1: "None", 2: "Polestar 1", 3: "Polestar 2", 4: "CCC"])
+        result.nfcReader = label(car, 68, [1: "None", 2: "Door handle", 3: "B-pillar"])
+        let phones = nested(key, 3)
+        if !phones.isEmpty {
+            let names = ["Apple", "Google", "Samsung", "Huawei", "Xiaomi", "Vivo", "Oppo", "Motorola", "OnePlus"]
+            result.compatiblePhones = names.enumerated().compactMap { flag(phones, $0.offset + 1) == true ? $0.element : nil }
+        }
+        if flag(target, 6) == true, let daily = integer(target, 5), (1...100).contains(daily) {
+            result.dailyChargeTarget = daily
+        }
+        result.automaticBatteryPreconditioning = flag(charging, 36)
+        if flag(air, 7) == true {
+            result.airCleaningRuntimeMinutes = integer(air, 8).flatMap { $0 > 0 ? $0 : nil }
+        }
+        result.internalAirMeasurement = flag(air, 2)
+        result.externalAirMeasurement = flag(air, 3)
+        result.restrictedSoftwareVersion = string(nested(car, 74), 6).nilIfEmpty
+        let lightFields = car.filter { $0.number == 73 }
+        if !lightFields.isEmpty {
+            result.supportedLightWarnings = lightFields.flatMap { field -> [UInt64] in
+                if field.wire == 0 { return [field.varint] }
+                guard field.wire == 2 else { return [] }
+                return Protobuf.packedVarints(field.data) ?? []
+            }.map(VehicleLightCoverage.name)
+        }
+        return result
     }
 
     private static func plausibleLimit(
@@ -1389,34 +1482,6 @@ extension PolestarGRPC {
         }
     }
 
-    /// Finds four consecutive numeric fields inside `window` whose values all sit in the
-    /// plausible kPa band. Returns the field numbers in ascending order, or nil. A single
-    /// stray value can never qualify — all four neighbours must agree, which is what makes
-    /// this safe to run against an undocumented layout.
-    static func discoverPressureQuadruple(
-        _ fields: [Protobuf.Field], window: ClosedRange<Int>
-    ) -> [Int]? {
-        let numericFields: [Int: Double] = {
-            var map: [Int: Double] = [:]
-            for field in fields where window.contains(field.number)
-                && (field.wire == 0 || field.wire == 1 || field.wire == 5) {
-                // Last one wins on repeated field numbers; protobuf decoders commonly take
-                // the final occurrence for scalar fields.
-                if let value = numeric(fields, field.number) { map[field.number] = value }
-            }
-            return map
-        }()
-        var run: [Int] = []
-        for number in window.lowerBound...window.upperBound {
-            if let value = numericFields[number], value >= 150, value <= 400 {
-                run.append(number)
-                if run.count == 4 { return run }
-            } else {
-                run.removeAll()
-            }
-        }
-        return nil
-    }
     private static func dailyTime(_ data: Data?) -> (Int, Int)? {
         guard let data else { return nil }
         let fields = Protobuf.fields(data)

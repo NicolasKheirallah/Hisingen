@@ -4,7 +4,13 @@ extension PolestarAPI {
     /// Returns the model-derived capability profile used by command and telemetry gates.
     func capabilityProfile(for vin: String? = nil) -> VehicleCapabilityProfile {
         let resolved = vin ?? selectedVIN
-        return VehicleCapabilityProfile(modelName: identity(for: resolved).modelName, vin: resolved)
+        return VehicleCapabilityProfile(modelName: identity(for: resolved).modelName, vin: resolved,
+                                        advertised: cachedMyCars(for: resolved)?.advertisedCapabilities ?? [:])
+    }
+
+    func cachedMyCars(for vin: String?) -> VehicleOTACapabilities? {
+        guard let vin, let cached = capabilityCache["\(vin)|my-cars"], cached.expiresAt > Date() else { return nil }
+        return cached.value as? VehicleOTACapabilities
     }
 
     func optionalBattery(enabled: Bool, vin: String, token: String) async throws -> GrpcBatteryExtras? {

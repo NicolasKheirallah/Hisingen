@@ -12,7 +12,7 @@ That distinction matters:
 - undocumented behaviour is treated conservatively by Hisingen;
 - Hisingen does not claim that these interfaces are officially supported by Polestar.
 
-This document deliberately describes the integration at a functional level. Detailed reverse-engineering notes, captured traffic, backend inventories, protocol field maps and probing material are not part of the public repository.
+This document describes the integration at a functional level.
 
 ---
 
@@ -553,17 +553,11 @@ When changing the Polestar integration:
 - preserve the shared provider/domain boundary;
 - keep network operations feature-gated;
 - handle missing fields as missing;
-- sanitize all fixtures before committing them;
-- never commit captured traffic from a real account;
-- never commit real credentials or tokens;
-- avoid putting detailed reverse-engineering findings into public documentation;
 - add regression coverage for provider-response changes;
 - ensure new remote actions participate in both capability and implementation gating;
 - fail safely when provider behaviour is uncertain.
 
 Sanitized fixtures belong in the public test suite.
-
-Raw captures, probing transcripts, credential-bearing responses and detailed reverse-engineering research do not.
 
 ---
 

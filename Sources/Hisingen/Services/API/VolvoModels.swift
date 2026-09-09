@@ -211,7 +211,11 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     }
 
     var estTimeToTargetMinutes: Int? {
-        (estimatedChargingTimeToTargetBatteryChargeLevel?.value ?? estimatedChargingTimeToFull?.value).map { Int($0.rounded()) }
+        estimatedChargingTimeToTargetBatteryChargeLevel?.value.map { Int($0.rounded()) }
+    }
+
+    var estTimeToFullMinutes: Int? {
+        estimatedChargingTimeToFull?.value.map { Int($0.rounded()) }
     }
 
     var chargingStateValue: String? {

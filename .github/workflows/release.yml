@@ -104,7 +104,7 @@ jobs:
           echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           rm -f "$CERTIFICATE_PATH"
 
-      - name: Build universal app
+      - name: Build universal app (Developer ID signed)
         env:
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
@@ -112,6 +112,8 @@ jobs:
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: |
+          # Signs Hisingen.app with the Developer ID Application certificate
+          # imported above, enabling Gatekeeper trust and notarization.
           REQUIRE_SPARKLE_UPDATER=true make app-universal OUTPUT_DIR=. IDENTITY="$IDENTITY"
 
       - name: Verify signature and architectures
@@ -134,7 +136,7 @@ jobs:
           xcrun stapler validate Hisingen.app
           spctl --assess --type execute --verbose=2 Hisingen.app
 
-      - name: Package disk image and archives
+      - name: Package disk image and archives (Developer ID signed DMG)
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
@@ -142,6 +144,8 @@ jobs:
         run: |
           set -euo pipefail
           make dmg OUTPUT_DIR=. IDENTITY="$IDENTITY"
+          # Sign the DMG itself with the same Developer ID identity so both
+          # the app bundle and the disk image are identified to Gatekeeper.
           codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
           codesign --verify --verbose=2 Hisingen.dmg
           xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait

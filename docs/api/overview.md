@@ -9,7 +9,7 @@ The most important distinction is:
 
 Because of that difference, the two integrations have different stability and support characteristics.
 
-This document describes the public architecture of those integrations without publishing reverse-engineering material such as internal backend inventories, first-party client identifiers, protocol field maps, probing results or captured traffic.
+This document describes the public architecture of those integrations.
 
 ---
 
@@ -532,8 +532,7 @@ When modifying a provider integration:
 8. Keep capabilities separate from provider implementation.
 9. Add sanitized fixtures for response-format changes.
 10. Never commit raw provider responses containing real account or vehicle data.
-11. Avoid publishing reverse-engineering notes in public documentation.
-12. Treat remote-command changes as security-sensitive.
+11. Treat remote-command changes as security-sensitive.
 
 ---
 

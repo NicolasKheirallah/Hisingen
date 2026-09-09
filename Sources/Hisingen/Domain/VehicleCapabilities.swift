@@ -501,17 +501,31 @@ struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
 struct VehicleCapabilityProfile: Equatable, Sendable {
     let model: VehicleModelFamily
     let probed: VehicleProbedCapabilities?
+    let advertised: [VehicleCapability: Bool]
 
-    init(modelName: String?, vin: String? = nil, probed: VehicleProbedCapabilities? = nil) {
+    init(modelName: String?, vin: String? = nil, probed: VehicleProbedCapabilities? = nil,
+         advertised: [VehicleCapability: Bool] = [:]) {
         model = VehicleModelFamily(modelName: modelName, vin: vin)
         self.probed = probed
+        self.advertised = advertised
+    }
+
+    func supportSource(for capability: VehicleCapability) -> String {
+        if advertised[capability] == false { return L10n.text("Explicit vehicle capability") }
+        if let probed, !probed.isStale, probed.support(for: capability) != nil {
+            return L10n.text("Recent service response")
+        }
+        if advertised[capability] == true { return L10n.text("Explicit vehicle capability") }
+        return L10n.text("Model reference; not verified for this vehicle")
     }
 
     func support(for capability: VehicleCapability) -> VehicleCapabilitySupport {
+        if let supported = advertised[capability], !supported { return .unavailable }
         if let probed, !probed.isStale,
            let observed = probed.support(for: capability) {
             return observed
         }
+        if advertised[capability] == true { return .supported }
         switch model {
         case .polestar2:
             switch capability {
@@ -522,10 +536,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             case .softwareInstallControl:
                 return .backendDependent
             case .tyrePressureValues:
-                // The reference MY23 capture reported warning level only (no kPa), but this is
-                // a firmware/backend question, not a vehicle-hardware fact — EU-market cars
-                // carry TPMS hardware. Probe at runtime; the health parser also scans for
-                // pressures at alternate field positions before giving up.
+                // Availability depends on whether the backend reports numeric wheel readings.
                 return .backendDependent
             default:
                 return .supported

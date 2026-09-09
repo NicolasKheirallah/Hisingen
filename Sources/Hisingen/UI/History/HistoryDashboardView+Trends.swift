@@ -87,6 +87,20 @@ extension HistoryDashboardView {
                         .font(.system(size: 9)).foregroundStyle(.secondary)
                 }
                 seasonalRow(seasonal)
+                if state.hasFreshReading(.battery), let battery = state.batteryPercentage,
+                   let estimate = HistoryInsights.historicalRange(
+                    from: telemetryRecords, vin: state.vin,
+                    usableCapacityKwh: state.configuredUsableBatteryCapacityKwh, batteryPercentage: battery) {
+                    Text(L10n.format("Range from recorded consumption: %@",
+                                     Format.distance(km: estimate.typicalKm, unit: preferences.distanceUnit)))
+                        .font(.caption.weight(.medium))
+                    Text(L10n.format("%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction.",
+                                     Format.distance(km: estimate.shortestKm, unit: preferences.distanceUnit),
+                                     Format.distance(km: estimate.longestKm, unit: preferences.distanceUnit),
+                                     estimate.observationCount))
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let slopePerDay {
                     let monthlySlope = slopePerDay * 30
                     Text(L10n.format("Trending %@ kWh/100km per month", Format.signedNumber(monthlySlope, decimals: 2)))

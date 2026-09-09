@@ -63,7 +63,7 @@ struct NotificationTestHarness {
         serviceWarning: Bool = false,
         reportedAt: Date = Date()
     ) -> VehicleState {
-        VehicleState(
+        var state = VehicleState(
             batteryPercentage: battery,
             rangeKm: 350,
             chargingState: chargingState,
@@ -92,12 +92,39 @@ struct NotificationTestHarness {
             vehicleReportedAt: reportedAt,
             dataWarnings: []
         )
+        let sensorDate = min(reportedAt, Date())
+        state.readingDates = [.battery: sensorDate, .charging: sensorDate, .health: sensorDate]
+        return state
     }
 }
 
 @Suite("Notification posting")
 @MainActor
 struct NotificationPostingTests {
+
+    @Test func freshSnapshotDoesNotMakeOldChargingAndHealthReadingsNotify() throws {
+        let harness = try NotificationTestHarness()
+        let notifier = harness.makeNotifier()
+        notifier.vehicleStateDidUpdate(harness.makeState(reportedAt: Date().addingTimeInterval(-60)))
+        harness.dispatcher.added.removeAll()
+        var current = harness.makeState(chargingState: .charging, chargerConnection: .connected,
+                                        serviceWarning: true)
+        current.readingDates[.charging] = Date().addingTimeInterval(-3600)
+        current.readingDates[.health] = Date().addingTimeInterval(-3600)
+        notifier.vehicleStateDidUpdate(current)
+        #expect(harness.dispatcher.added.isEmpty)
+    }
+
+    @Test func unknownConnectionDoesNotProduceDisconnectedNotification() throws {
+        let harness = try NotificationTestHarness()
+        harness.preferences.notifyChargerConnection = true
+        let notifier = harness.makeNotifier()
+        notifier.vehicleStateDidUpdate(harness.makeState(chargerConnection: .connected,
+                                                         reportedAt: Date().addingTimeInterval(-60)))
+        harness.dispatcher.added.removeAll()
+        notifier.vehicleStateDidUpdate(harness.makeState(chargerConnection: .unknown))
+        #expect(!harness.dispatcher.added.contains { $0.identifier.contains("cable-disconnected") })
+    }
 
     @Test func chargingStartIncludesVehicleSubtitle() throws {
         let harness = try NotificationTestHarness()

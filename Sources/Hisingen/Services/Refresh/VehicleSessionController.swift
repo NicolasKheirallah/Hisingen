@@ -235,6 +235,10 @@ final class VehicleSessionController {
         }
         refreshCoordinator.onState = { [weak self] state in
             guard let self else { return }
+            var state = state
+            if self.latest?.vin == state.vin, let pending = self.latest?.pendingCommand {
+                state.pendingCommand = pending.updatingConfirmation(from: state)
+            }
             self.context?.didReceiveVehicleState(state)
             self.latest = state
             self.lastError = nil

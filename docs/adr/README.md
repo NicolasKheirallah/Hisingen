@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Lightweight ADRs for decisions that genuinely shaped Hisingen's architecture and are worth recording so a future contributor doesn't have to reverse-engineer *why*, not just *what*. Where the original reasoning isn't recoverable from the repository, that's stated explicitly rather than invented.
+Lightweight ADRs for decisions that genuinely shaped Hisingen's architecture and are worth recording so a future contributor understands *why*, not just *what*. Where the original reasoning isn't recoverable from the repository, that's stated explicitly rather than invented.
 
 Format:
 

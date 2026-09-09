@@ -20,7 +20,7 @@ extension PolestarAPI {
         guard profile.permits(command.requiredCapability) else {
             throw RemoteCommandError.unsupported
         }
-        let adaptedCommand = command.adapted(to: profile)
+        let adaptedCommand = command.adapted(to: profile, settings: cachedMyCars(for: vin)?.controlSettings)
         // Only the invocation-backed commands (locks, climate, windows, cabin cleaning,
         // locate) need the separate command-client token; charging, timers and OTA go
         // through with the primary session token, so don't spend a refresh round-trip on them.
@@ -47,39 +47,13 @@ extension PolestarAPI {
             adaptedCommand, vin: vin, accessToken: token,
             commandToken: commandToken
         )
-        if case .setChargeTarget(let target) = adaptedCommand { targetCache[vin] = (target, Date()) }
-        if case .setAmpLimit(let amps) = adaptedCommand {
-            capabilityCache["\(vin)|amp-limit"] = CapabilityCacheEntry(value: amps, expiresAt: Date().addingTimeInterval(90))
+        // An acknowledgement is not a sensor reading. Force the follow-up to read the
+        // backend instead of caching the requested settings or inventing climate state.
+        targetCache[vin] = nil
+        for key in capabilityCache.keys.filter({ $0.hasPrefix("\(vin)|") && !$0.hasSuffix("|my-cars") }) {
+            capabilityCache[key] = nil
         }
-        if case .startClimate(let temp, let fl, let fr, _, _, let sw) = adaptedCommand {
-            let status = VehicleClimateStatus(
-                activity: .heating, timeRemainingMinutes: 30, timerTriggered: false,
-                interiorTemperatureCelsius: nil,
-                requestedTemperatureCelsius: Double(temp > 0 ? temp : 22.0),
-                driverSeatHeatingLevel: fl.rawValue > 1 ? fl.rawValue - 1 : nil,
-                passengerSeatHeatingLevel: fr.rawValue > 1 ? fr.rawValue - 1 : nil,
-                steeringWheelHeatingLevel: sw.rawValue > 1 ? sw.rawValue - 1 : nil
-            )
-            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(value: status, expiresAt: Date().addingTimeInterval(90))
-        } else if case .stopClimate = adaptedCommand {
-            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(
-                value: VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
-                                             interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil),
-                expiresAt: Date().addingTimeInterval(90)
-            )
-        } else if case .startPreCleaning = adaptedCommand {
-            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(
-                value: VehicleClimateStatus(activity: .ventilating, timeRemainingMinutes: 10, timerTriggered: false,
-                                             interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil),
-                expiresAt: Date().addingTimeInterval(90)
-            )
-        } else if case .stopPreCleaning = adaptedCommand {
-            capabilityCache["\(vin)|climate-status"] = CapabilityCacheEntry(
-                value: VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false,
-                                             interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil),
-                expiresAt: Date().addingTimeInterval(90)
-            )
-        }
+        capabilityBackoff[vin] = nil
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }

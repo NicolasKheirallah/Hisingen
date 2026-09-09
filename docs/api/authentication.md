@@ -11,7 +11,7 @@ Both integrations use PKCE and validate authorization state before accepting a c
 
 Long-lived credentials that need to survive an application restart are stored locally using the macOS Keychain. Hisingen does not operate an authentication server or account service of its own.
 
-This document intentionally describes the authentication architecture without publishing provider-specific reverse-engineering details such as internal client identifiers, captured login forms, undocumented allowlist behaviour, raw responses or probing results.
+This document describes the authentication architecture used by each provider.
 
 ---
 
@@ -613,7 +613,7 @@ Public authentication documentation should explain:
 
 Public documentation should not reproduce:
 
-* first-party OAuth client identifiers discovered through reverse engineering;
+* first-party OAuth client identifiers;
 * provider-internal allowlists;
 * raw authorization requests or responses from real accounts;
 * undocumented scope experiments;
@@ -643,7 +643,6 @@ When modifying authentication:
 10. Ensure an invalid refresh session returns to unauthenticated state.
 11. Add tests for callback validation and failure handling.
 12. Never commit raw authentication captures.
-13. Keep undocumented reverse-engineering material out of public documentation.
 
 Authentication changes should generally be treated as security-sensitive changes even when they appear to be simple provider compatibility fixes.
 

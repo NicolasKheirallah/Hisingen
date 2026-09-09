@@ -1,6 +1,7 @@
 .build*/
 releases/
 .swiftpm/
+docs/
 *.app
 *.dmg
 dmg-staging/

@@ -30,6 +30,16 @@ extension PolestarGRPC {
     func executeRemoteCommand(_ command: RemoteCommand, vin: String,
                               accessToken: String,
                               commandToken: String? = nil) async throws -> RemoteCommandResult {
+        if capabilityLimits[vin]?.honkFlashMode?.permits(command) == false {
+            throw RemoteCommandError.unsupported
+        }
+        if capabilityLimits[vin]?.advertisedCapabilities?[command.requiredCapability] == false {
+            throw RemoteCommandError.unsupported
+        }
+        let controlSettings = capabilityLimits[vin]?.controlSettings ?? VehicleControlSettings()
+        if let reason = controlSettings.rejection(for: command, bounds: VehicleChargeBounds(capabilities: capabilityLimits[vin])) {
+            throw RemoteCommandError.rejected(reason)
+        }
         // Invocation-backed commands are gated on a client-id allowlist that the primary
         // (web) client is not on, so they need the command client's token (`lp8dyrd_10`). Everything else
         // — OTA and chronos — is happy with the primary token. `PolestarAPI.executeRemoteCommand`
@@ -420,6 +430,7 @@ extension PolestarGRPC {
     }
 
     static func globalChargeTimer(_ schedule: VehicleSchedule) throws -> Data {
+        if let reason = schedule.validationMessage(expectedKind: .globalCharging) { throw RemoteCommandError.rejected(reason) }
         guard schedule.kind == .globalCharging,
               let startHour = schedule.startHour, let startMinute = schedule.startMinute,
               let endHour = schedule.endHour, let endMinute = schedule.endMinute,
@@ -435,6 +446,7 @@ extension PolestarGRPC {
     }
 
     static func climateTimer(_ schedule: VehicleSchedule) throws -> Data {
+        if let reason = schedule.validationMessage(expectedKind: .climate) { throw RemoteCommandError.rejected(reason) }
         guard schedule.kind == .climate,
               let hour = schedule.startHour, let minute = schedule.startMinute,
               (0..<24).contains(hour), (0..<60).contains(minute) else {

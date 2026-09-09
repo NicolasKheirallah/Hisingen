@@ -135,6 +135,7 @@ struct HistoryDashboardView: View {
         var tripPurposes: [String: TripPurpose] = [:]
         var chargingSessions: [HistoricalChargingSession] = []
         var commands: [RemoteCommandAuditRecord] = []
+        var activities: [VehicleActivity] = []
         var airQualityRecords: [AirQualityRecord] = []
         var telemetryRecords: [HistoricalTelemetryRecord] = []
         var anomalousSessionIDs: Set<String> = []
@@ -261,7 +262,7 @@ struct HistoryDashboardView: View {
     }
 
     var hasAnyDataInRange: Bool {
-        !trips.isEmpty || !chargingSessions.isEmpty || !commands.isEmpty
+        !trips.isEmpty || !chargingSessions.isEmpty || !commands.isEmpty || !snapshot.activities.isEmpty
             || airQualityRecords.count >= 2 || odometerPoints.count >= 3
             || efficiencyPoints.count >= 3 || combustionConsumptionPoints.count >= 3
     }
@@ -286,7 +287,22 @@ struct HistoryDashboardView: View {
                 loadingSkeleton
             } else {
                 overviewCard
+                if !snapshot.activities.isEmpty {
+                    Card {
+                        VStack(alignment: .leading, spacing: 8) {
+                            CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: .indigo)
+                            VehicleActivityList(events: Array(snapshot.activities.prefix(30)))
+                            if snapshot.activities.count > 30 {
+                                Text(L10n.text("Showing the 30 most recent changes in this period."))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
                 monthComparisonCard
+                if snapshot.activities.contains(where: { $0.kind == .airCleaning }) {
+                    airCleaningCyclesCard
+                }
                 emissionsCard
                 if !trips.isEmpty {
                     drivingPatternsCard
@@ -421,6 +437,8 @@ struct HistoryDashboardView: View {
 
             let rawCommands = db.recentCommandAudits(for: vin, limit: min(cap, 2_000))
             snap.commands = rawCommands.filter { inRange($0.executedAt) }
+            let rawActivities = db.recentActivities(for: vin, limit: 1000)
+            snap.activities = rawActivities.filter { inRange($0.timestamp) }
 
             let rawAir = db.recentAirQuality(for: vin, limit: min(cap, 5_000))
             snap.airQualityRecords = rawAir.filter { inRange($0.timestamp) }
@@ -429,12 +447,13 @@ struct HistoryDashboardView: View {
             snap.telemetryRecords = rawTelemetry.filter { inRange($0.timestamp) }
 
             snap.truncated = rawTrips.count >= tripLimit || rawSessions.count >= cap
-                || rawTelemetry.count >= telemetryLimit
+                || rawTelemetry.count >= telemetryLimit || rawActivities.count >= 1000
 
             snap.hasHistoryOutsideRange = rawTrips.count > snap.trips.count
                 || reconciledSessions.count > snap.chargingSessions.count
                 || rawCommands.count > snap.commands.count
                 || rawAir.count > snap.airQualityRecords.count
+                || rawActivities.count > snap.activities.count
 
             let calendar = Calendar.current
             if let month = HistoryInsights.monthToDateWindows(calendar: calendar) {

@@ -79,13 +79,8 @@ struct PolestarMyCarsTests {
         }
     }
 
-    /// Negative control for the 2026-09-08 capture: the nested MyCars charging settings
-    /// (amperage message fields 1=1, 3=6, 4=32; target message fields 1=1, 2=40, 4=1,
-    /// 5=90, 6=1) have no schema contract anywhere — neither this app's probes nor the
-    /// upstream clients model them. Plausible-looking amp/percent values must never
-    /// silently become command-validation bounds, so the parser keeps reading exactly
-    /// fields 1/2 of each settings message and ignores the rest.
-    @Test func myCarsNestedChargingSettingsNeverBecomeCommandBounds() throws {
+    // Captured layout corroborated by Polestar 5.11.1 generated settings classes.
+    @Test func myCarsNestedChargingSettingsUseVerifiedBounds() throws {
         var charging = Protobuf.intField(1, 1)
         charging += Protobuf.messageField(8, Protobuf.intField(1, 1) + Protobuf.intField(2, 40)
                                                  + Protobuf.intField(4, 1) + Protobuf.intField(5, 90)
@@ -96,34 +91,36 @@ struct PolestarMyCarsTests {
         car += Protobuf.messageField(35, charging)
         let carEntry = Protobuf.messageField(1, car)
         let capabilities = try #require(PolestarGRPC.parseMyCars(Protobuf.messageField(1, carEntry), vin: "VIN-A"))
-        // The presence of settings messages keeps the *feature* flags on, but the observed
-        // layout (min/max in fields 1/2) is not verified, so no bound may be extracted.
         #expect(capabilities.supportsTargetChargeLevel == true)
         #expect(capabilities.supportsGlobalChargeAmperageLimit == true)
-        #expect(capabilities.chargeAmperageMinLimit == 0)
-        #expect(capabilities.chargeAmperageMaxLimit == 0)
-        #expect(capabilities.targetChargeLevelPercentageMinLimit == 0)
+        #expect(capabilities.chargeAmperageMinLimit == 6)
+        #expect(capabilities.chargeAmperageMaxLimit == 32)
+        #expect(capabilities.targetChargeLevelPercentageMinLimit == 40)
     }
 
-    /// The upstream MyCars schema names no fields beyond vin/model/year/market/installed
-    /// version on the car details, and kildahldev PR 32 found entry field 4 (registration-
-    /// like on one account) absent on another. Registration must keep coming from GraphQL
-    /// only — the MyCars entry is never read for it here.
-    @Test func myCarsEntryField4IsNeverReadAsRegistration() throws {
+    @Test func myCarsSettingsPresenceDoesNotEnableUnsupportedFeatures() throws {
+        for settings in [Data(), Protobuf.intField(1, 0), Protobuf.intField(2, 1)] {
+            let charging = Protobuf.messageField(8, settings) + Protobuf.messageField(9, settings)
+            let car = Protobuf.stringField(1, "VIN-A") + Protobuf.messageField(35, charging)
+            let response = Protobuf.messageField(1, Protobuf.messageField(1, car))
+            let capabilities = try #require(PolestarGRPC.parseMyCars(response, vin: "VIN-A"))
+            #expect(!capabilities.supportsGlobalChargeAmperageLimit)
+            #expect(!capabilities.supportsTargetChargeLevel)
+        }
+    }
+
+    @Test func myCarsEntryField4DecodesRegistration() throws {
         var entryDetails = Protobuf.stringField(1, "VIN-A")
         entryDetails += Protobuf.stringField(9, "5.1.9")
         var entry = Protobuf.messageField(1, entryDetails)
         entry += Protobuf.stringField(4, "ABC 123")
         let car = try #require(PolestarGRPC.parseMyCars(Protobuf.messageField(1, entry), vin: "VIN-A"))
         #expect(car.installedSoftwareVersion == "5.1.9")
-        // VehicleOTACapabilities has no registration field at all — the outer-entry plate
-        // string is structurally invisible to the domain model, which is the control.
-        #expect(VehicleOTACapabilities.self != nil)
+        #expect(car.registrationPlate == "ABC 123")
     }
 
     /// Battery fields 8 and 28 were present in the 2026-09-08 capture but are not decoded:
-    /// upstream names field 8 (`estimated_distance_to_empty_miles`) only in an APK-derived
-    /// schema without live confirmation, and 28 has no name anywhere. They must stay
+    /// upstream names field 8 (`estimated_distance_to_empty_miles`), and 28 has no name anywhere. They must stay
     /// unnamed and unparsed rather than guessed into the diagnostics model.
     @Test func batteryUnverifiedFieldsStayUnnamedAndUnparsed() {
         var payload = Data()
@@ -138,17 +135,16 @@ struct PolestarMyCarsTests {
         #expect(battery.chargingVoltageVolts == nil)
     }
 
-    /// Health field 46 carries a nested status message with no known schema (upstream
-    /// Health ends at 44). It must not be decoded into any warning or light failure.
-    @Test func healthField46NestedMessageStaysUndecoded() {
+    // Polestar 5.11.1 Health.LightWarnings names field 1 as the front-left indicator.
+    @Test func healthField46DecodesKnownWarningsAndIgnoresWrongWireTypes() {
         var nested = Protobuf.intField(1, 2)
         nested += Protobuf.stringField(2, "unknown-status")
         var payload = Data()
         payload.append(Protobuf.intField(3, 10))
         payload.append(Protobuf.messageField(46, nested))
         let report = PolestarGRPC.parseHealth(payload)
-        #expect(report.details.warnings.isEmpty)
-        #expect(report.details.lightFailures.isEmpty)
+        #expect(report.details.warnings.contains(.exteriorLight))
+        #expect(report.details.lightFailures == [L10n.text("Turn indicator front left")])
         #expect(report.daysToService == 10)
     }
 

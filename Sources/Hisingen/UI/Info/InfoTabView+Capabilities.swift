@@ -62,7 +62,24 @@ extension InfoTabView {
                     }
                     if let installed = caps.installedSoftwareVersion {
                         KVRow(L10n.text("Backend-Reported Software"), installed, symbol: "checkmark.seal",
-                              info: L10n.text("Unverified value from an undocumented backend field."))
+                              info: L10n.text("Installed software version reported by MyCars."))
+                    }
+                    if let equipment = caps.equipment {
+                        ForEach(equipment.details) { detail in
+                            KVRow(L10n.text(detail.title), detail.value, symbol: "info.circle")
+                        }
+                        if equipment.softwareVersionDisagrees(with: caps.installedSoftwareVersion) {
+                            KVRow(L10n.text("Software Version Disagreement"),
+                                  equipment.restrictedSoftwareVersion ?? "", symbol: "exclamationmark.triangle")
+                        }
+                        if let lights = equipment.supportedLightWarnings, !lights.isEmpty {
+                            DisclosureGroup(L10n.text("Monitored Lights")) {
+                                Text(lights.joined(separator: ", "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                 }
 
@@ -78,7 +95,15 @@ extension InfoTabView {
                     }
                 }
 
-                Text(L10n.text("Reported by the vehicle cloud backend — exact support per VIN."))
+                DisclosureGroup(L10n.text("Effective Control Capabilities")) {
+                    ForEach(VehicleCapability.displayed, id: \.self) { capability in
+                        KVRow(capability.title, state.capabilityProfile.support(for: capability).displayName,
+                              symbol: state.capabilityProfile.support(for: capability).symbolName,
+                              info: state.capabilityProfile.supportSource(for: capability))
+                    }
+                }
+
+                Text(L10n.text("Controls also depend on account permissions, enabled features and available command implementations."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.tertiary)
             }
@@ -111,7 +136,8 @@ extension InfoTabView {
         guard !entries.positive.isEmpty || !entries.negative.isEmpty else { return AnyView(EmptyView()) }
 
         func row(_ pair: (VehicleCapability, VehicleCapabilitySupport)) -> KVRow {
-            KVRow(pair.0.title, pair.1.displayName, symbol: pair.1.symbolName)
+            KVRow(pair.0.title, pair.1.displayName, symbol: pair.1.symbolName,
+                  info: state.capabilityProfile.supportSource(for: pair.0))
         }
 
         return AnyView(Card {

@@ -151,7 +151,9 @@ extension PolestarAPI {
         // MyCars supplies identity fallbacks and the installed version independently of OTA discovery.
         async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
             .softwareUpdates, key: "my-cars",
-            enabled: features.contains(.softwareUpdates) || features.contains(.remoteOTA) || features.contains(.vehicleIdentity), vin: vin
+            enabled: features.contains(.softwareUpdates) || features.contains(.vehicleIdentity)
+                || features.contains(.batteryDiagnostics)
+                || !features.enabled.isDisjoint(with: AppFeature.remoteFeatures), vin: vin
         ) { try await self.grpc.fetchMyCars(vin: vin, accessToken: serviceToken) }
 
         let extras = try await batteryExtrasTask
@@ -278,9 +280,11 @@ extension PolestarAPI {
             )
         }()
 
-        let capacityKwh = [battery?.reportedBatteryCapacityKwh?.value, extras?.reportedBatteryCapacityKwh]
-            .compactMap { $0 }
-            .first { $0 > 0 }
+        let capacityKwh = Self.resolvedBatteryCapacity(
+            graphQL: battery?.reportedBatteryCapacityKwh?.value,
+            batteryService: extras?.reportedBatteryCapacityKwh,
+            equipment: otaCapabilities.value?.equipment
+        )
 
         var state = VehicleState(
             batteryPercentage: batteryPercentage,
@@ -334,6 +338,21 @@ extension PolestarAPI {
             dataWarnings: warnings
         )
         state.reportedBatteryCapacityKwh = capacityKwh
+        state.estimatedChargingTimeToTargetMinutes = extras?.diagnostics.timeToTargetMinutes
+        func batteryDate(primaryPresent: Bool, secondaryPresent: Bool) -> Date? {
+            let usesSecondary = extrasAreNewer ? secondaryPresent : !primaryPresent && secondaryPresent
+            return usesSecondary ? extras?.reportedAt : primaryPresent ? primaryReportedAt : nil
+        }
+        state.readingDates[.battery] = batteryDate(primaryPresent: battery?.batteryChargeLevelPercentage != nil,
+                                                  secondaryPresent: extras?.batteryPercentage != nil)
+        state.readingDates[.range] = batteryDate(primaryPresent: battery?.estimatedDistanceToEmptyKm != nil,
+                                                secondaryPresent: extras?.rangeKm != nil)
+        state.readingDates[.charging] = batteryDate(primaryPresent: primaryChargingState != nil,
+                                                   secondaryPresent: extras?.chargingState != nil)
+        state.readingDates[.locks] = exterior.value?.isLocked != nil ? exterior.value?.reportedAt : nil
+        state.readingDates[.openings] = exterior.value?.reportedAt
+        state.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date
+        state.readingDates[.odometer] = odometer?.odometerMeters != nil ? odometer?.timestamp?.date : trips.value?.reportedAt
         state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
         // Odometer average speeds arrive per trip period, with explicit km/h units; keep
         // them out of the blended `averageSpeedKmH` (Volvo statistics) so sources never
@@ -363,6 +382,11 @@ extension PolestarAPI {
         state.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
         try requireSession(epoch)
         return state
+    }
+
+    static func resolvedBatteryCapacity(graphQL: Double?, batteryService: Double?, equipment: VehicleEquipment?) -> Double? {
+        [graphQL, batteryService, equipment?.batteryCapacityKwh]
+            .compactMap { $0 }.first { $0.isFinite && $0 > 0 }
     }
 
     static func mergingSoftwareInfo(_ ota: VehicleSoftwareInfo?, myCars: VehicleOTACapabilities?) -> VehicleSoftwareInfo? {

@@ -4,6 +4,34 @@ import Testing
 
 @MainActor
 struct VehicleSessionControllerTests {
+    @Test func aRefreshDoesNotDiscardAnUnconfirmedCommandReceipt() async throws {
+        let suite = "VehicleSessionControllerTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.email = "test@example.invalid"
+        preferences.vin = "P1"
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory(), preferences: preferences)
+        let context = SessionTestContext()
+        let controller = VehicleSessionController(
+            context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
+            sessionManager: SessionManager(readToken: { _ in "token" }, readPassword: { "password" }, clearPassword: {}),
+            polestarAPI: SessionTestProvider(brand: .polestar), volvoAPI: SessionTestProvider(brand: .volvo),
+            fleetStore: FleetStore(stateStore: store, preferences: preferences), observesEnvironment: false)
+        defer { controller.stop() }
+        controller.resume()
+        for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
+        var current = try #require(controller.latest)
+        let receipt = PendingCommandSummary(commandIdentifier: "honk-horn", issuedAt: Date(), command: .honkHorn)
+        current.pendingCommand = receipt
+        controller.applyOptimisticState(current)
+        let previousCount = context.receivedStates
+        controller.refreshNow()
+        for _ in 0..<200 where context.receivedStates == previousCount { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(context.receivedStates > previousCount)
+        #expect(controller.latest?.pendingCommand == receipt)
+        #expect(store.database.loadSnapshot(for: "P1")?.pendingCommand == nil)
+    }
     @Test(arguments: [VehicleBrand.polestar, .volvo])
     func credentialChangeAdoptsPolestarAndReconcilesBeforeRestoring(from originalBrand: VehicleBrand) async throws {
         let suite = "VehicleSessionControllerTests.\(UUID())"
@@ -78,12 +106,13 @@ struct VehicleSessionControllerTests {
 
 @MainActor
 private final class SessionTestContext: VehicleSessionControllerContext {
+    var receivedStates = 0
     var reconciliations = 0
     var onCredentialsChanged: (() -> Void)?
     func sessionStateDidChange() {}
     func showLoading() {}
     func setActiveVIN(_ vin: String?) {}
-    func didReceiveVehicleState(_ state: VehicleState) {}
+    func didReceiveVehicleState(_ state: VehicleState) { receivedStates += 1 }
     func authenticationRequired() {}
     func authenticationSucceeded() {}
     func vehicleSwitchDidPause() {}

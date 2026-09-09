@@ -37,13 +37,6 @@ refresh token can be replayed into a fresh login without user interaction.
 - Do not add flows that bypass or weaken Polestar ID's own authentication (no MFA automation,
   no captcha solving, no credential stuffing resilience beyond honest error reporting).
 
-## Triggers for revisiting
-
-1. Polestar publishes a supported third-party API (EU Data Act pressure continues; the Data
-   Portal currently exposes human-readable snapshots only).
-2. Polestar registers a custom-scheme or associated-domain redirect usable by third parties.
-3. The PingFederate form contract changes (MFA rollout, resume-path format), which breaks the
-   scripted flow anyway and forces the redesign.
 
 ## Consequences
 

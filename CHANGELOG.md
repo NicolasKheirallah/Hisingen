@@ -3,6 +3,87 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.3.2] - 2026-09-09
+
+### Added
+
+- Polestar MyCars equipment details in Info and Factory Passport exports: charge-port
+  location, drivetrain, engine, driver side, doors, infotainment, digital-key compatibility,
+  NFC support, air-quality sensor coverage and advertised pre-cleaning runtime.
+- Advertised daily charging targets appear as labeled presets in Controls, including
+  targets that fall between the standard presets.
+- Supported exterior-light warning coverage and a notice when MyCars software-version
+  fields disagree, shown in Info.
+- Per-reading timestamps in Info, plus observed warning, software, charging, lock and
+  air-cleaning changes in Info and History. Activity is stored per vehicle and follows
+  the existing history-retention and deletion settings.
+- Departure and parking checks using fresh readings, with a charging estimate for a
+  chosen departure time. Missing and stale readings remain unknown.
+- Historical range estimates based on recorded electric consumption, current battery
+  charge and configured usable capacity. Fuel readings and other vehicles are excluded.
+- Observed air-cleaning intervals in History, excluding incomplete pairs and long gaps.
+- Charging-state explanations distinguish disconnected cables, scheduled or paused
+  charging, faults and active charging without confirmed power delivery.
+- Estimated parked charge loss in observed history, collected while Hisingen runs with
+  charging history enabled. Requires fresh battery/charging/odometer observations,
+  unchanged reported mileage and no gaps over 20 minutes; the result is explicitly an estimate.
+- Effective capability details identify explicit vehicle flags, recent service responses
+  and model defaults. Diagnostic errors are grouped by service, code and action with
+  duplicate records removed and record identities available for inspection.
+
+### Fixed
+
+- Session restoration reads the Polestar password only when authentication needs it,
+  avoiding an unnecessary Keychain request during successful token refreshes.
+- Keychain migration preserves the legacy credential when data-protection storage is
+  unavailable. Denied reads and writes stop instead of retrying another Keychain,
+  and missing-item reads are cached to avoid repeated lookups.
+- Local app packaging prefers a valid Developer ID identity over development
+  certificates and verifies the finished signature. Explicit unavailable identities
+  fail instead of provisioning an unrelated development certificate.
+
+- Polestar MyCars charging settings now read the schema-confirmed amperage bounds and
+  minimum charge target. Empty settings messages no longer enable unsupported controls.
+- Battery-capacity selection prefers valid GraphQL data, then the battery service, then
+  MyCars, rejecting missing, non-finite and non-positive values.
+- Corrected honk/flash capability values and validated explicit control-setting support.
+  Climate requests omit seat and steering-wheel settings the vehicle does not support.
+- Target and full-charge estimates remain separate, including Volvo energy responses.
+  Accepted commands no longer replace sensor readings with requested values.
+- The waiting-for-vehicle command receipt displays without requiring an optimistic
+  sensor-value update. Command acceptance does not imply a confirmed vehicle outcome.
+- Polestar tyre pressure uses verified wheel fields only; reference pressures cannot
+  appear as wheel readings. Nested exterior-light warnings are decoded individually.
+- Fleet totals use fresh readings, and incomplete charging coverage no longer appears
+  as an idle fleet.
+- Empty health-warning coverage remains unknown in readiness checks. Missing warning
+  fields cannot create a warning-cleared history event.
+- Climate controls use advertised temperature limits and independent front/rear seat
+  support. Location current controls use vehicle bounds, and schedule validation rejects
+  invalid times before dispatch while allowing overnight charging windows.
+- Command receipts survive refreshes. Lock, window and pre-cleaning outcomes require
+  a matching reading newer than the command; outcomes without confirmation remain labeled
+  unconfirmed instead of becoming assumed successes.
+- Notification posting checks the relevant sensor's freshness for charging, battery,
+  health and opening alerts. Unknown cable states no longer produce disconnection alerts.
+- Connectivity details distinguish old or undated readings from current reachability;
+  missing signal strength is excluded from the history chart instead of appearing as zero.
+
+### Documentation
+
+- Identified all 25 previously unmapped MyCars fields and the complete observed nested
+  tree against
+  names, types, enum values and artifact provenance in the
+  [MyCars field map](docs/testing/polestar-mycars-field-map.md).
+- Added the [API feature implementation checklist](docs/testing/api-feature-implementation.md)
+  with implementation and verification evidence, pending features and endpoint investigations.
+  New interface descriptions have matching localization keys across all 16 catalogs;
+  untranslated descriptions currently use English fallback text.
+- Added a [cross-provider data coverage inventory](docs/testing/api-data-coverage.md),
+  including remaining nested fields and the limits of schema, fixture and live-account evidence.
+
 ## [1.3.1] - 2026-09-08
 
 ### Added
@@ -43,10 +124,6 @@ All notable changes to Hisingen are documented in this file. The project follows
   availability reason renders as "Unknown reason (n)" instead of disappearing.
 - Polestar VDMS discovery now requests factory packages (`packages { name }`), completing the
   exterior/interior/wheels metadata set.
-- A Polestar raw-output coverage document
-  ([docs/api/polestar-raw-output-coverage.md](docs/api/polestar-raw-output-coverage.md)) mapping
-  every consumed GraphQL and gRPC surface, its decode status, and its source references,
-  verified by `Scripts/audit-polestar-coverage-doc.mjs`.
 - Polestar odometer average speeds (manual and automatic trip periods, km/h) from the
   schema-verified Odometer fields 5/6, shown per trip meter with unit conversion, plus a
   retained reading timestamp for odometer, health, and exterior responses.

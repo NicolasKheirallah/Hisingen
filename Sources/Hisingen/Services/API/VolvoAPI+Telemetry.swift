@@ -310,7 +310,7 @@ extension VolvoAPI {
             batteryPercentage: batteryPct,
             rangeKm: rangeKm,
             chargingState: chargingState,
-            estimatedChargingTimeToFullMinutes: estMinutes,
+            estimatedChargingTimeToFullMinutes: energy?.estTimeToFullMinutes.flatMap { $0 > 0 ? $0 : nil },
             chargeTargetPercentage: targetPct,
             chargingPowerWatts: chargingWatts,
             chargingCurrentAmps: currentDrawAmps ?? chargingAmps,
@@ -370,6 +370,21 @@ extension VolvoAPI {
         state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
         state.preferredWorkshopId = diagnostics?.workshopId?.value.volvoMeaningful
         state.preferredWorkshopName = diagnostics?.workshopName?.value.volvoMeaningful
+        state.estimatedChargingTimeToTargetMinutes = estMinutes
+        state.readingDates[.battery] = energy?.batteryChargeLevel?.updatedAt ?? fuel?.batteryChargeLevel?.updatedAt
+        state.readingDates[.range] = energy?.electricRange?.updatedAt ?? statistics?.distanceToEmptyBattery?.updatedAt
+        state.readingDates[.charging] = energy?.chargingSystemStatus?.updatedAt ?? energy?.chargingStatus?.updatedAt
+        state.readingDates[.locks] = doors?.centralLock?.updatedAt
+        state.readingDates[.openings] = [doors?.frontLeftDoor?.updatedAt, doors?.frontRightDoor?.updatedAt,
+                                       doors?.rearLeftDoor?.updatedAt, doors?.rearRightDoor?.updatedAt,
+                                       windows?.frontLeftWindow?.updatedAt, windows?.frontRightWindow?.updatedAt,
+                                       windows?.rearLeftWindow?.updatedAt, windows?.rearRightWindow?.updatedAt]
+            .compactMap { $0 }.min()
+        state.readingDates[.health] = [diagnostics?.serviceWarning?.updatedAt, tyres?.frontLeft?.updatedAt,
+                                     tyres?.frontRight?.updatedAt, tyres?.rearLeft?.updatedAt, tyres?.rearRight?.updatedAt]
+            .compactMap { $0 }.min()
+        state.readingDates[.odometer] = odometer?.odometer?.updatedAt
+        state.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
         return state
     }
 

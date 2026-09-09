@@ -23,10 +23,12 @@ struct VehicleFeatureCompletionTests {
 
         // GetMyCarsResponse -> MyCar -> Car -> Charging settings messages.
         var ampSettings = Data()
-        ampSettings.append(Protobuf.intField(1, 6))
-        ampSettings.append(Protobuf.intField(2, 32))
+        ampSettings.append(Protobuf.intField(1, 1))
+        ampSettings.append(Protobuf.intField(3, 6))
+        ampSettings.append(Protobuf.intField(4, 32))
         var targetSettings = Data()
-        targetSettings.append(Protobuf.intField(1, 40))
+        targetSettings.append(Protobuf.intField(1, 1))
+        targetSettings.append(Protobuf.intField(2, 40))
         var charging = Data()
         charging.append(Protobuf.intField(1, 1))
         charging.append(Protobuf.messageField(8, targetSettings))

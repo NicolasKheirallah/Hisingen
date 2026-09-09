@@ -36,7 +36,7 @@ To update: `brew upgrade --cask hisingen`
 
 ### Manual installation
 
-Download the latest universal DMG: [**Hisingen.dmg**](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) (supports Apple Silicon & Intel).
+Download the latest universal DMG: [**Hisingen.dmg**](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) (supports Apple Silicon & Intel). Both the DMG and the app inside are Developer ID signed, notarized and stapled by Apple.
 
 1. Open `Hisingen.dmg` and drag **Hisingen.app** to your `/Applications` folder.
 2. Launch Hisingen and open **Settings** (`⌘,`).
@@ -927,7 +927,13 @@ Releases are universal and support both:
 * Apple Silicon
 * Intel Macs
 
-Published releases are Developer ID signed, hardened-runtime enabled, notarized by Apple and distributed with SHA-256 checksums and GitHub build provenance.
+### Code signing
+
+Both **Hisingen.app** and **Hisingen.dmg** are signed with a personal Apple Developer ID certificate, built with the hardened runtime enabled, and notarized and stapled by Apple.
+
+This means macOS Gatekeeper recognizes the app as trusted software from an identified developer — no security warnings, no right-click-to-open workaround.
+
+The same Developer ID signing is performed in the GitHub Actions release workflow: the certificate is imported into the CI runner's keychain, both the app bundle and the disk image are individually signed, submitted for notarization, stapled, and verified with `spctl` before publication. Every release also ships with SHA-256 checksums and GitHub build provenance attestations.
 
 ### Install
 

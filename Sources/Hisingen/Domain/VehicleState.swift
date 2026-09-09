@@ -207,12 +207,14 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
 
 /// A remote command that was accepted but whose effect has not yet been confirmed by a
 /// fresh vehicle fetch. Display-only: the UI renders it as "waiting for the vehicle" instead
-/// of presenting optimistic values as vehicle-reported truth. Cleared on the next
-/// authoritative snapshot in `RefreshCoordinator.apply`.
+/// of presenting requested values as vehicle-reported truth. The session controller
+/// checks subsequent readings; a refresh alone does not confirm the outcome.
 struct PendingCommandSummary: Codable, Equatable, Sendable {
     /// Matches `RemoteCommand.identifier` and the command-audit trail.
     var commandIdentifier: String
     var issuedAt: Date
+    var command: RemoteCommand? = nil
+    var confirmedAt: Date? = nil
 }
 
 struct VehicleState: Codable, Equatable, Sendable {
@@ -315,15 +317,12 @@ struct VehicleState: Codable, Equatable, Sendable {
     var vehicleErrors: [VehicleChronosError] = []
     var otaCapabilities: VehicleOTACapabilities? = nil
 
-    /// Set when a command is accepted optimistically; cleared by the next authoritative
-    /// fetch so the UI can label optimistic values as "waiting for the vehicle".
+    /// Display-only command receipt. Sensor values remain vehicle-reported.
     var pendingCommand: PendingCommandSummary? = nil
 
-    /// True while the displayed state carries an optimistic patch that no fresh fetch has
-    /// confirmed yet. Window matches `optimisticCommandLockUntil`.
     var isAwaitingVehicleConfirmation: Bool {
-        guard pendingCommand != nil else { return false }
-        return (optimisticCommandLockUntil ?? .distantPast) > Date()
+        guard let pendingCommand, pendingCommand.confirmedAt == nil else { return false }
+        return Date().timeIntervalSince(pendingCommand.issuedAt) < 120
     }
 
     // MARK: Service compatibility accessors
@@ -444,6 +443,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     let imageData: Data?
     var fetchedAt: Date
     var vehicleReportedAt: Date?
+    var readingDates: [VehicleReading: Date] = [:]
+    var estimatedChargingTimeToTargetMinutes: Int?
     let dataWarnings: [String]
     var retainedDataCategories: [AppFeature] = []
     var retainedDataAt: Date? = nil
@@ -451,6 +452,11 @@ struct VehicleState: Codable, Equatable, Sendable {
     mutating func applyLiveUpdate(_ update: VehicleLiveUpdate, receivedAt: Date = Date()) {
         switch update {
         case .battery(let battery):
+            if let reportedAt = battery.reportedAt {
+                if battery.batteryPercentage != nil { readingDates[.battery] = reportedAt }
+                if battery.rangeKm != nil { readingDates[.range] = reportedAt }
+                if battery.chargingState != nil { readingDates[.charging] = reportedAt }
+            }
             batteryPercentage = battery.batteryPercentage ?? batteryPercentage
             rangeKm = battery.rangeKm ?? rangeKm
             estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
@@ -464,6 +470,10 @@ struct VehicleState: Codable, Equatable, Sendable {
             batteryDiagnostics = battery.diagnostics
             vehicleReportedAt = battery.reportedAt ?? vehicleReportedAt
         case .exterior(let exterior, let reportedAt):
+            if let date = exterior.reportedAt ?? reportedAt {
+                readingDates[.openings] = date
+                if exterior.isLocked != nil { readingDates[.locks] = date }
+            }
             exteriorStatus = exterior.merging(previous: exteriorStatus)
             // Prefer the vehicle's own exterior timestamp; the frame callback's received-at
             // time is only a fallback when the backend reported none.
@@ -555,6 +565,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case readingDates
+        case estimatedChargingTimeToTargetMinutes
         case batteryPercentage, rangeKm, chargingState, estimatedChargingTimeToFullMinutes
         case chargeTargetPercentage, chargingPowerWatts, chargingCurrentAmps, chargingVoltageVolts
         case chargingType, chargerConnection, availability, modelName, modelYear, registrationNo
@@ -628,6 +640,8 @@ struct VehicleState: Codable, Equatable, Sendable {
             vehicleReportedAt: try values.decodeIfPresent(Date.self, forKey: .vehicleReportedAt),
             dataWarnings: try values.decode([String].self, forKey: .dataWarnings)
         )
+        self.readingDates = try values.decodeIfPresent([VehicleReading: Date].self, forKey: .readingDates) ?? [:]
+        self.estimatedChargingTimeToTargetMinutes = try values.decodeIfPresent(Int.self, forKey: .estimatedChargingTimeToTargetMinutes)
         self.chargeLocations = try values.decodeIfPresent([ChargeLocationSnapshot].self, forKey: .chargeLocations) ?? []
         self.externalColour = try values.decodeIfPresent(String.self, forKey: .externalColour)
         self.gearbox = try values.decodeIfPresent(String.self, forKey: .gearbox)
@@ -740,6 +754,8 @@ struct VehicleState: Codable, Equatable, Sendable {
         try values.encode(imageData, forKey: .imageData)
         try values.encode(fetchedAt, forKey: .fetchedAt)
         try values.encode(vehicleReportedAt, forKey: .vehicleReportedAt)
+        try values.encode(readingDates, forKey: .readingDates)
+        try values.encodeIfPresent(estimatedChargingTimeToTargetMinutes, forKey: .estimatedChargingTimeToTargetMinutes)
         try values.encode(dataWarnings, forKey: .dataWarnings)
         try values.encode(powertrain, forKey: .powertrain)
         // Nested cluster is the current persisted layout; flat fuel keys are decode-only.
@@ -994,7 +1010,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var capabilityProfile: VehicleCapabilityProfile {
-        VehicleCapabilityProfile(modelName: modelName, vin: vin, probed: probedCapabilities)
+        VehicleCapabilityProfile(modelName: modelName, vin: vin, probed: probedCapabilities,
+                                 advertised: otaCapabilities?.advertisedCapabilities ?? [:])
     }
 
     var isPluggedIn: Bool? {
@@ -1037,15 +1054,15 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var estimatedChargingCompletion: Date? {
-        guard isCharging, let minutes = estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
+        guard isCharging, let minutes = remainingChargingMinutes, minutes > 0 else { return nil }
         guard !isStale() else { return nil }
-        let completion = (vehicleReportedAt ?? fetchedAt).addingTimeInterval(TimeInterval(minutes * 60))
+        let completion = (reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt).addingTimeInterval(TimeInterval(minutes * 60))
         return completion > Date() ? completion : nil
     }
 
     var formattedCompletionTime: String? {
-        guard let minutes = estimatedChargingTimeToFullMinutes, minutes > 0, isCharging else { return nil }
-        return Format.completionTime(from: minutes, baseDate: vehicleReportedAt ?? fetchedAt)
+        guard let minutes = remainingChargingMinutes, minutes > 0, isCharging else { return nil }
+        return Format.completionTime(from: minutes, baseDate: reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt)
     }
 
     func formattedChargingRate(unit: DistanceUnit) -> String? {
@@ -1130,6 +1147,9 @@ struct VehicleState: Codable, Equatable, Sendable {
             dataWarnings: dataWarnings
         )
         copy.externalColour = externalColour
+        copy.readingDates = readingDates
+        copy.estimatedChargingTimeToTargetMinutes = estimatedChargingTimeToTargetMinutes
+        copy.readingDates[.location] = nil
         copy.gearbox = gearbox
         copy.engineHoursToService = engineHoursToService
         copy.averageSpeedKmH = averageSpeedKmH
@@ -1287,6 +1307,12 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.structureWeek = structureWeek ?? previous.structureWeek
         merged.internalVehicleIdentifier = internalVehicleIdentifier ?? previous.internalVehicleIdentifier
         merged.pno34 = pno34 ?? previous.pno34
+        merged.readingDates = readingDates
+        merged.estimatedChargingTimeToTargetMinutes = estimatedChargingTimeToTargetMinutes
+        if batteryPercentage == nil { merged.readingDates[.battery] = previous.reportedDate(for: .battery) }
+        if rangeKm == nil { merged.readingDates[.range] = previous.reportedDate(for: .range) }
+        if odometerKm == nil { merged.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
+        if healthDetails == nil { merged.readingDates[.health] = previous.reportedDate(for: .health) }
         merged.accountMarket = accountMarket ?? previous.accountMarket
         merged.upholstery = upholstery ?? previous.upholstery
         merged.wheels = wheels ?? previous.wheels

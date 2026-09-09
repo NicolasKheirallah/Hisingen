@@ -18,6 +18,7 @@ struct VehicleTabView: View {
     @State private var moreExpanded = true
     @State private var chargingJustStarted = false
     @State private var dismissedSoftwareEventIdentifier: String?
+    @State private var dismissedCommandIssuedAt: Date?
     /// Persistent charging history, prefetched off the main thread. Reading it inside
     /// `chargingCard` ran a SQLite query on every `body` evaluation.
     @State private var persistentChargingSessions: [ChargingSession] = []
@@ -63,7 +64,7 @@ struct VehicleTabView: View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             multiCarChips
             heroCard
-            if state.isAwaitingVehicleConfirmation {
+            if let pending = state.pendingCommand, dismissedCommandIssuedAt != pending.issuedAt {
                 pendingCommandChip.transition(cardTransition)
             }
             if let card = attentionCard { card.transition(cardTransition) }
@@ -71,6 +72,9 @@ struct VehicleTabView: View {
             if let card = chargingCard { card.transition(cardTransition) }
             adaptiveCardsRow(fuelAndEngineCard, openingsCard)
             adaptiveCardsRow(tireSchematicCard, locationCard)
+            if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
+                VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
+            }
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
@@ -133,13 +137,26 @@ struct VehicleTabView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .foregroundStyle(HisingenTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.text("Command sent — waiting for the vehicle"))
-                    .font(.system(size: 11, weight: .semibold))
-                Text(L10n.text("Values below may update once the car reports in."))
+                TimelineView(.periodic(from: .now, by: 10)) { context in
+                    let confirmed = state.pendingCommand?.confirmedAt != nil
+                    let expired = context.date.timeIntervalSince(state.pendingCommand?.issuedAt ?? context.date) >= 120
+                    Text(confirmed ? L10n.text("Matching vehicle reading observed")
+                         : expired ? L10n.text("Command outcome not confirmed")
+                         : L10n.text("Command sent — waiting for the vehicle"))
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                Text(state.pendingCommand?.command?.title ?? L10n.text("Values below may update once the car reports in."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                dismissedCommandIssuedAt = state.pendingCommand?.issuedAt
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.text("Dismiss command status"))
         }
         .padding(9)
         .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -666,8 +683,9 @@ struct VehicleTabView: View {
     private var chargingReadyLine: String? {
         guard state.isCharging,
               let formattedCompletion = state.formattedCompletionTime,
-              let minutes = state.estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
-        return L10n.format("Ready at %@ · %@ remaining", formattedCompletion, Format.shortDuration(minutes: minutes))
+              let minutes = state.remainingChargingMinutes, minutes > 0 else { return nil }
+        return state.chargingEstimateDestination + " · "
+            + L10n.format("Ready at %@ · %@ remaining", formattedCompletion, Format.shortDuration(minutes: minutes))
     }
 
     private var chargingSecondaryLine: String? {
@@ -763,10 +781,7 @@ struct VehicleTabView: View {
     }
 
     private var chargingReadyDate: Date? {
-        guard let minutes = state.estimatedChargingTimeToFullMinutes, minutes > 0 else { return nil }
-        // Anchor at the fetch time, not render time: recomputing from `Date()` made the
-        // projected endpoint drift forward on every re-render between refreshes.
-        return state.fetchedAt.addingTimeInterval(TimeInterval(minutes * 60))
+        state.estimatedChargingCompletion
     }
 
     private var chargingCard: AnyView? {
@@ -841,6 +856,9 @@ struct VehicleTabView: View {
                 }
 
                 if !details.isEmpty {
+                    Text(state.chargingExplanation)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     DisclosureGroup(L10n.text("Charging Details")) {
                         VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }
                             .padding(.top, 6)

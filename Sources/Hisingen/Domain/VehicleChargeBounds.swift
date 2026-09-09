@@ -12,6 +12,7 @@ struct VehicleChargeBounds: Equatable, Sendable {
 
     let targetRange: ClosedRange<Int>
     let amperageRange: ClosedRange<Int>
+    let dailyTarget: Int?
 
     init(capabilities: VehicleOTACapabilities?) {
         let advertisedTargetMinimum = capabilities?.targetChargeLevelPercentageMinLimit ?? 0
@@ -31,6 +32,9 @@ struct VehicleChargeBounds: Equatable, Sendable {
 
         targetRange = targetMinimum...100
         amperageRange = ampMinimum...ampMaximum
+        dailyTarget = capabilities?.equipment?.dailyChargeTarget.flatMap {
+            (targetMinimum...100).contains($0) ? $0 : nil
+        }
     }
 
     func targetPresets(step: Int = 10) -> [Int] {
@@ -42,7 +46,8 @@ struct VehicleChargeBounds: Equatable, Sendable {
             value += step
         }
         if values.last != targetRange.upperBound { values.append(targetRange.upperBound) }
-        return values
+        if let dailyTarget, !values.contains(dailyTarget) { values.append(dailyTarget) }
+        return values.sorted()
     }
 
     func amperagePresets(candidates: [Int] = [6, 8, 10, 13, 16, 20, 24, 32]) -> [Int] {

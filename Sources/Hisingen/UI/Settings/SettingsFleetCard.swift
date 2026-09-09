@@ -83,10 +83,8 @@ struct SettingsFleetCard: View {
             fleet.snapshot(for: vin)
         }
 
-        let totalRange = allStates.compactMap(\.primaryRangeKm).reduce(0, +)
-        let chargingCars = allStates.filter(\.isCharging)
-        let totalChargingWatts = chargingCars.compactMap(\.chargingPowerWatts).reduce(0, +)
-        let totalOdometer = allStates.compactMap(\.odometerKm).reduce(0, +)
+        let summary = VehicleFleetSummary(states: allStates)
+        let totalChargingWatts = summary.chargingPowerWatts
 
         return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -98,7 +96,7 @@ struct SettingsFleetCard: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                Text(totalRange > 0 ? Format.distance(km: totalRange, unit: prefs.distanceUnit) : "--")
+                Text(summary.rangeKm.map { Format.distance(km: $0, unit: prefs.distanceUnit) } ?? "--")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,19 +105,20 @@ struct SettingsFleetCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Image(systemName: chargingCars.isEmpty ? "bolt.slash" : "bolt.fill")
+                    Image(systemName: summary.chargingCount == 0 ? "bolt.slash" : "bolt.fill")
                         .font(.system(size: 9.5))
-                        .foregroundStyle(chargingCars.isEmpty ? Color.secondary : Color.green)
+                        .foregroundStyle(summary.chargingCount == 0 ? Color.secondary : Color.green)
                     Text(L10n.text("Charging"))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                if chargingCars.isEmpty {
-                    Text(L10n.text("All Idle"))
+                if summary.chargingCount == 0 {
+                    Text(summary.chargingCoverage == vins.count
+                         ? L10n.text("No active charging reported") : L10n.text("Incomplete readings"))
                         .font(.system(size: 11.5, weight: .semibold))
                 } else {
                     HStack(spacing: 3) {
-                        Text(L10n.format("%d active", chargingCars.count))
+                        Text(L10n.format("%d active", summary.chargingCount))
                             .font(.system(size: 11.5, weight: .bold, design: .rounded))
                             .foregroundStyle(Color.green)
                         if totalChargingWatts > 0 {
@@ -143,7 +142,7 @@ struct SettingsFleetCard: View {
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                Text(totalOdometer > 0 ? Format.distance(km: totalOdometer, unit: prefs.distanceUnit) : "--")
+                Text(summary.odometerKm.map { Format.distance(km: $0, unit: prefs.distanceUnit) } ?? "--")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,6 +150,7 @@ struct SettingsFleetCard: View {
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
         }
         .padding(.bottom, 2)
+        .help(L10n.text("Totals include fresh readings only. Vehicles with missing or stale readings are excluded."))
     }
 }
 

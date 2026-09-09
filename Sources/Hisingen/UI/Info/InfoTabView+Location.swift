@@ -8,7 +8,7 @@ extension InfoTabView {
     var activityHistoryCard: some View {
         let telemetry = asyncData.recentTelemetry
         let commands = asyncData.recentCommands
-        guard !telemetry.isEmpty || !commands.isEmpty else { return AnyView(EmptyView()) }
+        guard !telemetry.isEmpty || !commands.isEmpty || !asyncData.recentActivities.isEmpty else { return AnyView(EmptyView()) }
 
         let odometerPoints = telemetry
             .compactMap { record -> (Date, Double)? in record.odometerKm.map { (record.timestamp, $0) } }
@@ -32,6 +32,9 @@ extension InfoTabView {
                     .foregroundStyle(HisingenTheme.accent)
                 }
 
+                if !asyncData.recentActivities.isEmpty {
+                    VehicleActivityList(events: asyncData.recentActivities)
+                }
                 if let newest = telemetry.first, let oldest = telemetry.last,
                    let newOdometer = newest.odometerKm, let oldOdometer = oldest.odometerKm,
                    newOdometer >= oldOdometer {

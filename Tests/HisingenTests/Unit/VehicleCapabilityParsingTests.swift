@@ -120,10 +120,7 @@ struct VehicleCapabilityParsingTests {
 
     @Test
     func testHealthyPolestarOmitsTyreFieldsButReportsEverythingElse() {
-        // Live Polestar 2 capture (2026-08): proto3 drops zero/unset values, so an all-clear
-        // car sends explicit 1s for every other category while the tyre quadruple (9–12) is
-        // absent. Within a substantive payload that omission must read as "no warning",
-        // otherwise the tyre card is stuck on "Unknown" forever.
+        // An omitted tyre warning is unspecified, even when other systems report healthy.
         var payload = Data()
         payload.append(Protobuf.intField(5, 1))
         payload.append(Protobuf.intField(6, 1))
@@ -133,10 +130,10 @@ struct VehicleCapabilityParsingTests {
         for field in 14...35 { payload.append(Protobuf.intField(field, 1)) }
         payload.append(Protobuf.intField(38, 1))
         let report = PolestarGRPC.parseHealth(payload)
-        XCTAssertTrue(report.details.tyres.allSatisfy { $0.warning == .none && $0.kilopascals == nil })
+        XCTAssertTrue(report.details.tyres.allSatisfy { $0.warning == .unknown && $0.kilopascals == nil })
         XCTAssertEqual(report.details.tyres.count, 4)
         XCTAssertFalse(report.details.warnings.contains(.tyrePressure))
-        XCTAssertTrue(report.details.reportedWarnings.contains(.tyrePressure))
+        XCTAssertFalse(report.details.reportedWarnings.contains(.tyrePressure))
     }
 
     @Test
@@ -703,47 +700,15 @@ struct VehicleCapabilityParsingTests {
 
 
 @Test
-func testHealthDiscoversPressuresAtAlternateFieldPositions() {
-    // Simulates a backend that reports the kPa quadruple outside the documented 39–42
-    // window: nothing plausible there, but four consecutive in-band fields at 43–46.
-    var payload = Data()
-    payload.append(Protobuf.intField(9, 1))
-    payload.append(Protobuf.doubleField(39, 0))
-    payload.append(Protobuf.doubleField(40, 0))
-    payload.append(Protobuf.doubleField(43, 231.0))
-    payload.append(Protobuf.doubleField(44, 229.5))
-    payload.append(Protobuf.doubleField(45, 236.0))
-    payload.append(Protobuf.doubleField(46, 234.0))
-    let report = PolestarGRPC.parseHealth(payload)
-    XCTAssertEqual(report.details.tyres.map { $0.kilopascals ?? 0 }, [231, 229.5, 236, 234])
-    XCTAssertEqual(report.details.tyres.map(\.position), TyrePosition.allCases)
-}
-
-@Test
-func testHealthDoesNotMisreadScatteredValuesAsPressures() {
-    // A single in-band value with no three consecutive neighbours must not be promoted
-    // into a pressure quadruple.
-    var payload = Data()
-    payload.append(Protobuf.intField(9, 1))
-    payload.append(Protobuf.doubleField(41, 250))
-    payload.append(Protobuf.intField(44, 3))   // out of band breaks any run
+func testHealthDoesNotTreatReferencePressuresAsWheelReadings() {
+    let payload = Protobuf.doubleField(43, 231) + Protobuf.doubleField(44, 229)
+        + Protobuf.doubleField(45, 236) + Protobuf.doubleField(46, 234)
     let report = PolestarGRPC.parseHealth(payload)
     XCTAssertTrue(report.details.tyres.allSatisfy { $0.kilopascals == nil })
 }
 
 @Test
-func testDiscoverPressureQuadrupleRequiresConsecutiveInBandFields() {
-    func fields(_ pairs: [(Int, Double)]) -> [Protobuf.Field] {
-        pairs.map { number, value in
-            var data = Data()
-            data.append(Protobuf.doubleField(number, value))
-            return Protobuf.fields(data)[0]
-        }
-    }
-    XCTAssertNotNil(PolestarGRPC.discoverPressureQuadruple(
-        fields([(39, 220), (40, 221), (41, 222), (42, 223)]), window: 36...52))
-    XCTAssertNil(PolestarGRPC.discoverPressureQuadruple(
-        fields([(38, 230), (39, 221), (41, 222), (42, 223)]), window: 36...52))
-    XCTAssertNil(PolestarGRPC.discoverPressureQuadruple(
-        fields([(39, 90), (40, 91), (41, 92), (42, 93)]), window: 36...52))
+func testHealthPreservesPartialWheelPressureReadings() {
+    let report = PolestarGRPC.parseHealth(Protobuf.doubleField(41, 250))
+    XCTAssertEqual(report.details.tyres.map { $0.kilopascals ?? 0 }, [0, 0, 250, 0])
 }

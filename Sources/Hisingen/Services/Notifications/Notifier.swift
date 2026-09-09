@@ -210,6 +210,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
               !preferences.isMuted(vin: state.vin) else { return }
 
         for event in result.events {
+            let reading: VehicleReading
+            if case .lowBattery = event { reading = .battery } else { reading = .charging }
+            guard state.hasFreshReading(reading) else { continue }
             switch event {
             case .started where preferences.notifyChargingStarted:
                 post(event, state: state, title: L10n.text("Charging started"), body: chargingBody(state))
@@ -279,7 +282,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkChargerConnection(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyChargerConnection,
-              let previous, previous.vin == current.vin else { return }
+              current.hasFreshReading(.charging),
+              let previous, previous.vin == current.vin,
+              [.connected, .disconnected].contains(previous.chargerConnection),
+              [.connected, .disconnected].contains(current.chargerConnection) else { return }
         let wasConnected = previous.chargerConnection == .connected
         let isConnected = current.chargerConnection == .connected
         guard isConnected != wasConnected else { return }
@@ -300,9 +306,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkClimateChanges(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyClimateChanges,
+              !current.isCachedSnapshot, !current.isStale(),
+              !current.retainedDataCategories.contains(.climateStatus),
               let previousActivity = previous?.climateStatus?.activity,
               let currentActivity = current.climateStatus?.activity,
               currentActivity != previousActivity else { return }
+        guard currentActivity != .unknown, previousActivity != .unknown else { return }
         let wasActive = previousActivity.isActiveClimate
         let isActive = currentActivity.isActiveClimate
         guard isActive != wasActive else { return }
@@ -323,7 +332,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkOpeningsLeftOpen(current: VehicleState) {
         let openings = current.exteriorStatus?.itemsNeedingAttention.map(\.displayName) ?? []
-        let condition = current.isEngineRunning != true && !openings.isEmpty
+        let condition = current.hasFreshReading(.openings) && current.isEngineRunning != true && !openings.isEmpty
         trackSustained(condition: condition, key: "\(current.vin).openings", duration: TimeInterval(preferences.openingsAlertDelayMinutes * 60)) {
             guard self.preferences.notifyOpeningsLeftOpen else { return }
             self.postNotice(identifier: "hisingen.\(current.vin).openings-left-open",
@@ -337,7 +346,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkServiceDue(current: VehicleState) {
-        guard preferences.notifyServiceDue else { return }
+        guard preferences.notifyServiceDue, current.hasFreshReading(.health) else { return }
         let due = current.serviceWarning || (current.daysToService.map { $0 <= 30 } ?? false)
             || (current.distanceToServiceKm.map { $0 <= 1_000 } ?? false)
         // The was-due flag persists across launches: without it, staying due re-fired
@@ -369,7 +378,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkSlowCharging(current: VehicleState) {
-        let condition = current.isCharging && (current.chargingPowerWatts.map { $0 > 0 && $0 < 2_000 } ?? false)
+        let condition = current.hasFreshReading(.charging) && current.isCharging
+            && (current.chargingPowerWatts.map { $0 > 0 && $0 < 2_000 } ?? false)
         trackSustained(condition: condition, key: "\(current.vin).slow-charging", duration: 15 * 60) {
             guard self.preferences.notifySlowCharging else { return }
             let power = current.chargingPowerWatts.map(Format.kilowatts) ?? L10n.text("Unavailable")
@@ -458,7 +468,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let previousWarnings = warningLabels(previous)
         let currentWarnings = warningLabels(current)
         let added = currentWarnings.subtracting(previousWarnings).sorted()
-        if !added.isEmpty {
+        if current.hasFreshReading(.health), !added.isEmpty {
             postNotice(identifier: "hisingen.\(current.vin).vehicle-warnings",
                        thread: "hisingen.warnings.\(current.vin)",
                        title: L10n.text("Vehicle warning"),
@@ -466,7 +476,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                        subtitle: displayName(for: current), vin: current.vin,
                        urgency: .urgent)
         }
-        if current.exteriorStatus?.alarmTriggered == true,
+        if current.hasFreshReading(.openings), current.exteriorStatus?.alarmTriggered == true,
            previous.exteriorStatus?.alarmTriggered != true {
             postNotice(identifier: "hisingen.\(current.vin).alarm",
                        thread: "hisingen.security.\(current.vin)",
@@ -497,6 +507,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkRainWithWindows(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyRainWithWindowsOpen,
+              current.hasFreshReading(.openings),
               Self.rainWithWindowsOpenCondition(current),
               !Self.rainWithWindowsOpenCondition(previous) else { return }
 
@@ -519,6 +530,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkEveningUnlocked(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyEveningUnlocked,
+              current.hasFreshReading(.locks),
               Self.eveningUnlockedCondition(current, startHour: preferences.eveningUnlockedStartHour),
               !Self.eveningUnlockedCondition(previous, startHour: preferences.eveningUnlockedStartHour) else { return }
 
@@ -546,6 +558,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     private func checkLowBatteryPlugIn(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyPlugInReminder,
+              current.hasFreshReading(.battery), current.hasFreshReading(.charging),
               Self.plugInReminderCondition(current, threshold: preferences.plugInReminderThreshold),
               !Self.plugInReminderCondition(previous, threshold: preferences.plugInReminderThreshold) else { return }
 

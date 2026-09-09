@@ -96,7 +96,7 @@ struct DataRetentionHardeningTests {
         let handle = try SQLiteDatabase(path: dbURL.path)
         // Leftovers from earlier schema bumps, plus an unrelated file that must survive.
         for name in ["hisingen.sqlite3.pre-v1.bak", "hisingen.sqlite3.pre-v2.bak",
-                     "hisingen.sqlite3.pre-v3.bak", "keep.txt"] {
+                     "hisingen.sqlite3.pre-v\(VehicleDatabase.latestSchemaVersion).bak", "keep.txt"] {
             try Data("x".utf8).write(to: dir.appendingPathComponent(name))
         }
 
@@ -105,7 +105,7 @@ struct DataRetentionHardeningTests {
         let remaining = try FileManager.default.contentsOfDirectory(atPath: dir.path)
         #expect(!remaining.contains("hisingen.sqlite3.pre-v1.bak"))
         #expect(!remaining.contains("hisingen.sqlite3.pre-v2.bak"))
-        #expect(remaining.contains("hisingen.sqlite3.pre-v3.bak"),
+        #expect(remaining.contains("hisingen.sqlite3.pre-v\(VehicleDatabase.latestSchemaVersion).bak"),
                 "the recovery point for the current migration must survive rotation")
         #expect(remaining.contains("hisingen.sqlite3"))
         #expect(remaining.contains("keep.txt"))

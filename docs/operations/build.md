@@ -7,7 +7,7 @@
 | `make doctor` | Runs `Scripts/doctor.sh` — verifies the selected Xcode/CLT toolchain is internally consistent (compiler, SDK, SwiftPM all compatible) before attempting a build. |
 | `make build` | (depends on `doctor`) `swift build -c release $(SWIFT_FLAGS)`. |
 | `make universal` | (depends on `doctor`) Builds arm64 and x86_64 release binaries into **separate scratch build directories** (`.build-arm64`, `.build-x86_64` — avoiding SwiftPM artifact reuse across architectures), then `lipo -create`s them into one universal binary and verifies both architectures are present. |
-| `make app` | (depends on `build`, skippable via `SKIP_BUILD=1`) Lints `Info.plist`, assembles `releases/Hisingen.app`, injects updater configuration, embeds and signs `Sparkle.framework`, adds the framework runtime path, then signs the app. Ad-hoc (`-s -`) by default; hardened-runtime signing (`--options runtime --timestamp`) when `IDENTITY` contains "Developer ID". |
+| `make app` | (depends on `build`, skippable via `SKIP_BUILD=1`) Lints `Info.plist`, assembles `releases/Hisingen.app`, injects updater configuration, embeds and signs `Sparkle.framework`, adds the framework runtime path, then signs the app. Prefers a valid Developer ID certificate, then Apple Development, then Hisingen Development; hardened-runtime signing (`--options runtime --timestamp`) when `IDENTITY` contains "Developer ID". Ad-hoc signing requires explicit `IDENTITY=-`. |
 | `make app-universal` | (depends on `universal`) Equivalent to `make app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"` using the universal binary. |
 | `make dmg` | Requires `$(APP)` to already exist (fails with a clear message otherwise). Stages the app plus an `Applications` symlink and builds a UDZO disk image via `hdiutil create`. Deliberately **not** a dependency of `app` — re-running `app` after notarization would re-sign the bundle and void the notarization staple, so `dmg` must be invoked as a separate, later step. |
 | `make run` | `swift run` — unbundled dev run, no launch-at-login, no stable signing identity. |
@@ -15,7 +15,7 @@
 | `make clean` | Removes `.build`, `.build-arm64`, `.build-x86_64`, local app/DMG/zip outputs in `releases/`, staging files, `SHA256SUMS`, and `notarize-app.zip`. |
 | `make release VERSION=x.y.z` | Requires a matching `CHANGELOG.md` entry, validates the version format and a clean working tree, bumps `CFBundleShortVersionString` (via `PlistBuddy`) and increments `CFBundleVersion`, commits, tags `vX.Y.Z`, and pushes both — which triggers `.github/workflows/release.yml`. See [releases.md](releases.md). |
 
-Default `IDENTITY` is `-` (ad-hoc). CI's release job passes a real `"Developer ID Application: ..."` identity resolved dynamically from an imported certificate.
+Default `IDENTITY` is selected by `Scripts/signing-identity.sh`, preferring a valid Developer ID Application certificate. If none is available, a development identity is used. `make build` only compiles a binary; use `make app` to create the signed application bundle. CI's release job passes a real `"Developer ID Application: ..."` identity resolved dynamically from an imported certificate.
 
 ## Scripts
 
