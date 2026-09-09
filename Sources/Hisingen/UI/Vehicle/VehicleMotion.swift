@@ -201,9 +201,6 @@ final class VehicleEntranceLedger {
         lastEntrance[identity.vin] = date
     }
 
-    func reset() {
-        lastEntrance.removeAll()
-    }
 }
 
 // MARK: - Motion curves

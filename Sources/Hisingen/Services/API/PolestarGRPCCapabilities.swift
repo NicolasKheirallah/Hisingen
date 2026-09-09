@@ -20,7 +20,6 @@ struct GrpcOdometerReport: Equatable, Sendable {
 
 extension PolestarGRPC {
     private static let exteriorPath = "/services.vehiclestates.exterior.ExteriorService/GetLatestExterior"
-    private static let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
     private static let healthPath = "/services.vehiclestates.health.HealthService/GetHealth"
     private static let odometerPath = "/services.vehiclestates.odometer.OdometerService/GetOdometer"
     private static let dashboardPath = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
@@ -30,10 +29,17 @@ extension PolestarGRPC {
     private static let chargeLocationsPath = "/pccs.chronos.services.v1.ChargeLocationService/GetChargeLocations"
     private static let climatePath = "/services.vehiclestates.parkingclimatization.ParkingClimatizationService/GetLatestParkingClimatization"
     private static let climateTimersPath = "/pccs.chronos.services.v1.ParkingClimateTimerService/GetTimers"
-    private static let preCleaningPath = "/services.vehiclestates.precleaning.PreCleaningService/GetPreCleaning"
     private static let locationPath = "/dtlinternet.DtlInternetService/GetLastKnownLocation"
     private static let weatherPath = "/weather.WeatherService/GetWeatherReport"
     private static let errorsPath = "/chronos.services.v1.ErrorService/GetErrors"
+
+    /// Returns `true` when a `UNAVAILABLE` (14) response carries a stable authorization
+    /// failure rather than a transient service disruption.
+    static func errorsAuthorizationGap(status: String, message: String?) -> Bool {
+        guard status == "14" else { return false }
+        let detail = (message?.removingPercentEncoding ?? message ?? "").lowercased()
+        return detail.contains("authorization failed")
+    }
     private static let myCarsPath = "/car_information.CarInformation/GetMyCars"
 
     func fetchExterior(vin: String, accessToken: String) async throws -> ExteriorSnapshot? {
@@ -278,7 +284,7 @@ extension PolestarGRPC {
         do {
             let (bytes, response) = try await longSession.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
-                await APIDiagnosticLogStore.shared.record(
+                await diagnosticLog.record(
                     provider: .polestar, request: request, operation: "gRPC errors",
                     startedAt: startedAt,
                     error: PolestarError.invalidResponse(operation: "gRPC errors"))
@@ -288,9 +294,12 @@ extension PolestarGRPC {
             grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
             grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
             if let status = grpcStatus, status != "0" {
-                // 12=UNIMPLEMENTED, 14=UNAVAILABLE — service not deployed; no errors to report.
+                // Unsupported or transient error reporting must not fail the vehicle refresh.
                 if status == "12" || status == "14" {
-                    await APIDiagnosticLogStore.shared.record(
+                    if Self.errorsAuthorizationGap(status: status, message: grpcMessage) {
+                        throw PolestarError.permissionDenied(operation: Self.errorsPath)
+                    }
+                    await diagnosticLog.record(
                         provider: .polestar, request: request,
                         operation: Self.diagnosticOperation("gRPC errors", grpcStatus: status,
                                                             grpcMessage: grpcMessage),
@@ -300,7 +309,7 @@ extension PolestarGRPC {
                 throw PolestarError.invalidResponse(operation: "gRPC errors status \(status)")
             }
             guard http.statusCode == 200 else {
-                await APIDiagnosticLogStore.shared.record(
+                await diagnosticLog.record(
                     provider: .polestar, request: request, operation: "gRPC errors",
                     statusCode: http.statusCode, startedAt: startedAt,
                     error: PolestarError.server(statusCode: http.statusCode))
@@ -322,27 +331,27 @@ extension PolestarGRPC {
                 if let frameSize = expected, body.count == frameSize { break }
             }
             guard !body.isEmpty else {
-                await APIDiagnosticLogStore.shared.record(
+                await diagnosticLog.record(
                     provider: .polestar, request: request, operation: "gRPC errors",
                     statusCode: http.statusCode, responseBytes: 0,
                     responseData: Data(), startedAt: startedAt)
                 return []
             }
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request, operation: "gRPC errors",
                 statusCode: http.statusCode, responseBytes: body.count,
                 responseData: body, startedAt: startedAt)
             return Self.parseErrors(body)
         } catch let error as URLError where error.code == .timedOut {
             // Server-streaming timeout — service didn't respond; treat as no errors.
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
                                                     grpcMessage: grpcMessage),
                 statusCode: httpStatus, startedAt: startedAt, error: error)
             return []
         } catch {
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
                                                     grpcMessage: grpcMessage),
@@ -599,7 +608,8 @@ extension PolestarGRPC {
         request.timeoutInterval = 8
         guard let (data, response) = try? await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
-            operation: "Open-Meteo vehicle weather", provider: .polestar
+            operation: "Open-Meteo vehicle weather", provider: .polestar,
+            diagnosticLog: diagnosticLog
         ), response.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let current = json["current"] as? [String: Any] else { return nil }

@@ -1,8 +1,6 @@
 import Foundation
 
 enum BuiltinPolestarSecrets {
-    static var isConfigured: Bool { true }
-
     /// Static AppSync-style key used to authenticate `GetCarImages` against
     /// `pc-api.polestar.com/eu-north-1/mystar-public/`. Baked into the official Polestar app,
     /// not user-specific — the same value is published in plaintext by other open-source

@@ -53,7 +53,7 @@ final class URLCommandRouter: NSObject {
     }
 
     @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor,
-                                         withReplyEvent replyEvent: NSAppleEventDescriptor) {
+                                         withReplyEvent _: NSAppleEventDescriptor) {
         guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
               let url = URL(string: urlString) else { return }
         route(url)

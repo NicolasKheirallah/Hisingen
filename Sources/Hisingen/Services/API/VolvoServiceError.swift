@@ -72,13 +72,6 @@ enum VolvoError: Error, LocalizedError {
         }
     }
 
-    var isTransient: Bool {
-        switch self {
-        case .network, .rateLimited, .server, .temporarilyUnavailable: return true
-        default: return false
-        }
-    }
-
     static func httpFailure(statusCode: Int, retryAfter: TimeInterval? = nil,
                             operation: String = "request") -> VolvoError? {
         if (200..<300).contains(statusCode) { return nil }
@@ -110,5 +103,4 @@ enum VolvoError: Error, LocalizedError {
         }
     }
 }
-
 

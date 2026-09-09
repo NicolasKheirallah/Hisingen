@@ -123,9 +123,6 @@ struct HistoryDashboardView: View {
 
     @State var fuelPage = 0
 
-    /// The read models live on the Vehicle History ledger — the read policy's home — and are
-    /// aliased here so the view extensions keep their names.
-    typealias MonthComparison = VehicleHistoryLedger.Comparison
     typealias HistoryDataSnapshot = VehicleHistoryLedger.DashboardSnapshot
     typealias LifetimeSnapshot = VehicleHistoryLedger.LifetimeSnapshot
 

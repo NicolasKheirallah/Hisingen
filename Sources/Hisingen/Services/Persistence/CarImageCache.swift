@@ -122,30 +122,4 @@ final class CarImageCache: @unchecked Sendable {
         }
     }
 
-    func clear(for vin: String? = nil) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let vin {
-            let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            memoryCache = memoryCache.filter { !$0.key.hasPrefix(cleanVIN) }
-            if let items = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) {
-                for fileURL in items where fileURL.lastPathComponent.hasPrefix(cleanVIN) {
-                    do {
-                        try fileManager.removeItem(at: fileURL)
-                    } catch {
-                        logger.error("Could not remove cached vehicle image: \(error, privacy: .public)")
-                    }
-                }
-            }
-        } else {
-            memoryCache.removeAll()
-            do {
-                try fileManager.removeItem(at: cacheDirectory)
-                try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-            } catch {
-                logger.error("Could not clear image cache: \(error, privacy: .public)")
-            }
-        }
-    }
 }

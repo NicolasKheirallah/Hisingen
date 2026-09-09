@@ -363,16 +363,6 @@ enum FeatureAvailability: String, Codable, Sendable {
     case authenticationRequired
     case unknown
 
-    var displayName: String {
-        switch self {
-        case .available: return L10n.text("Available")
-        case .vehicleOffline: return L10n.text("Vehicle offline")
-        case .temporarilyUnavailable: return L10n.text("Temporarily unavailable")
-        case .authenticationRequired: return L10n.text("Sign in required")
-        case .unknown: return L10n.text("Unknown")
-        }
-    }
-
     var isActionable: Bool { self == .available }
 }
 
@@ -438,8 +428,6 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .engineStart: return L10n.text("Remote engine start (RES)")
         }
     }
-
-    var displayName: String { title }
 
     static let displayed: [VehicleCapability] = [
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,

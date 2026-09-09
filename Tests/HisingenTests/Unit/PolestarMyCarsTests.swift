@@ -57,7 +57,8 @@ struct PolestarMyCarsTests {
         defer { session.invalidateAndCancel() }
         let suite = "io.kheirallah.hisingen.tests.mycars.\(UUID())"
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session)
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session,
+                                diagnosticLog: APIDiagnosticLogStore())
         do {
             let ota = try await grpc.fetchSoftware(vin: "VIN-A", accessToken: failure ? "fail" : "success", locale: "en")
             #expect(!failure)

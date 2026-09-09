@@ -12,7 +12,8 @@ struct SpotPriceServiceTests {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         SpotPriceTransport.handler = transport
-        let service = SpotPriceService(session: session, cache: SpotPriceResponseCache())
+        let service = SpotPriceService(session: session, cache: SpotPriceResponseCache(),
+                                       diagnosticLog: APIDiagnosticLogStore())
         let date = Date()
 
         let first = try await service.fetch(date: date, area: .se3)
@@ -30,7 +31,8 @@ struct SpotPriceServiceTests {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         SpotPriceTransport.handler = transport
-        let service = SpotPriceService(session: session, cache: SpotPriceResponseCache())
+        let service = SpotPriceService(session: session, cache: SpotPriceResponseCache(),
+                                       diagnosticLog: APIDiagnosticLogStore())
         let date = Date().addingTimeInterval(86_400)
 
         for _ in 0..<2 {

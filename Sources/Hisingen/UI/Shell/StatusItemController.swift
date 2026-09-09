@@ -59,7 +59,6 @@ final class StatusItemController: NSObject {
     var inFlightRemoteCommandID: String?
     /// Most recent remote-command outcome for the Controls tab's inline banner.
     var lastRemoteCommandFeedback: RemoteCommandFeedback?
-    var onOpenPanel: (() -> Void)?
     private(set) var notificationPermission: NotificationPermission = .notDetermined
 
     var onRefresh: () -> Void = {}

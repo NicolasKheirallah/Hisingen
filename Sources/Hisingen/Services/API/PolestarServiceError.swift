@@ -81,20 +81,6 @@ enum PolestarError: Error, LocalizedError {
         return false
     }
 
-    var isTransient: Bool {
-        switch self {
-        case .network, .rateLimited, .server, .grpcUnavailable: return true
-        default: return false
-        }
-    }
-
-    static func map(_ error: Error) -> PolestarError {
-        if let error = error as? PolestarError { return error }
-        if let error = error as? URLError { return .network(error) }
-        if error is KeychainError { return .secureStorage }
-        return .invalidResponse(operation: "network request")
-    }
-
     static func httpFailure(statusCode: Int, retryAfter: TimeInterval? = nil,
                             authenticationReason: AuthFailureReason = .expiredSession,
                             forbiddenIsAuthentication: Bool = false,
@@ -130,5 +116,4 @@ enum PolestarError: Error, LocalizedError {
         }
     }
 }
-
 

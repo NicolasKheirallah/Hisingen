@@ -21,7 +21,7 @@ struct InsightEstimatesTests {
             airRecord(1, daysAgo: 2, filterPercent: 80, now: now),
             airRecord(2, daysAgo: 0, filterPercent: 79, now: now),
         ]
-        #expect(HistoryInsights.filterLifeEstimate(from: records, now: now) == nil)
+        #expect(HistoryInsights.filterLifeEstimate(from: records) == nil)
     }
 
     @Test("Filter estimate returns nil until measurable decline")
@@ -32,7 +32,7 @@ struct InsightEstimatesTests {
             airRecord(1, daysAgo: 8, filterPercent: 80.0, now: now),
             airRecord(2, daysAgo: 0, filterPercent: 79.9, now: now),
         ]
-        #expect(HistoryInsights.filterLifeEstimate(from: records, now: now) == nil)
+        #expect(HistoryInsights.filterLifeEstimate(from: records) == nil)
     }
 
     @Test("Filter estimate extrapolates linearly from observed rate")
@@ -43,7 +43,7 @@ struct InsightEstimatesTests {
             airRecord(1, daysAgo: 40, filterPercent: 64, now: now),
             airRecord(2, daysAgo: 0, filterPercent: 60, now: now),
         ]
-        let estimate = try #require(HistoryInsights.filterLifeEstimate(from: records, now: now))
+        let estimate = try #require(HistoryInsights.filterLifeEstimate(from: records))
         #expect(abs(estimate.percentPerDay - 0.1) < 0.001)
         #expect(abs(estimate.daysRemaining - 600) < 1)
     }

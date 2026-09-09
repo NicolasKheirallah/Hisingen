@@ -500,8 +500,7 @@ struct ChargingCurveView: View {
                         curveCaption(
                             title: isLive ? L10n.text("Ready") : L10n.text("Target"),
                             pct: effectiveTargetPct,
-                            date: isLive ? readyDate : nil,
-                            isProjected: isLive
+                            date: isLive ? readyDate : nil
                         )
                     }
                 }
@@ -517,8 +516,7 @@ struct ChargingCurveView: View {
         pct: Double,
         date: Date?,
         emphasized: Bool = false,
-        isLive: Bool = false,
-        isProjected: Bool = false
+        isLive: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 3) {

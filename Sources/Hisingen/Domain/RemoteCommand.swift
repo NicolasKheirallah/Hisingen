@@ -7,15 +7,6 @@ enum HeatingLevel: Int, Codable, CaseIterable, Sendable {
     case level2 = 3
     case level3 = 4
 
-    var displayName: String {
-        switch self {
-        case .unspecified: return L10n.text("Vehicle default")
-        case .off: return L10n.text("Off")
-        case .level1: return L10n.text("Level 1")
-        case .level2: return L10n.text("Level 2")
-        case .level3: return L10n.text("Level 3")
-        }
-    }
 }
 
 enum RemoteCommandRisk: Equatable, Sendable {

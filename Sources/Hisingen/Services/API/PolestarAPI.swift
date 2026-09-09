@@ -57,7 +57,8 @@ actor PolestarAPI {
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
-    let grpc = PolestarGRPC()
+    let grpc: PolestarGRPC
+    let diagnosticLog: APIDiagnosticLogStore
     let keychain: KeychainStore
     let imageCache: CarImageCache
 
@@ -81,15 +82,8 @@ actor PolestarAPI {
     var imagePreparationAttempts: [String: (angle: Int, retryAt: Date)] = [:]
     var ownerInfoPrepared = false
 
-    /// Discovery metadata for one vehicle, keyed by VIN.
-    ///
-    /// This replaces the former flat "currently selected car" fields. Those were global
-    /// mutable state that every selection path wrote and every telemetry fetch read, so a
-    /// background garage scan temporarily selecting car B contaminated an in-flight or
-    /// subsequent fetch for car A — wrong model names, wrong render images, and a
-    /// `selectedVIN == vin` post-check that failed under concurrency and surfaced as a
-    /// bogus "not configured" error. Reads are now always scoped to the VIN being fetched,
-    /// so concurrent selections cannot cross-contaminate anything.
+    /// Discovery metadata for one vehicle, keyed by VIN. Scoped per-VIN so concurrent
+    /// selections cannot cross-contaminate telemetry fetches.
     struct CarIdentity {
         var internalVehicleIdentifier: String?
         var modelName: String?
@@ -108,14 +102,11 @@ actor PolestarAPI {
     func identity(for vin: String?) -> CarIdentity { vin.flatMap { identities[$0] } ?? .empty }
     var ownerFirstName: String?
     var market: String?
-    /// Set when the app-backend "VDMS" discovery source rejects the request with a client
-    /// error (it currently answers `426 Upgrade Required` — the spoofed mobile-app version is
-    /// stale). VDMS only adds cosmetic metadata (colour, upholstery, wheels, packages) on top
-    /// of the primary `getConsumerCarsV2` discovery, so it is skipped until this passes rather
-    /// than re-attempted — and re-logged — on every discovery. Cleared on sign-out.
+    /// Set when the app-backend VDMS source rejects the request with a client error. VDMS only
+    /// enriches the primary discovery with cosmetic metadata, so it is skipped until this date
+    /// rather than retried on every discovery. Cleared on sign-out.
     var vdmsDiscoveryBlockedUntil: Date?
-    private static let vdmsBackoffDefaultsKey = "polestar_vdms_backoff_until_v1"
-    /// Render images per VIN (replaces the former single selected-car `carImageData`).
+    private static let vdmsBackoffDefaultsKey = "polestar_vdms_backoff_until_v2"
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
     var capabilityBackoff: [String: [String: Date]] = [:]
@@ -132,15 +123,20 @@ actor PolestarAPI {
     let preferences: PreferencesStore
 
     @MainActor
-    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache()) {
-        self.init(keychain: keychain, imageCache: imageCache, preferences: .shared)
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
+         diagnosticLog: APIDiagnosticLogStore = .shared) {
+        self.init(keychain: keychain, imageCache: imageCache, preferences: .shared,
+                  diagnosticLog: diagnosticLog)
     }
 
-    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore) {
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
+         preferences: PreferencesStore, diagnosticLog: APIDiagnosticLogStore = .shared) {
         self.keychain = keychain
         self.saveCommandToken = { try keychain.saveCommandSessionToken($0) }
         self.imageCache = imageCache
         self.preferences = preferences
+        self.diagnosticLog = diagnosticLog
+        self.grpc = PolestarGRPC(diagnosticLog: diagnosticLog)
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
@@ -454,7 +450,8 @@ actor PolestarAPI {
             "code_verifier": verifier
         ])
         return try await Self.requestToken(request: request, session: session,
-                                           invalidReason: .callbackRejected)
+                                           invalidReason: .callbackRejected,
+                                           diagnosticLog: diagnosticLog)
     }
 
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
@@ -495,10 +492,12 @@ actor PolestarAPI {
         ])
         let tokenRequest = request
         let currentSession = session
+        let diagnosticLog = diagnosticLog
         let taskID = UUID()
         let task = Task {
             try await Self.requestToken(request: tokenRequest, session: currentSession,
-                                        invalidReason: .expiredSession)
+                                        invalidReason: .expiredSession,
+                                        diagnosticLog: diagnosticLog)
         }
         refreshTask = task
         refreshTaskID = taskID
@@ -552,10 +551,12 @@ actor PolestarAPI {
     }
 
     static func requestToken(request: URLRequest, session: URLSession,
-                                     invalidReason: AuthFailureReason) async throws -> TokenResponseDTO {
+                             invalidReason: AuthFailureReason,
+                             diagnosticLog: APIDiagnosticLogStore) async throws -> TokenResponseDTO {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
-            operation: "Polestar token request", provider: .polestar
+            operation: "Polestar token request", provider: .polestar,
+            diagnosticLog: diagnosticLog
         )
         if response.statusCode == 400 {
             throw PolestarError.authenticationRequired(invalidReason)
@@ -765,6 +766,7 @@ actor PolestarAPI {
     }
 
     private func fetchAppBackendCars(token: String) async throws -> [ConsumerCarDTO] {
+        // Polestar removed `packages` from VdmsContent; requesting it rejects the whole query.
         let query = """
         query GetVDMSCars {
           vdms {
@@ -775,7 +777,6 @@ actor PolestarAPI {
                 exterior { name }
                 interior { name }
                 wheels { name }
-                packages { name }
               }
             }
           }
@@ -874,7 +875,7 @@ actor PolestarAPI {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await HTTPExchange.data(
                   for: request, using: session, limit: 256_000, operation: "user information",
-                  provider: .polestar),
+                  provider: .polestar, diagnosticLog: diagnosticLog),
               response.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
@@ -910,7 +911,7 @@ actor PolestarAPI {
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         guard let (data, response) = try? await HTTPExchange.data(
                   for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata",
-                  provider: .polestar),
+                  provider: .polestar, diagnosticLog: diagnosticLog),
               response.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
@@ -927,7 +928,8 @@ actor PolestarAPI {
            url.scheme == "https" {
             if let (bytes, imageResponse) = try? await HTTPExchange.data(
                       for: URLRequest(url: url), using: session, limit: 5_000_000,
-                      operation: "vehicle image", provider: .polestar),
+                      operation: "vehicle image", provider: .polestar,
+                      diagnosticLog: diagnosticLog),
                   imageResponse.statusCode == 200,
                   imageResponse.mimeType?.hasPrefix("image/") == true,
                   bytes.count <= 5_000_000 {
@@ -979,11 +981,11 @@ actor PolestarAPI {
     ) {
         guard imageDownloadTasks[key] == nil else { return }
         let taskID = UUID()
-        let task = Task { [weak self, session] in
+        let task = Task { [weak self, session, diagnosticLog] in
             do {
                 let (data, response) = try await HTTPExchange.data(
                     for: request, using: session, limit: 5_000_000, operation: operation,
-                    provider: .polestar
+                    provider: .polestar, diagnosticLog: diagnosticLog
                 )
                 if response.statusCode == 200,
                    data.count <= 5_000_000 {

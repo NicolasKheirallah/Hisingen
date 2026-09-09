@@ -604,7 +604,4 @@ final class VehicleHistoryLedger: Sendable {
         return csv
     }
 
-    func exportMonthlyMileageCSV(for vin: String, limit: Int = 5_000) -> String {
-        MonthlyMileageReport.csv(reports: monthlyMileageReports(for: vin, limit: limit), vin: vin)
-    }
 }

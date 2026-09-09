@@ -53,8 +53,6 @@ final class VehicleOutlineImageProvider {
 }
 
 struct OutlineGeometry {
-    static let svgWidth: CGFloat = 1645.0
-    static let svgHeight: CGFloat = 769.0
     static let aspectRatio: CGFloat = 1645.0 / 769.0
 
     let containerWidth: CGFloat
@@ -173,80 +171,77 @@ struct VehicleSideProfileDoorsView: View {
                         .frame(width: w, height: h)
                 }
 
-                // 1. Front Headlights Beam (traced lamp cluster: SVG X=[1419..1583], Y=[347..407])
+                // Front headlight beam traced from SVG X=[1419..1583], Y=[347..407].
                 if hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered {
                     headlightsGlow(og: og, active: hoodOpen || frontDoorOpen || frontWindowOpen, hovered: hoodHovered || frontDoorHovered || frontWindowHovered)
                 }
 
-                // 2. Rear Taillights Glow (traced lamp cluster: SVG X=[72..211], Y=[278..343])
+                // Rear taillight glow traced from SVG X=[72..211], Y=[278..343].
                 if tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen || tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered {
                     taillightsGlow(og: og, active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen, hovered: tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered)
                 }
 
-                // 3. Hood Zone (traced bonnet sliver: SVG X=[1122..1541], Y=[275..361])
+                // Hood zone traced from SVG X=[1122..1541], Y=[275..361].
                 openingZone(
                     kind: .hood,
                     u: 0.8094, v: 0.4135,
                     wFraction: 0.2369, hFraction: 0.1040,
-                    open: hoodOpen, hovered: hoodHovered,
-                    label: "Hood", og: og
+                    open: hoodOpen, hovered: hoodHovered, og: og
                 )
 
-                // 4. Tailgate Zone (traced rear hatch cluster: SVG X=[45..410], Y=[156..479])
+                // Tailgate zone traced from SVG X=[45..410], Y=[156..479].
                 openingZone(
                     kind: .tailgate,
                     u: 0.1383, v: 0.4129,
                     wFraction: 0.2064, hFraction: 0.3906,
-                    open: tailgateOpen, hovered: tailgateHovered,
-                    label: "Tailgate", og: og
+                    open: tailgateOpen, hovered: tailgateHovered, og: og
                 )
 
-                // 5. Front Door Zone (traced door skin + rocker sill: SVG X=[766..1152], Y=[288..545])
+                // Front-door zone traced from SVG X=[766..1152], Y=[288..545].
                 openingZone(
                     kind: .frontDoor,
                     u: 0.5830, v: 0.5416,
                     wFraction: 0.2183, hFraction: 0.3108,
                     open: frontDoorOpen, hovered: frontDoorHovered,
-                    label: "Front Door", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
+                    hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // 6. Rear Door Zone (traced door skin + rocker sill: SVG X=[414..781], Y=[276..539])
+                // Rear-door zone traced from SVG X=[414..781], Y=[276..539].
                 openingZone(
                     kind: .rearDoor,
                     u: 0.3632, v: 0.5299,
                     wFraction: 0.2075, hFraction: 0.3181,
                     open: rearDoorOpen, hovered: rearDoorHovered,
-                    label: "Rear Door", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
+                    hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // 7. Front Window Zone (SVG X=[730..1125], Y=[153..293])
+                // Front-window zone traced from SVG X=[730..1125], Y=[153..293].
                 openingZone(
                     kind: .frontWindow,
                     u: 0.5638, v: 0.2900,
                     wFraction: 0.2401, hFraction: 0.1820,
                     open: frontWindowOpen, hovered: frontWindowHovered,
-                    label: "Front Window", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
+                    hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // 8. Rear Window Zone (SVG X=[414..759], Y=[152..275])
+                // Rear-window zone traced from SVG X=[414..759], Y=[152..275].
                 openingZone(
                     kind: .rearWindow,
                     u: 0.3565, v: 0.2776,
                     wFraction: 0.2097, hFraction: 0.1599,
                     open: rearWindowOpen, hovered: rearWindowHovered,
-                    label: "Rear Window", hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
+                    hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // 9. Sunroof Zone (Roofline: SVG X=[432..965], Y=[124..160])
+                // Sunroof zone traced from SVG X=[432..965], Y=[124..160].
                 openingZone(
                     kind: .sunroof,
                     u: 0.4246, v: 0.1850,
                     wFraction: 0.3240, hFraction: 0.0600,
-                    open: sunroofOpen, hovered: sunroofHovered,
-                    label: "Sunroof", og: og
+                    open: sunroofOpen, hovered: sunroofHovered, og: og
                 )
 
-                // 10. Charge Lid / Fuel Flap Indicator (SVG X=[290..381], Y=[281..331])
+                // Charge-lid and fuel-flap indicator traced from SVG X=[290..381], Y=[281..331].
                 chargeLidIndicator(
                     u: 0.2040, v: 0.3979,
                     wFraction: 0.0553, hFraction: 0.0650,
@@ -270,7 +265,7 @@ struct VehicleSideProfileDoorsView: View {
         u: CGFloat, v: CGFloat,
         wFraction: CGFloat, hFraction: CGFloat,
         open: Bool, hovered: Bool,
-        label: String, hoverColor: Color? = nil,
+        hoverColor: Color? = nil,
         hoverBadge: String? = nil, og: OutlineGeometry
     ) -> some View {
         if open || hovered {
@@ -587,21 +582,19 @@ struct VehicleSideProfileTiresView: View {
                         .frame(width: w, height: h)
                 }
 
-                // Rear Wheel (SVG X=379, Y=516 -> u=0.2304, v=0.6710)
+                // Rear wheel mapped from SVG X=379, Y=516.
                 tireWheelGlow(
                     u: 0.2304, v: 0.6710,
                     state: axleState(.rearLeft, .rearRight), hovered: rearHovered,
                     measured: axleMeasured(.rearLeft, .rearRight),
-                    positionName: hoveredPosition == .rearRight ? "RR" : "RL",
                     og: og
                 )
 
-                // Front Wheel (SVG X=1322, Y=516 -> u=0.8036, v=0.6710)
+                // Front wheel mapped from SVG X=1322, Y=516.
                 tireWheelGlow(
                     u: 0.8036, v: 0.6710,
                     state: axleState(.frontLeft, .frontRight), hovered: frontHovered,
                     measured: axleMeasured(.frontLeft, .frontRight),
-                    positionName: hoveredPosition == .frontRight ? "FR" : "FL",
                     og: og
                 )
             }
@@ -615,7 +608,6 @@ struct VehicleSideProfileTiresView: View {
         u: CGFloat, v: CGFloat,
         state: TyrePressureWarning, hovered: Bool,
         measured: Bool,
-        positionName: String,
         og: OutlineGeometry
     ) -> some View {
         let alerting = state.needsAttention

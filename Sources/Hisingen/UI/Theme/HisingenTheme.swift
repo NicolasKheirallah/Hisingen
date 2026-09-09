@@ -33,14 +33,11 @@ enum HisingenTheme {
         }
     }
     static let sectionSpacing: CGFloat = 12
-    static let smallSpacing: CGFloat = 8
     /// Live panel geometry from the selected size preset / custom overrides /
     /// density zoom, resolved through PanelLayout so every consumer agrees.
     /// Re-evaluated on each layout pass: changing any of the three in Settings
     /// resizes the open dropdown immediately.
     static var panelLayout: PanelLayout { .resolve(from: .shared) }
-    static var popoverWidth: CGFloat { panelLayout.width }
-    static var popoverIdealHeight: CGFloat { panelLayout.height }
     /// Content zoom factor from the density preset; <1 shows more content in the same
     /// panel, >1 enlarges it.
     static var contentScale: CGFloat { panelLayout.contentScale }

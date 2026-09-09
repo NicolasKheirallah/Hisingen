@@ -59,7 +59,6 @@ private struct VolvoSecretBundle: Codable {
 
 struct KeychainStore: Sendable {
     static let app = KeychainStore(service: "io.kheirallah.hisingen")
-    private static let logger = AppLog.logger("keychain")
 
     let service: String
     private let memoryCache: InMemorySecretCache
@@ -239,39 +238,6 @@ struct KeychainStore: Sendable {
     func deleteVolvoApiKeyDraft() throws {
         UserDefaults.standard.set(false, forKey: "has_volvo_key_draft")
         try delete(account: Self.volvoApiKeyDraftAccount)
-    }
-
-    /// Wipes all stored credentials, tokens, session state, and presence flags.
-    func wipeAll() {
-        attemptWipe("Polestar email") { try deleteEmail() }
-        attemptWipe("Polestar password") { try deletePassword() }
-        attemptWipe("Polestar session") { try deleteSessionToken() }
-        attemptWipe("Polestar command session") { try deleteCommandSessionToken() }
-        attemptWipe("Polestar password draft") { try deletePasswordDraft() }
-        attemptWipe("Volvo session") { try deleteVolvoSessionToken() }
-        attemptWipe("Volvo client secret") { try deleteVolvoClientSecret() }
-        attemptWipe("Volvo API key") { try deleteVolvoApiKey() }
-        attemptWipe("Volvo client secret draft") { try deleteVolvoClientSecretDraft() }
-        attemptWipe("Volvo API key draft") { try deleteVolvoApiKeyDraft() }
-        attemptWipe("Volvo credential bundle") { try delete(account: Self.volvoBundleAccount) }
-        UserDefaults.standard.removeObject(forKey: "has_polestar_password")
-        UserDefaults.standard.removeObject(forKey: "has_polestar_email")
-        UserDefaults.standard.removeObject(forKey: "has_polestar_session")
-        UserDefaults.standard.removeObject(forKey: "has_polestar_cmd_session")
-        UserDefaults.standard.removeObject(forKey: "has_volvo_session")
-        UserDefaults.standard.removeObject(forKey: "has_volvo_client_secret")
-        UserDefaults.standard.removeObject(forKey: "has_volvo_api_key")
-        UserDefaults.standard.removeObject(forKey: "has_polestar_pw_draft")
-        UserDefaults.standard.removeObject(forKey: "has_volvo_secret_draft")
-        UserDefaults.standard.removeObject(forKey: "has_volvo_key_draft")
-    }
-
-    private func attemptWipe(_ item: String, _ action: () throws -> Void) {
-        do {
-            try action()
-        } catch {
-            Self.logger.error("Could not remove \(item, privacy: .public) from Keychain: \(error, privacy: .public)")
-        }
     }
 
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
@@ -467,44 +433,20 @@ struct KeychainStore: Sendable {
 enum Keychain {
     /// Presence checks only. They intentionally never touch Security.framework, so views may
     /// evaluate them freely without triggering a Keychain authorization prompt.
-    static var hasStoredCommandSession: Bool {
-        KeychainStore.app.hasStoredCommandSession
-    }
     static var hasStoredPolestarEmail: Bool {
         KeychainStore.app.hasStoredPolestarEmail
     }
     static var hasStoredVolvoAppCredentials: Bool {
         KeychainStore.app.hasStoredVolvoAppCredentials
     }
-    static func saveEmail(_ email: String) throws { try KeychainStore.app.saveEmail(email) }
-    static func readEmail() throws -> String? { try KeychainStore.app.readEmail() }
-    static func deleteEmail() throws { try KeychainStore.app.deleteEmail() }
     static func savePassword(_ password: String) throws { try KeychainStore.app.savePassword(password) }
     static func readPassword() throws -> String? { try KeychainStore.app.readPassword() }
     static func deletePassword() throws { try KeychainStore.app.deletePassword() }
-    static func saveSessionToken(_ token: String) throws { try KeychainStore.app.saveSessionToken(token) }
     static func readSessionToken() throws -> String? { try KeychainStore.app.readSessionToken() }
-    static func deleteSessionToken() throws { try KeychainStore.app.deleteSessionToken() }
 
-    static func saveVolvoSessionToken(_ token: String) throws { try KeychainStore.app.saveVolvoSessionToken(token) }
     static func readVolvoSessionToken() throws -> String? { try KeychainStore.app.readVolvoSessionToken() }
-    static func deleteVolvoSessionToken() throws { try KeychainStore.app.deleteVolvoSessionToken() }
     static func saveVolvoClientSecret(_ value: String) throws { try KeychainStore.app.saveVolvoClientSecret(value) }
     static func readVolvoClientSecret() throws -> String? { try KeychainStore.app.readVolvoClientSecret() }
-    static func deleteVolvoClientSecret() throws { try KeychainStore.app.deleteVolvoClientSecret() }
     static func saveVolvoApiKey(_ value: String) throws { try KeychainStore.app.saveVolvoApiKey(value) }
     static func readVolvoApiKey() throws -> String? { try KeychainStore.app.readVolvoApiKey() }
-    static func deleteVolvoApiKey() throws { try KeychainStore.app.deleteVolvoApiKey() }
-
-    static func savePasswordDraft(_ value: String) throws { try KeychainStore.app.savePasswordDraft(value) }
-    static func readPasswordDraft() throws -> String? { try KeychainStore.app.readPasswordDraft() }
-    static func deletePasswordDraft() throws { try KeychainStore.app.deletePasswordDraft() }
-
-    static func saveVolvoClientSecretDraft(_ value: String) throws { try KeychainStore.app.saveVolvoClientSecretDraft(value) }
-    static func readVolvoClientSecretDraft() throws -> String? { try KeychainStore.app.readVolvoClientSecretDraft() }
-    static func deleteVolvoClientSecretDraft() throws { try KeychainStore.app.deleteVolvoClientSecretDraft() }
-
-    static func saveVolvoApiKeyDraft(_ value: String) throws { try KeychainStore.app.saveVolvoApiKeyDraft(value) }
-    static func readVolvoApiKeyDraft() throws -> String? { try KeychainStore.app.readVolvoApiKeyDraft() }
-    static func deleteVolvoApiKeyDraft() throws { try KeychainStore.app.deleteVolvoApiKeyDraft() }
 }

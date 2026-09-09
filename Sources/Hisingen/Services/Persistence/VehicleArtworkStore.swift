@@ -136,11 +136,6 @@ final class VehicleArtworkStore {
         "\(vin.uppercased())#\(angle)"
     }
 
-    func reset() {
-        cache.removeAll()
-        recency.removeAll()
-    }
-
     // MARK: - Private
 
     private func finish(key: Key, artwork: Artwork?) {

@@ -127,6 +127,140 @@ struct RemoteCommandDispatchTests {
             dialog,
             CommandAvailability.requiresAccountApproval.shortReason)
     }
+
+    // MARK: - Optimistic state patch
+
+    @MainActor
+    private func makeContext(features: Set<AppFeature>, brand: VehicleBrand = .polestar) -> DispatchMock {
+        AutomationHandoff.resetForTesting()
+        let context = DispatchMock(enabledFeatures: features, vin: vin, brand: brand)
+        AutomationHandoff.install(context)
+        return context
+    }
+
+    @Test
+    @MainActor
+    func successfulStartClimateFlipsOptimisticStateImmediately() async {
+        let context = makeContext(features: [.remoteClimate])
+        context.vehicleState?.climateStatus = VehicleClimateStatus(
+            activity: .idle, timeRemainingMinutes: nil, timerTriggered: false)
+
+        let outcome = await context.perform(
+            .startClimate(temperatureCelsius: 21, frontLeftSeat: .off, frontRightSeat: .off,
+                          rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+            origin: .userInitiated)
+
+        guard case .sent = outcome else { return XCTFail("Expected the command to be sent") }
+        // The patched temperature matches what was executed; cars without selectable
+        // temperature fall back to 22 °C.
+        guard case .startClimate(let executedTemperature, _, _, _, _, _) =
+                context.provider.executedCommands.first else {
+            return XCTFail("Expected a start-climate execution")
+        }
+        XCTAssertEqual(context.vehicleState?.climateStatus?.activity, .heating)
+        XCTAssertEqual(
+            context.vehicleState?.climateStatus?.requestedTemperatureCelsius,
+            Double(executedTemperature > 0 ? executedTemperature : 22))
+        XCTAssertNotNil(context.vehicleState?.optimisticCommandLockUntil)
+        XCTAssertEqual(context.vehicleState?.pendingCommand?.commandIdentifier, "start-climate")
+    }
+
+    @Test
+    @MainActor
+    func successfulStopClimateOptimisticallyIdles() async {
+        let context = makeContext(features: [.remoteClimate])
+        context.vehicleState?.climateStatus = VehicleClimateStatus(
+            activity: .heating, timeRemainingMinutes: 20, timerTriggered: false)
+
+        _ = await context.perform(.stopClimate, origin: .userInitiated)
+
+        XCTAssertEqual(context.vehicleState?.climateStatus?.activity, .idle)
+        XCTAssertEqual(context.vehicleState?.climateStatus?.timeRemainingMinutes, nil)
+        XCTAssertNotNil(context.vehicleState?.optimisticCommandLockUntil)
+    }
+
+    @Test
+    @MainActor
+    func successfulLockUnlockFlipOptimisticExterior() async {
+        let context = makeContext(features: [.remoteLocks])
+        context.vehicleState?.exteriorStatus = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .tailgate, state: .closed)],
+            isLocked: false, alarmTriggered: false)
+
+        _ = await context.perform(.lock, origin: .userInitiated)
+        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+
+        _ = await context.perform(.unlock, origin: .userInitiated)
+        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
+    }
+
+    @Test
+    @MainActor
+    func volvoUnlockDoesNotFlipOptimisticExterior() async {
+        let context = makeContext(features: [.remoteLocks], brand: .volvo)
+        context.vehicleState?.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: true, alarmTriggered: false)
+
+        _ = await context.perform(.unlock, origin: .userInitiated)
+
+        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+    }
+
+    @Test
+    @MainActor
+    func trunkUnlockDoesNotFlipCentralLock() async {
+        let context = makeContext(features: [.remoteLocks])
+        context.vehicleState?.exteriorStatus = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .tailgate, state: .closed)],
+            isLocked: true, alarmTriggered: false)
+
+        _ = await context.perform(.unlockTrunk, origin: .userInitiated)
+
+        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+    }
+
+    @Test
+    @MainActor
+    func preCleaningPatchesAirQualityNotClimate() async {
+        let context = makeContext(features: [.remotePreCleaning])
+        context.vehicleState?.airQuality = VehicleAirQuality(cleaningState: .off)
+
+        _ = await context.perform(.startPreCleaning, origin: .userInitiated)
+
+        XCTAssertEqual(context.vehicleState?.airQuality?.cleaningState, .on)
+        XCTAssertNil(context.vehicleState?.climateStatus)
+        XCTAssertNotNil(context.vehicleState?.optimisticCommandLockUntil)
+
+        _ = await context.perform(.stopPreCleaning, origin: .userInitiated)
+        XCTAssertEqual(context.vehicleState?.airQuality?.cleaningState, .off)
+    }
+
+    @Test
+    @MainActor
+    func successfulChargeTargetPatchOptimistically() async {
+        let context = makeContext(features: [.remoteCharging])
+        context.vehicleState?.chargeTargetPercentage = 70
+
+        _ = await context.perform(.setChargeTarget(80), origin: .userInitiated)
+
+        XCTAssertEqual(context.vehicleState?.chargeTargetPercentage, 80)
+        XCTAssertNotNil(context.vehicleState?.optimisticCommandLockUntil)
+    }
+
+    @Test
+    @MainActor
+    func failedCommandDoesNotPatchState() async {
+        let context = makeContext(features: [.remoteCharging])
+        context.vehicleState?.chargeTargetPercentage = 70
+        context.provider.failure = RemoteCommandError.rejected(nil)
+
+        let outcome = await context.perform(.setChargeTarget(80), origin: .userInitiated)
+
+        guard case .refused = outcome else { return XCTFail("Expected refusal") }
+        XCTAssertEqual(context.vehicleState?.chargeTargetPercentage, 70)
+        XCTAssertNil(context.vehicleState?.optimisticCommandLockUntil)
+        XCTAssertNil(context.vehicleState?.pendingCommand)
+    }
 }
 
 // MARK: - Mocks
@@ -158,8 +292,10 @@ private final class RouterContextMock: URLCommandRouterContext {
 private final class RecordingProvider: RemoteCommandExecuting {
     nonisolated let brand: VehicleBrand
     private(set) var executedCommands: [RemoteCommand] = []
+    var failure: (any Error)?
     init(brand: VehicleBrand) { self.brand = brand }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        if let failure { throw failure }
         executedCommands.append(command)
         return RemoteCommandResult(outcome: .completed, message: nil)
     }

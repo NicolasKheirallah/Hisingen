@@ -228,14 +228,6 @@ enum TyrePosition: String, Codable, CaseIterable, Sendable {
     case rearLeft
     case rearRight
 
-    var displayName: String {
-        switch self {
-        case .frontLeft: return L10n.text("Front-left tyre")
-        case .frontRight: return L10n.text("Front-right tyre")
-        case .rearLeft: return L10n.text("Rear-left tyre")
-        case .rearRight: return L10n.text("Rear-right tyre")
-        }
-    }
 }
 
 enum TyrePressureWarning: Int, Codable, Sendable {

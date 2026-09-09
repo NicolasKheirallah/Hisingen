@@ -8,7 +8,8 @@ enum HTTPExchange {
         using session: URLSession,
         limit: Int,
         operation: String,
-        provider: VehicleBrand
+        provider: VehicleBrand,
+        diagnosticLog: APIDiagnosticLogStore = .shared
     ) async throws -> (Data, HTTPURLResponse) {
         let startedAt = Date()
         let diagnosticProvider: APILogProvider = provider == .polestar ? .polestar : .volvo
@@ -35,14 +36,14 @@ enum HTTPExchange {
                 }
             }
             data.append(contentsOf: pending)
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
                 statusCode: http.statusCode, responseBytes: data.count,
                 responseData: data, startedAt: startedAt)
             return (data, http)
         } catch {
             let mapped = (error as? URLError).map { Self.network($0, provider: provider) } ?? error
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
                 startedAt: startedAt, error: mapped)
             throw mapped

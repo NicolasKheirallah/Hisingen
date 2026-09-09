@@ -11,17 +11,18 @@ struct APIDiagnosticLogTests {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         HTTPExchangeTransport.response.set(status: 200, data: Data(#"{"ok":true}"#.utf8))
-        await APIDiagnosticLogStore.shared.clear()
+        let diagnosticLog = APIDiagnosticLogStore()
 
         let request = URLRequest(url: URL(string: "https://exchange.example.test/value")!)
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 1_024,
-            operation: "bounded exchange test", provider: .polestar
+            operation: "bounded exchange test", provider: .polestar,
+            diagnosticLog: diagnosticLog
         )
 
         #expect(response.statusCode == 200)
         #expect(data == Data(#"{"ok":true}"#.utf8))
-        let entries = await APIDiagnosticLogStore.shared.snapshot()
+        let entries = await diagnosticLog.snapshot()
         let entry = try #require(entries.last(where: { $0.operation == "bounded exchange test" }))
         #expect(entry.responseBytes == data.count)
     }
@@ -33,12 +34,14 @@ struct APIDiagnosticLogTests {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         HTTPExchangeTransport.response.set(status: 200, data: Data(repeating: 0x61, count: 128))
+        let diagnosticLog = APIDiagnosticLogStore()
 
         let request = URLRequest(url: URL(string: "https://exchange.example.test/large")!)
         do {
             _ = try await HTTPExchange.data(
                 for: request, using: session, limit: 64,
-                operation: "bounded exchange test", provider: .polestar
+                operation: "bounded exchange test", provider: .polestar,
+                diagnosticLog: diagnosticLog
             )
             Issue.record("Oversized body was accepted")
         } catch let error as PolestarError {

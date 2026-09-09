@@ -282,17 +282,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         otaCapabilities?.userIsOwner
     }
 
-    var primaryEnergyFraction: Double? {
-        if powertrain == .ice {
-            return fuelLevelPercent.map { $0 / 100.0 }
-        }
-        if let b = batteryPercentage {
-            return b / 100.0
-        }
-        return fuelLevelPercent.map { $0 / 100.0 }
-    }
-
-
     /// Provider-reported pack specification. This is not a measured battery-health value.
     var reportedBatteryCapacityKwh: Double? = nil
     var externalColour: String? = nil
@@ -1075,11 +1064,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         return Format.chargingRateFormatted(powerWatts: watts, consumptionWhPerKm: consumption, unit: unit)
     }
 
-    @MainActor
-    var formattedChargingRate: String? {
-        formattedChargingRate(unit: PreferencesStore().distanceUnit)
-    }
-
     var freshnessDescription: String {
         if isStale() {
             return L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
@@ -1231,6 +1215,17 @@ struct VehicleState: Codable, Equatable, Sendable {
             return climateStatus ?? (features.contains(.climateStatus) ? previous.climateStatus : nil)
         }()
 
+        let mergedAirQuality: VehicleAirQuality? = {
+            // During the command grace window a disagreeing reading is a stale cache, not a flip.
+            if isCommandLocked, let previous = previous.airQuality {
+                if let incoming = airQuality, incoming.cleaningState == previous.cleaningState {
+                    return incoming
+                }
+                return previous
+            }
+            return airQuality ?? previous.airQuality
+        }()
+
         let mergedChargeTarget: Int? = {
             if isCommandLocked, let prevTarget = previous.chargeTargetPercentage {
                 return prevTarget
@@ -1283,7 +1278,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             tripMeterAutomaticKm: tripMeterAutomaticKm ?? (features.contains(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
             connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) && !connectivityIsUnsupported
                 ? previous.connectivity : nil),
-            airQuality: airQuality ?? (features.contains(.airQuality) ? previous.airQuality : nil),
+            airQuality: mergedAirQuality,
             batteryDiagnostics: batteryDiagnostics
                 ?? (features.contains(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
             weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),

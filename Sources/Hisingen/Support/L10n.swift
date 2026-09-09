@@ -59,14 +59,6 @@ enum L10n {
         localizedBundle(for: "en")
     }
 
-    /// Drops the memoized per-language bundles. Needed after locale files change on disk
-    /// (development rebuilds); harmless to call at any time.
-    static func invalidateBundleCache() {
-        bundleLock.lock()
-        defer { bundleLock.unlock() }
-        localizedBundleCache.removeAll()
-    }
-
     static func text(_ key: String) -> String {
         guard let languageCode = selectedLanguageCode,
               let localizedBundle = localizedBundle(for: languageCode) else {
@@ -101,5 +93,4 @@ enum L10n {
         return String(format: text(key, languageCode: languageCode), locale: locale, arguments: arguments)
     }
 }
-
 

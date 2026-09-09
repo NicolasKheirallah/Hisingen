@@ -8,7 +8,7 @@ import Testing
 struct PolestarAuthenticationTests {
     private func makeAPI() async -> (PolestarAPI, KeychainStore) {
         let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.auth.\(UUID())")
-        let api = PolestarAPI(keychain: keychain)
+        let api = PolestarAPI(keychain: keychain, diagnosticLog: APIDiagnosticLogStore())
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [AuthenticationTransport.self]
         await api.installAuthenticationTestSession(URLSession(configuration: configuration))

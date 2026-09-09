@@ -76,8 +76,6 @@ struct FlexibleDouble: Decodable {
 struct StringOrInt: Decodable {
     let value: String
 
-    init(value: String) { self.value = value }
-
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(String.self) { self.value = value; return }
@@ -342,5 +340,4 @@ struct TokenResponseDTO: Decodable, Sendable {
         idToken = try container.decodeIfPresent(String.self, forKey: .idToken)
     }
 }
-
 

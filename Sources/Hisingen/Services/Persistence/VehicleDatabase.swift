@@ -505,24 +505,6 @@ final class VehicleDatabase: @unchecked Sendable {
         }
     }
 
-    func cachedImageAngles(for vin: String) -> [Int] {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty else { return [] }
-        let sql = "SELECT angle FROM vehicle_images WHERE vin = ?;"
-        let result = try? db.query(sql: sql) { stmt in
-            try stmt.bindText(cleanVIN, at: 1)
-        } process: { stmt -> [Int] in
-            var angles: [Int] = []
-            while stmt.step() {
-                if let angle = stmt.columnInt64(at: 0).map(Int.init) {
-                    angles.append(angle)
-                }
-            }
-            return angles
-        }
-        return result ?? []
-    }
-
     // MARK: - Vehicle Snapshots
 
     func saveSnapshot(_ state: VehicleState) {

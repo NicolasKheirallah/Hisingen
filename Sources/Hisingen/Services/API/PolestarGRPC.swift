@@ -61,6 +61,7 @@ actor PolestarGRPC {
     private static let legacyUnimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
     private static let unimplementedReadPathTTL: TimeInterval = 24 * 60 * 60
     private let defaults: UserDefaults
+    let diagnosticLog: APIDiagnosticLogStore
 
     /// Single-flight guard for `fetchLocation`: one telemetry sweep asks for the vehicle's
     /// location directly *and* again inside `fetchWeather`, so without this the location RPC
@@ -68,10 +69,9 @@ actor PolestarGRPC {
     var locationInFlight: [String: PolestarInFlightRequest<VehicleLocation?>] = [:]
     var chargeLocationsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
 
-    /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError`. The read paths
-    /// used to collapse every status into `invalidResponse("gRPC status N")`, so a permanently
-    /// unimplemented service (12) was indistinguishable from a transient blip (14) and a real
-    /// `16 UNAUTHENTICATED` never triggered re-authentication.
+    /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError` so that
+    /// permanently unimplemented services (12), transient unavailability (14), and
+    /// authentication failures (16) each receive distinct handling.
     static func readStatusError(status: String, message: String? = nil, path: String) -> PolestarError {
         let service = path.split(separator: "/").first.map(String.init) ?? path
         let detail = (message?.removingPercentEncoding ?? message)?.lowercased()
@@ -213,28 +213,28 @@ actor PolestarGRPC {
         do {
             (bytes, response) = try await liveSession.bytes(for: request)
         } catch {
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request, operation: "live gRPC \(path)",
                 startedAt: startedAt, error: error)
             throw error
         }
         guard let http = response as? HTTPURLResponse else {
             let error = PolestarError.invalidResponse(operation: "live gRPC stream")
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request, operation: "live gRPC \(path)",
                 startedAt: startedAt, error: error)
             throw error
         }
         if http.statusCode == 401 || http.statusCode == 403 {
             let error = PolestarError.authenticationRequired(.expiredSession)
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request, operation: "live gRPC \(path)",
                 statusCode: http.statusCode, startedAt: startedAt, error: error)
             throw error
         }
         guard http.statusCode == 200 else {
             let error = PolestarError.server(statusCode: http.statusCode)
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request, operation: "live gRPC \(path)",
                 statusCode: http.statusCode, startedAt: startedAt, error: error)
             throw error
@@ -243,14 +243,14 @@ actor PolestarGRPC {
             let error = Self.readStatusError(status: status,
                                              message: http.value(forHTTPHeaderField: "grpc-message"),
                                              path: path)
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("live gRPC \(path)", grpcStatus: status,
                                                     grpcMessage: http.value(forHTTPHeaderField: "grpc-message")),
                 statusCode: http.statusCode, startedAt: startedAt, error: error)
             throw error
         }
-        await APIDiagnosticLogStore.shared.record(
+        await diagnosticLog.record(
             provider: .polestar, request: request, operation: "live gRPC \(path) connected",
             statusCode: http.statusCode, startedAt: startedAt)
         onConnected()
@@ -291,8 +291,10 @@ actor PolestarGRPC {
     }
     let session: URLSession
 
-    init(defaultsSuiteName: String? = nil, session: URLSession? = nil) {
+    init(defaultsSuiteName: String? = nil, session: URLSession? = nil,
+         diagnosticLog: APIDiagnosticLogStore = .shared) {
         self.defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
+        self.diagnosticLog = diagnosticLog
         let defaults = self.defaults
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
@@ -387,13 +389,14 @@ actor PolestarGRPC {
         if let c3DiscoveryTask { return try await c3DiscoveryTask.task.value }
         let discoveryURL = discoveryURL
         let session = session
+        let diagnosticLog = diagnosticLog
         let task = Task<URL, Error> {
             var request = URLRequest(url: discoveryURL)
             request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await HTTPExchange.data(
                 for: request, using: session, limit: 256_000, operation: "C3 discovery",
-                provider: .polestar
+                provider: .polestar, diagnosticLog: diagnosticLog
             )
             if let failure = PolestarError.httpFailure(
                 statusCode: response.statusCode, operation: "C3 discovery"
@@ -528,7 +531,7 @@ actor PolestarGRPC {
                 throw PolestarError.invalidResponse(operation: "truncated gRPC frame")
             }
 
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
                 statusCode: http.statusCode, responseBytes: body.count,
@@ -539,7 +542,7 @@ actor PolestarGRPC {
             // Exactly one record per attempt: failures carry whatever HTTP/gRPC status
             // made it back before the failure. The success-path record above returns
             // immediately, so nothing reaches here twice.
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
                 statusCode: httpStatus, startedAt: startedAt, error: error
@@ -678,7 +681,7 @@ actor PolestarGRPC {
                     L10n.text("The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.")
                 )
             }
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
                 statusCode: http.statusCode, responseBytes: latest.count,
@@ -686,7 +689,7 @@ actor PolestarGRPC {
             )
             return latest
         } catch {
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
                 statusCode: httpStatus, startedAt: startedAt, error: error

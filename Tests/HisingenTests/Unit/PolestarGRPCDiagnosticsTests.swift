@@ -44,9 +44,8 @@ struct PolestarGRPCDiagnosticsTests {
         #expect(!label.contains(String(repeating: "a", count: 200)))
     }
 
-    /// Read paths used to collapse every non-zero gRPC status into a generic
-    /// `invalidResponse`; the typed mapping is what lets a permanently-unimplemented service
-    /// be negative-cached and a `16` trigger re-auth.
+    /// Typed gRPC status mapping: unimplemented (12) is negative-cached, unavailable (14) is
+    /// transient, and unauthenticated (16) triggers re-auth.
     @Test
     func readStatusMapsWellKnownCodes() {
         let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
@@ -73,11 +72,23 @@ struct PolestarGRPCDiagnosticsTests {
     }
 
     @Test
+    func errorServiceTreatsStableAuthorizationGapAsPermissionDenied() {
+        #expect(PolestarGRPC.errorsAuthorizationGap(
+            status: "14", message: "Authorization%20failed"))
+        #expect(!PolestarGRPC.errorsAuthorizationGap(
+            status: "14", message: "unavailable: vehicle asleep"))
+        #expect(!PolestarGRPC.errorsAuthorizationGap(
+            status: "12", message: "Authorization%20failed"))
+        #expect(!PolestarGRPC.errorsAuthorizationGap(
+            status: "0", message: "Authorization%20failed"))
+    }
+
+    @Test
     func unimplementedReadPathIsRememberedAndSkipped() async {
         let suite = "HisingenPolestarGRPCDiagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let grpc = PolestarGRPC(defaultsSuiteName: suite)
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
         let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
 
         let base = URL(string: "https://backend.example")!
@@ -96,7 +107,7 @@ struct PolestarGRPCDiagnosticsTests {
         #expect(await !grpc.unimplementedReadPaths.contains("/x/Y"))
 
         // A fresh actor restores the bounded negative capability from disk.
-        let restored = PolestarGRPC(defaultsSuiteName: suite)
+        let restored = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
         #expect(await restored.unimplementedReadPaths.contains(key))
         #expect(await restored.unimplementedReadPathExpirations[key] != nil)
     }
@@ -120,7 +131,7 @@ struct PolestarGRPCDiagnosticsTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(["/test/Read": Date().addingTimeInterval(3600).timeIntervalSince1970],
                      forKey: "polestar_unimplemented_grpc_paths_v2")
-        let grpc = PolestarGRPC(defaultsSuiteName: suite)
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
         #expect(await grpc.unimplementedReadPaths.isEmpty)
     }
 
@@ -132,7 +143,10 @@ struct PolestarGRPCDiagnosticsTests {
             config.protocolClasses = [CapabilityFailureTransport.self]
             let transport = URLSession(configuration: config)
             defer { transport.invalidateAndCancel() }
-            let grpc = PolestarGRPC(defaultsSuiteName: "HisingenPolestarGRPCDiagnostics.\(UUID())", session: transport)
+            let grpc = PolestarGRPC(
+                defaultsSuiteName: "HisingenPolestarGRPCDiagnostics.\(UUID())",
+                session: transport,
+                diagnosticLog: APIDiagnosticLogStore())
             do {
                 if weather { _ = try await grpc.fetchWeather(vin: "VIN-A", accessToken: token) }
                 else { _ = try await grpc.fetchLocation(vin: "VIN-A", accessToken: token) }

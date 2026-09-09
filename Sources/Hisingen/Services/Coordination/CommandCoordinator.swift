@@ -268,9 +268,85 @@ final class CommandCoordinator {
         }
     }
 
-    /// Keep the reported values until telemetry confirms the operation.
+    /// Patches the visible state to what a successful command should have produced, so the
+    /// fan animation, lock icon, or charge-target slider flip immediately instead of waiting
+    /// for telemetry. `mergingLastKnown` honors `optimisticCommandLockUntil` for 90 s, so a
+    /// stale read cannot revert the patch before the car confirms it.
+    ///
+    /// The patch is partly synthesized (an assumed 30-minute climate window), so it is
+    /// display-only and must never be persisted.
     private func applyOptimisticPatch(for command: RemoteCommand, outcome: RemoteCommandOutcome) {
+        guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return }
         guard let context, var current = context.vehicleState else { return }
+        switch command {
+        case .startClimate(let temperature, _, _, _, _, _):
+            current.climateStatus = VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
+            )
+        case .stopClimate:
+            current.climateStatus = VehicleClimateStatus(
+                activity: .idle,
+                timeRemainingMinutes: nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
+                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
+            )
+        case .startPreCleaning, .stopPreCleaning:
+            // Patch `airQuality`, not `climateStatus`; a synthesized climate session would
+            // surface a "Stop Climate" button that does not target pre-cleaning.
+            guard var air = current.airQuality else { break }
+            air = VehicleAirQuality(
+                cleaningState: command == .startPreCleaning ? .on : .off,
+                airQualityIndex: air.airQualityIndex,
+                particulateMatter25: air.particulateMatter25,
+                particulateMatter10: air.particulateMatter10,
+                externalParticulateMatter25: air.externalParticulateMatter25,
+                filterRemainingPercent: air.filterRemainingPercent,
+                runtimeRemainingMinutes: air.runtimeRemainingMinutes,
+                hasError: air.hasError,
+                reportedAt: air.reportedAt,
+                startedAt: command == .startPreCleaning ? (air.startedAt ?? Date()) : air.startedAt,
+                endingAt: air.endingAt,
+                startReason: air.startReason,
+                lastCycleValid: air.lastCycleValid,
+                errorKind: air.errorKind
+            )
+            current.airQuality = air
+        case .lock, .lockReducedGuard:
+            guard var exterior = current.exteriorStatus else { break }
+            exterior.isLocked = true
+            current.exteriorStatus = exterior
+        case .unlock:
+            guard var exterior = current.exteriorStatus else { break }
+            // Volvo unlock does not patch exterior; the official app behaves the same way.
+            if context.currentCommandExecutor().brand == .volvo { break }
+            exterior.isLocked = false
+            current.exteriorStatus = exterior
+        case .unlockTrunk:
+            // Trunk-only unlock leaves central locking engaged.
+            break
+        case .openTailgate, .closeTailgate:
+            guard var exterior = current.exteriorStatus else { break }
+            let patchedState: OpeningState = command == .openTailgate ? .open : .closed
+            if let index = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
+                exterior.openings[index] = OpeningReading(opening: .tailgate, state: patchedState)
+            } else {
+                exterior.openings.append(OpeningReading(opening: .tailgate, state: patchedState))
+            }
+            current.exteriorStatus = exterior
+        case .setChargeTarget(let target):
+            current.chargeTargetPercentage = target
+        case .setAmpLimit(let amps):
+            current.chargingCurrentLimitAmps = amps
+        default:
+            break
+        }
+        current.fetchedAt = Date()
+        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
         current.pendingCommand = PendingCommandSummary(
             commandIdentifier: command.identifier, issuedAt: Date(), command: command)
         context.applyOptimisticState(current)

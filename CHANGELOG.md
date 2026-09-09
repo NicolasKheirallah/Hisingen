@@ -3,6 +3,27 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-09-10
+
+### Fixed
+
+- Remote controls re-render again after a successful command: the coordinator
+  extraction had dropped the optimistic state patch, so the fan animation, Start/Stop
+  Climate button, lock icon, and charge-target slider kept showing the pre-command
+  state until a later telemetry refresh carried the car's answer. A successful command
+  now patches the visible state immediately and holds it against stale telemetry for
+  90 seconds via `optimisticCommandLockUntil`, which the merge logic already honored.
+- The restored patch corrects two quirks the pre-refactor code had: a trunk-only
+  unlock no longer claims the car is centrally unlocked, and pre-cleaning updates the
+  air-cleaning reading its button displays instead of synthesizing a climatization
+  session (which surfaced a "Stop Climate" button that did not target pre-cleaning).
+- Polestar metadata discovery no longer requests the removed VDMS `packages` field,
+  which rejected the whole GraphQL query and triggered a 24-hour backoff.
+- Chronos error-service authorization failures now enter capability backoff instead
+  of being cached as empty results and retried every five minutes.
+- Network tests now inject an in-memory API diagnostic store instead of clearing and
+  writing fixture traffic to the user's persisted diagnostic archive.
+
 ## [1.3.4] - 2026-09-09
 
 ### Fixed

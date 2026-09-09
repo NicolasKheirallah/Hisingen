@@ -709,14 +709,6 @@ struct VehicleTabView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Stable identifiers for the Charging card's detail rows, reordered from Settings →
-    /// Features. Identifiers absent from the saved order keep their natural position after
-    /// the ordered ones, so a partial or stale preference can never drop a row.
-    private let chargingStatIdentifiers: [String] = [
-        "connection", "type", "draw", "limit", "voltage", "target",
-        "powerModule", "timeToTarget", "timeToMinSoc", "avgConsumption", "avgSinceCharge", "energySinceCharge",
-    ]
-
     private var chargingDetailRows: [KVRow] {
         let tagged = chargingDetailTagged()
         let order = preferences.chargingStatOrder

@@ -76,13 +76,15 @@ extension PolestarAPI {
             "grant_type": "refresh_token", "client_id": commandClientID, "refresh_token": refresh
         ])
         let currentSession = session
+        let diagnosticLog = diagnosticLog
         let requestEpoch = sessionEpoch
         let commandEpoch = commandAuthorization.generation
         let taskID = UUID()
         let task = Task { [logger] () -> CommandClientAuthorization in
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
-                                                        invalidReason: .expiredSession)
+                                                        invalidReason: .expiredSession,
+                                                        diagnosticLog: diagnosticLog)
                 guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
                 // Rotation already happened at the server, even if userinfo is unavailable.
                 self.commandRefreshToken = token.refreshToken ?? refresh
@@ -220,7 +222,10 @@ extension PolestarAPI {
                 request.httpBody = Self.formBody([
                     "client_id": clientID, "token": token, "token_type_hint": "refresh_token"
                 ])
-                _ = try? await HTTPExchange.data(for: request, using: revocationSession, limit: 64_000, operation: "session revocation", provider: .polestar)
+                _ = try? await HTTPExchange.data(
+                    for: request, using: revocationSession, limit: 64_000,
+                    operation: "session revocation", provider: .polestar,
+                    diagnosticLog: diagnosticLog)
             }
         }
         if let storageError { throw storageError }
@@ -265,7 +270,10 @@ extension PolestarAPI {
         func identity(token: String) async throws -> AccountIdentity {
             var request = URLRequest(url: endpoint)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await HTTPExchange.data(for: request, using: session, limit: 64_000, operation: "account verification", provider: .polestar)
+            let (data, response) = try await HTTPExchange.data(
+                for: request, using: session, limit: 64_000,
+                operation: "account verification", provider: .polestar,
+                diagnosticLog: diagnosticLog)
             try validateHTTP(response, operation: "account verification")
             let identity = try JSONDecoder().decode(AccountIdentity.self, from: data)
             guard !identity.sub.isEmpty else { throw PolestarError.authenticationRequired(.callbackRejected) }

@@ -36,10 +36,6 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
         didSet { onStateChanged?(state) }
     }
 
-    var isReady: Bool {
-        didStart && controller.updater.canCheckForUpdates
-    }
-
     /// Starts only from a real app bundle with a real public key. This deliberately fails
     /// closed for developer builds and incomplete release configuration instead of making
     /// an unauthenticated request to GitHub.

@@ -4,7 +4,8 @@ extension PolestarAPI {
     func perform(_ request: URLRequest, limit: Int = 2_000_000,
                  operation: String = "HTTP request") async throws -> (Data, HTTPURLResponse) {
         try await HTTPExchange.data(
-            for: request, using: session, limit: limit, operation: operation, provider: .polestar
+            for: request, using: session, limit: limit, operation: operation, provider: .polestar,
+            diagnosticLog: diagnosticLog
         )
     }
 

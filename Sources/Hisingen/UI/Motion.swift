@@ -35,12 +35,8 @@ enum Motion {
 
     /// A control reacting to the pointer or a click. Quick, no overshoot.
     static var interaction: Animation { .easeOut(duration: fast) }
-    /// The settling half of an interaction (releasing a press, closing a hover).
-    static var interactionIn: Animation { .easeIn(duration: fast) }
     /// Selection indicators that slide rather than teleport (tab underline, chips).
     static var selection: Animation { .spring(response: 0.30, dampingFraction: 0.86) }
-    /// Disclosure groups and expand/collapse.
-    static var disclosure: Animation { .easeInOut(duration: standard) }
 
     // MARK: - State-change animations
 
@@ -58,8 +54,6 @@ enum Motion {
     /// roll-in ends on (see ``VehicleTransitionMotion``), reused so every
     /// entrance in the app reads as one system.
     static var entrance: Animation { .timingCurve(0.16, 0.72, 0.20, 1.0, duration: standard) }
-    /// Things leave promptly; nobody waits for an exit.
-    static var exit: Animation { .easeIn(duration: fast) }
 
     // MARK: - Telemetry values
 
@@ -87,8 +81,6 @@ enum Motion {
     /// Energy travelling along a charging indicator, in points per second, for a
     /// `TimelineView`-driven sweep. Slow and continuous, not a race.
     static let chargeFlowPointsPerSecond: CGFloat = 42
-    /// Seconds for one charge-flow highlight to traverse a 160-pt reference bar.
-    static let chargeFlowCycle: TimeInterval = 2.6
     /// Continuous rotation (fan blades, sync spinner): one turn per this long.
     static let spinCycle: TimeInterval = 1.4
     static var spin: Animation {
@@ -142,11 +134,6 @@ extension View {
             .animation(reduceMotion ? nil : Motion.telemetry, value: value)
     }
 
-    /// Applies `animation` unless Reduce Motion is on, in which case the value
-    /// change still lands — just without the tween.
-    func hisAnimation<V: Equatable>(_ animation: Animation?, value: V, reduceMotion: Bool) -> some View {
-        self.animation(reduceMotion ? nil : animation, value: value)
-    }
 }
 
 // MARK: - Pressable button style
@@ -184,9 +171,4 @@ struct PressableButtonBody: View {
 extension ButtonStyle where Self == PressableButtonStyle {
     /// A press that compresses slightly and dims, then springs back.
     static var pressable: PressableButtonStyle { PressableButtonStyle() }
-
-    /// A gentler press for large touch targets (command buttons).
-    static var pressableSoft: PressableButtonStyle {
-        PressableButtonStyle(scale: 0.985, pressedOpacity: 0.9)
-    }
 }

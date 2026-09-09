@@ -32,8 +32,6 @@ struct SpotPriceInterval: Codable, Equatable, Sendable {
         case start = "time_start"
         case end = "time_end"
     }
-
-    var duration: TimeInterval { max(0, end.timeIntervalSince(start)) }
 }
 
 struct SmartChargingRecommendation: Equatable, Sendable {
@@ -43,9 +41,6 @@ struct SmartChargingRecommendation: Equatable, Sendable {
     let averageSEKPerKWh: Double
     let estimatedCostSEK: Double
     let intervalCount: Int
-
-    var duration: TimeInterval { end.timeIntervalSince(start) }
-
     /// Finds the least-cost contiguous window at source interval boundaries. The final
     /// interval may be used partially. This supports both historical hourly rows and the
     /// 15-minute rows Sweden has published since October 2025.
@@ -166,12 +161,15 @@ actor SpotPriceResponseCache {
 struct SpotPriceService: Sendable {
     let session: URLSession
     let cache: SpotPriceResponseCache
+    let diagnosticLog: APIDiagnosticLogStore
 
     private static let userAgent = "Hisingen/1.x (+https://nicolaskheirallah.github.io/Hisingen/)"
 
-    init(session: URLSession = .shared, cache: SpotPriceResponseCache = .shared) {
+    init(session: URLSession = .shared, cache: SpotPriceResponseCache = .shared,
+         diagnosticLog: APIDiagnosticLogStore = .shared) {
         self.session = session
         self.cache = cache
+        self.diagnosticLog = diagnosticLog
     }
 
     static func endpoint(date: Date, area: SwedishPriceArea,
@@ -212,7 +210,7 @@ struct SpotPriceService: Sendable {
             guard let http = response as? HTTPURLResponse else {
                 throw SpotPriceServiceError.invalidResponse
             }
-            await APIDiagnosticLogStore.shared.record(
+            await diagnosticLog.record(
                 provider: .hisingen, request: request, operation: "spot-price day-ahead",
                 statusCode: http.statusCode, responseBytes: data.count,
                 responseData: data, startedAt: startedAt)
@@ -230,7 +228,7 @@ struct SpotPriceService: Sendable {
             return values
         } catch {
             if !responseRecorded {
-                await APIDiagnosticLogStore.shared.record(
+                await diagnosticLog.record(
                     provider: .hisingen, request: request, operation: "spot-price day-ahead",
                     startedAt: startedAt, error: error)
             }

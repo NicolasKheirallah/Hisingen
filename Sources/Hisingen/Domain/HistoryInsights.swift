@@ -533,8 +533,7 @@ extension HistoryInsights {
     /// samples — explicitly a guesstimate: it extrapolates a linear rate from sparse readings
     /// and assumes usage stays similar. Returns nil until at least 0.5 percentage points of
     /// decline have been observed over at least 7 days.
-    static func filterLifeEstimate(from records: [AirQualityRecord],
-                                   now: Date = Date()) -> FilterLifeEstimate? {
+    static func filterLifeEstimate(from records: [AirQualityRecord]) -> FilterLifeEstimate? {
         let chronological = records
             .compactMap { record -> (Date, Double)? in
                 record.filterRemainingPercent.map { (record.timestamp, $0) }
