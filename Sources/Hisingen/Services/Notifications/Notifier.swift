@@ -720,15 +720,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// telemetry snapshot. Location lives on the persisted DB session (domain sessions don't
     /// carry it), so detection runs here against the store.
     func notifyChargingAnomalyIfNeeded(for state: VehicleState) {
-        let database = stateStore.database
+        let ledger = stateStore.database.charging
         guard preferences.features.contains(.notifications),
-              let last = database.recentChargingSessions(for: state.vin, limit: 1).first,
+              let last = ledger.recentChargingSessions(for: state.vin, limit: 1).first,
               last.locationName?.isEmpty == false,
               let ended = last.endedAt,
               Date().timeIntervalSince(ended) < 600 else { return }
         let key = "anomaly_\(last.id)"
         guard !defaults.bool(forKey: key) else { return }
-        let priors = database.priorSessionPeaks(
+        let priors = ledger.priorSessionPeaks(
             vin: state.vin, locationName: last.locationName ?? "",
             excludingSessionID: last.id)
         guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,

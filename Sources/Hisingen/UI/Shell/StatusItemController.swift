@@ -100,7 +100,7 @@ final class StatusItemController: NSObject {
          onSettings: @escaping () -> Void = {},
          onCheckForUpdates: @escaping () -> Void = {},
          onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
-         database: VehicleDatabase = VehicleDatabase(),
+         database: VehicleDatabase = VehicleDatabase.shared,
          reverseGeocoder: ReverseGeocoder = ReverseGeocoder(),
          imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore, fleetStore: FleetStore) {

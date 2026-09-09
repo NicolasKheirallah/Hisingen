@@ -18,7 +18,7 @@ extension HistoryDashboardView {
         let tenToEighty = HistoryInsights.tenToEightyDuration(from: curve)
         let idleTail = HistoryInsights.idleTailDuration(from: curve)
         let lossPct: Double? = state.powertrain.hasElectricRange
-            ? HistoryInsights.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
+            ? ChargingSessionLedger.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
             : nil
         let displayedCost = session.flatMap { stored in
             stored.estimatedCost
@@ -257,16 +257,16 @@ extension HistoryDashboardView {
         }
     }
 
-    func tariffSplitForSelectedSession() -> HistoryInsights.TariffCost? {
+    func tariffSplitForSelectedSession() -> ChargingSessionLedger.TariffCost? {
         guard let session = selectedSession, session.nightTariffEnabled || preferences.nightTariffEnabled,
               !selectedSessionSamples.isEmpty else { return nil }
         let dayRate = session.tariffPricePerKwh ?? preferences.electricityPricePerKwh
         let nightRate = session.nightTariffPricePerKwh ?? preferences.nightElectricityPricePerKwh
         let startHour = session.nightTariffStartHour ?? preferences.nightTariffStartHour
         let endHour = session.nightTariffEndHour ?? preferences.nightTariffEndHour
-        return HistoryInsights.tariffAwareCost(from: selectedSessionSamples, dayRatePerKwh: dayRate,
-                                               nightRatePerKwh: nightRate, nightStartHour: startHour,
-                                               nightEndHour: endHour)
+        return ChargingSessionLedger.tariffAwareCost(from: selectedSessionSamples, dayRatePerKwh: dayRate,
+                                                     nightRatePerKwh: nightRate, nightStartHour: startHour,
+                                                     nightEndHour: endHour)
     }
 
     func chargingTypeBadgeColor(_ type: ChargingType) -> Color? {

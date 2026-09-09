@@ -23,6 +23,19 @@ final class VehicleStateStore {
         self.database = database
         let preferences = preferences ?? PreferencesStore(defaults: defaults)
         self.historyRecorder = VehicleHistoryRecorder(database: database, preferences: preferences)
+
+        // Legacy-summary reconciliation runs once per launch, not per snapshot: the repair
+        // is idempotent, so re-filtering every stored session on every refresh only burned
+        // time. Rows keep the usable capacity they were written with; the current preference
+        // override is the fallback for rows that never stored one.
+        if preferences.storeChargingHistory {
+            for vin in database.charging.legacySummaryVINs() {
+                database.charging.reconcileLegacySummaries(
+                    for: vin,
+                    usableCapacityKwh: preferences.vehicleSpecificationOverride(for: vin)?
+                        .usableBatteryCapacityKwh)
+            }
+        }
     }
 
     func snapshot(for vin: String) -> VehicleState? {

@@ -10,13 +10,15 @@ import Foundation
 final class VehicleHistoryRecorder {
     private let database: VehicleDatabase
     private let preferences: PreferencesStore
-    private let chargingSessionEngine: ChargingSessionEngine
     private var parkedChargeLossDetector = ParkedChargeLossDetector()
+
+    /// The charging ledger lives on the database (both own the same SQLite handle); the
+    /// recorder routes every charging observation through it.
+    private var chargingSessionLedger: ChargingSessionLedger { database.charging }
 
     init(database: VehicleDatabase, preferences: PreferencesStore) {
         self.database = database
         self.preferences = preferences
-        chargingSessionEngine = ChargingSessionEngine(database: database)
     }
 
     func record(_ state: VehicleState) {
@@ -94,10 +96,7 @@ final class VehicleHistoryRecorder {
         let specification = preferences.vehicleSpecificationOverride(for: state.vin)
         let capacity = specification?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
-        if preferences.storeChargingHistory {
-            database.repairLegacyChargingSessions(for: state.vin, usableCapacityKwh: capacity)
-        }
-        chargingSessionEngine.ingest(
+        chargingSessionLedger.ingest(
             ChargingSessionObservation(
                 vin: state.vin,
                 timestamp: state.fetchedAt,
@@ -110,7 +109,7 @@ final class VehicleHistoryRecorder {
                 chargingType: state.chargingType,
                 targetSoc: state.chargeTargetPercentage.map(Double.init)
             ),
-            configuration: ChargingSessionEngineConfiguration(
+            configuration: ChargingSessionLedgerConfiguration(
                 usableCapacityKwh: capacity,
                 tariffPricePerKwh: preferences.electricityPricePerKwh,
                 nightTariffEnabled: preferences.nightTariffEnabled,
@@ -138,10 +137,10 @@ final class VehicleHistoryRecorder {
         capacity: Double,
         specification: VehicleSpecificationOverride?
     ) {
-        let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
-            .map { $0.toDomainSession(database: database, usableCapacityKwh: capacity) }
+        let sessions = database.charging.recentChargingSessions(for: state.vin, limit: 20)
+            .map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }
             .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-        let previous = database.batteryHealthHistory(for: state.vin, limit: 1).first
+        let previous = database.history.batteryHealthHistory(for: state.vin, limit: 1).first
             .map {
                 BatteryHealthPriorEstimate(
                     stateOfHealthPercent: $0.stateOfHealthPct,

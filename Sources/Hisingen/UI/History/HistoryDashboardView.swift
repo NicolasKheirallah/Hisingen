@@ -123,45 +123,11 @@ struct HistoryDashboardView: View {
 
     @State var fuelPage = 0
 
-    struct MonthComparison: Sendable {
-        let distanceKm: Double
-        let energyKwh: Double
-        let averageConsumption: Double?
-    }
-
-    struct HistoryDataSnapshot: Sendable {
-        var trips: [TripHistoryEntry] = []
-        var reportTrips: [TripHistoryEntry] = []
-        var tripPurposes: [String: TripPurpose] = [:]
-        var chargingSessions: [HistoricalChargingSession] = []
-        var commands: [RemoteCommandAuditRecord] = []
-        var activities: [VehicleActivity] = []
-        var airQualityRecords: [AirQualityRecord] = []
-        var telemetryRecords: [HistoricalTelemetryRecord] = []
-        var anomalousSessionIDs: Set<String> = []
-        var thisMonth: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
-        var lastMonth: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
-        var thisYear: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
-        var lastYear: MonthComparison = MonthComparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
-        /// True when the database holds trips/sessions/commands/air-quality outside the
-        /// selected range — lets the empty state say "nothing in this range" rather than
-        /// "nothing recorded".
-        var hasHistoryOutsideRange = false
-        /// True when at least one query returned exactly its row cap, so a caption can warn
-        /// that older rows are not shown.
-        var truncated = false
-    }
-
-    /// Period-independent series (state of health, all-time odometer, fuel, cabin climate)
-    /// loaded on their own cadence so changing the period selector doesn't re-run them.
-    struct LifetimeSnapshot: Sendable {
-        var batteryHealthRecords: [BatteryHealthRecord] = []
-        var allTimeTelemetryRecords: [HistoricalTelemetryRecord] = []
-        var fuelEntries: [VehicleDatabase.FuelEntry] = []
-        var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] = []
-        var lifetimeChargingEnergyKwh: Double = 0
-        var lifetimeFuelCost: Double = 0
-    }
+    /// The read models live on the Vehicle History ledger — the read policy's home — and are
+    /// aliased here so the view extensions keep their names.
+    typealias MonthComparison = VehicleHistoryLedger.Comparison
+    typealias HistoryDataSnapshot = VehicleHistoryLedger.DashboardSnapshot
+    typealias LifetimeSnapshot = VehicleHistoryLedger.LifetimeSnapshot
 
     @State var snapshot = HistoryDataSnapshot()
 
@@ -415,56 +381,12 @@ struct HistoryDashboardView: View {
         let range = activeRange
         let cap = rowCap
         let tripLimit = tripCap
-        let telemetryLimit = min(cap, 10_000)
         let chargingCapacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
 
         let loaded = await Task.detached(priority: .userInitiated) { () -> HistoryDataSnapshot in
-            var snap = HistoryDataSnapshot()
-            func inRange(_ date: Date) -> Bool { range.map { $0.contains(date) } ?? true }
-
-            let rawTrips = db.derivedTrips(for: vin, limit: tripLimit)
-            snap.trips = rawTrips.filter { inRange($0.endedAt) }
-            snap.reportTrips = rawTrips
-            snap.tripPurposes = db.tripPurposes(for: vin)
-
-            let rawSessions = db.recentChargingSessions(for: vin, limit: cap)
-            let reconciledSessions = rawSessions.map {
-                $0.reconciled(database: db, usableCapacityKwh: chargingCapacity)
-            }
-            snap.chargingSessions = reconciledSessions.filter { inRange($0.startedAt) }
-            snap.anomalousSessionIDs = HistoryInsights.sessionPeakAnomalies(in: snap.chargingSessions)
-
-            let rawCommands = db.recentCommandAudits(for: vin, limit: min(cap, 2_000))
-            snap.commands = rawCommands.filter { inRange($0.executedAt) }
-            let rawActivities = db.recentActivities(for: vin, limit: 1000)
-            snap.activities = rawActivities.filter { inRange($0.timestamp) }
-
-            let rawAir = db.recentAirQuality(for: vin, limit: min(cap, 5_000))
-            snap.airQualityRecords = rawAir.filter { inRange($0.timestamp) }
-
-            let rawTelemetry = db.recentTelemetry(for: vin, limit: telemetryLimit)
-            snap.telemetryRecords = rawTelemetry.filter { inRange($0.timestamp) }
-
-            snap.truncated = rawTrips.count >= tripLimit || rawSessions.count >= cap
-                || rawTelemetry.count >= telemetryLimit || rawActivities.count >= 1000
-
-            snap.hasHistoryOutsideRange = rawTrips.count > snap.trips.count
-                || reconciledSessions.count > snap.chargingSessions.count
-                || rawCommands.count > snap.commands.count
-                || rawAir.count > snap.airQualityRecords.count
-                || rawActivities.count > snap.activities.count
-
-            let calendar = Calendar.current
-            if let month = HistoryInsights.monthToDateWindows(calendar: calendar) {
-                snap.thisMonth = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: month.current)
-                snap.lastMonth = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: month.previous)
-            }
-            if let year = HistoryInsights.yearToDateWindows(calendar: calendar) {
-                snap.thisYear = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: year.current)
-                snap.lastYear = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: year.previous)
-            }
-            return snap
+            db.history.dashboard(vin: vin, range: range, rowCap: cap,
+                                 tripLimit: tripLimit, chargingCapacity: chargingCapacity)
         }.value
 
         guard !Task.isCancelled else { return }
@@ -476,34 +398,12 @@ struct HistoryDashboardView: View {
         // curve reappears if the range later includes that session again.
     }
 
-    nonisolated static func comparison(trips: [TripHistoryEntry], sessions: [HistoricalChargingSession],
-                                               in interval: DateInterval) -> MonthComparison {
-        let windowTrips = trips.filter { interval.contains($0.endedAt) }
-        let windowSessions = sessions.filter { interval.contains($0.startedAt) }
-        let consumption = windowTrips.compactMap { trip -> Double? in
-            guard let value = trip.averageConsumption, HistoryInsights.efficiencyBounds.contains(value) else { return nil }
-            return value
-        }
-        return MonthComparison(
-            distanceKm: windowTrips.reduce(0) { $0 + $1.distanceKm },
-            energyKwh: windowSessions.reduce(0) { $0 + $1.energyDeliveredKwh },
-            averageConsumption: consumption.isEmpty ? nil : consumption.reduce(0, +) / Double(consumption.count)
-        )
-    }
-
     func loadLifetimeData() async {
         let vin = state.vin
         let db = database
         let hasCombustion = state.powertrain.hasCombustionEngine
         let loaded = await Task.detached(priority: .userInitiated) { () -> LifetimeSnapshot in
-            var snap = LifetimeSnapshot()
-            snap.batteryHealthRecords = db.batteryHealthHistory(for: vin, limit: 500)
-            snap.allTimeTelemetryRecords = db.recentTelemetry(for: vin, limit: 10_000)
-            snap.fuelEntries = hasCombustion ? db.recentFuelEntries(for: vin, limit: 500) : []
-            snap.cabinClimateRecords = db.recentCabinClimate(for: vin, limit: 2_000)
-            snap.lifetimeChargingEnergyKwh = db.lifetimeChargingEnergyKwh(for: vin)
-            snap.lifetimeFuelCost = db.lifetimeFuelCost(for: vin)
-            return snap
+            db.history.lifetime(vin: vin, hasCombustionEngine: hasCombustion)
         }.value
         guard !Task.isCancelled else { return }
         lifetime = loaded
@@ -515,7 +415,7 @@ struct HistoryDashboardView: View {
             return
         }
         let db = database
-        let samples = await Task.detached(priority: .userInitiated) { session.reconciledSamples(database: db) }.value
+        let samples = await Task.detached(priority: .userInitiated) { db.charging.reconciledSamples(for: session) }.value
         guard !Task.isCancelled else { return }
         selectedSessionSamples = samples
     }
@@ -530,7 +430,7 @@ struct HistoryDashboardView: View {
         let previous = chargingSessions[index + 1]
         let db = database
         let curve = await Task.detached(priority: .userInitiated) {
-            HistoryInsights.chargingCurve(from: previous.reconciledSamples(database: db))
+            HistoryInsights.chargingCurve(from: db.charging.reconciledSamples(for: previous))
         }.value
         guard !Task.isCancelled else { return }
         previousSessionCurve = curve

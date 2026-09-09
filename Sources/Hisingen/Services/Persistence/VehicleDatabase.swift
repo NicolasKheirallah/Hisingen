@@ -19,19 +19,42 @@ final class VehicleDatabase: @unchecked Sendable {
     /// lockstep with a new block in `runMigrations(from:)`.
     static let latestSchemaVersion = 4
 
+    /// The Charging Session ledger owns all domain reads and writes over the
+    /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
+    /// schema, migrations, and cross-table operations (wipe, prune, backup, counts).
+    let charging: ChargingSessionLedger
+
+    /// The Vehicle History ledger owns all domain reads and CSV exports over the remaining
+    /// history tables (battery health, air quality, telemetry, trips, audits, connectivity,
+    /// cabin climate, fuel).
+    let history: VehicleHistoryLedger
+
     /// Whether the database file already existed when this process opened it. Gates the
     /// one-shot pre-migration backup and the corruption quarantine — neither is meaningful
     /// for a database this launch just created.
     private let databaseFilePreexisted: Bool
 
     init(database: SQLiteDatabase? = nil) {
+        var handle: SQLiteDatabase
+        var filePreexisted = false
         if let database {
-            self.db = database
-            self.databaseFilePreexisted = false
-            createTables()
-            return
+            handle = database
+        } else {
+            (handle, filePreexisted) = Self.openDatabase(logger: logger)
         }
+        self.db = handle
+        self.databaseFilePreexisted = filePreexisted
+        let chargingLedger = ChargingSessionLedger(sql: handle)
+        self.charging = chargingLedger
+        self.history = VehicleHistoryLedger(sql: handle, charging: chargingLedger)
+        createTables()
+    }
 
+    /// Opens the default database location, creating the directory if needed. Returns the
+    /// handle and whether the database file already existed when this process opened it
+    /// (gates the one-shot pre-migration backup and the corruption quarantine — neither is
+    /// meaningful for a database this launch just created).
+    private static func openDatabase(logger: Logger) -> (SQLiteDatabase, Bool) {
         guard let baseDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             // No writable Application Support means no durable storage. Use a closed handle —
@@ -39,10 +62,7 @@ final class VehicleDatabase: @unchecked Sendable {
             // purges, which previously made "my history vanished" indistinguishable from an
             // OS housekeeping sweep.
             logger.fault("Application Support is unavailable; persistent storage is disabled for this launch")
-            self.db = .unavailable(path: ":unavailable:")
-            self.databaseFilePreexisted = false
-            createTables()
-            return
+            return (.unavailable(path: ":unavailable:"), false)
         }
 
         let appSupport = baseDirectory.appendingPathComponent("Hisingen", isDirectory: true)
@@ -52,10 +72,10 @@ final class VehicleDatabase: @unchecked Sendable {
             logger.error("Could not create database directory: \(error, privacy: .public)")
         }
         let dbURL = appSupport.appendingPathComponent("hisingen.sqlite3")
-        self.databaseFilePreexisted = FileManager.default.fileExists(atPath: dbURL.path)
-        self.db = Self.openQuarantiningCorruption(
-            at: dbURL, preexisting: databaseFilePreexisted, logger: logger)
-        createTables()
+        let filePreexisted = FileManager.default.fileExists(atPath: dbURL.path)
+        let handle = Self.openQuarantiningCorruption(
+            at: dbURL, preexisting: filePreexisted, logger: logger)
+        return (handle, filePreexisted)
     }
 
     /// Opens the database, and if a pre-existing file fails `PRAGMA quick_check`, moves it
@@ -580,340 +600,6 @@ final class VehicleDatabase: @unchecked Sendable {
         try? db.execute(sql: "DELETE FROM vehicle_snapshots;")
     }
 
-    // MARK: - Charging Sessions & Samples
-
-    private static let chargingSessionColumns = """
-        id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh,
-        peak_power_kw, average_power_kw, location_name, created_at, lifecycle_state,
-        completion_reason, energy_source, confidence, sample_coverage,
-        usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
-        night_tariff_price_per_kwh, night_tariff_start_hour, night_tariff_end_hour,
-        currency_symbol, target_soc, last_observed_at, summary_version,
-        pending_stop_count, estimated_cost
-        """
-
-    /// Shared column mapping for the `charging_sessions` SELECT shape used by every session
-    /// query (previously duplicated in four readers with drift risk).
-    private func sessionRow(from stmt: SQLiteStatement,
-                            endedAt: Date?, endSoc: Double?, energy: Double?,
-                            peak: Double?, average: Double?, location: String?) -> HistoricalChargingSession? {
-        guard let id = stmt.columnText(at: 0),
-              let vin = stmt.columnText(at: 1),
-              let startedAt = stmt.columnDate(at: 2),
-              let startSoc = stmt.columnDouble(at: 4),
-              let createdAt = stmt.columnDate(at: 10) else { return nil }
-        return HistoricalChargingSession(
-            id: id, vin: vin, startedAt: startedAt, endedAt: endedAt,
-            startSoc: startSoc, endSoc: endSoc ?? stmt.columnDouble(at: 5),
-            energyDeliveredKwh: energy ?? (stmt.columnDouble(at: 6) ?? 0.0),
-            peakPowerKw: peak ?? (stmt.columnDouble(at: 7) ?? 0.0),
-            averagePowerKw: average ?? (stmt.columnDouble(at: 8) ?? 0.0),
-            locationName: location ?? stmt.columnText(at: 9), createdAt: createdAt,
-            lifecycleState: stmt.columnText(at: 11).flatMap(ChargingSessionLifecycleState.init(rawValue:))
-                ?? (endedAt == nil ? .active : .completed),
-            completionReason: stmt.columnText(at: 12).flatMap(ChargingSessionCompletionReason.init(rawValue:)),
-            energySource: stmt.columnText(at: 13).flatMap(ChargingSessionEnergySource.init(rawValue:)) ?? .legacyEstimate,
-            confidence: stmt.columnText(at: 14).flatMap(ChargingSessionConfidence.init(rawValue:)) ?? .low,
-            sampleCoverage: stmt.columnDouble(at: 15),
-            usableCapacityKwh: stmt.columnDouble(at: 16),
-            tariffPricePerKwh: stmt.columnDouble(at: 17),
-            nightTariffEnabled: (stmt.columnInt64(at: 18) ?? 0) != 0,
-            nightTariffPricePerKwh: stmt.columnDouble(at: 19),
-            nightTariffStartHour: stmt.columnInt64(at: 20).map(Int.init),
-            nightTariffEndHour: stmt.columnInt64(at: 21).map(Int.init),
-            currencySymbol: stmt.columnText(at: 22),
-            targetSoc: stmt.columnDouble(at: 23),
-            lastObservedAt: stmt.columnDate(at: 24),
-            summaryVersion: Int(stmt.columnInt64(at: 25) ?? 1),
-            pendingStopCount: Int(stmt.columnInt64(at: 26) ?? 0),
-            estimatedCost: stmt.columnDouble(at: 27)
-        )
-    }
-
-    @discardableResult
-    func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double,
-                              location: String? = nil, startedAt: Date = Date(),
-                              usableCapacityKwh: Double? = nil,
-                              tariffPricePerKwh: Double? = nil,
-                              nightTariffEnabled: Bool = false,
-                              nightTariffPricePerKwh: Double? = nil,
-                              nightTariffStartHour: Int? = nil,
-                              nightTariffEndHour: Int? = nil,
-                              currencySymbol: String? = nil,
-                              targetSoc: Double? = nil,
-                              lifecycleState: ChargingSessionLifecycleState = .active) -> String {
-        let sql = """
-        INSERT INTO charging_sessions (
-            id, vin, started_at, start_soc, energy_delivered_kwh, peak_power_kw,
-            average_power_kw, location_name, created_at, lifecycle_state, energy_source,
-            confidence, usable_capacity_kwh, tariff_price_per_kwh, currency_symbol,
-            night_tariff_enabled, night_tariff_price_per_kwh,
-            night_tariff_start_hour, night_tariff_end_hour, target_soc,
-            last_observed_at, summary_version, pending_stop_count
-        ) VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?, ?, 'soc_capacity_estimate',
-                  'low', ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 0);
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(id, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(startedAt, at: 3)
-            try stmt.bindDouble(startSoc, at: 4)
-            try stmt.bindText(location, at: 5)
-            try stmt.bindDate(startedAt, at: 6)
-            try stmt.bindText(lifecycleState.rawValue, at: 7)
-            try stmt.bindDouble(usableCapacityKwh, at: 8)
-            try stmt.bindDouble(tariffPricePerKwh, at: 9)
-            try stmt.bindText(currencySymbol, at: 10)
-            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 11)
-            try stmt.bindDouble(nightTariffPricePerKwh, at: 12)
-            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 13)
-            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 14)
-            try stmt.bindDouble(targetSoc, at: 15)
-            try stmt.bindDate(startedAt, at: 16)
-            try stmt.executeUpdate()
-        } process: { _ in }
-        return id
-    }
-
-    func recordChargingSample(sessionId: String, vin: String, soc: Double,
-                              powerKw: Double?, voltage: Double?, current: Double?,
-                              chargingType: String? = nil, timestamp: Date = Date()) {
-        let sql = """
-        INSERT INTO charging_samples (session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(sessionId, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(timestamp, at: 3)
-            try stmt.bindDouble(soc, at: 4)
-            try stmt.bindDouble(powerKw, at: 5)
-            try stmt.bindDouble(voltage, at: 6)
-            try stmt.bindDouble(current, at: 7)
-            try stmt.bindText(chargingType, at: 8)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func completeChargingSession(id: String, endSoc: Double, energyDeliveredKwh: Double,
-                                 peakPowerKw: Double, averagePowerKw: Double,
-                                 endedAt: Date = Date(),
-                                 lifecycleState: ChargingSessionLifecycleState = .completed,
-                                 completionReason: ChargingSessionCompletionReason = .stopped,
-                                 energySource: ChargingSessionEnergySource = .socCapacityEstimate,
-                                 confidence: ChargingSessionConfidence = .low,
-                                 usableCapacityKwh: Double? = nil,
-                                 tariffPricePerKwh: Double? = nil,
-                                 nightTariffEnabled: Bool = false,
-                                 nightTariffPricePerKwh: Double? = nil,
-                                 nightTariffStartHour: Int? = nil,
-                                 nightTariffEndHour: Int? = nil,
-                                 currencySymbol: String? = nil,
-                                 targetSoc: Double? = nil,
-                                 sampleCoverage: Double? = nil,
-                                 estimatedCost: Double? = nil) {
-        let sql = """
-        UPDATE charging_sessions SET
-            ended_at = ?,
-            end_soc = ?,
-            energy_delivered_kwh = ?,
-            peak_power_kw = ?,
-            average_power_kw = ?, lifecycle_state = ?, completion_reason = ?,
-            energy_source = ?, confidence = ?,
-            sample_coverage = ?,
-            usable_capacity_kwh = COALESCE(?, usable_capacity_kwh),
-            tariff_price_per_kwh = COALESCE(?, tariff_price_per_kwh),
-            night_tariff_enabled = ?,
-            night_tariff_price_per_kwh = COALESCE(?, night_tariff_price_per_kwh),
-            night_tariff_start_hour = COALESCE(?, night_tariff_start_hour),
-            night_tariff_end_hour = COALESCE(?, night_tariff_end_hour),
-            currency_symbol = COALESCE(?, currency_symbol),
-            target_soc = COALESCE(?, target_soc), last_observed_at = ?,
-            summary_version = 2, pending_stop_count = 0,
-            estimated_cost = ?
-        WHERE id = ?;
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindDate(endedAt, at: 1)
-            try stmt.bindDouble(endSoc, at: 2)
-            try stmt.bindDouble(energyDeliveredKwh, at: 3)
-            try stmt.bindDouble(peakPowerKw, at: 4)
-            try stmt.bindDouble(averagePowerKw, at: 5)
-            try stmt.bindText(lifecycleState.rawValue, at: 6)
-            try stmt.bindText(completionReason.rawValue, at: 7)
-            try stmt.bindText(energySource.rawValue, at: 8)
-            try stmt.bindText(confidence.rawValue, at: 9)
-            try stmt.bindDouble(sampleCoverage, at: 10)
-            try stmt.bindDouble(usableCapacityKwh, at: 11)
-            try stmt.bindDouble(tariffPricePerKwh, at: 12)
-            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 13)
-            try stmt.bindDouble(nightTariffPricePerKwh, at: 14)
-            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 15)
-            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 16)
-            try stmt.bindText(currencySymbol, at: 17)
-            try stmt.bindDouble(targetSoc, at: 18)
-            try stmt.bindDate(endedAt, at: 19)
-            try stmt.bindDouble(estimatedCost, at: 20)
-            try stmt.bindText(id, at: 21)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func updateChargingSessionLifecycle(
-        id: String, state: ChargingSessionLifecycleState, observedAt: Date,
-        pendingStopCount: Int, targetSoc: Double?
-    ) {
-        try? db.query(sql: """
-            UPDATE charging_sessions SET lifecycle_state = ?, last_observed_at = ?,
-                pending_stop_count = ?, target_soc = COALESCE(?, target_soc)
-            WHERE id = ? AND ended_at IS NULL;
-            """) { stmt in
-            try stmt.bindText(state.rawValue, at: 1)
-            try stmt.bindDate(observedAt, at: 2)
-            try stmt.bindInt64(Int64(max(0, pendingStopCount)), at: 3)
-            try stmt.bindDouble(targetSoc, at: 4)
-            try stmt.bindText(id, at: 5)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func abandonChargingSession(id: String, endedAt: Date,
-                                reason: ChargingSessionCompletionReason) {
-        try? db.query(sql: """
-            UPDATE charging_sessions SET ended_at = ?, lifecycle_state = 'abandoned',
-                completion_reason = ?, last_observed_at = ?, pending_stop_count = 0,
-                summary_version = 2
-            WHERE id = ? AND ended_at IS NULL;
-            """) { stmt in
-            try stmt.bindDate(endedAt, at: 1)
-            try stmt.bindText(reason.rawValue, at: 2)
-            try stmt.bindDate(endedAt, at: 3)
-            try stmt.bindText(id, at: 4)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    /// Removes an unfinished observation that never produced a measurable SoC gain. Keeping
-    /// these rows made an interrupted poll look like a completed 0 kWh / 0 cost charge.
-    func discardChargingSession(id: String) {
-        try? db.withTransaction {
-            try db.query(sql: "DELETE FROM charging_samples WHERE session_id = ?;") { stmt in
-                try stmt.bindText(id, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-            try db.query(sql: "DELETE FROM charging_sessions WHERE id = ? AND ended_at IS NULL;") { stmt in
-                try stmt.bindText(id, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-    }
-
-    func activeChargingSession(for vin: String) -> HistoricalChargingSession? {
-        let sql = """
-        SELECT \(Self.chargingSessionColumns)
-        FROM charging_sessions
-        WHERE vin = ? AND ended_at IS NULL
-          AND lifecycle_state IN ('active', 'paused', 'pending_completion')
-        ORDER BY started_at DESC LIMIT 1;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { [weak self] stmt -> HistoricalChargingSession? in
-            guard stmt.step() else { return nil }
-            return self?.sessionRow(from: stmt, endedAt: nil, endSoc: nil, energy: nil,
-                                    peak: nil, average: nil, location: nil)
-        }) ?? nil
-    }
-
-    func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {
-        let sql = """
-        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type
-        FROM charging_samples WHERE session_id = ? ORDER BY timestamp ASC;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(sessionId, at: 1)
-        } process: { stmt -> [HistoricalChargingSample] in
-            var list: [HistoricalChargingSample] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let sess = stmt.columnText(at: 1),
-                      let vin = stmt.columnText(at: 2),
-                      let ts = stmt.columnDate(at: 3),
-                      let soc = stmt.columnDouble(at: 4) else { continue }
-                list.append(HistoricalChargingSample(
-                    id: id, sessionId: sess, vin: vin, timestamp: ts, soc: soc,
-                    powerKw: stmt.columnDouble(at: 5),
-                    voltageVolts: stmt.columnDouble(at: 6),
-                    currentAmps: stmt.columnDouble(at: 7),
-                    chargingType: stmt.columnText(at: 8)
-                ))
-            }
-            return list
-        }) ?? []
-    }
-
-    func recentChargingSessions(for vin: String, limit: Int = 20) -> [HistoricalChargingSession] {
-        let sql = """
-        SELECT \(Self.chargingSessionColumns)
-        FROM charging_sessions
-        WHERE vin = ? AND ended_at IS NOT NULL
-          AND lifecycle_state IN ('completed', 'interrupted')
-          AND (
-            end_soc > start_soc OR energy_delivered_kwh > 0 OR EXISTS (
-              SELECT 1 FROM charging_samples
-              WHERE charging_samples.session_id = charging_sessions.id
-                AND charging_samples.soc > charging_sessions.start_soc
-            )
-          )
-        ORDER BY started_at DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { [weak self] stmt -> [HistoricalChargingSession] in
-            var list: [HistoricalChargingSession] = []
-            while stmt.step() {
-                guard let session = self?.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
-                                                     endSoc: stmt.columnDouble(at: 5),
-                                                     energy: stmt.columnDouble(at: 6),
-                                                     peak: stmt.columnDouble(at: 7),
-                                                     average: stmt.columnDouble(at: 8),
-                                                     location: stmt.columnText(at: 9)) else { continue }
-                list.append(session)
-            }
-            return list
-        }) ?? []
-    }
-
-    /// Repairs completed rows written by older builds with a stale/zero final summary. The
-    /// operation is idempotent and only touches rows whose retained samples prove a real gain.
-    func repairLegacyChargingSessions(for vin: String, usableCapacityKwh: Double) {
-        guard usableCapacityKwh > 0 else { return }
-        let candidates = recentChargingSessions(for: vin, limit: 1_000).filter {
-            $0.energyDeliveredKwh <= 0 || ($0.endSoc ?? $0.startSoc) <= $0.startSoc
-        }
-        for candidate in candidates {
-            let repaired = candidate.reconciled(
-                database: self, usableCapacityKwh: usableCapacityKwh
-            )
-            guard repaired.energyDeliveredKwh > 0,
-                  let endSoc = repaired.endSoc, endSoc > repaired.startSoc else { continue }
-            try? db.query(sql: """
-                UPDATE charging_sessions SET
-                    end_soc = ?, energy_delivered_kwh = ?,
-                    peak_power_kw = ?, average_power_kw = ?
-                WHERE id = ? AND ended_at IS NOT NULL;
-                """) { stmt in
-                try stmt.bindDouble(endSoc, at: 1)
-                try stmt.bindDouble(repaired.energyDeliveredKwh, at: 2)
-                try stmt.bindDouble(repaired.peakPowerKw, at: 3)
-                try stmt.bindDouble(repaired.averagePowerKw, at: 4)
-                try stmt.bindText(repaired.id, at: 5)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-    }
-
     // MARK: - Battery Health History
 
     /// What makes a battery-health row a *milestone* rather than a duplicate.
@@ -949,7 +635,7 @@ final class VehicleDatabase: @unchecked Sendable {
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
                                       sohPct: Double, degPct: Double, usableKwh: Double,
                                       measurementSource: String = "calculated-v2") -> Bool {
-        let previous = batteryHealthHistory(for: vin, limit: 1).first
+        let previous = history.batteryHealthHistory(for: vin, limit: 1).first
         guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
             return false
         }
@@ -970,34 +656,6 @@ final class VehicleDatabase: @unchecked Sendable {
         return true
     }
 
-    func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
-        let sql = """
-        SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
-        FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [BatteryHealthRecord] in
-            var records: [BatteryHealthRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2),
-                      let odo = stmt.columnDouble(at: 3),
-                      let soh = stmt.columnDouble(at: 4),
-                      let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6),
-                      let source = stmt.columnText(at: 7) else { continue }
-                records.append(BatteryHealthRecord(
-                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
-                    measurementSource: source
-                ))
-            }
-            return records
-        }) ?? []
-    }
 
     // MARK: - Cabin Air Quality History
 
@@ -1049,42 +707,7 @@ final class VehicleDatabase: @unchecked Sendable {
         return true
     }
 
-    func recentAirQuality(for vin: String, limit: Int = 200) -> [AirQualityRecord] {
-        let sql = """
-        SELECT id, vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent
-        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [AirQualityRecord] in
-            var records: [AirQualityRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                records.append(AirQualityRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    airQualityIndex: stmt.columnDouble(at: 3),
-                    particulateMatter25: stmt.columnDouble(at: 4),
-                    particulateMatter10: stmt.columnDouble(at: 5),
-                    filterRemainingPercent: stmt.columnDouble(at: 6)
-                ))
-            }
-            return records
-        }) ?? []
-    }
 
-    func exportAirQualityCSV(for vin: String) -> String {
-        let records = recentAirQuality(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Record ID,VIN,Date,Air Quality Index,PM2.5,PM10,Filter Remaining (%)\n"
-        for r in records {
-            func number(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "" }
-            csv += "\(r.id),\(r.vin),\(formatter.string(from: r.timestamp)),\(number(r.airQualityIndex)),\(number(r.particulateMatter25)),\(number(r.particulateMatter10)),\(number(r.filterRemainingPercent))\n"
-        }
-        return csv
-    }
 
     // MARK: - Telemetry Logging
 
@@ -1123,7 +746,7 @@ final class VehicleDatabase: @unchecked Sendable {
            last.odometerKm == odometerKm,
            last.tripManualKm == tripManualKm,
            last.tripAutoKm == tripAutoKm {
-            let previous = recentTelemetry(for: vin, limit: 2).dropFirst().first
+            let previous = history.recentTelemetry(for: vin, limit: 2).dropFirst().first
             let lastRowFollowedMovement = previous.map {
                 $0.odometerKm != last.odometerKm
                     || $0.tripManualKm != last.tripManualKm
@@ -1151,134 +774,8 @@ final class VehicleDatabase: @unchecked Sendable {
         return true
     }
 
-    func recentTelemetry(for vin: String, limit: Int = 50, since: Date? = nil) -> [HistoricalTelemetryRecord] {
-        let sql = since != nil
-            ? """
-            SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit
-            FROM telemetry_logs WHERE vin = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT ?;
-            """
-            : """
-            SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit
-            FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
-            """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            if let since { try stmt.bindDate(since, at: 2) }
-            try stmt.bindInt64(Int64(max(1, limit)), at: since != nil ? 3 : 2)
-        } process: { stmt -> [HistoricalTelemetryRecord] in
-            var records: [HistoricalTelemetryRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let rowVIN = stmt.columnText(at: 1),
-                      let timestamp = stmt.columnDate(at: 2) else { continue }
-                records.append(HistoricalTelemetryRecord(
-                    id: id, vin: rowVIN, timestamp: timestamp,
-                    odometerKm: stmt.columnDouble(at: 3),
-                    tripManualKm: stmt.columnDouble(at: 4),
-                    tripAutomaticKm: stmt.columnDouble(at: 5),
-                    averageConsumption: stmt.columnDouble(at: 6),
-                    averageConsumptionUnit: stmt.columnText(at: 10),
-                    ambientTemperatureCelsius: stmt.columnDouble(at: 7),
-                    latitude: stmt.columnDouble(at: 8),
-                    longitude: stmt.columnDouble(at: 9)
-                ))
-            }
-            return records
-        }) ?? []
-    }
 
-    /// Derives trips from telemetry rows. `since` pushes the lower time bound into SQL so a
-    /// Shortcuts query for "last 7 days" no longer decodes the entire table first.
-    func derivedTrips(for vin: String, limit: Int = 100, since: Date? = nil) -> [TripHistoryEntry] {
-        let records = Array(recentTelemetry(for: vin, limit: max(2_000, limit * 20), since: since).reversed())
-        var trips: [TripHistoryEntry] = []
-        var segmentStart: HistoricalTelemetryRecord?
-        var segmentEnd: HistoricalTelemetryRecord?
-        var segmentDistance = 0.0
-        var consumptionTotal = 0.0
-        var consumptionCount = 0
-        var temperatureTotal = 0.0
-        var temperatureCount = 0
 
-        func appendSegment() {
-            guard let start = segmentStart, let end = segmentEnd, segmentDistance >= 0.05 else { return }
-            trips.append(TripHistoryEntry(
-                id: "\(start.id)-\(end.id)", vin: vin,
-                startedAt: start.timestamp, endedAt: end.timestamp,
-                distanceKm: segmentDistance,
-                averageConsumption: consumptionCount > 0 ? consumptionTotal / Double(consumptionCount) : nil,
-                ambientTemperatureCelsius: temperatureCount > 0 ? temperatureTotal / Double(temperatureCount) : nil,
-                startLatitude: start.latitude, startLongitude: start.longitude,
-                endLatitude: end.latitude, endLongitude: end.longitude
-            ))
-        }
-
-        func clearSegment() {
-            segmentStart = nil
-            segmentEnd = nil
-            segmentDistance = 0
-            consumptionTotal = 0
-            consumptionCount = 0
-            temperatureTotal = 0
-            temperatureCount = 0
-        }
-
-        for pair in zip(records, records.dropFirst()) {
-            let start = pair.0
-            let end = pair.1
-            let odometerDelta: Double? = {
-                guard let current = start.odometerKm, let next = end.odometerKm else { return nil }
-                return next - current
-            }()
-            let automaticDelta: Double? = {
-                guard let current = start.tripAutomaticKm, let next = end.tripAutomaticKm else { return nil }
-                return next >= current ? next - current : next
-            }()
-            let manualDelta: Double? = {
-                guard let current = start.tripManualKm, let next = end.tripManualKm else { return nil }
-                return next >= current ? next - current : next
-            }()
-            let distance = [odometerDelta, automaticDelta, manualDelta]
-                .compactMap { $0 }.first(where: { $0 >= 0.05 && $0 < 2_000 })
-            let gap = end.timestamp.timeIntervalSince(start.timestamp)
-            guard let distance, gap > 0, gap <= 45 * 60 else {
-                appendSegment()
-                clearSegment()
-                continue
-            }
-            if segmentStart == nil { segmentStart = start }
-            segmentEnd = end
-            segmentDistance += distance
-            if let value = end.averageConsumption ?? start.averageConsumption {
-                consumptionTotal += value
-                consumptionCount += 1
-            }
-            if let value = end.ambientTemperatureCelsius ?? start.ambientTemperatureCelsius {
-                temperatureTotal += value
-                temperatureCount += 1
-            }
-        }
-        appendSegment()
-        return Array(trips.suffix(limit).reversed())
-    }
-
-    func exportTripsCSV(for vin: String, limit: Int = 5_000) -> String {
-        let trips = derivedTrips(for: vin, limit: limit)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude\n"
-        for trip in trips {
-            let values = [
-                trip.id, trip.vin, formatter.string(from: trip.startedAt), formatter.string(from: trip.endedAt),
-                String(format: "%.1f", trip.duration / 60), String(format: "%.2f", trip.distanceKm),
-                trip.averageConsumption.map { String(format: "%.2f", $0) } ?? "",
-                trip.ambientTemperatureCelsius.map { String(format: "%.1f", $0) } ?? "",
-                trip.startLatitude.map { String($0) } ?? "", trip.startLongitude.map { String($0) } ?? "",
-                trip.endLatitude.map { String($0) } ?? "", trip.endLongitude.map { String($0) } ?? ""
-            ]
-            csv += values.joined(separator: ",") + "\n"
-        }
-        return csv
-    }
 
     // MARK: - Trip classification and monthly mileage
 
@@ -1308,34 +805,8 @@ final class VehicleDatabase: @unchecked Sendable {
         }
     }
 
-    func tripPurposes(for vin: String) -> [String: TripPurpose] {
-        let sql = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
-        } process: { stmt -> [String: TripPurpose] in
-            var result: [String: TripPurpose] = [:]
-            while stmt.step() {
-                guard let id = stmt.columnText(at: 0),
-                      let raw = stmt.columnText(at: 1),
-                      let purpose = TripPurpose(rawValue: raw) else { continue }
-                result[id] = purpose
-            }
-            return result
-        }) ?? [:]
-    }
 
-    func monthlyMileageReports(for vin: String, limit: Int = 5_000,
-                               calendar: Calendar = .current) -> [MonthlyMileageReport] {
-        MonthlyMileageReport.build(
-            from: derivedTrips(for: vin, limit: limit),
-            purposes: tripPurposes(for: vin),
-            calendar: calendar
-        )
-    }
 
-    func exportMonthlyMileageCSV(for vin: String, limit: Int = 5_000) -> String {
-        MonthlyMileageReport.csv(reports: monthlyMileageReports(for: vin, limit: limit), vin: vin)
-    }
 
     // MARK: - Remote Commands Audit
 
@@ -1357,34 +828,6 @@ final class VehicleDatabase: @unchecked Sendable {
         } process: { _ in }
     }
 
-    func recentCommandAudits(for vin: String?, limit: Int = 20) -> [RemoteCommandAuditRecord] {
-        let filterClause = vin != nil ? "WHERE vin = ? " : ""
-        let sql = """
-        SELECT id, vin, command_name, status, executed_at, duration_ms, error_message
-        FROM remote_commands_log \(filterClause)ORDER BY executed_at DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            var bindIndex: Int32 = 1
-            if let vin { try stmt.bindText(vin, at: bindIndex); bindIndex += 1 }
-            try stmt.bindInt64(Int64(max(1, limit)), at: bindIndex)
-        } process: { stmt -> [RemoteCommandAuditRecord] in
-            var records: [RemoteCommandAuditRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnText(at: 0),
-                      let rowVIN = stmt.columnText(at: 1),
-                      let command = stmt.columnText(at: 2),
-                      let status = stmt.columnText(at: 3),
-                      let executedAt = stmt.columnDate(at: 4) else { continue }
-                records.append(RemoteCommandAuditRecord(
-                    id: id, vin: rowVIN, command: command, status: status,
-                    executedAt: executedAt,
-                    durationMs: stmt.columnInt64(at: 5).map(Int.init),
-                    errorMessage: stmt.columnText(at: 6)
-                ))
-            }
-            return records
-        }) ?? []
-    }
 
     // MARK: - Database Diagnostics & Maintenance
 
@@ -1530,146 +973,10 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - CSV Exporters
 
-    func exportChargingSessionsCSV(for vin: String? = nil) -> String {
-        let sessions: [HistoricalChargingSession]
-        if let vin {
-            sessions = recentChargingSessions(for: vin, limit: 1000)
-        } else {
-            let sql = """
-            SELECT \(Self.chargingSessionColumns)
-            FROM charging_sessions
-            WHERE ended_at IS NOT NULL
-              AND lifecycle_state IN ('completed', 'interrupted')
-              AND (end_soc > start_soc OR energy_delivered_kwh > 0)
-            ORDER BY started_at DESC LIMIT 1000;
-            """
-            sessions = (try? db.query(sql: sql) { _ in } process: { [weak self] stmt -> [HistoricalChargingSession] in
-                var list: [HistoricalChargingSession] = []
-                while stmt.step() {
-                    guard let session = self?.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
-                                                         endSoc: stmt.columnDouble(at: 5),
-                                                         energy: stmt.columnDouble(at: 6),
-                                                         peak: stmt.columnDouble(at: 7),
-                                                         average: stmt.columnDouble(at: 8),
-                                                         location: stmt.columnText(at: 9)) else { continue }
-                    list.append(session)
-                }
-                return list
-            }) ?? []
-        }
 
-        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version\n"
-        let df = ISO8601DateFormatter()
-        for s in sessions {
-            let start = df.string(from: s.startedAt)
-            let end = s.endedAt.map { df.string(from: $0) } ?? ""
-            let endSoc = s.endSoc.map { String(format: "%.1f", $0) } ?? ""
-            let loc = (s.locationName ?? "").replacingOccurrences(of: ",", with: " ")
-            let coverage = s.sampleCoverage.map { String(format: "%.3f", $0) } ?? ""
-            let capacity = s.usableCapacityKwh.map { String(format: "%.2f", $0) } ?? ""
-            let tariff = s.tariffPricePerKwh.map { String(format: "%.4f", $0) } ?? ""
-            let nightTariff = s.nightTariffPricePerKwh.map { String(format: "%.4f", $0) } ?? ""
-            let nightStart = s.nightTariffStartHour.map(String.init) ?? ""
-            let nightEnd = s.nightTariffEndHour.map(String.init) ?? ""
-            let cost = s.estimatedCost.map { String(format: "%.2f", $0) } ?? ""
-            let target = s.targetSoc.map { String(format: "%.1f", $0) } ?? ""
-            csv += "\(s.id),\(s.vin),\(start),\(end),\(String(format: "%.1f", s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc),\(s.lifecycleState.rawValue),\(s.completionReason?.rawValue ?? ""),\(s.energySource.rawValue),\(s.confidence.rawValue),\(coverage),\(capacity),\(tariff),\(s.nightTariffEnabled),\(nightTariff),\(nightStart),\(nightEnd),\(cost),\(s.currencySymbol ?? ""),\(target),\(s.summaryVersion)\n"
-        }
-        return csv
-    }
 
-    func exportBatteryHealthCSV(for vin: String? = nil) -> String {
-        let sql = vin != nil
-            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
-            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
 
-        let records = (try? db.query(sql: sql) { stmt in
-            if let vin { try stmt.bindText(vin, at: 1) }
-        } process: { stmt -> [BatteryHealthRecord] in
-            var list: [BatteryHealthRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2),
-                      let odo = stmt.columnDouble(at: 3),
-                      let soh = stmt.columnDouble(at: 4),
-                      let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6),
-                      let source = stmt.columnText(at: 7) else { continue }
-                list.append(BatteryHealthRecord(
-                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
-                    measurementSource: source
-                ))
-            }
-            return list
-        }) ?? []
 
-        var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"
-        let df = ISO8601DateFormatter()
-        for r in records {
-            let date = df.string(from: r.timestamp)
-            csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh)),\(r.measurementSource)\n"
-        }
-        return csv
-    }
-
-    /// Raw per-sample export for one charging session — the curve data exactly as recorded,
-    /// for third-party analysis or debugging a misshapen curve.
-    func exportChargingSamplesCSV(sessionID: String) -> String {
-        let samples = chargingSamples(for: sessionID)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Timestamp,SOC (%),Power (kW),Voltage (V),Current (A)\n"
-        for sample in samples {
-            func cell(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
-            csv += "\(formatter.string(from: sample.timestamp)),\(String(format: "%.1f", sample.soc)),\(cell(sample.powerKw)),\(cell(sample.voltageVolts)),\(cell(sample.currentAmps))\n"
-        }
-        return csv
-    }
-
-    func exportTelemetryCSV(for vin: String) -> String {
-        let records = recentTelemetry(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Record ID,VIN,Date,Odometer (km),Trip Manual (km),Trip Automatic (km),Average Consumption,Ambient Temperature (C)\n"
-        for record in records {
-            func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
-            csv += "\(record.id),\(record.vin),\(formatter.string(from: record.timestamp)),\(number(record.odometerKm)),\(number(record.tripManualKm)),\(number(record.tripAutomaticKm)),\(number(record.averageConsumption)),\(number(record.ambientTemperatureCelsius))\n"
-        }
-        return csv
-    }
-
-    func exportCommandAuditsCSV(for vin: String) -> String {
-        let records = recentCommandAudits(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
-        func cell(_ value: String) -> String {
-            "\"\(value.replacingOccurrences(of: "\"", with: "\"\"").replacingOccurrences(of: "\n", with: " "))\""
-        }
-        var csv = "Command ID,VIN,Command,Status,Executed At,Duration (ms),Error\n"
-        for record in records {
-            csv += "\(cell(record.id)),\(record.vin),\(record.command),\(record.status),\(formatter.string(from: record.executedAt)),\(record.durationMs.map(String.init) ?? ""),\(cell(record.errorMessage ?? ""))\n"
-        }
-        return csv
-    }
-
-    func exportFuelEntriesCSV(for vin: String) -> String {
-        let entries = recentFuelEntries(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Entry ID,VIN,Date,Litres,Price per Litre,Total,Odometer (km)\n"
-        for entry in entries {
-            csv += "\(entry.id),\(entry.vin),\(formatter.string(from: entry.date)),\(String(format: "%.2f", entry.liters)),\(String(format: "%.3f", entry.pricePerLiter)),\(String(format: "%.2f", entry.liters * entry.pricePerLiter)),\(entry.odometerKm.map { String(format: "%.1f", $0) } ?? "")\n"
-        }
-        return csv
-    }
-
-    func exportCabinClimateCSV(for vin: String) -> String {
-        let records = recentCabinClimate(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
-        var csv = "Record ID,VIN,Date,Interior (C),Requested Setpoint (C)\n"
-        for record in records {
-            csv += "\(record.id),\(record.vin),\(formatter.string(from: record.timestamp)),\(record.interiorCelsius.map { String(format: "%.1f", $0) } ?? ""),\(record.requestedCelsius.map { String(format: "%.1f", $0) } ?? "")\n"
-        }
-        return csv
-    }
 
     // MARK: - Wipe / Purge
 
@@ -2154,92 +1461,8 @@ extension VehicleDatabase {
         }
     }
 
-    func recentConnectivity(for vin: String, limit: Int = 200) -> [ConnectivityRecord] {
-        let sql = """
-        SELECT id, vin, timestamp, network_type, signal_bars, wake_reason
-        FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [ConnectivityRecord] in
-            var out: [ConnectivityRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                out.append(ConnectivityRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    networkType: stmt.columnText(at: 3),
-                    signalBars: stmt.columnInt64(at: 4).map(Int.init),
-                    wakeReason: stmt.columnText(at: 5)))
-            }
-            return out
-        }) ?? []
-    }
 
-    func recentCabinClimate(for vin: String, limit: Int = 200) -> [CabinClimateRecord] {
-        let sql = """
-        SELECT id, vin, timestamp, interior_c, requested_c
-        FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [CabinClimateRecord] in
-            var out: [CabinClimateRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                out.append(CabinClimateRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    interiorCelsius: stmt.columnDouble(at: 3),
-                    requestedCelsius: stmt.columnDouble(at: 4)))
-            }
-            return out
-        }) ?? []
-    }
 
-    /// Lifetime charging energy for a VIN across all stored sessions (kWh).
-    func lifetimeChargingEnergyKwh(for vin: String) -> Double {
-        var total = 0.0
-        try? db.query(sql: "SELECT COALESCE(SUM(energy_delivered_kwh),0) FROM charging_sessions WHERE vin = ? AND lifecycle_state IN ('completed', 'interrupted');", bindings: { stmt in
-            try stmt.bindText(vin, at: 1)
-        }, process: { stmt in
-            if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
-        })
-        return total
-    }
-
-    /// First→last odometer span across stored telemetry, when both ends exist (km).
-    func lifetimeOdometerSpanKm(for vin: String) -> Double? {
-        let points = HistoryInsights.odometerTrend(from: recentTelemetry(for: vin, limit: 10_000))
-        return HistoryInsights.distanceCovered(from: points)
-    }
-}
-
-extension VehicleDatabase {
-    /// Peak power history for prior sessions at the same named location (newest excluded by
-    /// the caller passing its id), oldest-first — the baseline for anomaly detection.
-    func priorSessionPeaks(vin: String, locationName: String,
-                           excludingSessionID: String, limit: Int = 10) -> [Double] {
-        guard !locationName.isEmpty else { return [] }
-        let sql = """
-        SELECT peak_power_kw FROM charging_sessions
-        WHERE vin = ? AND location_name = ? AND id != ? AND peak_power_kw > 0
-          AND lifecycle_state IN ('completed', 'interrupted')
-        ORDER BY started_at DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindText(locationName, at: 2)
-            try stmt.bindText(excludingSessionID, at: 3)
-            try stmt.bindInt64(Int64(limit), at: 4)
-        } process: { stmt -> [Double] in
-            var out: [Double] = []
-            while stmt.step(), let v = stmt.columnDouble(at: 0) { out.append(v) }
-            return out
-        }) ?? []
-    }
 }
 
 // MARK: - Manual Fuel Entries (PHEV/ICE economics)
@@ -2276,36 +1499,5 @@ extension VehicleDatabase {
         } process: { _ in }
     }
 
-    func recentFuelEntries(for vin: String, limit: Int = 100) -> [FuelEntry] {
-        let sql = """
-        SELECT id, vin, date, liters, price_per_liter, odometer_km
-        FROM fuel_entries WHERE vin = ? ORDER BY date DESC LIMIT ?;
-        """
-        return (try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [FuelEntry] in
-            var out: [FuelEntry] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let date = stmt.columnDate(at: 2), let liters = stmt.columnDouble(at: 3),
-                      let price = stmt.columnDouble(at: 4) else { continue }
-                out.append(FuelEntry(id: id, vin: vin, date: date, liters: liters,
-                                     pricePerLiter: price,
-                                     odometerKm: stmt.columnDouble(at: 5)))
-            }
-            return out
-        }) ?? []
-    }
 
-    /// Total spend on fuel across stored entries — the combustion half of lifetime cost.
-    func lifetimeFuelCost(for vin: String) -> Double {
-        var total = 0.0
-        try? db.query(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
-            try stmt.bindText(vin, at: 1)
-        }, process: { stmt in
-            if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
-        })
-        return total
-    }
 }

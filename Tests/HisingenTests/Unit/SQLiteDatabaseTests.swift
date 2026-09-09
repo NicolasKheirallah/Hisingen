@@ -162,24 +162,24 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "CHARGING_VIN_001"
 
-        let sessionId = vdb.startChargingSession(vin: vin, startSoc: 20.0, location: "Home Wallbox")
+        let sessionId = vdb.charging.startChargingSession(vin: vin, startSoc: 20.0, location: "Home Wallbox")
         #expect(!sessionId.isEmpty)
 
-        vdb.recordChargingSample(
+        vdb.charging.recordChargingSample(
             sessionId: sessionId, vin: vin, soc: 25.0,
             powerKw: 11.0, voltage: 230.0, current: 16.0
         )
-        vdb.recordChargingSample(
+        vdb.charging.recordChargingSample(
             sessionId: sessionId, vin: vin, soc: 50.0,
             powerKw: 11.0, voltage: 230.0, current: 16.0
         )
 
-        vdb.completeChargingSession(
+        vdb.charging.completeChargingSession(
             id: sessionId, endSoc: 80.0, energyDeliveredKwh: 45.2,
             peakPowerKw: 11.2, averagePowerKw: 10.8
         )
 
-        let sessions = vdb.recentChargingSessions(for: vin, limit: 5)
+        let sessions = vdb.charging.recentChargingSessions(for: vin, limit: 5)
         #expect(sessions.count == 1)
         #expect(sessions.first?.id == sessionId)
         #expect(sessions.first?.startSoc == 20.0)
@@ -200,7 +200,7 @@ struct SQLiteDatabaseTests {
             vin: vin, odometerKm: 50000, sohPct: 95.0, degPct: 5.0, usableKwh: 74.1
         )
 
-        let history = vdb.batteryHealthHistory(for: vin, limit: 10)
+        let history = vdb.history.batteryHealthHistory(for: vin, limit: 10)
         #expect(history.count == 2)
         #expect(history.first?.odometerKm == 50000)
         #expect(history.first?.stateOfHealthPct == 95.0)
@@ -224,7 +224,7 @@ struct SQLiteDatabaseTests {
                 vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
             ) == false)
         }
-        #expect(vdb.batteryHealthHistory(for: vin, limit: 50).count == 1)
+        #expect(vdb.history.batteryHealthHistory(for: vin, limit: 50).count == 1)
 
         // Noise below the threshold is still noise.
         #expect(vdb.recordBatteryHealthMilestone(
@@ -240,7 +240,7 @@ struct SQLiteDatabaseTests {
         #expect(vdb.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_600, sohPct: 97.9, degPct: 2.1, usableKwh: 76.2
         ))
-        #expect(vdb.batteryHealthHistory(for: vin, limit: 50).count == 3)
+        #expect(vdb.history.batteryHealthHistory(for: vin, limit: 50).count == 3)
     }
 
     @Test("Battery health records a heartbeat row once the interval elapses")
@@ -327,11 +327,11 @@ struct SQLiteDatabaseTests {
         try insert(15, odometer: 120)
         try insert(25, odometer: 125)
 
-        let trips = vdb.derivedTrips(for: vin)
+        let trips = vdb.history.derivedTrips(for: vin)
         #expect(trips.count == 2)
         #expect(trips[0].distanceKm == 5)
         #expect(trips[1].distanceKm == 20)
-        #expect(vdb.exportTripsCSV(for: vin).contains("Duration (min)"))
+        #expect(vdb.history.exportTripsCSV(for: vin).contains("Duration (min)"))
     }
 
     @Test("VehicleDatabase audit logs remote commands")
@@ -350,11 +350,11 @@ struct SQLiteDatabaseTests {
             stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(count == 1)
-        let audit = try #require(vdb.recentCommandAudits(for: vin).first)
+        let audit = try #require(vdb.history.recentCommandAudits(for: vin).first)
         #expect(audit.command == "lock")
         #expect(audit.status == "success")
         #expect(audit.durationMs == 1420)
-        #expect(vdb.exportCommandAuditsCSV(for: vin).contains("lock"))
+        #expect(vdb.history.exportCommandAuditsCSV(for: vin).contains("lock"))
     }
 
     @Test("VehicleDatabase computes record counts and diagnostic metrics")
@@ -363,8 +363,8 @@ struct SQLiteDatabaseTests {
         let vin = "DIAG_VIN_004"
 
         vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 12000, sohPct: 98.0, degPct: 2.0, usableKwh: 76.0)
-        let sId = vdb.startChargingSession(vin: vin, startSoc: 30.0)
-        vdb.recordChargingSample(sessionId: sId, vin: vin, soc: 35.0, powerKw: 11.0, voltage: 230.0, current: 16.0)
+        let sId = vdb.charging.startChargingSession(vin: vin, startSoc: 30.0)
+        vdb.charging.recordChargingSample(sessionId: sId, vin: vin, soc: 35.0, powerKw: 11.0, voltage: 230.0, current: 16.0)
         vdb.recordTelemetry(vin: vin, odometerKm: 12000, tripManualKm: 250, tripAutoKm: 45, avgConsumption: 18.5, ambientTempC: 18.0, latitude: 57.7, longitude: 11.9)
         vdb.recordCommandAudit(vin: vin, command: "climate", status: "success")
 
@@ -386,11 +386,11 @@ struct SQLiteDatabaseTests {
             vin: vin, odometerKm: 42_000, tripManualKm: 120.5, tripAutoKm: 18.2,
             avgConsumption: 17.4, ambientTempC: 9.0, latitude: nil, longitude: nil
         ))
-        let record = try #require(vdb.recentTelemetry(for: vin).first)
+        let record = try #require(vdb.history.recentTelemetry(for: vin).first)
         #expect(record.odometerKm == 42_000)
         #expect(record.tripAutomaticKm == 18.2)
         #expect(record.averageConsumption == 17.4)
-        #expect(vdb.exportTelemetryCSV(for: vin).contains("42000.00"))
+        #expect(vdb.history.exportTelemetryCSV(for: vin).contains("42000.00"))
     }
 
     @Test("Disabling location history removes stored coordinates and charging labels")
@@ -399,7 +399,7 @@ struct SQLiteDatabaseTests {
         let vin = "PRIVATE_LOCATION_HISTORY"
         #expect(vdb.recordTelemetry(vin: vin, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
                                     avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
-        _ = vdb.startChargingSession(vin: vin, startSoc: 20, location: "57.7000°, 11.9000°")
+        _ = vdb.charging.startChargingSession(vin: vin, startSoc: 20, location: "57.7000°, 11.9000°")
         vdb.clearStoredLocations(for: vin)
         let remaining = try vdb.db.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
             try stmt.bindText(vin, at: 1)
@@ -409,7 +409,7 @@ struct SQLiteDatabaseTests {
         }
         #expect(remaining.0 == nil)
         #expect(remaining.1 == nil)
-        #expect(vdb.activeChargingSession(for: vin)?.locationName == nil)
+        #expect(vdb.charging.activeChargingSession(for: vin)?.locationName == nil)
     }
 
     @Test("VehicleDatabase retrieves active charging session and samples")
@@ -417,31 +417,31 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "ACTIVE_VIN_005"
 
-        #expect(vdb.activeChargingSession(for: vin) == nil)
+        #expect(vdb.charging.activeChargingSession(for: vin) == nil)
 
-        let sessionId = vdb.startChargingSession(vin: vin, startSoc: 15.0, location: "Fast Charger 150kW")
-        let active = vdb.activeChargingSession(for: vin)
+        let sessionId = vdb.charging.startChargingSession(vin: vin, startSoc: 15.0, location: "Fast Charger 150kW")
+        let active = vdb.charging.activeChargingSession(for: vin)
         #expect(active != nil)
         #expect(active?.id == sessionId)
         #expect(active?.startSoc == 15.0)
         #expect(active?.endedAt == nil)
 
-        vdb.recordChargingSample(sessionId: sessionId, vin: vin, soc: 20.0, powerKw: 145.0, voltage: 400.0, current: 362.5)
-        vdb.recordChargingSample(sessionId: sessionId, vin: vin, soc: 40.0, powerKw: 110.0, voltage: 400.0, current: 275.0)
+        vdb.charging.recordChargingSample(sessionId: sessionId, vin: vin, soc: 20.0, powerKw: 145.0, voltage: 400.0, current: 362.5)
+        vdb.charging.recordChargingSample(sessionId: sessionId, vin: vin, soc: 40.0, powerKw: 110.0, voltage: 400.0, current: 275.0)
 
-        let samples = vdb.chargingSamples(for: sessionId)
+        let samples = vdb.charging.chargingSamples(for: sessionId)
         #expect(samples.count == 2)
         #expect(samples.first?.powerKw == 145.0)
 
-        let domainSession = active?.toDomainSession(database: vdb)
+        let domainSession = active.map { vdb.charging.domainSession(from: $0) }
         // Domain conversion restores the durable 15% session boundary that predates the
         // first retained 20% sample, keeping the summary and curve on the same SoC range.
         #expect(domainSession?.samples.count == 3)
         #expect(domainSession?.samples.first?.batteryPercentage == 15.0)
         #expect(domainSession?.startBatteryPercentage == 15.0)
 
-        vdb.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 52.0, peakPowerKw: 145.0, averagePowerKw: 95.0)
-        #expect(vdb.activeChargingSession(for: vin) == nil)
+        vdb.charging.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 52.0, peakPowerKw: 145.0, averagePowerKw: 95.0)
+        #expect(vdb.charging.activeChargingSession(for: vin) == nil)
     }
 
     @Test("VehicleDatabase generates valid CSV exports for charging and health")
@@ -449,17 +449,17 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "CSV_VIN_006"
 
-        let sessionId = vdb.startChargingSession(vin: vin, startSoc: 20.0, location: "Gothenburg Supercharger")
-        vdb.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 46.8, peakPowerKw: 150.0, averagePowerKw: 85.0)
+        let sessionId = vdb.charging.startChargingSession(vin: vin, startSoc: 20.0, location: "Gothenburg Supercharger")
+        vdb.charging.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 46.8, peakPowerKw: 150.0, averagePowerKw: 85.0)
 
         vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 25000, sohPct: 97.2, degPct: 2.8, usableKwh: 75.8)
 
-        let chargingCSV = vdb.exportChargingSessionsCSV(for: vin)
+        let chargingCSV = vdb.charging.exportChargingSessionsCSV(for: vin)
         #expect(chargingCSV.contains("Session ID,VIN,Started At,Ended At"))
         #expect(chargingCSV.contains("Gothenburg Supercharger"))
         #expect(chargingCSV.contains("46.80"))
 
-        let healthCSV = vdb.exportBatteryHealthCSV(for: vin)
+        let healthCSV = vdb.history.exportBatteryHealthCSV(for: vin)
         #expect(healthCSV.contains("Record ID,VIN,Date,Odometer (km)"))
         #expect(healthCSV.contains("25000.0"))
         #expect(healthCSV.contains("97.20"))
@@ -470,8 +470,8 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "PRUNE_VIN_007"
 
-        let sId = vdb.startChargingSession(vin: vin, startSoc: 10.0)
-        vdb.recordChargingSample(sessionId: sId, vin: vin, soc: 20.0, powerKw: 10.0, voltage: 230.0, current: 16.0)
+        let sId = vdb.charging.startChargingSession(vin: vin, startSoc: 10.0)
+        vdb.charging.recordChargingSample(sessionId: sId, vin: vin, soc: 20.0, powerKw: 10.0, voltage: 230.0, current: 16.0)
 
         // Pruning older than 90 days should keep recent samples
         vdb.pruneHistoricalSamples(olderThanDays: 90)

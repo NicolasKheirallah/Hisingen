@@ -68,7 +68,7 @@ enum AutomationHandoff {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
-            if let result = database.recentCommandAudits(for: effectiveVin, limit: 10).first(where: {
+            if let result = database.history.recentCommandAudits(for: effectiveVin, limit: 10).first(where: {
                 $0.command == command && $0.executedAt >= startedAt
             }) {
                 if result.status == "failed" {
@@ -319,7 +319,7 @@ struct GetRecentTripsIntent: AppIntent {
         }
         // Push the 7-day bound into SQL instead of decoding up to 20k telemetry rows per run.
         let cutoff = Date().addingTimeInterval(-7 * 86_400)
-        let trips = VehicleDatabase.shared.derivedTrips(for: state.vin, limit: 1_000, since: cutoff)
+        let trips = VehicleDatabase.shared.history.derivedTrips(for: state.vin, limit: 1_000, since: cutoff)
         let distance = trips.reduce(0) { $0 + $1.distanceKm }
         let minutes = Int(trips.reduce(0) { $0 + $1.duration } / 60)
         let response = "Last 7 days: \(trips.count) inferred trips, \(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit)), \(Format.shortDuration(minutes: minutes)) driving."

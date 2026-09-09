@@ -193,7 +193,7 @@ struct SettingsDatabaseCard: View {
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
-                                db.exportChargingSessionsCSV(for: vin)
+                                db.charging.exportChargingSessionsCSV(for: vin)
                             }.value
                             saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
                         }
@@ -212,7 +212,7 @@ struct SettingsDatabaseCard: View {
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
-                                db.exportBatteryHealthCSV(for: vin)
+                                db.history.exportBatteryHealthCSV(for: vin)
                             }.value
                             saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
                         }
@@ -233,7 +233,7 @@ struct SettingsDatabaseCard: View {
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
-                                db.exportTelemetryCSV(for: vin)
+                                db.history.exportTelemetryCSV(for: vin)
                             }.value
                             saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
                         }
@@ -253,7 +253,7 @@ struct SettingsDatabaseCard: View {
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
-                                db.exportCommandAuditsCSV(for: vin)
+                                db.history.exportCommandAuditsCSV(for: vin)
                             }.value
                             saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
                         }
@@ -274,7 +274,7 @@ struct SettingsDatabaseCard: View {
                     let db = database
                     Task { @MainActor in
                         let csv = await Task.detached(priority: .userInitiated) {
-                            db.exportAirQualityCSV(for: vin)
+                            db.history.exportAirQualityCSV(for: vin)
                         }.value
                         saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
                     }

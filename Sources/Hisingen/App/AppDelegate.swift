@@ -3,7 +3,10 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = PreferencesStore()
-    private let vehicleDatabase = VehicleDatabase()
+    /// The one process-wide storage handle: intents, image caching, and Settings default to
+    /// `VehicleDatabase.shared`, so every consumer must share this same instance (and its
+    /// SQLite handle) rather than opening parallel connections to the same file.
+    private let vehicleDatabase = VehicleDatabase.shared
     private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
     private lazy var fleetStore = FleetStore(stateStore: stateStore, preferences: preferences)
     private let reverseGeocoder = ReverseGeocoder()

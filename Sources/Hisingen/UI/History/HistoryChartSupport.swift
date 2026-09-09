@@ -89,8 +89,8 @@ enum HistoryExport {
     }
 
     // The two series a user most often wants clipped to the visible period. Column order
-    // mirrors `VehicleDatabase.exportTripsCSV` / `exportChargingSessionsCSV` so a period
-    // export and a full export open the same way.
+    // mirrors `VehicleDatabase.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
+    // so a period export and a full export open the same way.
 
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
         let header = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude"

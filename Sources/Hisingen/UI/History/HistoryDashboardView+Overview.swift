@@ -183,46 +183,46 @@ extension HistoryDashboardView {
             Button(L10n.text("Trips")) {
                 let csv = exportScope == .selectedPeriod
                     ? HistoryExport.tripsCSV(trips)
-                    : database.exportTripsCSV(for: state.vin)
+                    : database.history.exportTripsCSV(for: state.vin)
                 exportCSV(csv, name: "Trips")
             }
             .disabled(trips.isEmpty)
             Button(L10n.text("Charging Sessions")) {
                 let csv = exportScope == .selectedPeriod
                     ? HistoryExport.chargingSessionsCSV(chargingSessions)
-                    : database.exportChargingSessionsCSV(for: state.vin)
+                    : database.charging.exportChargingSessionsCSV(for: state.vin)
                 exportCSV(csv, name: "Charging-Sessions")
             }
             .disabled(chargingSessions.isEmpty)
             Button(L10n.text("Session Samples")) {
                 guard let session = selectedSession else { return }
-                exportCSV(database.exportChargingSamplesCSV(sessionID: session.id), name: "Charging-Samples")
+                exportCSV(database.charging.exportChargingSamplesCSV(sessionID: session.id), name: "Charging-Samples")
             }
             .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
             Button(L10n.text("Battery Health")) {
-                exportCSV(database.exportBatteryHealthCSV(for: state.vin), name: "Battery-Health")
+                exportCSV(database.history.exportBatteryHealthCSV(for: state.vin), name: "Battery-Health")
             }
             .disabled(batteryHealthRecords.isEmpty)
             Button(L10n.text("Air Quality")) {
-                exportCSV(database.exportAirQualityCSV(for: state.vin), name: "Air-Quality")
+                exportCSV(database.history.exportAirQualityCSV(for: state.vin), name: "Air-Quality")
             }
             .disabled(airQualityRecords.isEmpty)
             Button(L10n.text("Telemetry")) {
-                exportCSV(database.exportTelemetryCSV(for: state.vin), name: "Telemetry")
+                exportCSV(database.history.exportTelemetryCSV(for: state.vin), name: "Telemetry")
             }
             .disabled(telemetryRecords.isEmpty)
             Button(L10n.text("Automation Log")) {
-                exportCSV(database.exportCommandAuditsCSV(for: state.vin), name: "Automation-Log")
+                exportCSV(database.history.exportCommandAuditsCSV(for: state.vin), name: "Automation-Log")
             }
             .disabled(commands.isEmpty)
             if state.powertrain.hasCombustionEngine {
                 Button(L10n.text("Fuel Fill-Ups")) {
-                    exportCSV(database.exportFuelEntriesCSV(for: state.vin), name: "Fuel")
+                    exportCSV(database.history.exportFuelEntriesCSV(for: state.vin), name: "Fuel")
                 }
                 .disabled(fuelEntries.isEmpty)
             }
             Button(L10n.text("Cabin Climate")) {
-                exportCSV(database.exportCabinClimateCSV(for: state.vin), name: "Cabin-Climate")
+                exportCSV(database.history.exportCabinClimateCSV(for: state.vin), name: "Cabin-Climate")
             }
             .disabled(cabinClimateRecords.isEmpty)
             Divider()

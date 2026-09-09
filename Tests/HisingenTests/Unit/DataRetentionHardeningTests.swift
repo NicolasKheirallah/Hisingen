@@ -9,7 +9,7 @@ import Testing
 struct DataRetentionHardeningTests {
     private func seededDatabase(vin: String) -> VehicleDatabase {
         let database = VehicleDatabase.inMemory()
-        _ = database.startChargingSession(vin: vin, startSoc: 30)
+        _ = database.charging.startChargingSession(vin: vin, startSoc: 30)
         #expect(database.recordTelemetry(
             vin: vin, odometerKm: 1_234, tripManualKm: nil, tripAutoKm: nil,
             avgConsumption: nil, ambientTempC: nil, latitude: nil, longitude: nil
@@ -33,7 +33,7 @@ struct DataRetentionHardeningTests {
         let counts = database.recordCounts()
         #expect(counts.chargingSessions == 1)
         #expect(counts.telemetry == 1)
-        #expect(database.recentFuelEntries(for: vin).count == 1)
+        #expect(database.history.recentFuelEntries(for: vin).count == 1)
     }
 
     @Test
@@ -47,7 +47,7 @@ struct DataRetentionHardeningTests {
         let counts = database.recordCounts()
         #expect(counts.chargingSessions == 0)
         #expect(counts.telemetry == 0)
-        #expect(database.recentFuelEntries(for: vin).isEmpty)
+        #expect(database.history.recentFuelEntries(for: vin).isEmpty)
     }
 
     @Test

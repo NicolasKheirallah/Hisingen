@@ -145,7 +145,7 @@ extension InfoTabView {
     }
 
     func exportBatteryHealthCSV() {
-        let csv = database.exportBatteryHealthCSV(for: state.vin)
+        let csv = database.history.exportBatteryHealthCSV(for: state.vin)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"

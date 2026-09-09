@@ -87,8 +87,8 @@ struct VehicleTabView: View {
             let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
                 ?? state.configuredUsableBatteryCapacityKwh
             let sessions = await Task.detached(priority: .userInitiated) {
-                db.recentChargingSessions(for: vin)
-                    .map { $0.toDomainSession(database: db, usableCapacityKwh: capacity) }
+                db.charging.recentChargingSessions(for: vin)
+                    .map { db.charging.domainSession(from: $0, usableCapacityKwh: capacity) }
                     .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
             }.value
             guard !Task.isCancelled else { return }

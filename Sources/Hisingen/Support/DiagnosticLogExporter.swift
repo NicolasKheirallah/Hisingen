@@ -284,7 +284,7 @@ enum DiagnosticLogExporter {
         if let database {
             let formatter = ISO8601DateFormatter()
             // Newest first; VINs and free-text errors pass the redactor on the way out.
-            commandAudits = database.recentCommandAudits(for: nil, limit: 25).map { audit in
+            commandAudits = database.history.recentCommandAudits(for: nil, limit: 25).map { audit in
                 [
                     "timestamp": formatter.string(from: audit.executedAt),
                     "command": audit.command,

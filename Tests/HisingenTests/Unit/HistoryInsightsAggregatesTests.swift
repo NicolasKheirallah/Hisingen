@@ -162,7 +162,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 20, soc: 60, powerKw: 30),
         ]
-        #expect(HistoryInsights.estimatedChargingLossPct(from: impossible, packCapacityKwh: 60) == nil)
+        #expect(ChargingSessionLedger.estimatedChargingLossPct(from: impossible, packCapacityKwh: 60) == nil)
 
         // 30 kW for 60 minutes = 30 kWh input; SoC rises 20% of a 60 kWh pack = 12 kWh stored.
         // Loss = 1 - 12/30 = 60%, outside the plausible 0...40% band, so also nil.
@@ -170,7 +170,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 60, soc: 60, powerKw: 30),
         ]
-        #expect(HistoryInsights.estimatedChargingLossPct(from: implausible, packCapacityKwh: 60) == nil)
+        #expect(ChargingSessionLedger.estimatedChargingLossPct(from: implausible, packCapacityKwh: 60) == nil)
 
         // 30 kW for 24 minutes = 12 kWh input; SoC rises 20% of a 60 kWh pack = 12 kWh stored.
         // Loss = 0%, a plausible (if optimistic) result.
@@ -178,7 +178,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 40, powerKw: 30),
             chargingSample(2, minutesAfterStart: 24, soc: 60, powerKw: 30),
         ]
-        let loss = try #require(HistoryInsights.estimatedChargingLossPct(from: realistic, packCapacityKwh: 60))
+        let loss = try #require(ChargingSessionLedger.estimatedChargingLossPct(from: realistic, packCapacityKwh: 60))
         #expect(abs(loss - 0) <= 0.5)
     }
 
@@ -196,7 +196,7 @@ struct HistoryInsightsAggregatesTests {
             HistoricalChargingSample(id: 2, sessionId: "s", vin: "VIN", timestamp: sessionStart.addingTimeInterval(3_600), soc: 50, powerKw: 10, voltageVolts: nil, currentAmps: nil, chargingType: nil),
             HistoricalChargingSample(id: 3, sessionId: "s", vin: "VIN", timestamp: sessionStart.addingTimeInterval(2 * 3_600), soc: 80, powerKw: 10, voltageVolts: nil, currentAmps: nil, chargingType: nil),
         ]
-        let result = try #require(HistoryInsights.tariffAwareCost(
+        let result = try #require(ChargingSessionLedger.tariffAwareCost(
             from: samples, dayRatePerKwh: 3, nightRatePerKwh: 1,
             nightStartHour: 22, nightEndHour: 6, calendar: calendar))
         // 23:00-00:00 interval (night) = 10 kWh, 00:00-01:00 interval (still night, before 06:00) = 10 kWh.
@@ -211,7 +211,7 @@ struct HistoryInsightsAggregatesTests {
             chargingSample(1, minutesAfterStart: 0, soc: 20, powerKw: 10),
             chargingSample(2, minutesAfterStart: 60, soc: 40, powerKw: 10),
         ]
-        let result = try #require(HistoryInsights.tariffAwareCost(
+        let result = try #require(ChargingSessionLedger.tariffAwareCost(
             from: samples, dayRatePerKwh: 2, nightRatePerKwh: 0.5, nightStartHour: 3, nightEndHour: 3))
         #expect(abs(result.nightEnergyKwh - 0) <= 0.01)
     }

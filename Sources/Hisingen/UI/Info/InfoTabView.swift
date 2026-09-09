@@ -47,18 +47,9 @@ struct InfoTabView: View {
         self.onRemoteCommand = onRemoteCommand
     }
 
-    /// Everything the Info tab derives from the local SQLite store. Loaded once per VIN on a
-    /// detached task so no card touches the database from inside `body` (which re-runs on every
-    /// scroll / state change).
-    struct InfoAsyncData: Sendable {
-        var recentTelemetry: [HistoricalTelemetryRecord] = []
-        var recentCommands: [RemoteCommandAuditRecord] = []
-        var recentActivities: [VehicleActivity] = []
-        var airQualityHistory: [AirQualityRecord] = []
-        var connectivityHistory: [VehicleDatabase.ConnectivityRecord] = []
-        var chargingSessions: [ChargingSession] = []
-        var batteryHealthHistory: [BatteryHealthRecord] = []
-    }
+    /// Everything the Info tab derives from the local store lives on the Vehicle History
+    /// ledger's read model (aliased here so the split-out card extensions keep their names).
+    typealias InfoAsyncData = VehicleHistoryLedger.RecentRecords
 
     /// Stable identity + ordering for every card, so the "jump to section" menu and the render
     /// loop derive from one list instead of two hand-synced copies.
@@ -302,17 +293,7 @@ struct InfoTabView: View {
         let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
         let loaded = await Task.detached(priority: .userInitiated) { () -> InfoAsyncData in
-            var d = InfoAsyncData()
-            d.recentTelemetry = db.recentTelemetry(for: vin, limit: 40)
-            d.recentCommands = db.recentCommandAudits(for: vin, limit: 5)
-            d.recentActivities = db.recentActivities(for: vin, limit: 10)
-            d.airQualityHistory = db.recentAirQuality(for: vin, limit: 500)
-            d.connectivityHistory = db.recentConnectivity(for: vin, limit: 60)
-            d.batteryHealthHistory = db.batteryHealthHistory(for: vin)
-            d.chargingSessions = db.recentChargingSessions(for: vin, limit: 20)
-                .map { $0.toDomainSession(database: db, usableCapacityKwh: capacity) }
-                .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-            return d
+            return db.history.recent(vin: vin, chargingCapacityKwh: capacity)
         }.value
         guard !Task.isCancelled else { return }
         asyncData = loaded

@@ -26,6 +26,13 @@ authoritative energy summary, and is the one place where sample integration
 and its gap-tolerance policies live. See
 `Services/Persistence/ChargingSessionLedger.swift`.
 
+**Vehicle History ledger** — the read interface over the remaining local
+history tables (battery health, air quality, telemetry, trips, Remote Command
+outcomes, connectivity, cabin climate, fuel entries): one typed surface that
+assembles the History dashboard and Info tab bundles and owns the row-cap and
+freshness policy those consumers used to re-derive at every call site. See
+`Services/Persistence/VehicleHistoryLedger.swift`.
+
 **Gatekeeper** — macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates
 this check.

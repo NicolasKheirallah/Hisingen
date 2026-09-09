@@ -45,8 +45,9 @@ enum HistoryInsights {
     static let defaultChartGapThreshold: TimeInterval = 3 * 24 * 3_600
     /// Gap threshold for a within-session series (the charging curve): much shorter than
     /// `defaultChartGapThreshold` since a single session spans hours, not weeks. This matches
-    /// the energy integrator: beyond 15 minutes the app does not know what happened and neither
-    /// calculations nor charts may pretend the observations form a continuous interval.
+    /// the Charging Session ledger's authoritative summary integration: beyond 15 minutes the
+    /// app does not know what happened and neither calculations nor charts may pretend the
+    /// observations form a continuous interval.
     static let chargingCurveGapThreshold: TimeInterval = 15 * 60
 
     // MARK: - Charging curve
@@ -136,75 +137,6 @@ enum HistoryInsights {
         }
         guard let tailStart, tailStart.timestamp < last.timestamp else { return nil }
         return last.timestamp.timeIntervalSince(tailStart.timestamp)
-    }
-
-    /// An interval between consecutive samples longer than this is treated as a polling gap
-    /// (e.g. the vehicle was unplugged and replugged elsewhere) rather than continuous
-    /// charging. Wide enough that a long, slow AC session polled only once an hour — a
-    /// perfectly ordinary cadence, matching e.g. `airQualityHeartbeat` elsewhere in this file's
-    /// sibling recorder — doesn't get its real energy silently discarded interval by interval.
-    static let maxContinuousChargingGap: TimeInterval = 3 * 3_600
-
-    /// Estimated round-trip loss between what the charger delivered and what actually landed
-    /// as usable state of charge: integrated sample power (trapezoidal, skipping any interval
-    /// that spans a polling gap) compared against SoC-gain × pack capacity. Returns `nil`
-    /// rather than a fabricated figure whenever the inputs can't support a plausible estimate.
-    static func estimatedChargingLossPct(from samples: [HistoricalChargingSample],
-                                         packCapacityKwh: Double) -> Double? {
-        guard packCapacityKwh > 0 else { return nil }
-        let chronological = samples.sorted { $0.timestamp < $1.timestamp }
-        guard let first = chronological.first, let last = chronological.last,
-              last.soc > first.soc else { return nil }
-        var energyInputKwh = 0.0
-        for (a, b) in zip(chronological, chronological.dropFirst()) {
-            guard let p0 = a.powerKw, let p1 = b.powerKw else { continue }
-            let interval = b.timestamp.timeIntervalSince(a.timestamp)
-            guard interval > 0, interval <= maxContinuousChargingGap else { continue }
-            energyInputKwh += (p0 + p1) / 2 * (interval / 3_600)
-        }
-        guard energyInputKwh > 0 else { return nil }
-        let storedKwh = packCapacityKwh * (last.soc - first.soc) / 100
-        let lossPct = (1 - storedKwh / energyInputKwh) * 100
-        return (0...40).contains(lossPct) ? lossPct : nil
-    }
-
-    struct TariffCost: Equatable {
-        let dayEnergyKwh: Double
-        let nightEnergyKwh: Double
-        let cost: Double
-    }
-
-    /// Splits a session's sample-integrated energy into day/night buckets by each interval's
-    /// local hour and prices each bucket separately — materially more accurate than
-    /// multiplying total energy by one flat rate once a night tariff is configured, since it
-    /// reflects when the energy actually flowed rather than only how much flowed. `nightStart
-    /// == nightEnd` disables the night bucket entirely (everything prices at `dayRatePerKwh`).
-    static func tariffAwareCost(from samples: [HistoricalChargingSample], dayRatePerKwh: Double,
-                                nightRatePerKwh: Double, nightStartHour: Int, nightEndHour: Int,
-                                calendar: Calendar = .current) -> TariffCost? {
-        let chronological = samples.sorted { $0.timestamp < $1.timestamp }
-        guard chronological.count >= 2 else { return nil }
-        func isNight(_ date: Date) -> Bool {
-            guard nightStartHour != nightEndHour else { return false }
-            let hour = calendar.component(.hour, from: date)
-            if nightStartHour < nightEndHour {
-                return hour >= nightStartHour && hour < nightEndHour
-            }
-            return hour >= nightStartHour || hour < nightEndHour
-        }
-        var dayKwh = 0.0
-        var nightKwh = 0.0
-        for (a, b) in zip(chronological, chronological.dropFirst()) {
-            guard let p0 = a.powerKw, let p1 = b.powerKw else { continue }
-            let interval = b.timestamp.timeIntervalSince(a.timestamp)
-            guard interval > 0, interval <= maxContinuousChargingGap else { continue }
-            let energy = (p0 + p1) / 2 * (interval / 3_600)
-            let midpoint = a.timestamp.addingTimeInterval(interval / 2)
-            if isNight(midpoint) { nightKwh += energy } else { dayKwh += energy }
-        }
-        guard dayKwh + nightKwh > 0 else { return nil }
-        return TariffCost(dayEnergyKwh: dayKwh, nightEnergyKwh: nightKwh,
-                          cost: dayKwh * dayRatePerKwh + nightKwh * nightRatePerKwh)
     }
 
     /// Mean sessions-per-week across the observed span. `nil` for fewer than 2 sessions, since

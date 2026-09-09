@@ -107,7 +107,7 @@ struct VehicleFeatureCompletionTests {
             cleaningState: .off, airQualityIndex: 18, particulateMatter25: 4
         )
         store.save(polestar)
-        #expect(database.recentAirQuality(for: polestar.vin).count == 1)
+        #expect(database.history.recentAirQuality(for: polestar.vin).count == 1)
 
         let volvo = VehicleState(
             batteryPercentage: 60, rangeKm: 300, chargingState: .idle,
@@ -124,7 +124,7 @@ struct VehicleFeatureCompletionTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
         store.save(volvo)
-        #expect(database.recentAirQuality(for: volvo.vin).isEmpty)
+        #expect(database.history.recentAirQuality(for: volvo.vin).isEmpty)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         let trend = HistoryInsights.airQualityTrend(from: [
@@ -182,9 +182,9 @@ struct VehicleFeatureCompletionTests {
 
         let database = VehicleDatabase.inMemory()
         database.setTripPurpose(.business, tripID: "1-2", vin: "VIN")
-        #expect(database.tripPurposes(for: "VIN")["1-2"] == .business)
+        #expect(database.history.tripPurposes(for: "VIN")["1-2"] == .business)
         database.setTripPurpose(nil, tripID: "1-2", vin: "VIN")
-        #expect(database.tripPurposes(for: "VIN")["1-2"] == nil)
+        #expect(database.history.tripPurposes(for: "VIN")["1-2"] == nil)
         #expect(MonthlyMileageReport.csv(reports: [report], vin: "VIN").contains("Business km"))
     }
 

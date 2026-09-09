@@ -11,7 +11,7 @@ struct SettingsDataManagementTests {
         #expect(database.addFuelEntry(vin: vin, date: Date(), liters: 20, pricePerLiter: 2, odometerKm: 1_000))
         database.saveVehicleImage(vin: vin, angle: 0, data: Data([1, 2, 3]))
         #expect(database.recordCounts().commands == 1)
-        #expect(database.recentFuelEntries(for: vin).count == 1)
+        #expect(database.history.recentFuelEntries(for: vin).count == 1)
         #expect(database.loadVehicleImage(for: vin, angle: 0) != nil)
 
         try database.vacuumOrThrow()
@@ -19,7 +19,7 @@ struct SettingsDataManagementTests {
 
         try database.wipeAllOrThrow(for: vin)
         #expect(database.recordCounts().commands == 0)
-        #expect(database.recentFuelEntries(for: vin).isEmpty)
+        #expect(database.history.recentFuelEntries(for: vin).isEmpty)
         #expect(database.loadVehicleImage(for: vin, angle: 0) == nil)
     }
 
@@ -39,8 +39,8 @@ struct SettingsDataManagementTests {
     func historyBackupHasAnExplicitReadOnlySchema() throws {
         let database = VehicleDatabase.inMemory()
         let vin = "SETTINGS_BACKUP_TEST"
-        let sessionID = database.startChargingSession(vin: vin, startSoc: 30)
-        database.recordChargingSample(
+        let sessionID = database.charging.startChargingSession(vin: vin, startSoc: 30)
+        database.charging.recordChargingSample(
             sessionId: sessionID, vin: vin, soc: 31, powerKw: 11,
             voltage: 230, current: 16
         )

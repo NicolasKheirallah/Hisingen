@@ -118,7 +118,7 @@ struct VehicleActivityTests {
         #expect(loss.intervalStart == start)
         let database = VehicleDatabase.inMemory()
         database.recordActivities([loss])
-        #expect(database.recentActivities(for: loss.vin).first == loss)
+        #expect(database.history.recentActivities(for: loss.vin).first == loss)
         #expect(detector.ingest(sample(30, battery: 58)) == nil)
         detector.reset()
         #expect(detector.ingest(sample(0)) == nil)
@@ -194,8 +194,8 @@ struct VehicleActivityTests {
         let database = VehicleDatabase.inMemory()
         database.recordActivities(events)
         database.recordActivities(events)
-        #expect(database.recentActivities(for: current.vin).count == 2)
-        #expect(database.recentActivities(for: "OTHER-VIN").isEmpty)
+        #expect(database.history.recentActivities(for: current.vin).count == 2)
+        #expect(database.history.recentActivities(for: "OTHER-VIN").isEmpty)
         let version = try database.db.query(sql: "PRAGMA user_version;") { statement in
             statement.step() ? statement.columnInt64(at: 0) : nil
         }

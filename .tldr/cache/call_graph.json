@@ -1,0 +1,694 @@
+{
+  "edges": [
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "main",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "check_links"
+    },
+    {
+      "from_file": "Scripts/check-localization.py",
+      "from_func": "main",
+      "to_file": "Scripts/check-localization.py",
+      "to_func": "extract_keys"
+    },
+    {
+      "from_file": "Scripts/check-localization.py",
+      "from_func": "<module>",
+      "to_file": "Scripts/check-localization.py",
+      "to_func": "main"
+    },
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "markdown_files",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "is_gitignored"
+    },
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "main",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "check_fences"
+    },
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "<module>",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "main"
+    },
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "check_links",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "is_gitignored"
+    },
+    {
+      "from_file": "Scripts/check-docs-links.py",
+      "from_func": "main",
+      "to_file": "Scripts/check-docs-links.py",
+      "to_func": "markdown_files"
+    },
+    {
+      "from_file": "Scripts/check-localization.py",
+      "from_func": "main",
+      "to_file": "Scripts/check-localization.py",
+      "to_func": "sync_locale"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setMode",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setAngleIndex",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "startFade"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "animate"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "loadTextures"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "handlePointer",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "updateTooltip"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "initScene"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "setupLights"
+    },
+    {
+      "from_file": "website/src/utils/smoothScroll.ts",
+      "from_func": "SmoothScrollManager.constructor",
+      "to_file": "website/src/utils/smoothScroll.ts",
+      "to_func": "init"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setAngleIndex",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "leaveSpecial"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.step",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "applyFrustum"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.constructor",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "onResize"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initMagneticButtons"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setAngleIndex",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildHvacSystem"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.bindEvents",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "resize"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupEvents",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "onResize"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.constructor",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "initParticles"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "onPointerMove",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "handlePointerMove",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateX"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "setupEvents"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupObserver",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initScrollProgressBar"
+    },
+    {
+      "from_file": "website/src/components/VehicleViewer.ts",
+      "from_func": "VehicleViewer.initTabs",
+      "to_file": "website/src/components/VehicleViewer.ts",
+      "to_func": "selectAngle"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.loadTextures",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "queue"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "createCallouts"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "createGroundShadow"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setWindSpeed",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.onResize",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "applyFrustum"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "createCarMesh"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "handlePointerMove",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateY"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupEvents",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "refreshDark"
+    },
+    {
+      "from_file": "website/src/main.ts",
+      "from_func": "applyThemeMeta",
+      "to_file": "website/src/main.ts",
+      "to_func": "isDark"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.constructor",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "bindEvents"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.constructor",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "initCardListeners"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "setTab"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.step",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "updateNightLighting"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "handlePointerLeave",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateX"
+    },
+    {
+      "from_file": "website/src/components/VehicleViewer.ts",
+      "from_func": "VehicleViewer.constructor",
+      "to_file": "website/src/components/VehicleViewer.ts",
+      "to_func": "initTabs"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildBatteryPack"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initPrivacyFlow"
+    },
+    {
+      "from_file": "website/src/components/ChargeCalc.ts",
+      "from_func": "ChargeCalc.constructor",
+      "to_file": "website/src/components/ChargeCalc.ts",
+      "to_func": "recalculate"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.bindEvents",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "draw"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.highlightNode",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "setTab"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupObserver",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "onScroll"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildHudPlanes"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "createWindTunnelParticles"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.constructor",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "init"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.leaveSpecial",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "nearestFrame"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "onPointerDown",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "setupEvents"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initSectionScrollTriggers"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initLenisSync"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.draw",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "getPowerAtSoc"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.createNightLighting",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "makeGlowTexture"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initHeroTilt"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setMode",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "updateTurntable"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.initMagneticButtons",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setY"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.initScene",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "applyFrustum"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "handlePointerLeave",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateY"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.constructor",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "draw"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.highlightNode",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "updateHud"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildSensors"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.setSoc",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "draw"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildChassis"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setAngleIndex",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "updateTurntable"
+    },
+    {
+      "from_file": "website/src/main.ts",
+      "from_func": "initThreeStudio",
+      "to_file": "website/src/main.ts",
+      "to_func": "setMode"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.constructor",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "initScene"
+    },
+    {
+      "from_file": "website/src/main.ts",
+      "from_func": "observeWhenNearViewport",
+      "to_file": "website/src/main.ts",
+      "to_func": "start"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.dispose",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "stopLoop"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.initMagneticButtons",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setX"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupEvents",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "stopLoop"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.bindEvents",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "updateTooltip"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "refreshDark"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.initHeroTilt",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateX"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.step",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "updateTurntable"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "onResize"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.initScene",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "stopLoop"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.init",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "resize"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "handlePointer",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "draw"
+    },
+    {
+      "from_file": "website/src/main.ts",
+      "from_func": "openLightbox",
+      "to_file": "website/src/main.ts",
+      "to_func": "setLightbox"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.constructor",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "initObserver"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.loadTextures",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "markReady"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "setupObserver"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.setTheme",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "draw"
+    },
+    {
+      "from_file": "website/src/components/ChargingCurve.ts",
+      "from_func": "ChargingCurve.updateTooltip",
+      "to_file": "website/src/components/ChargingCurve.ts",
+      "to_func": "getPowerAtSoc"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupEvents",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "applyTheme"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.setTab",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "updateHud"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupEvents",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initMetricsScrollTrigger"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.initHeroTilt",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "setRotateY"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.constructor",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "buildChargingSpline"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.markReady",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.initCardListeners",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "applyCardTilt"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.constructor",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "createNightLighting"
+    },
+    {
+      "from_file": "website/src/components/ThreeMetricsField.ts",
+      "from_func": "ThreeMetricsField.initObserver",
+      "to_file": "website/src/components/ThreeMetricsField.ts",
+      "to_func": "animate"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.initScene",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "onPointerUp",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/VehicleViewer.ts",
+      "from_func": "VehicleViewer.constructor",
+      "to_file": "website/src/components/VehicleViewer.ts",
+      "to_func": "preloadImages"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.leaveSpecial",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "startFade"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initHeroSequence"
+    },
+    {
+      "from_file": "website/src/utils/gsapMotion.ts",
+      "from_func": "GsapMotionManager.constructor",
+      "to_file": "website/src/utils/gsapMotion.ts",
+      "to_func": "initGalleryAnimations"
+    },
+    {
+      "from_file": "website/src/components/ThreeTabInspector.ts",
+      "from_func": "ThreeTabInspector.buildSensors",
+      "to_file": "website/src/components/ThreeTabInspector.ts",
+      "to_func": "createBeacon"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setupObserver",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "stopLoop"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.applyTheme",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "requestRender"
+    },
+    {
+      "from_file": "website/src/components/ThreeVehicleStudio.ts",
+      "from_func": "ThreeVehicleStudio.setMode",
+      "to_file": "website/src/components/ThreeVehicleStudio.ts",
+      "to_func": "leaveSpecial"
+    }
+  ],
+  "languages": [
+    "python",
+    "swift",
+    "typescript"
+  ],
+  "timestamp": 1788980592.753629
+}

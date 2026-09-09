@@ -10,23 +10,23 @@ struct ChargeHistoryRegressionTests {
         let vin = "ACTIVE-HISTORY-VIN"
         let startedAt = Date(timeIntervalSince1970: 1_780_000_000)
 
-        let id = database.startChargingSession(
+        let id = database.charging.startChargingSession(
             vin: vin, startSoc: 62, startedAt: startedAt
         )
-        database.recordChargingSample(
+        database.charging.recordChargingSample(
             sessionId: id, vin: vin, soc: 62, powerKw: 4,
             voltage: nil, current: nil, timestamp: startedAt
         )
 
-        #expect(database.activeChargingSession(for: vin)?.id == id)
-        #expect(database.recentChargingSessions(for: vin).isEmpty)
+        #expect(database.charging.activeChargingSession(for: vin)?.id == id)
+        #expect(database.charging.recentChargingSessions(for: vin).isEmpty)
 
-        database.completeChargingSession(
+        database.charging.completeChargingSession(
             id: id, endSoc: 62, energyDeliveredKwh: 0,
             peakPowerKw: 4, averagePowerKw: 4,
             endedAt: startedAt.addingTimeInterval(60)
         )
-        #expect(database.recentChargingSessions(for: vin).isEmpty)
+        #expect(database.charging.recentChargingSessions(for: vin).isEmpty)
     }
 
     @Test("Legacy summary is reconciled with its observed charging samples")
@@ -37,25 +37,25 @@ struct ChargeHistoryRegressionTests {
         let firstObservedAt = startedAt.addingTimeInterval(9 * 60 * 60 + 46 * 60)
         let endedAt = startedAt.addingTimeInterval(10 * 60 * 60 + 12 * 60)
 
-        let id = database.startChargingSession(
+        let id = database.charging.startChargingSession(
             vin: vin, startSoc: 42, startedAt: startedAt
         )
-        database.recordChargingSample(
+        database.charging.recordChargingSample(
             sessionId: id, vin: vin, soc: 70, powerKw: 4,
             voltage: nil, current: nil, timestamp: firstObservedAt
         )
-        database.recordChargingSample(
+        database.charging.recordChargingSample(
             sessionId: id, vin: vin, soc: 72, powerKw: 4,
             voltage: nil, current: nil, timestamp: endedAt
         )
         // Reproduce the old failure: the durable final values were all written as zero.
-        database.completeChargingSession(
+        database.charging.completeChargingSession(
             id: id, endSoc: 42, energyDeliveredKwh: 0,
             peakPowerKw: 4, averagePowerKw: 4, endedAt: endedAt
         )
 
-        let record = try #require(database.recentChargingSessions(for: vin).first)
-        let session = record.toDomainSession(database: database, usableCapacityKwh: 79)
+        let record = try #require(database.charging.recentChargingSessions(for: vin).first)
+        let session = database.charging.domainSession(from: record, usableCapacityKwh: 79)
 
         #expect(session.startBatteryPercentage == 42)
         #expect(session.endBatteryPercentage == 72)
@@ -67,12 +67,12 @@ struct ChargeHistoryRegressionTests {
         #expect(session.samples.first?.timestamp == session.startDate)
         #expect(session.samples.last?.timestamp == session.endDate)
 
-        let dashboardSession = record.reconciled(database: database, usableCapacityKwh: 79)
+        let dashboardSession = database.charging.reconciled(record, usableCapacityKwh: 79)
         #expect(dashboardSession.endSoc == 72)
         #expect(abs(dashboardSession.energyDeliveredKwh - 23.7) < 0.001)
 
-        database.repairLegacyChargingSessions(for: vin, usableCapacityKwh: 79)
-        let repairedRecord = try #require(database.recentChargingSessions(for: vin).first)
+        database.charging.reconcileLegacySummaries(for: vin, usableCapacityKwh: 79)
+        let repairedRecord = try #require(database.charging.recentChargingSessions(for: vin).first)
         #expect(repairedRecord.endSoc == 72)
         #expect(abs(repairedRecord.energyDeliveredKwh - 23.7) < 0.001)
     }
@@ -109,7 +109,7 @@ struct ChargeHistoryRegressionTests {
             at: startedAt.addingTimeInterval(3_720)
         ))
 
-        let session = try #require(database.recentChargingSessions(for: vin).first)
+        let session = try #require(database.charging.recentChargingSessions(for: vin).first)
         #expect(session.startSoc == 40)
         #expect(session.endSoc == 55)
         #expect(abs(session.energyDeliveredKwh - 11.85) < 0.001)
