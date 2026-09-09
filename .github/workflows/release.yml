@@ -234,7 +234,9 @@ jobs:
         run: |
           set -euo pipefail
           PRIVATE_KEY="$RUNNER_TEMP/hisingen-sparkle-private.key"
-          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | base64 --decode > "$PRIVATE_KEY"
+          # The key file must stay in Sparkle's native format: the base64 seed
+          # text, exactly as generate_appcast and verify-sparkle-keypair read it.
+          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > "$PRIVATE_KEY"
           chmod 600 "$PRIVATE_KEY"
           node Scripts/verify-sparkle-keypair.mjs "$PRIVATE_KEY"
           sh Scripts/publish-appcast.sh "$SPARKLE_TOOLS_DIR" "${TAG#v}" "$TAG" Hisingen.app.zip updates "$PRIVATE_KEY"
