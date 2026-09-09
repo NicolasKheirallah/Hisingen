@@ -71,19 +71,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Connectivity details distinguish old or undated readings from current reachability;
   missing signal strength is excluded from the history chart instead of appearing as zero.
 
-### Documentation
-
-- Identified all 25 previously unmapped MyCars fields and the complete observed nested
-  tree against
-  names, types, enum values and artifact provenance in the
-  [MyCars field map](docs/testing/polestar-mycars-field-map.md).
-- Added the [API feature implementation checklist](docs/testing/api-feature-implementation.md)
-  with implementation and verification evidence, pending features and endpoint investigations.
-  New interface descriptions have matching localization keys across all 16 catalogs;
-  untranslated descriptions currently use English fallback text.
-- Added a [cross-provider data coverage inventory](docs/testing/api-data-coverage.md),
-  including remaining nested fields and the limits of schema, fixture and live-account evidence.
-
 ## [1.3.1] - 2026-09-08
 
 ### Added
