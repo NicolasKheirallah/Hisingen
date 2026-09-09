@@ -1637,6 +1637,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "이 업데이트는 공지되었지만 아직 다운로드가 승인되지 않았습니다. 백엔드가 승인하고 조건이 허용되면 차량이 스스로 다운로드하며, 설치는 그 이후에만 시작할 수 있습니다.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "이 차량은 클라우드 기반 다운로드 동의를 지원하지 않습니다. 업데이트는 차량이 백엔드에 자율적으로 접속할 때만 다운로드할 수 있습니다. Polestar 정비 예약을 통해 직접 적용할 수 있습니다.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "이 차량의 간접 TPMS는 정확한 공기압 측정값이 아닌 타이어별 경고 수준을 보고합니다.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "이 상태는 차량의 API에서 제공되며 문제가 보고될 때만 변경되므로 실시간 측정값이 아닙니다. 확인된 결과가 아닌 참고용으로 취급하세요.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "경고 상태만 제공됩니다. 차량은 타이어별 경고 수준을 보고하며 문제를 감지했을 때만 타이어를 표시하므로 이것은 실시간 공기압 측정이 아닙니다.";
 "To" = "까지";
 "to" = "에서";
 "Trend" = "추세";
@@ -1867,7 +1869,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "닫기";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

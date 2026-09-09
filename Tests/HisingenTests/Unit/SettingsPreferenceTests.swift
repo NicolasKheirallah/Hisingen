@@ -29,6 +29,21 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func safeStreamingMigrationEnablesTheNewDefaultOnce() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([AppFeature.vehicleIdentity.rawValue],
+                     forKey: "enabled_features_v2")
+
+        XCTAssertTrue(preferences.features.contains(.realTimeUpdates))
+        var explicitlyDisabled = preferences.features
+        explicitlyDisabled.set(.realTimeUpdates, enabled: false)
+        preferences.features = explicitlyDisabled
+
+        XCTAssertFalse(PreferencesStore(defaults: defaults).features.contains(.realTimeUpdates))
+    }
+
+    @Test
     func safeBulkEnableNeverIncludesRemoteCommands() {
         XCTAssertFalse(AppFeature.safeBulkEnableCases.isEmpty)
         XCTAssertTrue(Set(AppFeature.safeBulkEnableCases).isDisjoint(with: AppFeature.remoteFeatures))
@@ -144,6 +159,44 @@ struct SettingsPreferenceTests {
         XCTAssertEqual(preferences.openingsAlertDelayMinutes, 60)
         XCTAssertEqual(preferences.plugInReminderThreshold, 10)
         XCTAssertEqual(preferences.eveningUnlockedStartHour, 18)
+    }
+
+    @Test
+    func updateCheckIntervalDefaultsToDailyAndSurvivesRelaunch() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(preferences.updateCheckInterval, .daily)
+
+        preferences.updateCheckInterval = .everyHour
+        let relaunched = PreferencesStore(defaults: defaults)
+        XCTAssertEqual(relaunched.updateCheckInterval, .everyHour)
+    }
+
+    @Test
+    func unknownStoredUpdateCheckIntervalFallsBackToDaily() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // A removed case or hand-edited defaults must not break the updater.
+        defaults.set("three_times_a_day", forKey: "update_check_interval")
+        XCTAssertEqual(preferences.updateCheckInterval, .daily)
+    }
+
+    @Test
+    func settingsArchiveCarriesTheUpdateCheckInterval() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        preferences.updateCheckInterval = .weekly
+
+        let data = try preferences.exportSettingsPropertyList()
+        let archive = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+        XCTAssertEqual(archive["update_check_interval"] as? String, UpdateCheckInterval.weekly.rawValue)
+
+        preferences.updateCheckInterval = .daily
+        try preferences.importSettingsPropertyList(data)
+        XCTAssertEqual(preferences.updateCheckInterval, .weekly)
     }
 
     @Test

@@ -10,12 +10,11 @@ audit (SQLITE_TRANSIENT binds, Keychain migration ordering, refresh credential r
 `PRAGMA user_version` migrations, transactional wipes/prunes, session epoch guards, hot-key
 modifier gating, dead `Preferences` removal) landed in code.
 
-1. **God files.** `AppDelegate.swift` (~1k lines), `HisingenContentView.swift` (~3k lines),
-   and `VehicleDatabase.swift` (~1.5k lines) still carry too many responsibilities.
-   `SessionManager` extracted the duplicated credential assembly; the next extractions are a
-   command coordinator out of AppDelegate and per-card view files plus a repository split
-   (`Schema` / `HistoryRepository` / `AuditRepository` / `Exporter`) for VehicleDatabase.
-   Both are mechanical but need UI verification time.
+1. **Large implementation files remain.** `HisingenContentView.swift` and
+   `VehicleDatabase.swift` are still large. `CommandCoordinator`, `VehicleSessionController`,
+   and `VehicleHistoryRecorder` now hide their end-to-end workflows behind smaller interfaces,
+   so future work should deepen a concrete query/export workflow when it changes rather than
+   mechanically splitting SQL into shallow repository wrappers.
 
 2. **`VehicleState` is a 60+-property flat struct.** Adding one field touches the property
    list, the memberwise init, `CodingKeys`, hand-written `init(from:)`, `cacheableCopy`,
@@ -31,10 +30,9 @@ modifier gating, dead `Preferences` removal) landed in code.
    capabilities and images. Correct per endpoint, but a refresh coordinator-level budget or
    stagger would protect against future rate-limit tightening.
 
-5. **Test coverage gaps.** Auth/token-refresh lifecycle is now covered by
-   `RefreshCoordinatorTests.testTokenExpiryMidRunRecoversSessionFromStorage`; still missing:
-   schema-migration fixtures exercising an old database through the `user_version` path,
-   Notifier privacy-body branches, Sparkle end-to-end signed-feed staging coverage, AppIntents dialogs.
+5. **Test coverage gaps.** Auth/token-refresh and old-schema migration paths now have direct
+   regression coverage. Still missing: Notifier privacy-body branches, Sparkle end-to-end
+   signed-feed staging coverage, and AppIntents dialogs.
 
 6. **Localization of Shortcuts dialogs.** All `AppIntents` user-facing strings are English
    only; every other surface resolves through `L10n`.

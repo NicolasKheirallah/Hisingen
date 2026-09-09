@@ -43,14 +43,17 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
     /// Starts only from a real app bundle with a real public key. This deliberately fails
     /// closed for developer builds and incomplete release configuration instead of making
     /// an unauthenticated request to GitHub.
-    func start(automaticallyChecks: Bool, automaticallyDownloads: Bool) {
+    func start(automaticallyChecks: Bool, automaticallyDownloads: Bool, checkInterval: TimeInterval) {
         guard Bundle.main.bundleURL.pathExtension == "app" else {
             Self.logger.debug("Updater unavailable outside an app bundle")
             return
         }
         guard Self.hasConfiguredPublicKey(Bundle.main) else {
-            Self.logger.error("Updater disabled because the embedded Ed25519 public key is missing")
-            state = .failed("This build is not configured for secure updates.")
+            // Expected for source/test builds. Manual checks still explain that secure updates
+            // are unavailable, but startup diagnostics should not report a configuration error
+            // for a capability that was deliberately not packaged.
+            Self.logger.notice("Updater unavailable because this build has no embedded Ed25519 public key")
+            state = .idle
             return
         }
 
@@ -70,7 +73,8 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
         }
         updater.automaticallyChecksForUpdates = automaticallyChecks
         updater.automaticallyDownloadsUpdates = automaticallyDownloads
-        Self.logger.info("Automatic update checks \(automaticallyChecks ? "enabled" : "disabled", privacy: .public); automatic downloads \(automaticallyDownloads ? "enabled" : "disabled", privacy: .public)")
+        updater.updateCheckInterval = max(checkInterval, 1)
+        Self.logger.info("Automatic update checks \(automaticallyChecks ? "enabled" : "disabled", privacy: .public); automatic downloads \(automaticallyDownloads ? "enabled" : "disabled", privacy: .public); interval \(Int(max(checkInterval, 1)), privacy: .public) seconds")
     }
 
     func checkForUpdates() {
@@ -88,10 +92,11 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
         controller.updater.checkForUpdates()
     }
 
-    func configure(automaticallyChecks: Bool, automaticallyDownloads: Bool) {
+    func configure(automaticallyChecks: Bool, automaticallyDownloads: Bool, checkInterval: TimeInterval) {
         guard didStart else { return }
         controller.updater.automaticallyChecksForUpdates = automaticallyChecks
         controller.updater.automaticallyDownloadsUpdates = automaticallyDownloads
+        controller.updater.updateCheckInterval = max(checkInterval, 1)
         Self.logger.info("Update preferences changed")
     }
 

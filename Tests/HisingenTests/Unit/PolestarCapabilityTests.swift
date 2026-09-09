@@ -69,6 +69,42 @@ struct PolestarCapabilityTests {
         #expect(!other.unavailable)
     }
 
+    @Test func unimplementedCapabilityRemainsUnsupportedDuringBackoff() async throws {
+        let api = makeAPI()
+        let first: OptionalCapability<Int> = try await api.optionalCapability(
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
+        ) {
+            throw PolestarError.grpcUnimplemented(service: "dashboard")
+        }
+        let retry: OptionalCapability<Int> = try await api.optionalCapability(
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
+        ) {
+            Issue.record("Unsupported capability issued another request during backoff")
+            return 42
+        }
+        #expect(first.unsupported)
+        #expect(retry.unsupported)
+        #expect(!first.unavailable)
+        #expect(!retry.unavailable)
+    }
+
+    @Test func serviceAuthorizationGapRemainsUnsupportedDuringBackoff() async throws {
+        let api = makeAPI()
+        let first: OptionalCapability<Int> = try await api.optionalCapability(
+            .vehicleErrors, enabled: true, vin: "VIN-A"
+        ) { throw PolestarError.permissionDenied(operation: "errors") }
+        let retry: OptionalCapability<Int> = try await api.optionalCapability(
+            .vehicleErrors, enabled: true, vin: "VIN-A"
+        ) {
+            Issue.record("Permission-gated capability issued another request during backoff")
+            return 42
+        }
+        #expect(first.unsupported)
+        #expect(retry.unsupported)
+        #expect(!first.unavailable)
+        #expect(!retry.unavailable)
+    }
+
     @Test func featureAliasesShareTheSameReadingCache() async throws {
         let api = makeAPI()
         let first: OptionalCapability<Int> = try await api.optionalCapability(.exteriorStatus, enabled: true, vin: "VIN-A") { 42 }

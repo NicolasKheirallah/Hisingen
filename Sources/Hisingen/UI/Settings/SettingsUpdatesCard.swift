@@ -33,7 +33,7 @@ struct SettingsUpdatesCard: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Automatically check for updates"))
                             .font(.system(size: 12, weight: .medium))
-                        Text(L10n.text("Check quietly once a day while Hisingen is running"))
+                        Text(L10n.text("Check quietly in the background while Hisingen is running"))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -53,6 +53,27 @@ struct SettingsUpdatesCard: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .accessibilityLabel(L10n.text("Automatically check for updates"))
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.text("Check frequency"))
+                            .font(.system(size: 12, weight: .medium))
+                        Text(L10n.text("How often Hisingen looks for new versions"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Picker("", selection: binder(\.updateCheckInterval, .updater)) {
+                        ForEach(UpdateCheckInterval.allCases, id: \.self) { interval in
+                            Text(interval.title).tag(interval)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: 160)
+                    .accessibilityLabel(L10n.text("Check frequency"))
+                    .disabled(!prefs.automaticallyChecksForUpdates)
                 }
 
                 Divider().opacity(0.4)

@@ -1694,6 +1694,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement.";
 "To" = "To";
 "Trend" = "Trend";
 "Trending %@%@ kWh/100km per month" = "Trending %@%@ kWh/100km per month";
@@ -2400,3 +2402,11 @@
 "Vehicle Dynamic Calculation. Estimated time until the high-voltage battery reaches the configured charge target." = "Vehicle Dynamic Calculation. Estimated time until the high-voltage battery reaches the configured charge target.";
 "Who authored the software schedule, as reported by the backend." = "Who authored the software schedule, as reported by the backend.";
 "Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports." = "Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.";
+
+"Check frequency" = "Check frequency";
+"Check quietly in the background while Hisingen is running" = "Check quietly in the background while Hisingen is running";
+"How often Hisingen looks for new versions" = "How often Hisingen looks for new versions";
+"Every Hour" = "Every Hour";
+"Every 6 Hours" = "Every 6 Hours";
+"Weekly" = "Weekly";
+"Monthly" = "Monthly";

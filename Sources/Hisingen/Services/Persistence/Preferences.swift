@@ -612,6 +612,38 @@ enum FuelEconomyUnit: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// How often Sparkle automatically consults the signed update feed while Hisingen runs.
+/// Raw values are the stored UserDefaults strings; changing them would silently reset
+/// existing installations' selections.
+enum UpdateCheckInterval: String, CaseIterable, Codable, Sendable {
+    case everyHour = "hour"
+    case everySixHours = "six_hours"
+    case daily = "daily"
+    case weekly = "weekly"
+    case monthly = "monthly"
+
+    var title: String {
+        switch self {
+        case .everyHour: return L10n.text("Every Hour")
+        case .everySixHours: return L10n.text("Every 6 Hours")
+        case .daily: return L10n.text("Daily")
+        case .weekly: return L10n.text("Weekly")
+        case .monthly: return L10n.text("Monthly")
+        }
+    }
+
+    /// Sparkle schedules automatic checks this many seconds after its last completed check.
+    var seconds: TimeInterval {
+        switch self {
+        case .everyHour: return 3600
+        case .everySixHours: return 21600
+        case .daily: return 86400
+        case .weekly: return 604800
+        case .monthly: return 2592000
+        }
+    }
+}
+
 enum EnergyConsumptionUnit: String, CaseIterable, Codable, Sendable {
     case kwhPer100Km = "kwh_per_100km"
     case kwhPer100Miles = "kwh_per_100mi"

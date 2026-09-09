@@ -230,6 +230,12 @@ struct FormattingTests {
     }
 
     @Test
+    func testTelematicsQueryOmitsRemovedBatteryCapacityField() {
+        let query = PolestarAPI.telematicsQuery(features: .default)
+        XCTAssertFalse(query.contains("reportedBatteryCapacityKwh"))
+    }
+
+    @Test
     func testMissingCoreTelemetryKeepsLastKnownValueForSameVIN() {
         let previous = vehicle(vin: "VIN-A", battery: 64)
         let current = vehicle(vin: "VIN-A", battery: nil)
@@ -249,6 +255,46 @@ struct FormattingTests {
         XCTAssertEqual(merged.exteriorStatus?.isLocked, true)
         XCTAssertTrue(merged.retainedDataCategories.contains(.exteriorStatus))
         XCTAssertNotNil(merged.retainedDataAt)
+    }
+
+    @Test
+    func testUnsupportedConnectivityDoesNotRetainAnObsoleteReading() {
+        var previous = vehicle(vin: "VIN-A")
+        previous.connectivity = VehicleConnectivity(state: .connected, networkType: "LTE")
+        var current = vehicle(vin: "VIN-A")
+        var probes = VehicleProbedCapabilities()
+        probes.record(.connectivity, as: .unavailable)
+        current.probedCapabilities = probes
+
+        var features = FeatureSelection.default
+        features.set(.connectivityDiagnostics, enabled: true)
+        let merged = current.mergingLastKnown(from: previous, features: features)
+
+        XCTAssertNil(merged.connectivity)
+        XCTAssertFalse(merged.retainedDataCategories.contains(.connectivityDiagnostics))
+    }
+
+    @Test
+    func testRetainedDataNoticeIdentityChangesOnlyForANewIncident() throws {
+        let sourceAt = Date(timeIntervalSince1970: 1_700_000_000)
+        var first = vehicle(vin: "VIN-A")
+        first.retainedDataCategories = [.exteriorStatus, .vehicleLocation]
+        first.retainedDataAt = sourceAt
+        var sameIncident = first
+        sameIncident.fetchedAt = sourceAt.addingTimeInterval(300)
+        var differentCategory = sameIncident
+        differentCategory.retainedDataCategories = [.exteriorStatus]
+        var newerIncident = first
+        newerIncident.retainedDataAt = sourceAt.addingTimeInterval(600)
+
+        let firstID = try XCTUnwrap(RetainedDataNoticeID(state: first))
+        XCTAssertEqual(firstID, RetainedDataNoticeID(state: sameIncident))
+        XCTAssertNotEqual(firstID, RetainedDataNoticeID(state: differentCategory))
+        XCTAssertNotEqual(firstID, RetainedDataNoticeID(state: newerIncident))
+
+        var fresh = first
+        fresh.retainedDataCategories = []
+        XCTAssertNil(RetainedDataNoticeID(state: fresh))
     }
 
     @Test

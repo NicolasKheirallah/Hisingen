@@ -27,7 +27,10 @@ struct RefreshCoordinatorTests {
                                            readPassword: { nil }, clearPassword: {})
         )
         await withCheckedContinuation { continuation in
-            coordinator.onState = { _ in continuation.resume() }
+            coordinator.onEvent = { event in
+                guard case .state = event else { return }
+                continuation.resume()
+            }
             coordinator.start(preferredVIN: "YSMTEST")
             coordinator.refreshNow()
             coordinator.refreshNow()
@@ -64,7 +67,10 @@ struct RefreshCoordinatorTests {
         )
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            coordinator.onState = { _ in continuation.resume() }
+            coordinator.onEvent = { event in
+                guard case .state = event else { return }
+                continuation.resume()
+            }
             coordinator.start(preferredVIN: "YSMTEST")
         }
 
@@ -72,7 +78,10 @@ struct RefreshCoordinatorTests {
         // the coordinator must re-enter via the *stored* token, not wedge on `.noStoredSession`.
         await provider.expireSession()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            coordinator.onState = { _ in continuation.resume() }
+            coordinator.onEvent = { event in
+                guard case .state = event else { return }
+                continuation.resume()
+            }
             coordinator.refreshNow()
         }
 

@@ -18,7 +18,7 @@ Hisingen builds in the **Swift 6 language mode** with complete concurrency check
 | `ReverseGeocoder` | `actor` | in-memory geocode cache | Actor isolation |
 | `UpdateService` | `@MainActor` class | Sparkle controller and UI state | Main-actor confinement; Sparkle serializes update sessions |
 | `Preferences` | `@MainActor enum` | none directly (UserDefaults façade) | Main-actor confinement |
-| `VehicleStateStore` | plain `final class`, **no isolation annotation** | none held across calls — reads/writes UserDefaults fresh each time | **Not compiler-enforced** — see [technical-debt.md](technical-debt.md); safe today only because both callers (`RefreshCoordinator`, `Notifier`) happen to be `@MainActor` |
+| `VehicleStateStore` / `VehicleHistoryRecorder` | `@MainActor` classes | migration cache and ordered snapshot-to-history ingestion state | Compiler-enforced main-actor confinement |
 | `Keychain` / `KeychainStore` | `struct` (stateless) delegating to `InMemorySecretCache` | none itself | Delegates to the manual-lock singleton below |
 | `InMemorySecretCache` | `final class`, `@unchecked Sendable` | `[account: secret]` dictionary | `NSLock` — the one deliberate manual-lock pattern for shared mutable state; see [technical-debt.md](technical-debt.md) for its cache-key caveat |
 | `OAuthRedirectDelegate` (Polestar login) | `final class`, `@unchecked Sendable`, `NSObject`/`URLSessionTaskDelegate` | captured redirect `URL` | `NSLock` — required because `URLSessionTaskDelegate` callbacks can't be actor-isolated |

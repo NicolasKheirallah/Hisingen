@@ -2,6 +2,7 @@ import Foundation
 
 extension PolestarAPI {
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        guard commandCatalog.implements(command) else { throw RemoteCommandError.unsupported }
         // Membership, not selection equality: the background garage scan re-points
         // `selectedVIN` while fetching other vehicles, and a strict equality check here
         // made a perfectly valid command for the user's car fail with "missing context"

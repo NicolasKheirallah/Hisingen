@@ -79,7 +79,9 @@ struct APILogEntry: Codable, Equatable, Sendable {
 /// memory-only to remain hermetic.
 actor APIDiagnosticLogStore {
     static let shared = APIDiagnosticLogStore(persistsToDisk: true)
-    static let maximumEntries = 2_000
+    // Metadata for a fully enabled vehicle can exceed 2,000 rows in 24 hours. Keep enough
+    // rows for the advertised lookback; the independent payload budget still caps disk use.
+    static let maximumEntries = 10_000
     /// Matches the diagnostic bundle's unified-log lookback window.
     static let retentionInterval: TimeInterval = 24 * 3_600
     private static let persistDebounce: Duration = .seconds(3)
@@ -131,7 +133,9 @@ actor APIDiagnosticLogStore {
             payloadOmissionReason: omissionReason,
             durationMilliseconds: max(0, Int(completedAt.timeIntervalSince(startedAt) * 1_000)),
             errorType: error.map { Self.describeError($0) },
-            semanticErrorType: sensitiveResponse ? nil : Self.semanticError(in: responseData),
+            semanticErrorType: sensitiveResponse ? nil : (
+                Self.semanticError(in: responseData) ?? Self.grpcSemanticError(in: operation)
+            ),
             appVersion: Self.appVersion,
             appBuild: Self.appBuild,
             processIdentifier: ProcessInfo.processInfo.processIdentifier,
@@ -238,6 +242,14 @@ actor APIDiagnosticLogStore {
     }
 
     // MARK: - Sanitization
+
+    private static func grpcSemanticError(in operation: String) -> String? {
+        guard let marker = operation.range(of: "grpc-status=") else { return nil }
+        let suffix = operation[marker.upperBound...]
+        let status = suffix.prefix { $0.isNumber }
+        guard !status.isEmpty, status != "0" else { return nil }
+        return "grpc:\(status)"
+    }
 
     /// True when `error` is (or wraps) a `URLError.cancelled` / NSURLErrorDomain -999.
     private static func isCancellation(_ error: Error) -> Bool {

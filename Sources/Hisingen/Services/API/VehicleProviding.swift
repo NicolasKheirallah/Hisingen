@@ -1,7 +1,7 @@
 import Foundation
 
 
-protocol VehicleProviding: Sendable {
+protocol VehicleProviding: RemoteCommandExecuting {
     var brand: VehicleBrand { get }
     var cars: [CarSummary] { get async }
     /// True when the provider already holds enough state (a refresh token, known vehicles, and
@@ -19,16 +19,24 @@ protocol VehicleProviding: Sendable {
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
     /// Requires a session, but no prior vehicle-selection call.
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
-    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
 }
 
 enum VehicleLiveUpdate: Sendable {
+    case connected(activeTransportStreams: Int)
     case battery(GrpcBatteryExtras)
     case exterior(ExteriorSnapshot, reportedAt: Date?)
 }
 
+enum VehicleLiveStreamPurpose: Equatable, Sendable {
+    case charging
+    case exteriorConfirmation
+}
+
 protocol VehicleLiveStreaming: Sendable {
-    func liveVehicleUpdates(vin: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error>
+    func liveVehicleUpdates(
+        vin: String, purpose: VehicleLiveStreamPurpose
+    ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error>
+    func refreshLiveStreamAuthorization() async throws
 }
 
 extension PolestarAPI: VehicleProviding {}

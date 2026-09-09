@@ -3,27 +3,9 @@ import Foundation
 extension VolvoAPI {
     func perform(_ request: URLRequest, limit: Int = 2_000_000,
                  operation: String = "HTTP request") async throws -> (Data, HTTPURLResponse) {
-        let startedAt = Date()
-        do {
-            let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: limit, operation: operation, provider: .volvo
-            )
-            guard let http = response as? HTTPURLResponse else {
-                throw VolvoError.invalidResponse(operation: operation)
-            }
-            await APIDiagnosticLogStore.shared.record(
-                provider: .volvo, request: request, operation: operation,
-                statusCode: http.statusCode, responseBytes: data.count,
-                responseData: data, startedAt: startedAt
-            )
-            return (data, http)
-        } catch {
-            await APIDiagnosticLogStore.shared.record(
-                provider: .volvo, request: request, operation: operation,
-                startedAt: startedAt, error: error
-            )
-            throw error
-        }
+        try await HTTPExchange.data(
+            for: request, using: session, limit: limit, operation: operation, provider: .volvo
+        )
     }
 
     static func formBody(_ fields: [String: String]) -> Data? {

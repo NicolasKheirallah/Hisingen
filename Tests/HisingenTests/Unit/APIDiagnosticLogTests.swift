@@ -2,7 +2,53 @@ import Foundation
 import Testing
 @testable import Hisingen
 
+@Suite(.serialized)
 struct APIDiagnosticLogTests {
+    @Test
+    func exchangeReturnsTypedHTTPResponseAndRecordsTheBoundedBody() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HTTPExchangeTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        HTTPExchangeTransport.response.set(status: 200, data: Data(#"{"ok":true}"#.utf8))
+        await APIDiagnosticLogStore.shared.clear()
+
+        let request = URLRequest(url: URL(string: "https://exchange.example.test/value")!)
+        let (data, response) = try await HTTPExchange.data(
+            for: request, using: session, limit: 1_024,
+            operation: "bounded exchange test", provider: .polestar
+        )
+
+        #expect(response.statusCode == 200)
+        #expect(data == Data(#"{"ok":true}"#.utf8))
+        let entries = await APIDiagnosticLogStore.shared.snapshot()
+        let entry = try #require(entries.last(where: { $0.operation == "bounded exchange test" }))
+        #expect(entry.responseBytes == data.count)
+    }
+
+    @Test
+    func exchangeRejectsOversizedBodiesBeforeReturningPartialData() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HTTPExchangeTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        HTTPExchangeTransport.response.set(status: 200, data: Data(repeating: 0x61, count: 128))
+
+        let request = URLRequest(url: URL(string: "https://exchange.example.test/large")!)
+        do {
+            _ = try await HTTPExchange.data(
+                for: request, using: session, limit: 64,
+                operation: "bounded exchange test", provider: .polestar
+            )
+            Issue.record("Oversized body was accepted")
+        } catch let error as PolestarError {
+            guard case .responseTooLarge = error else {
+                Issue.record("Unexpected mapped error: \(error)")
+                return
+            }
+        }
+    }
+
     @Test
     func recordRedactsVehicleIdentifiersAndSecrets() async throws {
         let store = APIDiagnosticLogStore()
@@ -66,6 +112,20 @@ struct APIDiagnosticLogTests {
             responseData: Data(#"{"errors":[{"message":"denied","extensions":{"code":"AuthenticationFailure"}}]}"#.utf8),
             startedAt: Date())
         #expect(await store.snapshot().first?.semanticErrorType == "graphql:AuthenticationFailure")
+    }
+
+    @Test
+    func grpcFailureInsideHTTP200IsClassifiedSemantically() async throws {
+        let store = APIDiagnosticLogStore()
+        await store.record(
+            provider: .polestar, request: nil,
+            operation: "gRPC errors (grpc-status=14, grpc-message=Authorization failed)",
+            statusCode: 200, startedAt: Date(),
+            error: PolestarError.permissionDenied(operation: "errors")
+        )
+        let entry = try #require(await store.snapshot().first)
+        #expect(entry.errorType != nil)
+        #expect(entry.semanticErrorType == "grpc:14")
     }
 
     @Test
@@ -203,4 +263,41 @@ struct APIDiagnosticLogTests {
         #expect(entries.first?.operation.hasSuffix("poll 100") == true)
         #expect(entries.last?.operation.hasSuffix("poll \(APIDiagnosticLogStore.maximumEntries + 99)") == true)
     }
+}
+
+private final class HTTPExchangeResponse: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: (status: Int, data: Data) = (200, Data())
+
+    func set(status: Int, data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        value = (status, data)
+    }
+
+    func get() -> (status: Int, data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
+private final class HTTPExchangeTransport: URLProtocol, @unchecked Sendable {
+    static let response = HTTPExchangeResponse()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let value = Self.response.get()
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: value.status, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Length": "\(value.data.count)"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: value.data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

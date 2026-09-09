@@ -1,6 +1,22 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Identifies one continuous last-known-data incident. A dismissal survives ordinary view
+/// refreshes for that incident, while a different source timestamp or affected category gets
+/// a new identity and is surfaced again.
+struct RetainedDataNoticeID: Hashable {
+    let vin: String
+    let sourceAt: Date?
+    let categories: [String]
+
+    init?(state: VehicleState) {
+        guard !state.retainedDataCategories.isEmpty else { return nil }
+        vin = state.vin
+        sourceAt = state.retainedDataAt
+        categories = state.retainedDataCategories.map(\.rawValue).sorted()
+    }
+}
+
 @MainActor
 struct HisingenContentView: View {
     let state: VehicleState?
@@ -33,6 +49,7 @@ struct HisingenContentView: View {
     @State private var selectedTab: Tab
     private let tabSelection: Binding<Tab>
     @State private var refreshRotation: Double = 0
+    @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
     @Namespace private var tabIndicatorNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.preferencesStore) private var preferences
@@ -166,8 +183,9 @@ struct HisingenContentView: View {
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: HisingenTheme.sectionSpacing) {
-                            if !state.retainedDataCategories.isEmpty {
-                                retainedDataNotice(state)
+                            if let noticeID = RetainedDataNoticeID(state: state),
+                               noticeID != dismissedRetainedDataNotice {
+                                retainedDataNotice(state, id: noticeID)
                             }
                             switch selectedTab {
                             case .vehicle:
@@ -236,11 +254,12 @@ struct HisingenContentView: View {
         }
     }
 
-    private func retainedDataNotice(_ state: VehicleState) -> some View {
+    private func retainedDataNotice(_ state: VehicleState, id: RetainedDataNoticeID) -> some View {
         let names = state.retainedDataCategories.map(\.title).joined(separator: ", ")
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: "clock.badge.exclamationmark")
                 .foregroundStyle(HisingenTheme.semanticWarning)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(L10n.text("Showing last-known values"))
                     .font(.system(size: 11, weight: .semibold))
@@ -254,13 +273,27 @@ struct HisingenContentView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .accessibilityElement(children: .combine)
             Spacer()
+            Button {
+                withAnimation(reduceMotion ? nil : Motion.selection) {
+                    dismissedRetainedDataNotice = id
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .accessibilityLabel(L10n.text("Dismiss"))
+            .help(L10n.text("Dismiss"))
         }
         .padding(9)
         .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(HisingenTheme.semanticWarning.opacity(0.22)))
         .help(L10n.text("The newest provider refresh did not include these fields. Hisingen retained the previous successful readings and labels them here instead of presenting them as live."))
-        .accessibilityElement(children: .combine)
     }
 
 

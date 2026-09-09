@@ -5,6 +5,7 @@ import OSLog
 struct OptionalCapability<Value: Sendable>: Sendable {
     let value: Value?
     let unavailable: Bool
+    let unsupported: Bool
 }
 
 struct CapabilityCacheEntry {
@@ -44,20 +45,12 @@ actor PolestarAPI {
     let commandClientID = "lp8dyrd_10"
     let commandRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
 
-    var commandAuthorizationEpoch = 0
-    var commandAuthorizationInProgress = false
-    var webAuthorizationInProgress = false
+    var commandAuthorization = PolestarAuthorizationFlow()
+    var webAuthorization = PolestarAuthorizationFlow()
     var saveCommandToken: @Sendable (String) throws -> Void
     var commandAccessToken: String?
     var commandRefreshToken: String?
     var commandTokenExpiry: Date?
-    var commandPendingVerifier: String?
-    var commandPendingState: String?
-    /// When the current "Authorize Remote Commands" browser flow began. Used to expire a
-    /// pending PKCE pair the user walked away from rather than leaving it completable forever.
-    var commandPendingSince: Date?
-    var webPendingVerifier: String?
-    var webPendingState: String?
     /// Single-flight guard for the command client's refresh grant (see `commandClientAuthorization`).
     var commandRefreshTask: Task<CommandClientAuthorization, Never>?
     var commandRefreshTaskID: UUID?
@@ -71,6 +64,10 @@ actor PolestarAPI {
     var accessToken: String?
     var refreshToken: String?
     var tokenExpiry: Date?
+    /// Lifetime advertised by the latest grant. Polestar commonly returns five-minute access
+    /// tokens, so a fixed five-minute renewal margin makes every caller refresh immediately.
+    /// The margin below scales with this value and keeps most of the token usable.
+    var tokenLifetime: TimeInterval = 0
     var refreshTask: Task<TokenResponseDTO, Error>?
     var refreshTaskID: UUID?
 
@@ -122,6 +119,7 @@ actor PolestarAPI {
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
     var capabilityBackoff: [String: [String: Date]] = [:]
+    var unsupportedCapabilities: Set<String> = []
     var capabilityCache: [String: CapabilityCacheEntry] = [:]
     var remoteCommandsInFlight: Set<String> = []
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
@@ -339,9 +337,6 @@ actor PolestarAPI {
         }
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
-        webAuthorizationInProgress = true
-        webPendingVerifier = verifier
-        webPendingState = state
         guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
             throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
         }
@@ -355,6 +350,7 @@ actor PolestarAPI {
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
         }
+        webAuthorization.begin(verifier: verifier, state: state)
         return (url, oidcRedirectURL)
     }
 
@@ -362,29 +358,12 @@ actor PolestarAPI {
     /// captured by `PolestarWebSignInPresenter`.
     func completeWebAuthorization(callbackURL: URL, preferredVIN: String? = nil,
                                   features: FeatureSelection = .default) async throws {
-        guard let verifier = webPendingVerifier, let expectedState = webPendingState else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        guard callbackURL.scheme == oidcRedirectURL.scheme,
-              callbackURL.host == oidcRedirectURL.host,
-              Self.normalizedPath(callbackURL) == Self.normalizedPath(oidcRedirectURL) else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        guard Self.queryValue("state", from: callbackURL) == expectedState else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
         let epoch = sessionEpoch
-        defer { if epoch == sessionEpoch { webAuthorizationInProgress = false } }
-        webPendingVerifier = nil
-        webPendingState = nil
-        if let error = Self.queryValue("error", from: callbackURL) {
-            throw PolestarError.permissionDenied(operation: error)
-        }
-        guard Self.queryValue("state", from: callbackURL) == expectedState,
-              let code = Self.queryValue("code", from: callbackURL) else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        try await exchangeCodeForToken(code, verifier: verifier)
+        let completion = try webAuthorization.consume(
+            callbackURL: callbackURL, redirectURL: oidcRedirectURL
+        )
+        defer { if epoch == sessionEpoch { webAuthorization.finish(generation: completion.generation) } }
+        try await exchangeCodeForToken(completion.code, verifier: completion.verifier)
         try await fetchCarInfo(preferredVIN: preferredVIN)
         if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
@@ -401,26 +380,22 @@ actor PolestarAPI {
     ///
     /// Any macOS app can also register `polestar-explore://`, so a hostile app that wins the
     /// LaunchServices registration could receive this callback. It is not exploitable: the
-    /// authorization `code` is PKCE-bound to `commandPendingVerifier`, which never leaves this
+    /// authorization `code` is PKCE-bound to the command flow's verifier, which never leaves this
     /// process, and `completeCommandAuthorization` rejects any callback whose `state` does not
-    /// match `commandPendingState`. This is the same exposure the official Polestar app carries.
+    /// match the pending state. This is the same exposure the official Polestar app carries.
     func beginCommandAuthorization() async throws -> URL {
         try Task.checkCancellation()
         invalidateCommandAuthorization()
         let epoch = sessionEpoch
-        let commandEpoch = commandAuthorizationEpoch
+        let commandEpoch = commandAuthorization.generation
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
         try requireSession(epoch)
-        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
+        guard commandAuthorization.isCurrent(commandEpoch) else { throw CancellationError() }
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
-        commandAuthorizationInProgress = true
-        commandPendingVerifier = verifier
-        commandPendingState = state
-        commandPendingSince = Date()
         guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
             throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
         }
@@ -434,50 +409,25 @@ actor PolestarAPI {
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
         }
+        commandAuthorization.begin(verifier: verifier, state: state)
         return url
     }
 
     /// Completes command-client authorization from the `polestar-explore://` callback the OS
     /// handed back after the user signed in through their real browser.
     func completeCommandAuthorization(callbackURL: URL) async throws {
-        guard let verifier = commandPendingVerifier, let expectedState = commandPendingState else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        let startedAt = commandPendingSince
-        // A flow the user began and walked away from should not stay completable indefinitely —
-        // a much later `polestar-explore://` callback matching this state is more likely stale
-        // or hostile than a legitimate resumption.
-        if let startedAt, Date().timeIntervalSince(startedAt) > 600 {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        guard callbackURL.scheme == commandRedirectURL.scheme,
-              callbackURL.host == commandRedirectURL.host,
-              Self.normalizedPath(callbackURL) == Self.normalizedPath(commandRedirectURL) else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        guard Self.queryValue("state", from: callbackURL) == expectedState else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
         let epoch = sessionEpoch
-        let commandEpoch = commandAuthorizationEpoch
-        defer { if commandEpoch == commandAuthorizationEpoch { commandAuthorizationInProgress = false } }
-        commandPendingVerifier = nil
-        commandPendingState = nil
-        commandPendingSince = nil
-        if let error = Self.queryValue("error", from: callbackURL) {
-            throw PolestarError.permissionDenied(operation: error)
-        }
-        guard Self.queryValue("state", from: callbackURL) == expectedState,
-              let code = Self.queryValue("code", from: callbackURL) else {
-            throw PolestarError.authenticationRequired(.callbackRejected)
-        }
-        let token = try await exchangeCode(code, verifier: verifier,
+        let completion = try commandAuthorization.consume(
+            callbackURL: callbackURL, redirectURL: commandRedirectURL, maximumAge: 600
+        )
+        defer { commandAuthorization.finish(generation: completion.generation) }
+        let token = try await exchangeCode(completion.code, verifier: completion.verifier,
                                            clientID: commandClientID, redirectURI: commandRedirectURL)
         try requireSession(epoch)
-        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
+        guard commandAuthorization.isCurrent(completion.generation) else { throw CancellationError() }
         try await verifyCommandAccount(accessToken: token.accessToken)
         try requireSession(epoch)
-        guard commandEpoch == commandAuthorizationEpoch else { throw CancellationError() }
+        guard commandAuthorization.isCurrent(completion.generation) else { throw CancellationError() }
         guard let durableRefresh = token.refreshToken, !durableRefresh.isEmpty else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
@@ -516,15 +466,18 @@ actor PolestarAPI {
     }
 
     func refreshTokenIfNeeded() async throws {
-        guard let expiry = tokenExpiry else {
-            throw PolestarError.authenticationRequired(.expiredSession)
-        }
-        if expiry.timeIntervalSinceNow < 300 { try await refreshAccessToken(force: false) }
+        try await refreshAccessToken(force: false)
     }
 
-    func refreshAccessToken(force: Bool) async throws {
+    /// Returns early when another request has already replaced the token rejected by the
+    /// server. This closes the late-arrival race where a fan-out of 401 responses could each
+    /// force a separate refresh after the original single-flight task completed.
+    func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil) async throws {
         let requestEpoch = sessionEpoch
-        if !force, let expiry = tokenExpiry, expiry.timeIntervalSinceNow >= 300 { return }
+        if force, let rejectedAccessToken, accessToken != rejectedAccessToken { return }
+        let renewalMargin = Self.tokenRenewalMargin(lifetime: tokenLifetime)
+        if !force, let expiry = tokenExpiry, accessToken != nil,
+           expiry.timeIntervalSinceNow >= renewalMargin { return }
         if let refreshTask {
             try await applyRefreshResult(from: refreshTask, requestEpoch: requestEpoch)
             return
@@ -579,7 +532,8 @@ actor PolestarAPI {
         // app replaying the dead token. A failed persist costs a restart, not the session.
         accessToken = token.accessToken
         refreshToken = renewableToken
-        tokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        tokenLifetime = TimeInterval(token.expiresIn)
+        tokenExpiry = Date().addingTimeInterval(tokenLifetime)
         if let renewableToken, renewableToken != previousRefreshToken {
             do {
                 try keychain.saveSessionToken(renewableToken)
@@ -589,44 +543,37 @@ actor PolestarAPI {
         }
     }
 
+    /// Refresh near expiry while avoiding a margin as large as a short-lived token. Ten per
+    /// cent, clamped to 5...60 seconds, absorbs clock and transit skew without discarding most
+    /// of a five-minute grant.
+    static func tokenRenewalMargin(lifetime: TimeInterval) -> TimeInterval {
+        guard lifetime > 0 else { return 60 }
+        return min(60, max(5, lifetime * 0.1))
+    }
+
     static func requestToken(request: URLRequest, session: URLSession,
                                      invalidReason: AuthFailureReason) async throws -> TokenResponseDTO {
-        let startedAt = Date()
-        do {
-            let (data, response) = try await HTTPBodyReader.data(
-                for: request, using: session, limit: 256_000, operation: "token response", provider: .polestar
-            )
-            guard let http = response as? HTTPURLResponse else {
-                throw PolestarError.invalidResponse(operation: "token response")
-            }
-            if http.statusCode == 400 {
-                throw PolestarError.authenticationRequired(invalidReason)
-            }
-            if let failure = PolestarError.httpFailure(
-                statusCode: http.statusCode,
-                retryAfter: retryAfter(from: http),
-                authenticationReason: invalidReason,
-                forbiddenIsAuthentication: true,
-                operation: "token request"
-            ) {
-                throw failure
-            }
-            guard let token = try? JSONDecoder().decode(TokenResponseDTO.self, from: data),
-                  token.expiresIn > 0 else {
-                throw PolestarError.decoding(operation: "token response")
-            }
-            await APIDiagnosticLogStore.shared.record(
-                provider: .polestar, request: request, operation: "Polestar token request",
-                statusCode: http.statusCode, responseBytes: data.count, responseData: data,
-                startedAt: startedAt)
-            return token
-        } catch {
-            let wrapped: Error = (error as? URLError).map(PolestarError.network) ?? error
-            await APIDiagnosticLogStore.shared.record(
-                provider: .polestar, request: request, operation: "Polestar token request",
-                startedAt: startedAt, error: wrapped)
-            throw wrapped
+        let (data, response) = try await HTTPExchange.data(
+            for: request, using: session, limit: 256_000,
+            operation: "Polestar token request", provider: .polestar
+        )
+        if response.statusCode == 400 {
+            throw PolestarError.authenticationRequired(invalidReason)
         }
+        if let failure = PolestarError.httpFailure(
+            statusCode: response.statusCode,
+            retryAfter: retryAfter(from: response),
+            authenticationReason: invalidReason,
+            forbiddenIsAuthentication: true,
+            operation: "token request"
+        ) {
+            throw failure
+        }
+        guard let token = try? JSONDecoder().decode(TokenResponseDTO.self, from: data),
+              token.expiresIn > 0 else {
+            throw PolestarError.decoding(operation: "token response")
+        }
+        return token
     }
 
 
@@ -648,7 +595,7 @@ actor PolestarAPI {
             let (data, response) = try await perform(request, operation: operation)
             if response.statusCode == 401 || response.statusCode == 403 {
                 if attempt == 0 {
-                    try await refreshAccessToken(force: true)
+                    try await refreshAccessToken(force: true, replacing: bearerToken)
                     guard let newToken = accessToken else {
                         throw PolestarError.authenticationRequired(.expiredSession)
                     }
@@ -671,7 +618,7 @@ actor PolestarAPI {
             if decoded.data == nil, let errors = decoded.errors,
                Self.containsAuthenticationError(errors) {
                 if attempt == 0 {
-                    try await refreshAccessToken(force: true)
+                    try await refreshAccessToken(force: true, replacing: bearerToken)
                     guard let newToken = accessToken else {
                         throw PolestarError.authenticationRequired(.expiredSession)
                     }
@@ -925,10 +872,10 @@ actor PolestarAPI {
         guard let token = accessToken, let userinfoEndpoint else { return }
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, response) = try? await HTTPBodyReader.data(
+        guard let (data, response) = try? await HTTPExchange.data(
                   for: request, using: session, limit: 256_000, operation: "user information",
-                  provider: .polestar, recordDiagnostics: true),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  provider: .polestar),
+              response.statusCode == 200,
               let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
         ownerFirstName = info.givenName ?? info.firstName
@@ -961,10 +908,10 @@ actor PolestarAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (data, response) = try? await HTTPBodyReader.data(
+        guard let (data, response) = try? await HTTPExchange.data(
                   for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata",
-                  provider: .polestar, recordDiagnostics: true),
-              (response as? HTTPURLResponse)?.statusCode == 200,
+                  provider: .polestar),
+              response.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let payload = json["data"] as? [String: Any],
               let images = payload["getCarImages"] as? [String: Any] else { return }
@@ -978,12 +925,11 @@ actor PolestarAPI {
 
         if carImages[vin] == nil, let string = pick?["url"] as? String, let url = URL(string: string),
            url.scheme == "https" {
-            if let (bytes, imageResponse) = try? await HTTPBodyReader.data(
+            if let (bytes, imageResponse) = try? await HTTPExchange.data(
                       for: URLRequest(url: url), using: session, limit: 5_000_000,
-                      operation: "vehicle image", provider: .polestar, recordDiagnostics: true),
-                  let http = imageResponse as? HTTPURLResponse,
-                  http.statusCode == 200,
-                  http.mimeType?.hasPrefix("image/") == true,
+                      operation: "vehicle image", provider: .polestar),
+                  imageResponse.statusCode == 200,
+                  imageResponse.mimeType?.hasPrefix("image/") == true,
                   bytes.count <= 5_000_000 {
                 guard epoch == sessionEpoch, !Task.isCancelled else { return }
                 carImages[vin] = bytes
@@ -1035,11 +981,11 @@ actor PolestarAPI {
         let taskID = UUID()
         let task = Task { [weak self, session] in
             do {
-                let (data, response) = try await HTTPBodyReader.data(
+                let (data, response) = try await HTTPExchange.data(
                     for: request, using: session, limit: 5_000_000, operation: operation,
-                    provider: .polestar, recordDiagnostics: true
+                    provider: .polestar
                 )
-                if (response as? HTTPURLResponse)?.statusCode == 200,
+                if response.statusCode == 200,
                    data.count <= 5_000_000 {
                     save(data)
                 }
@@ -1070,13 +1016,14 @@ actor PolestarAPI {
     func clearAccountState(keepRefreshToken: Bool = false) {
         sessionEpoch &+= 1
         cancelImageDownloads()
-        webAuthorizationInProgress = false
+        webAuthorization.invalidate()
         invalidateCommandAuthorization()
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskID = nil
         accessToken = nil
         tokenExpiry = nil
+        tokenLifetime = 0
         if !keepRefreshToken { refreshToken = nil }
         cars = []
         identities = [:]
@@ -1088,10 +1035,9 @@ actor PolestarAPI {
         market = nil
         targetCache = [:]
         capabilityBackoff = [:]
+        unsupportedCapabilities = []
         capabilityCache = [:]
         remoteCommandsInFlight = []
-        webPendingVerifier = nil
-        webPendingState = nil
     }
 
     static func makeSession(delegate: URLSessionDelegate) -> URLSession {
@@ -1305,12 +1251,21 @@ actor PolestarAPI {
 }
 
 extension PolestarAPI: VehicleLiveStreaming {
-    func liveVehicleUpdates(vin: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+    func liveVehicleUpdates(
+        vin: String, purpose: VehicleLiveStreamPurpose
+    ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
         try await refreshTokenIfNeeded()
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
-        return try await grpc.liveUpdates(vin: vin, accessToken: token)
+        return try await grpc.liveUpdates(vin: vin, accessToken: token, purpose: purpose)
+    }
+
+    func refreshLiveStreamAuthorization() async throws {
+        guard let rejectedToken = accessToken else {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        try await refreshAccessToken(force: true, replacing: rejectedToken)
     }
 }
 

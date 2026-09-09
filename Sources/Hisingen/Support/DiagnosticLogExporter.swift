@@ -236,7 +236,8 @@ enum DiagnosticLogExporter {
 
     private static func diagnosticsSection(_ snapshot: DiagnosticsSnapshot,
                                            formatter: ISO8601DateFormatter) -> [String: Any] {
-        [
+        let metrics = snapshot.liveStreamMetrics
+        return [
             "lastSuccess": snapshot.lastSuccess.map(formatter.string(from:)) as Any? ?? NSNull(),
             "lastError": (snapshot.lastError.map { DiagnosticRedaction.redact($0) }) as Any? ?? NSNull(),
             "latencySeconds": snapshot.latency as Any? ?? NSNull(),
@@ -245,6 +246,23 @@ enum DiagnosticLogExporter {
             "networkAvailable": snapshot.networkAvailable,
             "refreshInProgress": snapshot.refreshInProgress,
             "liveStreamConnected": snapshot.liveStreamConnected,
+            "liveStreamRetryAt": snapshot.liveStreamRetryAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+            "lastLiveFrameAt": snapshot.lastLiveFrameAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+            "liveStream": [
+                "connectionAttempts": metrics.connectionAttempts,
+                "successfulConnections": metrics.successfulConnections,
+                "disconnects": metrics.disconnects,
+                "messagesReceived": metrics.messagesReceived,
+                "authorizationRefreshes": metrics.authorizationRefreshes,
+                "fallbackPolls": metrics.fallbackPolls,
+                "activeTransportStreams": metrics.activeTransportStreams,
+                "connectedAt": metrics.connectedAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "lastFrameAt": metrics.lastFrameAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "lastDisconnectedAt": metrics.lastDisconnectedAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "lastConnectionDurationSeconds": metrics.lastConnectionDuration as Any? ?? NSNull(),
+                "lastDisconnectReason": metrics.lastDisconnectReason as Any? ?? NSNull(),
+                "circuitOpenUntil": metrics.circuitOpenUntil.map(formatter.string(from:)) as Any? ?? NSNull(),
+            ] as [String: Any],
             "refreshAttempts": snapshot.refreshAttempts,
             "refreshSuccesses": snapshot.refreshSuccesses,
             "refreshFailures": snapshot.refreshFailures,

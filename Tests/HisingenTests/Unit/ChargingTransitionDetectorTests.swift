@@ -60,8 +60,8 @@ struct ChargingTransitionDetectorTests {
 
     @Test
     func testRefreshPolicyBoundsPollingAndBackoff() {
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true), 60)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false), 300)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true), 120)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false), 600)
         XCTAssertEqual(RefreshPolicy.retryDelay(failureCount: 1, retryAfter: nil), 30)
         XCTAssertEqual(RefreshPolicy.retryDelay(failureCount: 4, retryAfter: nil), 240)
         XCTAssertEqual(RefreshPolicy.retryDelay(failureCount: 99, retryAfter: nil), 900)
@@ -87,5 +87,4 @@ struct ChargingTransitionDetectorTests {
                 fetchedAt: now.addingTimeInterval(offset), reportedAt: now.addingTimeInterval(offset))
     }
 }
-
 

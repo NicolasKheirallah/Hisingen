@@ -306,7 +306,7 @@ extension AppDelegate: CommandExecutionContext {
     var vehicleState: VehicleState? { vehicleSession.latest }
     var sessionIsValid: Bool { vehicleSession.sessionValid }
 
-    func currentProvider() -> any VehicleProviding { vehicleSession.currentProvider() }
+    func currentCommandExecutor() -> any RemoteCommandExecuting { vehicleSession.currentProvider() }
     func applyOptimisticState(_ state: VehicleState) {
         vehicleSession.applyOptimisticState(state)
     }
@@ -324,6 +324,9 @@ extension AppDelegate: CommandExecutionContext {
             title: title, message: message, success: success)
         render()
         resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
+    }
+    func beginCommandConfirmation(_ command: RemoteCommand) {
+        vehicleSession.beginCommandConfirmation(command)
     }
     func refreshNowAfterCommand() {
         vehicleSession.refreshNow()

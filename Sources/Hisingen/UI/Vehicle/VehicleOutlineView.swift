@@ -542,7 +542,7 @@ struct VehicleSideProfileTiresView: View {
     }
 
     /// Rolls two tyres of an axle up into one level: any attention-needing tyre wins (very low
-    /// outranks low/high), green only when *both* explicitly reported OK — an unreported axle
+    /// outranks low/high), explicit OK only when *both* tyres reported OK — an unreported axle
     /// renders muted rather than falsely healthy.
     private func axleState(_ a: TyrePosition, _ b: TyrePosition) -> TyrePressureWarning {
         let pair = [tyre(for: a), tyre(for: b)].compactMap { $0 }.map(\.warning)
@@ -551,6 +551,12 @@ struct VehicleSideProfileTiresView: View {
         if pair.contains(.sensorFault) { return .sensorFault }
         if !pair.isEmpty && pair.allSatisfy({ $0 == .none }) { return .none }
         return .unknown
+    }
+
+    /// Whether the axle carries at least one numeric pressure reading. An iTPMS axle's
+    /// explicit OK carries no measurement, so its ring stays neutral (see `tireWheelGlow`).
+    private func axleMeasured(_ a: TyrePosition, _ b: TyrePosition) -> Bool {
+        [tyre(for: a), tyre(for: b)].compactMap { $0 }.contains { $0.kilopascals != nil }
     }
 
     private var frontHovered: Bool { hoveredPosition == .frontLeft || hoveredPosition == .frontRight }
@@ -587,6 +593,7 @@ struct VehicleSideProfileTiresView: View {
                 tireWheelGlow(
                     u: 0.2304, v: 0.6710,
                     state: axleState(.rearLeft, .rearRight), hovered: rearHovered,
+                    measured: axleMeasured(.rearLeft, .rearRight),
                     positionName: hoveredPosition == .rearRight ? "RR" : "RL",
                     og: og
                 )
@@ -595,6 +602,7 @@ struct VehicleSideProfileTiresView: View {
                 tireWheelGlow(
                     u: 0.8036, v: 0.6710,
                     state: axleState(.frontLeft, .frontRight), hovered: frontHovered,
+                    measured: axleMeasured(.frontLeft, .frontRight),
                     positionName: hoveredPosition == .frontRight ? "FR" : "FL",
                     og: og
                 )
@@ -608,6 +616,7 @@ struct VehicleSideProfileTiresView: View {
     private func tireWheelGlow(
         u: CGFloat, v: CGFloat,
         state: TyrePressureWarning, hovered: Bool,
+        measured: Bool,
         positionName: String,
         og: OutlineGeometry
     ) -> some View {
@@ -615,7 +624,11 @@ struct VehicleSideProfileTiresView: View {
         let activeColor: Color = {
             switch state {
             case .none:
-                return hovered ? HisingenTheme.accent : HisingenTheme.semanticGood
+                // Green requires an actual measurement. An iTPMS axle reports a warning
+                // level only and flags a tyre just once an issue is detected, so its
+                // explicit OK stays neutral instead of reading as a verified all-clear.
+                return hovered ? HisingenTheme.accent
+                    : (measured ? HisingenTheme.semanticGood : HisingenTheme.inkMuted.opacity(0.55))
             case .veryLow, .low, .high, .sensorFault:
                 return HisingenTheme.tyreWarningColor(state)
             case .unknown:

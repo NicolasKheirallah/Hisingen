@@ -98,7 +98,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .remoteHonkFlash: return L10n.text("Flash the lights or honk and flash on explicit request.")
         case .remoteOTA: return L10n.text("Schedule, install, or cancel vehicle software updates with confirmation.")
         case .vehicleErrors: return L10n.text("Fetch charging and climate service errors from the vehicle backend.")
-        case .realTimeUpdates: return L10n.text("Use server-streaming gRPC for live battery and exterior updates instead of polling.")
+        case .realTimeUpdates: return L10n.text("Use live server streaming when supported, with polling as fallback")
         }
     }
 

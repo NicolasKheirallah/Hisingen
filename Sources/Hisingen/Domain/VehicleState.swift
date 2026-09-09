@@ -451,6 +451,8 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     mutating func applyLiveUpdate(_ update: VehicleLiveUpdate, receivedAt: Date = Date()) {
         switch update {
+        case .connected:
+            return
         case .battery(let battery):
             if let reportedAt = battery.reportedAt {
                 if battery.batteryPercentage != nil { readingDates[.battery] = reportedAt }
@@ -1193,6 +1195,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             guard let probedCapabilities else { return previous.probedCapabilities }
             return previous.probedCapabilities?.merging(newerProbe: probedCapabilities) ?? probedCapabilities
         }()
+        let connectivityIsUnsupported = probedCapabilities?.support(for: .connectivity) == .unavailable
         // Polestar reports a single version string whose meaning flips once an update is
         // pending, so the running version drops out of the payload for the whole rollout.
         // Carry the last settled reading forward — otherwise "Installed Version" disappears
@@ -1278,7 +1281,8 @@ struct VehicleState: Codable, Equatable, Sendable {
                 : (features.contains(.climateStatus) ? previous.climateTimers : []),
             tripMeterManualKm: tripMeterManualKm ?? (features.contains(.tripMeters) ? previous.tripMeterManualKm : nil),
             tripMeterAutomaticKm: tripMeterAutomaticKm ?? (features.contains(.tripMeters) ? previous.tripMeterAutomaticKm : nil),
-            connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) ? previous.connectivity : nil),
+            connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) && !connectivityIsUnsupported
+                ? previous.connectivity : nil),
             airQuality: airQuality ?? (features.contains(.airQuality) ? previous.airQuality : nil),
             batteryDiagnostics: batteryDiagnostics
                 ?? (features.contains(.batteryDiagnostics) ? previous.batteryDiagnostics : nil),
@@ -1352,7 +1356,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         markRetained(.climateStatus, currentIsMissing: climateStatus == nil, previousWasPresent: previous.climateStatus != nil)
         markRetained(.tripMeters, currentIsMissing: tripMeterManualKm == nil && tripMeterAutomaticKm == nil,
                      previousWasPresent: previous.tripMeterManualKm != nil || previous.tripMeterAutomaticKm != nil)
-        markRetained(.connectivityDiagnostics, currentIsMissing: connectivity == nil, previousWasPresent: previous.connectivity != nil)
+        if !connectivityIsUnsupported {
+            markRetained(.connectivityDiagnostics, currentIsMissing: connectivity == nil,
+                         previousWasPresent: previous.connectivity != nil)
+        }
         markRetained(.airQuality, currentIsMissing: airQuality == nil, previousWasPresent: previous.airQuality != nil)
         markRetained(.batteryDiagnostics, currentIsMissing: batteryDiagnostics == nil, previousWasPresent: previous.batteryDiagnostics != nil)
         markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)

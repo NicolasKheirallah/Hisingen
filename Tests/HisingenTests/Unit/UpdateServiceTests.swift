@@ -45,4 +45,26 @@ struct UpdateServiceTests {
         #expect(UpdateService.stateAfterAbortedCycle(available) == available)
         #expect(UpdateService.stateAfterAbortedCycle(existingFailure) == existingFailure)
     }
+
+    @Test
+    func checkIntervalChoicesMapToSparkleSeconds() {
+        // 86400 is the historical daily default from Info.plist SUScheduledCheckInterval;
+        // the daily case must keep matching it so a fresh install behaves as before.
+        XCTAssertEqual(UpdateCheckInterval.daily.seconds, 86400)
+        XCTAssertEqual(UpdateCheckInterval.everyHour.seconds, 3600)
+        XCTAssertEqual(UpdateCheckInterval.everySixHours.seconds, 21600)
+        XCTAssertEqual(UpdateCheckInterval.weekly.seconds, 604800)
+        XCTAssertEqual(UpdateCheckInterval.monthly.seconds, 2592000)
+    }
+
+    @Test
+    func everyIntervalCaseHasADisplayTitleAndPositiveCadence() {
+        for interval in UpdateCheckInterval.allCases {
+            XCTAssertFalse(interval.title.isEmpty)
+            XCTAssertTrue(interval.seconds >= 3600)
+        }
+        // Ordering of the picker follows the cadence, shortest first.
+        let seconds = UpdateCheckInterval.allCases.map(\.seconds)
+        XCTAssertEqual(seconds, seconds.sorted())
+    }
 }

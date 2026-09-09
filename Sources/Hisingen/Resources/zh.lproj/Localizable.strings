@@ -1637,6 +1637,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "此更新已公布但尚未获得下载授权。在后端授权且条件允许后，车辆会自行下载；之后才能开始安装。";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "此车辆不支持基于云端的下载同意——只有车辆自主向后台报到时才能下载更新。可由 Polestar 服务预约直接安装。";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "此车辆的间接式 TPMS 报告的是每个轮胎的警告级别，而非精确胎压读数。";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "该状态来自车辆 API，仅在报告问题时才会变化，因此并非实时测量结果。请将其视为参考信息，而非确认无恙。";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "仅限警告状态。车辆报告每个轮胎的警告级别，且只有在检测到问题时才会标记轮胎，因此这不是实时胎压测量。";
 "To" = "至";
 "to" = "到";
 "Trend" = "趋势";
@@ -1867,7 +1869,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "关闭";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

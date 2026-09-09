@@ -21,7 +21,7 @@ protocol CommandExecutionContext: AnyObject {
     /// Whether the active brand's session currently allows commands.
     var sessionIsValid: Bool { get }
 
-    func currentProvider() -> any VehicleProviding
+    func currentCommandExecutor() -> any RemoteCommandExecuting
     /// Applies an optimistic post-command state (display-only; never persisted).
     func applyOptimisticState(_ state: VehicleState)
     /// Called when command-busyness changes so the shell can re-render controls.
@@ -29,6 +29,7 @@ protocol CommandExecutionContext: AnyObject {
     /// Presents a command outcome to the user.
     func presentResult(title: String, message: String, success: Bool)
     /// Requests the post-command authoritative refresh.
+    func beginCommandConfirmation(_ command: RemoteCommand)
     func refreshNowAfterCommand()
 }
 
@@ -95,7 +96,7 @@ final class CommandCoordinator {
         let availability = gate.availability(
             for: command,
             state: state,
-            brand: context.currentProvider().brand,
+            commandCatalog: context.currentCommandExecutor().commandCatalog,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress
         )
@@ -117,7 +118,7 @@ final class CommandCoordinator {
             return
         }
         let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
-        let providerBrand = context.currentProvider().brand
+        let providerBrand = context.currentCommandExecutor().brand
         let vehicle = [state.modelName, state.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
         }.joined(separator: " - ")
@@ -148,7 +149,7 @@ final class CommandCoordinator {
 
     private func isCurrentExecutionContext(vin: String, brand: VehicleBrand) -> Bool {
         guard let context, context.sessionIsValid,
-              context.currentProvider().brand == brand,
+              context.currentCommandExecutor().brand == brand,
               let currentState = context.vehicleState else { return false }
         return currentState.vin.caseInsensitiveCompare(vin) == .orderedSame
     }
@@ -166,7 +167,7 @@ final class CommandCoordinator {
         }
         do {
             logger.info("Remote command \(command.identifier, privacy: .public) sent for \(vin, privacy: .private)")
-            let result = try await context.currentProvider().executeRemoteCommand(command, vin: vin)
+            let result = try await context.currentCommandExecutor().executeRemoteCommand(command, vin: vin)
             database.recordCommandAudit(
                 vin: vin,
                 command: command.identifier,
@@ -192,6 +193,7 @@ final class CommandCoordinator {
                 message: L10n.format("%@ — %@", command.title, detail),
                 success: true
             )
+            context.beginCommandConfirmation(command)
             scheduleFollowUpRefresh(vin: vin)
         } catch {
             let mapped = error as? LocalizedError

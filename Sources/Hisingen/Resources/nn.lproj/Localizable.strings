@@ -1637,6 +1637,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Denne oppdateringa er kunngjort men enno ikkje autorisert for nedlasting. Køyretøyet lastar henne ned sjølv når backenden autoriserer henne og vilkåra tillèt det; installasjonen kan først startast etterpå.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Dette køyretøyet støttar ikkje skybasert samtykke til nedlasting — oppdateringa kan berre lastast ned når bilen selv melder seg til backenden. Ein Polestar-services time kan setja henne direkte inn.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Den indirekte TPMS-en på dette køyretøyet rapporterer eit varslingsnivå per dekk, ikkje ei nøyaktig trykkmåling.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "Statusen kjem frå køyretøyets API og endrar seg først når eit problem blir rapportert, så det er ikkje ei løpande måling. Handsam han som rettleiande, ikkje som ein stadfesta alt-i-orden.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Kun varslingsstatus. Køyretøyet rapporterer eit varslingsnivå per dekk og markerer eit dekk først når det oppdagar eit problem, så dette er ikkje ei løpande trykkmåling.";
 "To" = "Til";
 "to" = "til";
 "Trend" = "Trend";
@@ -1867,7 +1869,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "Lukk";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

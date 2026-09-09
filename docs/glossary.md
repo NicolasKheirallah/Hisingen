@@ -19,6 +19,13 @@ reconfirmed — see [ADR-0006](adr/0006-runtime-capability-probing.md).
 **Developer ID** — the Apple code-signing certificate type used to sign
 software distributed outside the Mac App Store. Required for notarization.
 
+**Charging Session ledger** — the module that owns the Charging Session
+lifecycle: it ingests observations into `charging_samples`, advances
+`charging_sessions` through its explicit states, produces each session's
+authoritative energy summary, and is the one place where sample integration
+and its gap-tolerance policies live. See
+`Services/Persistence/ChargingSessionLedger.swift`.
+
 **Gatekeeper** — macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates
 this check.

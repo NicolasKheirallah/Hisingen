@@ -45,13 +45,13 @@ struct CapabilityGate: Sendable {
     func availability(
         for command: RemoteCommand,
         state: VehicleState,
-        brand: VehicleBrand,
+        commandCatalog: ProviderCommandCatalog,
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
-        guard command.isImplemented(by: brand) else { return .unimplementedByProvider }
-        if brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {
+        guard commandCatalog.implements(command) else { return .unimplementedByProvider }
+        if commandCatalog.brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {
             return .unsupportedByVehicle
         }
         guard state.capabilityProfile.permits(command.requiredCapability) else { return .unsupportedByVehicle }

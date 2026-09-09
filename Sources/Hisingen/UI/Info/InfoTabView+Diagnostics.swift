@@ -366,10 +366,19 @@ extension InfoTabView {
             if !health.tyres.isEmpty {
                 let hasTyreWarning = health.tyres.contains { $0.warning.needsAttention }
                 let allReported = health.tyres.count == 4 && health.tyres.allSatisfy { $0.kilopascals != nil || $0.warning != .unknown }
+                let anyReported = health.tyres.contains { $0.warning != .unknown || $0.kilopascals != nil }
+                // Warning-level-only tyres (iTPMS) never read as a verified all-clear: the
+                // system flags a tyre only once it detects an issue, so "no warnings" is a
+                // status, not a measurement.
+                let warningLevelOnly = health.tyres.allSatisfy { $0.kilopascals == nil }
                 let tyreStatus = hasTyreWarning
                     ? L10n.text("Pressure Warning")
-                    : (allReported ? L10n.text("Everything looks good") : (health.tyres.contains { $0.warning != .unknown || $0.kilopascals != nil } ? L10n.text("No warnings reported") : L10n.text("Data unavailable")))
-                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyreStatus, symbol: "circle.dashed", valueWarning: hasTyreWarning, info: L10n.text("Some providers expose warning status without a numeric tyre-pressure measurement.")))
+                    : (allReported && !warningLevelOnly ? L10n.text("Everything looks good")
+                        : (anyReported ? L10n.text("No warnings reported") : L10n.text("Data unavailable")))
+                let tyreInfo = warningLevelOnly
+                    ? L10n.text("Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement.")
+                    : L10n.text("Some providers expose warning status without a numeric tyre-pressure measurement.")
+                rows.append(KVRow(L10n.text("Tyre Pressure Status"), tyreStatus, symbol: "circle.dashed", valueWarning: hasTyreWarning, info: tyreInfo))
             }
         } else {
             rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Unavailable"), symbol: "circle.circle"))

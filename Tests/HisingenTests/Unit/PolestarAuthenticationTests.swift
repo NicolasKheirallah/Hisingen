@@ -137,9 +137,9 @@ struct PolestarAuthenticationTests {
             try await api.restoreSession(token: "old-refresh", preferredVIN: nil, features: .default)
             Issue.record("Background restore replaced the interactive request")
         } catch { #expect(error is CancellationError) }
-        #expect(await api.webPendingState == PolestarAPI.queryValue("state", from: authorizeURL))
+        #expect(await api.webAuthorization.pendingState == PolestarAPI.queryValue("state", from: authorizeURL))
         await api.cancelAuthorization(state: PolestarAPI.queryValue("state", from: authorizeURL))
-        #expect(await api.webAuthorizationInProgress == false)
+        #expect(await api.webAuthorization.isInProgress == false)
     }
 
     @Test func signOutClearsLocallyBeforeRevocationAndCannotClearANewerSession() async throws {
@@ -172,6 +172,86 @@ struct PolestarAuthenticationTests {
         #expect(!a.matches(.init(sub: "b", email: "a@example.com", emailVerified: false)))
         #expect(!a.matches(.init(sub: "b", email: "b@example.com", emailVerified: true)))
     }
+
+    @Test func authorizationFlowRejectsWrongStateWithoutDestroyingThePendingGrant() throws {
+        var flow = PolestarAuthorizationFlow()
+        flow.begin(verifier: "verifier", state: "expected")
+        let redirect = URL(string: "polestar-explore://explore.polestar.com")!
+        let wrong = URL(string: "polestar-explore://explore.polestar.com?code=x&state=wrong")!
+        #expect(throws: PolestarError.self) {
+            try flow.consume(callbackURL: wrong, redirectURL: redirect)
+        }
+        #expect(flow.pendingState == "expected")
+        #expect(flow.isInProgress)
+    }
+
+    @Test func authorizationFlowExpiresAndInvalidatesAbandonedPKCESecrets() throws {
+        var flow = PolestarAuthorizationFlow()
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        flow.begin(verifier: "verifier", state: "expected", now: startedAt)
+        let redirect = URL(string: "polestar-explore://explore.polestar.com")!
+        let callback = URL(string: "polestar-explore://explore.polestar.com?code=x&state=expected")!
+        #expect(throws: PolestarError.self) {
+            try flow.consume(
+                callbackURL: callback, redirectURL: redirect,
+                now: startedAt.addingTimeInterval(601), maximumAge: 600
+            )
+        }
+        #expect(flow.pendingState == nil)
+        #expect(!flow.isInProgress)
+    }
+
+    @Test func shortLivedAccessTokenIsReusedUntilItsActualRenewalWindow() async throws {
+        let (api, _) = await makeAPI()
+        let requests = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            if request.url?.path == "/token" { await requests.increment() }
+            return Data(#"{"access_token":"refreshed-access","refresh_token":"rotated-refresh","expires_in":300}"#.utf8)
+        }
+
+        await api.installAccessTokenForTesting("short-lived", lifetime: 300, remaining: 240)
+        let tasks = (0..<20).map { _ in Task { try await api.validAccessToken() } }
+        var tokens: [String?] = []
+        for task in tasks { tokens.append(try await task.value) }
+
+        #expect(tokens.allSatisfy { $0 == "short-lived" })
+        #expect(await requests.value == 0)
+        #expect(PolestarAPI.tokenRenewalMargin(lifetime: 300) == 30)
+    }
+
+    @Test func concurrentExpiryRefreshesUseOneTokenGrant() async throws {
+        let (api, _) = await makeAPI()
+        let requests = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            if request.url?.path == "/token" { await requests.increment() }
+            try? await Task.sleep(for: .milliseconds(50))
+            return Data(#"{"access_token":"refreshed-access","refresh_token":"rotated-refresh","expires_in":300}"#.utf8)
+        }
+        await api.installAccessTokenForTesting("expired", lifetime: 300, remaining: -1)
+
+        let tasks = (0..<20).map { _ in Task { try await api.validAccessToken() } }
+        var tokens: [String?] = []
+        for task in tasks { tokens.append(try await task.value) }
+
+        #expect(tokens.allSatisfy { $0 == "refreshed-access" })
+        #expect(await requests.value == 1)
+    }
+
+    @Test func lateUnauthorizedResponseDoesNotRefreshANewerTokenAgain() async throws {
+        let (api, _) = await makeAPI()
+        let requests = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            if request.url?.path == "/token" { await requests.increment() }
+            return Data(#"{"access_token":"new-access","refresh_token":"rotated-refresh","expires_in":300}"#.utf8)
+        }
+        await api.installAccessTokenForTesting("rejected-access", lifetime: 300, remaining: 200)
+
+        try await api.refreshAccessToken(force: true, replacing: "rejected-access")
+        try await api.refreshAccessToken(force: true, replacing: "rejected-access")
+
+        #expect(await requests.value == 1)
+        #expect(await api.accessToken == "new-access")
+    }
 }
 
 private extension PolestarAPI {
@@ -189,6 +269,17 @@ private extension PolestarAPI {
     func restoreCommandPersistence() { saveCommandToken = { [keychain] in try keychain.saveCommandSessionToken($0) } }
     func enableTestRevocation() { revocationEndpoint = URL(string: "https://auth.example/revoke")! }
     func installNewTestSession() { accessToken = "new-access"; refreshToken = "new-refresh" }
+    func installAccessTokenForTesting(_ token: String, lifetime: TimeInterval, remaining: TimeInterval) {
+        accessToken = token
+        refreshToken = "base-refresh"
+        tokenLifetime = lifetime
+        tokenExpiry = Date().addingTimeInterval(remaining)
+    }
+}
+
+private actor RequestCounter {
+    private(set) var value = 0
+    func increment() { value += 1 }
 }
 
 private actor AuthenticationGate {

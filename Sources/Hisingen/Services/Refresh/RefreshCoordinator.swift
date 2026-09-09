@@ -19,6 +19,8 @@ struct DiagnosticsSnapshot: Sendable {
     var servingCachedSnapshot: Bool = false
     var liveStreamConnected: Bool = false
     var liveStreamRetryAt: Date? = nil
+    var lastLiveFrameAt: Date? = nil
+    var liveStreamMetrics = LiveStreamMetrics()
 
     /// Since-launch counters. Distinguishing "never refreshed" from "stopped
     /// refreshing" is the first fork in most refresh investigations.
@@ -120,10 +122,10 @@ enum RefreshPolicy {
     /// Floor for polls while the vehicle reports itself unavailable (asleep, power saving,
     /// in service). Deep-sleeping cars answer every poll with the same stale snapshot, so
     /// hammering the backend buys nothing; 15 minutes still recovers promptly on wake.
-    static let vehicleAsleepInterval: TimeInterval = 900
+    static let vehicleAsleepInterval: TimeInterval = 1_800
 
     static func regularInterval(isCharging: Bool, isClimateActive: Bool = false) -> TimeInterval {
-        (isCharging || isClimateActive) ? 60 : 300
+        (isCharging || isClimateActive) ? 120 : 600
     }
 
     /// Effective interval combines the activity-based cadence with vehicle availability:
@@ -146,6 +148,20 @@ enum RefreshPolicy {
     }
 }
 
+/// The complete outward lifecycle of a refresh session. A single typed channel keeps related
+/// transitions atomic (notably session establishment and a rate-limited vehicle switch) and
+/// prevents consumers from constructing inconsistent combinations of callback handlers.
+enum RefreshCoordinatorEvent {
+    case loading
+    case state(VehicleState)
+    case sessionEstablished(cars: [CarSummary], selectedVIN: String)
+    case selectionChanged(String)
+    case switchPaused(VehicleServiceError)
+    case failed(VehicleServiceError)
+    case diagnostics(DiagnosticsSnapshot)
+    case vehiclesCleared
+}
+
 @MainActor
 final class RefreshCoordinator {
     enum Trigger { case timer, manual, wake, networkRestored }
@@ -160,6 +176,11 @@ final class RefreshCoordinator {
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
     /// Delay between automatic retries of a raced vehicle selection. Injectable for tests.
     private let selectionRetryDelay: TimeInterval
+    /// How long a command-confirmation stream stays open after a command. Injectable so
+    /// tests can collapse the two-minute window.
+    private let commandConfirmationWindow: TimeInterval
+    private let liveStreamPolicy: LiveStreamPolicy
+    private let liveStreamJitter: () -> Double
     private let logger = AppLog.logger("refresh")
     /// Interval instrumentation for Instruments' os_signpost tool — free refresh-latency
     /// timelines without touching the unified log.
@@ -170,6 +191,8 @@ final class RefreshCoordinator {
     private var timer: Timer?
     private var task: Task<Void, Never>?
     private var streamTask: Task<Void, Never>?
+    private var streamTaskID: UUID?
+    private var commandWatchdogTask: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var failureCount = 0
     private var rateLimitedUntil: Date?
@@ -178,6 +201,11 @@ final class RefreshCoordinator {
     private var networkAvailable = true
     private var liveStreamConnected = false
     private var liveStreamRetryAt: Date?
+    private var liveStreamMetrics = LiveStreamMetrics()
+    private var liveStreamPurpose: VehicleLiveStreamPurpose?
+    private var commandStreamPurpose: VehicleLiveStreamPurpose?
+    private var commandStreamUntil: Date?
+    private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
     private var sessionIntent: SessionManager.Intent = .resume
@@ -205,28 +233,7 @@ final class RefreshCoordinator {
     private(set) var nextRefresh: Date?
     private(set) var lastLatency: TimeInterval?
 
-    /// Fired once per successful session establishment — not on vehicle switches. The shell
-    /// uses it to schedule the background garage scan: hooking that to `onCars` instead made
-    /// every switch trigger a full scan ~8 s later (two extra discoveries plus a complete
-    /// telemetry fan-out), tripping provider rate limits right after switching.
-    var onSessionEstablished: (() -> Void)?
-    /// A vehicle switch was requested but is paused by an active provider rate limit.
-    /// Separate from `onError` because refreshes hit the same error on their normal
-    /// schedule — only this one means the user just tapped a switch and got nothing.
-    var onSwitchPaused: (() -> Void)?
-    var onState: ((VehicleState) -> Void)?
-    var onCars: (([CarSummary], String) -> Void)?
-    /// Fired whenever the active-vehicle selection changes or resolves — optimistically when
-    /// a switch begins and again once the provider-side swap completed. The shell syncs its
-    /// visible "active car" marker from here; without it the marker stayed on the launch
-    /// vehicle forever (only `beginSession` fired `onCars`), which let two disagreeing
-    /// idempotence guards veto every further switch.
-    var onSelectionChanged: ((String) -> Void)?
-    var onError: ((VehicleServiceError) -> Void)?
-    var onLoading: (() -> Void)?
-    var onDiagnostics: ((DiagnosticsSnapshot) -> Void)?
-    var onSignedOut: (() -> Void)?
-    var onCleared: (() -> Void)?
+    var onEvent: ((RefreshCoordinatorEvent) -> Void)?
 
     /// True while a network operation owned by this coordinator is in flight. The background
     /// garage scan checks this so it never competes with (or flips shared provider state
@@ -242,7 +249,10 @@ final class RefreshCoordinator {
          preferences: PreferencesStore,
          sessionManager: SessionManager = SessionManager(),
          retryDelay: @escaping (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval = RefreshPolicy.retryDelay,
-         selectionRetryDelay: TimeInterval = 2) {
+         selectionRetryDelay: TimeInterval = 2,
+         liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
+         liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
+         commandConfirmationWindow: TimeInterval = 2 * 60) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
@@ -250,6 +260,9 @@ final class RefreshCoordinator {
         self.sessionManager = sessionManager
         self.retryDelay = retryDelay
         self.selectionRetryDelay = selectionRetryDelay
+        self.liveStreamPolicy = liveStreamPolicy
+        self.liveStreamJitter = liveStreamJitter
+        self.commandConfirmationWindow = commandConfirmationWindow
         guard observesEnvironment else { return }
         installSystemObservers()
         monitor.pathUpdateHandler = { [weak self] path in
@@ -264,7 +277,7 @@ final class RefreshCoordinator {
         accountEmail = preferences.email
         if let preferredVIN, let cached = stateStore.snapshot(for: preferredVIN) {
             latest = cached
-            onState?(cached)
+            onEvent?(.state(cached))
         }
         beginSession(preferredVIN: preferredVIN)
     }
@@ -292,7 +305,7 @@ final class RefreshCoordinator {
             latest = nil
             cars = []
             lastError = nil
-            onCleared?()
+            onEvent?(.vehiclesCleared)
         }
         let requestGeneration = generation
         task = Task {
@@ -323,6 +336,65 @@ final class RefreshCoordinator {
         refresh(trigger: .manual)
     }
 
+    func beginCommandConfirmation(_ command: RemoteCommand) {
+        let purpose: VehicleLiveStreamPurpose?
+        switch command.feature {
+        case .remoteCharging:
+            purpose = .charging
+        case .remoteLocks, .remoteWindows, .remoteHonkFlash:
+            purpose = .exteriorConfirmation
+        default:
+            // No climate, schedules, or OTA stream exists; the 12 s follow-up refresh
+            // is the confirmation path for those commands.
+            purpose = nil
+        }
+        guard let purpose, let vin = latest?.vin,
+              preferences.features.contains(.realTimeUpdates) else { return }
+        commandStreamPurpose = purpose
+        commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
+        if liveStreamPurpose != purpose {
+            stopLiveStreaming()
+        }
+        startLiveStreamingIfNeeded(vin: vin)
+        scheduleConfirmationWatchdog(vin: vin)
+    }
+
+    /// The confirmation window must actually end. A held-open exterior stream only
+    /// re-evaluates its purpose on the next frame or reconnect — on a quiet car that could
+    /// leave a battery/exterior connection running for the whole idle timeout after its
+    /// reason expired. The watchdog closes it the moment the window lapses.
+    private func scheduleConfirmationWatchdog(vin: String) {
+        commandWatchdogTask?.cancel()
+        guard let until = commandStreamUntil else { return }
+        let requestGeneration = generation
+        commandWatchdogTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(0.05, until.timeIntervalSinceNow))) }
+            catch { return }
+            guard let self, !Task.isCancelled, requestGeneration == self.generation else { return }
+            self.enforceCommandWindowExpiry(vin: vin)
+        }
+    }
+
+    private func enforceCommandWindowExpiry(vin: String) {
+        commandWatchdogTask = nil
+        guard let until = commandStreamUntil, until <= Date() else { return }
+        let expiredPurpose = commandStreamPurpose
+        commandStreamUntil = nil
+        commandStreamPurpose = nil
+        guard latest?.vin == vin else { return }
+        guard let expiredPurpose, liveStreamPurpose == expiredPurpose else {
+            publishDiagnostics()
+            return
+        }
+        stopLiveStreaming()
+        if desiredLiveStreamPurpose(for: latest) != nil {
+            startLiveStreamingIfNeeded(vin: vin)
+        } else {
+            scheduleFallbackPoll(for: latest)
+        }
+        publishDiagnostics()
+    }
+
     func reloadVehicleMetadata() {
         if !preferences.features.contains(.realTimeUpdates) {
             streamTask?.cancel()
@@ -337,7 +409,7 @@ final class RefreshCoordinator {
         }
         let vin = preferences.vin
         let requestGeneration = generation
-        onLoading?()
+        onEvent?(.loading)
         task = Task {
             do {
                 try await api.reloadVehicleMetadata(vin: vin, features: preferences.features)
@@ -384,8 +456,9 @@ final class RefreshCoordinator {
             // A silent drop reads as a frozen app; surface why switching is paused instead.
             // Multi-vehicle accounts double the request volume and hit this window far
             // more often than the single-car case.
-            onSwitchPaused?()
-            onError?(.rateLimited(retryAfter: rateLimitedUntil?.timeIntervalSinceNow))
+            onEvent?(.switchPaused(.rateLimited(
+                retryAfter: rateLimitedUntil?.timeIntervalSinceNow
+            )))
             return
         }
         // Already switching to exactly this car: let that attempt finish rather than
@@ -406,15 +479,20 @@ final class RefreshCoordinator {
         failureCount = 0
         task?.cancel()
         task = nil
+        commandWatchdogTask?.cancel()
+        commandWatchdogTask = nil
+        commandStreamPurpose = nil
+        commandStreamUntil = nil
         streamTask?.cancel()
         streamTask = nil
+        streamTaskID = nil
         liveStreamConnected = false
         timer?.invalidate()
         preferences.vin = vin
         requestedSelectionVIN = vin
         latest = stateStore.snapshot(for: vin)
-        if let latest { onState?(latest) } else { onLoading?() }
-        onSelectionChanged?(vin)
+        if let latest { onEvent?(.state(latest)) } else { onEvent?(.loading) }
+        onEvent?(.selectionChanged(vin))
         publishDiagnostics()
         runSelection(vin: vin)
     }
@@ -433,7 +511,7 @@ final class RefreshCoordinator {
                 requestedSelectionVIN = nil
                 selectionRetryCount = 0
                 cars = providerCars
-                onSelectionChanged?(vin)
+                onEvent?(.selectionChanged(vin))
                 // Selection does not establish a session or schedule a garage scan.
                 apply(state, latency: Date().timeIntervalSince(started))
             } catch {
@@ -508,7 +586,7 @@ final class RefreshCoordinator {
                 stateStore.clear(vin: vin, eraseHistory: eraseHistory)
             }
         }
-        onSignedOut?()
+        onEvent?(.vehiclesCleared)
         publishDiagnostics()
         task = Task {
             do {
@@ -520,7 +598,7 @@ final class RefreshCoordinator {
             }
             guard requestGeneration == generation, !Task.isCancelled else { return }
             task = nil
-            if let lastError { self.onError?(lastError) }
+            if let lastError { self.onEvent?(.failed(lastError)) }
             self.publishDiagnostics()
         }
     }
@@ -542,7 +620,7 @@ final class RefreshCoordinator {
             handle(.network(URLError(.notConnectedToInternet)), retrySession: true)
             return
         }
-        onLoading?()
+        onEvent?(.loading)
         let requestGeneration = generation
         let started = Date()
         refreshAttempts += 1
@@ -559,10 +637,8 @@ final class RefreshCoordinator {
                 // is superseded and its retry budget resets.
                 requestedSelectionVIN = nil
                 selectionRetryCount = 0
-                onSelectionChanged?(vin)
                 cars = await api.cars
-                onCars?(cars, vin)
-                onSessionEstablished?()
+                onEvent?(.sessionEstablished(cars: cars, selectedVIN: vin))
                 sessionReady = true
                 sessionIntent = .resume
                 let intervalState = Self.signposter.beginInterval("fetchVehicleState")
@@ -594,7 +670,7 @@ final class RefreshCoordinator {
             handle(.notConfigured, retrySession: false)
             return
         }
-        if trigger == .manual { onLoading?() }
+        if trigger == .manual { onEvent?(.loading) }
         timer?.invalidate()
         nextRefresh = nil
         let requestGeneration = generation
@@ -634,6 +710,7 @@ final class RefreshCoordinator {
         // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
         state.chargingSessions = []
         latest = state
+        lastFullRefreshAt = state.fetchedAt
         lastError = nil
         lastLatency = latency
         failureCount = 0
@@ -641,9 +718,15 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(state)
         SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.vin))
-        onState?(state)
-        startLiveStreamingIfNeeded(vin: state.vin)
-        schedule(after: RefreshPolicy.interval(
+        onEvent?(.state(state))
+        if desiredLiveStreamPurpose(for: state) == nil {
+            stopLiveStreaming()
+        } else {
+            startLiveStreamingIfNeeded(vin: state.vin)
+        }
+        let pollingInterval = liveStreamConnected
+            ? liveStreamPolicy.integrityPollInterval
+            : RefreshPolicy.interval(
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
             isVehicleAvailable: {
@@ -653,7 +736,8 @@ final class RefreshCoordinator {
                 case .unknown: return nil
                 }
             }()
-        ), retrySession: false)
+        )
+        schedule(after: pollingInterval, retrySession: false)
         publishDiagnostics()
     }
 
@@ -664,7 +748,7 @@ final class RefreshCoordinator {
         // `String(describing:)` keeps enum payloads and NSError codes that
         // `localizedDescription` flattens away.
         logger.error("Refresh failed (attempt \(self.failureCount, privacy: .public) consecutive): \(String(describing: error), privacy: .public)")
-        onError?(error)
+        onEvent?(.failed(error))
         guard error.allowsAutomaticRetry else {
             timer?.invalidate()
             nextRefresh = nil
@@ -696,6 +780,9 @@ final class RefreshCoordinator {
                 if retrySession || !self.sessionReady {
                     self.beginSession(preferredVIN: preferences.vin.nilIfEmpty, deferIfBusy: true)
                 } else {
+                    if self.streamTask != nil && !self.liveStreamConnected {
+                        self.liveStreamMetrics.fallbackPolls += 1
+                    }
                     self.refresh(trigger: .timer)
                 }
             }
@@ -751,18 +838,23 @@ final class RefreshCoordinator {
         generation &+= 1
         task?.cancel()
         task = nil
+        commandWatchdogTask?.cancel()
+        commandWatchdogTask = nil
         streamTask?.cancel()
         streamTask = nil
+        liveStreamPurpose = nil
         liveStreamConnected = false
         liveStreamRetryAt = nil
+        liveStreamMetrics.activeTransportStreams = 0
+        liveStreamMetrics.connectedAt = nil
         timer?.invalidate()
         timer = nil
         nextRefresh = nil
     }
 
     private func publishDiagnostics() {
-        onDiagnostics?(DiagnosticsSnapshot(
-            lastSuccess: latest?.fetchedAt,
+        onEvent?(.diagnostics(DiagnosticsSnapshot(
+            lastSuccess: lastFullRefreshAt,
             lastError: lastError?.localizedDescription,
             latency: lastLatency,
             nextRefresh: nextRefresh,
@@ -773,49 +865,85 @@ final class RefreshCoordinator {
             servingCachedSnapshot: latest?.isCachedSnapshot ?? false,
             liveStreamConnected: liveStreamConnected,
             liveStreamRetryAt: liveStreamRetryAt,
+            lastLiveFrameAt: liveStreamMetrics.lastFrameAt,
+            liveStreamMetrics: liveStreamMetrics,
             refreshAttempts: refreshAttempts,
             refreshSuccesses: refreshSuccesses,
             refreshFailures: refreshFailures,
             vehicleSwitchPending: requestedSelectionVIN != nil
-        ))
+        )))
     }
 
     private func startLiveStreamingIfNeeded(vin: String) {
         guard preferences.features.contains(.realTimeUpdates), streamTask == nil,
-              let streaming = api as? any VehicleLiveStreaming else { return }
+              let streaming = api as? any VehicleLiveStreaming,
+              let state = latest,
+              let purpose = desiredLiveStreamPurpose(for: state) else { return }
         let requestGeneration = generation
+        liveStreamPurpose = purpose
+        let taskID = UUID()
+        streamTaskID = taskID
         streamTask = Task { [weak self] in
+            defer {
+                if let self, self.streamTaskID == taskID {
+                    self.streamTask = nil
+                    self.streamTaskID = nil
+                    self.liveStreamPurpose = nil
+                    self.liveStreamConnected = false
+                    self.liveStreamRetryAt = nil
+                    self.liveStreamMetrics.activeTransportStreams = 0
+                    self.liveStreamMetrics.connectedAt = nil
+                    self.scheduleFallbackPoll(for: self.latest)
+                    self.publishDiagnostics()
+                    if let vin = self.latest?.vin {
+                        self.startLiveStreamingIfNeeded(vin: vin)
+                    }
+                }
+            }
             var failure = 0
+            var authorizationRecoveryUsed = false
             // Streamed frames can arrive several times a minute; persisting every frame used
             // to write the full snapshot blob (plus telemetry rows) per message. UI updates
             // stay immediate; disk writes coalesce.
             var lastPersistAt = Date.distantPast
             while !Task.isCancelled {
                 guard let self, requestGeneration == self.generation,
-                      self.latest?.vin == vin else { return }
+                      self.latest?.vin == vin,
+                      self.desiredLiveStreamPurpose(for: self.latest) == purpose else { return }
                 let streamStartedAt = Date()
-                var receivedFrame = false
+                var connectedAt: Date?
                 do {
-                    let stream = try await streaming.liveVehicleUpdates(vin: vin)
-                    self.liveStreamConnected = true
-                    self.liveStreamRetryAt = nil
-                    self.publishDiagnostics()
+                    self.liveStreamMetrics.connectionAttempts += 1
+                    let stream = try await streaming.liveVehicleUpdates(vin: vin, purpose: purpose)
                     for try await update in stream {
                         try Task.checkCancellation()
                         guard requestGeneration == self.generation,
                               var current = self.latest, current.vin == vin else { return }
-                        // Connecting is not "healthy" — a sleeping vehicle can idle-time-out
-                        // repeatedly without ever sending a frame. Only a real frame clears
-                        // the backoff.
-                        if !receivedFrame { receivedFrame = true; failure = 0 }
+                        if case .connected(let activeTransportStreams) = update {
+                            let now = Date()
+                            connectedAt = now
+                            self.liveStreamConnected = true
+                            self.liveStreamRetryAt = nil
+                            self.liveStreamMetrics.successfulConnections += 1
+                            self.liveStreamMetrics.activeTransportStreams = activeTransportStreams
+                            self.liveStreamMetrics.connectedAt = now
+                            self.liveStreamMetrics.circuitOpenUntil = nil
+                            self.schedule(after: self.liveStreamPolicy.integrityPollInterval,
+                                          retrySession: false)
+                            self.publishDiagnostics()
+                            continue
+                        }
                         current.applyLiveUpdate(update)
                         self.latest = current
                         let now = Date()
+                        self.liveStreamMetrics.messagesReceived += 1
+                        self.liveStreamMetrics.lastFrameAt = now
+                        self.liveStreamMetrics.lastDisconnectedAt = nil
                         if now.timeIntervalSince(lastPersistAt) >= 10 {
                             lastPersistAt = now
                             self.stateStore.save(current)
                         }
-                        self.onState?(current)
+                        self.onEvent?(.state(current))
                     }
                     throw VehicleServiceError.temporarilyUnavailable(
                         provider: self.api.brand, service: "live vehicle stream"
@@ -823,28 +951,94 @@ final class RefreshCoordinator {
                 } catch is CancellationError {
                     return
                 } catch {
+                    let now = Date()
                     self.liveStreamConnected = false
-                    // A stream that carried frames, or stayed up for minutes before the
-                    // request-inactivity timeout on an idle parked vehicle, is not a flap:
-                    // reset the backoff and log softly. A fast, frameless failure keeps
-                    // escalating and is surfaced as a warning.
-                    let looksHealthy = receivedFrame
-                        || Date().timeIntervalSince(streamStartedAt) >= 5 * 60
-                    if looksHealthy { failure = 0 }
-                    failure += 1
-                    let delay = min(5 * pow(2, Double(min(failure - 1, 4))), 60)
-                    self.liveStreamRetryAt = Date().addingTimeInterval(delay)
-                    if looksHealthy {
-                        self.logger.debug("Live stream reconnecting in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
-                    } else {
-                        self.logger.warning("Live stream dropped; retrying in \(Int(delay), privacy: .public)s: \(String(describing: error), privacy: .public)")
+                    self.liveStreamMetrics.activeTransportStreams = 0
+                    self.liveStreamMetrics.connectedAt = nil
+                    self.liveStreamMetrics.disconnects += 1
+                    self.liveStreamMetrics.lastDisconnectedAt = now
+                    let duration = now.timeIntervalSince(connectedAt ?? streamStartedAt)
+                    self.liveStreamMetrics.lastConnectionDuration = max(0, duration)
+                    let mapped = ServiceErrorPolicy.decision(error, provider: self.api.brand).error
+                    self.liveStreamMetrics.lastDisconnectReason =
+                        DiagnosticRedaction.redact(String(describing: mapped))
+                    if duration >= self.liveStreamPolicy.stabilityInterval {
+                        failure = 0
+                        authorizationRecoveryUsed = false
                     }
+                    failure += 1
+                    let action = self.liveStreamPolicy.action(
+                        for: mapped, consecutiveFailures: failure,
+                        authorizationRecoveryUsed: authorizationRecoveryUsed,
+                        now: now, jitterUnit: self.liveStreamJitter()
+                    )
+                    let delay: TimeInterval
+                    switch action {
+                    case .retry(let retryDelay):
+                        delay = retryDelay
+                    case .refreshAuthorization(let retryDelay):
+                        authorizationRecoveryUsed = true
+                        do {
+                            try await streaming.refreshLiveStreamAuthorization()
+                            self.liveStreamMetrics.authorizationRefreshes += 1
+                        } catch {
+                            self.logger.warning("Live stream token recovery failed: \(String(describing: error), privacy: .public)")
+                        }
+                        delay = retryDelay
+                    case .openCircuit(let until):
+                        self.liveStreamMetrics.circuitOpenUntil = until
+                        delay = max(0, until.timeIntervalSince(now))
+                    }
+                    self.liveStreamRetryAt = now.addingTimeInterval(delay)
+                    self.scheduleFallbackPoll(for: self.latest)
+                    self.logger.warning("Live stream dropped; retrying in \(Int(delay), privacy: .public)s: \(String(describing: mapped), privacy: .public)")
                     self.publishDiagnostics()
                     do { try await Task.sleep(for: .seconds(delay)) }
                     catch { return }
+                    if case .openCircuit = action {
+                        failure = 0
+                        authorizationRecoveryUsed = false
+                        self.liveStreamMetrics.circuitOpenUntil = nil
+                    }
                 }
             }
         }
+    }
+
+    private func desiredLiveStreamPurpose(for state: VehicleState?) -> VehicleLiveStreamPurpose? {
+        guard let state else { return nil }
+        if let until = commandStreamUntil, until > Date(), let commandStreamPurpose {
+            return commandStreamPurpose
+        }
+        commandStreamUntil = nil
+        commandStreamPurpose = nil
+        return liveStreamPolicy.shouldStream(state) ? .charging : nil
+    }
+
+    private func scheduleFallbackPoll(for state: VehicleState?) {
+        guard let state else { return }
+        schedule(after: RefreshPolicy.interval(
+            isCharging: state.isCharging,
+            isClimateActive: state.isClimateActive,
+            isVehicleAvailable: {
+                if case .unavailable = state.availability { return false }
+                if case .available = state.availability { return true }
+                return nil
+            }()
+        ), retrySession: false)
+    }
+
+    private func stopLiveStreaming() {
+        commandWatchdogTask?.cancel()
+        commandWatchdogTask = nil
+        streamTask?.cancel()
+        streamTask = nil
+        streamTaskID = nil
+        liveStreamPurpose = nil
+        liveStreamConnected = false
+        liveStreamRetryAt = nil
+        liveStreamMetrics.activeTransportStreams = 0
+        liveStreamMetrics.connectedAt = nil
     }
 }
 

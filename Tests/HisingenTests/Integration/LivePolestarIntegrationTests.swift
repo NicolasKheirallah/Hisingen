@@ -44,6 +44,7 @@ struct LivePolestarReadOnlyIntegrationTests {
     @Test(.disabled(if: !livePolestarCredentialsConfigured,
                     "Live Polestar credentials are not configured"))
     func testAuthenticationDiscoveryFetchRestoreAndSignOut() async throws {
+        let startedAt = Date()
         let environment = ProcessInfo.processInfo.environment
         let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
         let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
@@ -73,6 +74,12 @@ struct LivePolestarReadOnlyIntegrationTests {
             let state = try await api.fetchVehicleState(vin: vin, features: features)
             XCTAssertEqual(state.vin, vin)
             XCTAssertTrue(state.batteryPercentage != nil || state.rangeKm != nil)
+            let connectivitySupport = state.probedCapabilities?.support(for: .connectivity)
+            if connectivitySupport == .unavailable {
+                XCTAssertFalse(state.unavailableFeatures.contains(.connectivityDiagnostics))
+            } else if state.connectivity != nil {
+                XCTAssertEqual(connectivitySupport, .supported)
+            }
             if let installed = state.otaCapabilities?.installedSoftwareVersion, !installed.isEmpty {
                 #expect(state.softwareInfo?.installedVersion == installed)
             }
@@ -105,6 +112,14 @@ struct LivePolestarReadOnlyIntegrationTests {
             try await api.restoreSession(token: token, preferredVIN: vin, features: features)
             let restored = try await api.fetchVehicleState(vin: vin, features: features)
             XCTAssertEqual(restored.vin, vin)
+            let tokenRequests = await APIDiagnosticLogStore.shared.snapshot().filter {
+                $0.provider == .polestar && $0.operation == "Polestar token request"
+                    && $0.timestamp >= startedAt
+            }
+            XCTAssertEqual(
+                tokenRequests.count, 2,
+                "Authentication and one explicit restore should be the only token grants"
+            )
             try await api.signOut()
         } catch {
             try? await api.signOut()

@@ -51,12 +51,6 @@ actor PolestarGRPC {
     var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
     /// Last observed raw OTA state per VIN, preserving the 15 vs 1 distinction.
     var otaRawSoftwareStates: [String: SoftwareStateRaw] = [:]
-    /// When true, uses server-streaming gRPC methods (`GetBattery`, `GetExterior`) that the
-    /// server keeps open and pushes updates over, instead of the one-shot `GetLatest*` methods.
-    /// The streaming variants return the same first-frame data but may be fresher since the
-    /// server expects an ongoing connection.
-    var useStreaming = false
-
     /// Backend/VIN/path keys that answered a read with status 12 UNIMPLEMENTED.
     /// They are skipped for this vehicle and backend for 24 hours rather than
     /// re-attempted — and failing — on every refresh. The expiry lets a newly deployed backend
@@ -74,16 +68,21 @@ actor PolestarGRPC {
     var locationInFlight: [String: PolestarInFlightRequest<VehicleLocation?>] = [:]
     var chargeLocationsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
 
-    func setUseStreaming(_ enabled: Bool) { useStreaming = enabled }
-
     /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError`. The read paths
     /// used to collapse every status into `invalidResponse("gRPC status N")`, so a permanently
     /// unimplemented service (12) was indistinguishable from a transient blip (14) and a real
     /// `16 UNAUTHENTICATED` never triggered re-authentication.
-    static func readStatusError(status: String, path: String) -> PolestarError {
+    static func readStatusError(status: String, message: String? = nil, path: String) -> PolestarError {
         let service = path.split(separator: "/").first.map(String.init) ?? path
+        let detail = (message?.removingPercentEncoding ?? message)?.lowercased()
         switch status {
         case "12": return .grpcUnimplemented(service: service)
+        case "14" where detail?.contains("authorization failed") == true:
+            // Some Chronos reads report a stable per-service authorization gap as UNAVAILABLE
+            // rather than PERMISSION_DENIED. It is not a dead account token because sibling
+            // RPCs succeed with the same bearer token; classify it as an unsupported optional
+            // capability so the caller backs off for hours.
+            return .permissionDenied(operation: service)
         case "14": return .grpcUnavailable(service: service)
         case "16": return .authenticationRequired(.expiredSession)
         default:   return .invalidResponse(operation: "gRPC status \(status)")
@@ -92,8 +91,8 @@ actor PolestarGRPC {
 
     /// Applies `readStatusError` and, for UNIMPLEMENTED, remembers the path so it is not
     /// retried. Call from every read helper's non-zero-status branch.
-    func readStatusFailure(status: String, path: String, vin: String, base: URL) -> PolestarError {
-        let error = Self.readStatusError(status: status, path: path)
+    func readStatusFailure(status: String, message: String? = nil, path: String, vin: String, base: URL) -> PolestarError {
+        let error = Self.readStatusError(status: status, message: message, path: path)
         let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
         if case .grpcUnimplemented = error,
            unimplementedReadPaths.insert(key).inserted {
@@ -137,12 +136,27 @@ actor PolestarGRPC {
     }
     #endif
 
-    func liveUpdates(vin: String, accessToken: String) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+    func liveUpdates(
+        vin: String, accessToken: String, purpose: VehicleLiveStreamPurpose
+    ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
         let base = try await resolvedHost(.c3, accessToken: accessToken)
-        let batteryRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
-        let exteriorRequest = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
-        let batteryStreamPath = batteryStreamPath
-        let exteriorStreamPath = "/services.vehiclestates.exterior.ExteriorService/GetExterior"
+        let requestBody = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        let stream: (path: String, parse: @Sendable (Data) -> VehicleLiveUpdate?)
+        switch purpose {
+        case .charging:
+            stream = (batteryStreamPath, { body in
+                guard let payload = Protobuf.fields(body)
+                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data else { return nil }
+                return .battery(Self.parseBattery(payload))
+            })
+        case .exteriorConfirmation:
+            stream = ("/services.vehiclestates.exterior.ExteriorService/GetExterior", { body in
+                guard let payload = Protobuf.fields(body)
+                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
+                      let exterior = Self.parseExterior(payload) else { return nil }
+                return .exterior(exterior, reportedAt: nil)
+            })
+        }
 
         // `bufferingNewest` bounds memory if the UI consumer stalls while the push stream
         // stays chatty; dropping stale frames is correct because each frame is a full
@@ -150,31 +164,12 @@ actor PolestarGRPC {
         return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(16)) { continuation in
             let worker = Task {
                 do {
-                    try await withThrowingTaskGroup(of: Void.self) { group in
-                        group.addTask {
-                            try await self.consumeLiveFrames(
-                                base: base, path: batteryStreamPath,
-                                message: batteryRequest, vin: vin, accessToken: accessToken
-                            ) { body in
-                                guard let payload = Protobuf.fields(body)
-                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data else { return }
-                                continuation.yield(.battery(Self.parseBattery(payload)))
-                            }
-                        }
-                        group.addTask {
-                            try await self.consumeLiveFrames(
-                                base: base,
-                                path: exteriorStreamPath,
-                                message: exteriorRequest, vin: vin, accessToken: accessToken
-                            ) { body in
-                                guard let payload = Protobuf.fields(body)
-                                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
-                                      let exterior = Self.parseExterior(payload) else { return }
-                                continuation.yield(.exterior(exterior, reportedAt: nil))
-                            }
-                        }
-                        _ = try await group.next()
-                        group.cancelAll()
+                    try await self.consumeLiveFrames(
+                        base: base, path: stream.path,
+                        message: requestBody, vin: vin, accessToken: accessToken,
+                        onConnected: { continuation.yield(.connected(activeTransportStreams: 1)) }
+                    ) { body in
+                        if let update = stream.parse(body) { continuation.yield(update) }
                     }
                     continuation.finish()
                 } catch is CancellationError {
@@ -189,6 +184,7 @@ actor PolestarGRPC {
 
     private func consumeLiveFrames(
         base: URL, path: String, message: Data, vin: String, accessToken: String,
+        onConnected: @escaping @Sendable () -> Void,
         onFrame: @escaping @Sendable (Data) -> Void
     ) async throws {
         let configuration = URLSessionConfiguration.ephemeral
@@ -244,7 +240,9 @@ actor PolestarGRPC {
             throw error
         }
         if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            let error = Self.readStatusError(status: status, path: path)
+            let error = Self.readStatusError(status: status,
+                                             message: http.value(forHTTPHeaderField: "grpc-message"),
+                                             path: path)
             await APIDiagnosticLogStore.shared.record(
                 provider: .polestar, request: request,
                 operation: Self.diagnosticOperation("live gRPC \(path)", grpcStatus: status,
@@ -255,6 +253,7 @@ actor PolestarGRPC {
         await APIDiagnosticLogStore.shared.record(
             provider: .polestar, request: request, operation: "live gRPC \(path) connected",
             statusCode: http.statusCode, startedAt: startedAt)
+        onConnected()
 
         var header: [UInt8] = []
         var body = Data()
@@ -321,8 +320,7 @@ actor PolestarGRPC {
         var message = Data()
         message.append(Protobuf.stringField(1, UUID().uuidString))
         message.append(Protobuf.stringField(2, vin))
-        let path = useStreaming ? batteryStreamPath : batteryPath
-        let body = try await firstMessage(path: path, message: message,
+        let body = try await firstMessage(path: batteryPath, message: message,
                                           vin: vin, accessToken: accessToken)
 
 
@@ -393,15 +391,12 @@ actor PolestarGRPC {
             var request = URLRequest(url: discoveryURL)
             request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await HTTPBodyReader.data(
+            let (data, response) = try await HTTPExchange.data(
                 for: request, using: session, limit: 256_000, operation: "C3 discovery",
-                provider: .polestar, recordDiagnostics: true
+                provider: .polestar
             )
-            guard let http = response as? HTTPURLResponse else {
-                throw PolestarError.invalidResponse(operation: "C3 discovery")
-            }
             if let failure = PolestarError.httpFailure(
-                statusCode: http.statusCode, operation: "C3 discovery"
+                statusCode: response.statusCode, operation: "C3 discovery"
             ) { throw failure }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let c3 = json["c3"] as? [String: Any],
@@ -503,7 +498,8 @@ actor PolestarGRPC {
                 statusCode: http.statusCode, retryAfter: PolestarAPI.retryAfter(from: http), operation: path
             ) { throw failure }
             if let grpcStatus, grpcStatus != "0" {
-                throw readStatusFailure(status: grpcStatus, path: path, vin: vin, base: base)
+                throw readStatusFailure(status: grpcStatus, message: grpcMessage,
+                                        path: path, vin: vin, base: base)
             }
 
             var header = [UInt8]()

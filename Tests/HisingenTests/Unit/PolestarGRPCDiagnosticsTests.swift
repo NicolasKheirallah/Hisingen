@@ -59,6 +59,11 @@ struct PolestarGRPCDiagnosticsTests {
         if case .grpcUnavailable = PolestarGRPC.readStatusError(status: "14", path: path) {} else {
             Issue.record("status 14 must map to grpcUnavailable")
         }
+        if case .permissionDenied = PolestarGRPC.readStatusError(
+            status: "14", message: "Authorization%20failed", path: path
+        ) {} else {
+            Issue.record("a service-scoped authorization failure must be capability-gated")
+        }
         if case .authenticationRequired = PolestarGRPC.readStatusError(status: "16", path: path) {} else {
             Issue.record("status 16 must map to authenticationRequired")
         }

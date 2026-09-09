@@ -81,7 +81,7 @@ struct ControlsTabView: View {
         capabilityGate.availability(
             for: command,
             state: state,
-            brand: preferences.activeBrand,
+            commandCatalog: ProviderCommandCatalog(brand: preferences.activeBrand),
             enabledFeatures: features,
             commandInProgress: ignoreBusy ? false : remoteCommandInProgress
         )
@@ -119,7 +119,7 @@ struct ControlsTabView: View {
     }
 
     /// Stands in for the real `.startClimate` when only its gating matters — neither
-    /// `isImplemented(by:)` nor `requiredCapability` looks at the associated values.
+    /// Provider implementation support and `requiredCapability` do not inspect associated values.
     private static let climateProbe = RemoteCommand.startClimate(
         temperatureCelsius: 0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified,
         rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified

@@ -37,7 +37,7 @@ extension PolestarGRPC {
     private static let myCarsPath = "/car_information.CarInformation/GetMyCars"
 
     func fetchExterior(vin: String, accessToken: String) async throws -> ExteriorSnapshot? {
-        let path = useStreaming ? Self.exteriorStreamPath : Self.exteriorPath
+        let path = Self.exteriorPath
         let body = try await firstMessage(path: path, message: Self.vehicleRequest(vin),
                                            vin: vin, accessToken: accessToken)
         guard let payload = Self.message(body, field: 3) else { return nil }
@@ -597,27 +597,10 @@ extension PolestarGRPC {
         guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
-        let startedAt = Date()
-        let data: Data
-        let http: HTTPURLResponse
-        do {
-            let result = try await session.data(for: request)
-            data = result.0
-            guard let response = result.1 as? HTTPURLResponse else {
-                throw PolestarError.invalidResponse(operation: "Open-Meteo weather")
-            }
-            http = response
-        } catch {
-            await APIDiagnosticLogStore.shared.record(
-                provider: .polestar, request: request, operation: "Open-Meteo vehicle weather",
-                startedAt: startedAt, error: error)
-            return nil
-        }
-        await APIDiagnosticLogStore.shared.record(
-            provider: .polestar, request: request, operation: "Open-Meteo vehicle weather",
-            statusCode: http.statusCode, responseBytes: data.count,
-            responseData: data, startedAt: startedAt)
-        guard http.statusCode == 200,
+        guard let (data, response) = try? await HTTPExchange.data(
+            for: request, using: session, limit: 256_000,
+            operation: "Open-Meteo vehicle weather", provider: .polestar
+        ), response.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let current = json["current"] as? [String: Any] else { return nil }
 

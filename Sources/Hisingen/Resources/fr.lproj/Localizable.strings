@@ -1637,6 +1637,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Cette mise à jour a été annoncée mais n'est pas encore autorisée au téléchargement. Le véhicule la télécharge de lui-même dès que le backend l'autorise et que les conditions le permettent ; l'installation ne peut être lancée qu'ensuite.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Ce véhicule ne prend pas en charge le consentement de téléchargement via le cloud — la mise à jour ne peut être téléchargée que lorsque la voiture communique avec le backend de sa propre initiative. Un rendez-vous en atelier Polestar peut l'appliquer directement.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Le TPMS indirect de ce véhicule signale un niveau d'avertissement par pneu, pas une lecture de pression exacte.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "L'état provient de l'API du véhicule et ne change que lorsqu'un problème est signalé ; ce n'est donc pas une mesure en direct. À considérer comme indicatif, et non comme un feu vert vérifié.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "État d'avertissement uniquement. Le véhicule signale un niveau d'avertissement par pneu et n'identifie un pneu problématique qu'une fois le problème détecté ; ce n'est donc pas une mesure de pression en direct.";
 "To" = "Au";
 "to" = "à";
 "Trend" = "Tendance";
@@ -1867,7 +1869,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "Fermer";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

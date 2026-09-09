@@ -33,6 +33,7 @@ require_(domain.includes("var actionDisplayName"), "VehicleChronosError.actionDi
 const grpc = read("Sources/Hisingen/Services/API/PolestarGRPC.swift");
 require_(grpc.includes("let reportedBatteryCapacityKwh: Double?"), "GrpcBatteryExtras capacity missing");
 require_(grpc.includes("let unknownFields: [PolestarRawWireField]"), "GrpcBatteryExtras.unknownFields missing");
+require_(grpc.includes("capacityKwh = Protobuf.double(from: field.data)"), "battery wire field 12 (capacity) parse missing");
 require_(grpc.includes("static let unmappedBatteryFields"), "unmappedBatteryFields set missing");
 require_(grpc.includes("static func rawField("), "rawField capture missing");
 require_(grpc.includes("Transport error"), "availability reason 7 missing");
@@ -53,11 +54,21 @@ require_(caps.includes("recordID: recordID"), "parseErrors recordID missing");
 const models = read("Sources/Hisingen/Services/API/GraphQLModels.swift");
 require_(models.includes("let tokenType: String?"), "TokenResponseDTO.tokenType missing");
 require_(models.includes("let idToken: String?"), "TokenResponseDTO.idToken missing");
+// Decode-tolerance only: the query no longer selects this field, but the DTO still accepts
+// it if Polestar ever returns it (pinned by PolestarRawDecodeTests).
 require_(models.includes("let reportedBatteryCapacityKwh: FlexibleDouble?"), "BatteryDTO capacity missing");
 
-// 6. Telemetry query selects capacity and flows it into state.
+// 6. Telemetry query must NOT re-select the capacity field Polestar removed from its schema
+//    (GraphQL rejects the whole carTelematicsV2 selection otherwise). Capacity instead flows
+//    through the gRPC battery parse and the equipment fallback via resolvedBatteryCapacity.
 const telemetry = read("Sources/Hisingen/Services/API/PolestarAPI+Telemetry.swift");
-require_(telemetry.includes("reportedBatteryCapacityKwh\n"), "telematics query missing capacity selection");
+const queryStart = telemetry.indexOf("static func telematicsQuery");
+const queryEnd = telemetry.indexOf("static func matchingReading");
+require_(queryStart >= 0 && queryEnd > queryStart, "telematicsQuery builder not found");
+require_(!telemetry.slice(queryStart, queryEnd).includes("reportedBatteryCapacityKwh"),
+  "telematics query must not re-select the schema-removed capacity field");
+require_(telemetry.includes("static func resolvedBatteryCapacity(graphQL: Double?, batteryService: Double?, equipment: VehicleEquipment?)"),
+  "capacity resolution missing gRPC/equipment path");
 require_(telemetry.includes("state.reportedBatteryCapacityKwh = capacityKwh"), "capacity not wired into VehicleState");
 require_(telemetry.includes("enriched.unknownWireFields = diag.unknownFields"), "unknown fields not wired into BatteryDiagnostics");
 

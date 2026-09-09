@@ -110,6 +110,9 @@ final class VehicleSessionController {
     // MARK: - Passthroughs
 
     func refreshNow() { refreshCoordinator.refreshNow() }
+    func beginCommandConfirmation(_ command: RemoteCommand) {
+        refreshCoordinator.beginCommandConfirmation(command)
+    }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
     func signOut() { refreshCoordinator.signOut() }
@@ -215,71 +218,62 @@ final class VehicleSessionController {
     // MARK: - RefreshCoordinator wiring
 
     private func connectCoordinator() {
-        refreshCoordinator.onLoading = { [weak self] in self?.context?.showLoading() }
-        // Keep the visible "active car" marker synced from the coordinator's selection — it
-        // changes optimistically when a switch begins and again when one resolves, not only
-        // on session-level events.
-        refreshCoordinator.onSelectionChanged = { [weak self] vin in
-            self?.context?.setActiveVIN(vin)
+        refreshCoordinator.onEvent = { [weak self] event in
+            self?.handle(event)
         }
-        refreshCoordinator.onCars = { [weak self] cars, vin in
-            guard let self else { return }
-            self.setFleet(cars, activeVIN: vin)
-        }
-        // The garage scan belongs to session establishment only. It previously hung off
-        // `onCars`, which vehicle switches also fired — so every switch scheduled a full scan
-        // ~8 s later and the doubled request volume tripped provider rate limits right after
-        // switching.
-        refreshCoordinator.onSessionEstablished = { [weak self] in
-            self?.context?.sessionDidEstablish()
-        }
-        refreshCoordinator.onState = { [weak self] state in
-            guard let self else { return }
-            var state = state
-            if self.latest?.vin == state.vin, let pending = self.latest?.pendingCommand {
+    }
+
+    private func handle(_ event: RefreshCoordinatorEvent) {
+        switch event {
+        case .loading:
+            context?.showLoading()
+        case .selectionChanged(let vin):
+            context?.setActiveVIN(vin)
+        case .sessionEstablished(let cars, let selectedVIN):
+            setFleet(cars, activeVIN: selectedVIN)
+            context?.sessionDidEstablish()
+        case .state(var state):
+            if latest?.vin == state.vin, let pending = latest?.pendingCommand {
                 state.pendingCommand = pending.updatingConfirmation(from: state)
             }
-            self.context?.didReceiveVehicleState(state)
-            self.latest = state
-            self.lastError = nil
-            self.context?.sessionStateDidChange()
+            context?.didReceiveVehicleState(state)
+            latest = state
+            lastError = nil
+            context?.sessionStateDidChange()
+        case .switchPaused(let error):
+            context?.vehicleSwitchDidPause()
+            handleFailure(error)
+        case .failed(let error):
+            handleFailure(error)
+        case .diagnostics(let diagnostics):
+            handleDiagnostics(diagnostics)
+        case .vehiclesCleared:
+            fleetStore.forget(brand: preferences.activeBrand)
+            latest = nil
+            lastError = nil
+            sessionValid = false
+            setFleet([], activeVIN: nil)
+            context?.sessionStateDidChange()
         }
-        // A switch attempt during a rate-limit pause otherwise vanishes without a trace when
-        // the popover is closed: the menu closes, nothing changes on screen, and the only
-        // record was an in-panel error banner nobody saw.
-        refreshCoordinator.onSwitchPaused = { [weak self] in
-            self?.context?.vehicleSwitchDidPause()
+    }
+
+    private func handleFailure(_ error: VehicleServiceError) {
+        lastError = error.localizedDescription
+        if error.requiresAuthentication && preferences.features.contains(.notifications) {
+            sessionValid = false
+            context?.authenticationRequired()
         }
-        refreshCoordinator.onError = { [weak self] error in
-            guard let self else { return }
-            self.lastError = error.localizedDescription
-            if error.requiresAuthentication && self.preferences.features.contains(.notifications) {
-                self.sessionValid = false
-                self.context?.authenticationRequired()
-            }
-            self.context?.sessionStateDidChange()
+        context?.sessionStateDidChange()
+    }
+
+    private func handleDiagnostics(_ diagnostics: DiagnosticsSnapshot) {
+        let hasStored = preferences.hasResumableSession(for: preferences.activeBrand)
+        sessionValid = diagnostics.sessionValid || hasStored
+        lastDiagnostics = diagnostics
+        Task { await LatestDiagnosticsStore.shared.update(diagnostics) }
+        if (diagnostics.sessionValid || hasStored) && preferences.features.contains(.notifications) {
+            context?.authenticationSucceeded()
         }
-        refreshCoordinator.onDiagnostics = { [weak self] diagnostics in
-            guard let self else { return }
-            let hasStored = self.preferences.hasResumableSession(for: self.preferences.activeBrand)
-            self.sessionValid = diagnostics.sessionValid || hasStored
-            self.lastDiagnostics = diagnostics
-            Task { await LatestDiagnosticsStore.shared.update(diagnostics) }
-            if (diagnostics.sessionValid || hasStored) && self.preferences.features.contains(.notifications) {
-                self.context?.authenticationSucceeded()
-            }
-            self.context?.sessionStateDidChange()
-        }
-        let clearVehicles: () -> Void = { [weak self] in
-            guard let self else { return }
-            self.fleetStore.forget(brand: self.preferences.activeBrand)
-            self.latest = nil
-            self.lastError = nil
-            self.sessionValid = false
-            self.setFleet([], activeVIN: nil)
-            self.context?.sessionStateDidChange()
-        }
-        refreshCoordinator.onSignedOut = clearVehicles
-        refreshCoordinator.onCleared = clearVehicles
+        context?.sessionStateDidChange()
     }
 }

@@ -237,9 +237,14 @@ odometer. Included in lifetime cost-per-distance and the Fuel Fill-Ups card. Add
 
 ---
 
-## `VehicleStateStore`
+## `VehicleStateStore` and `VehicleHistoryRecorder`
 
-`VehicleStateStore` coordinates the local last-known vehicle state and historical database.
+`VehicleStateStore` is the snapshot-cache entry point. `VehicleHistoryRecorder` owns the
+end-to-end ingestion workflow for each fresh snapshot: it loads the previous authoritative
+snapshot, derives activities, saves the new snapshot, and records applicable telemetry,
+charging, air-quality, connectivity, cabin-climate, and battery-health history in a fixed order.
+This keeps the workflow behind `record(_:)` instead of exposing a sequence of database writes to
+every refresh caller.
 
 On save, the current implementation performs several independent operations:
 
@@ -376,7 +381,7 @@ The `UserDefaults` snapshot fallback likewise uses `cacheableCopy` and does not 
 
 ### Historical telemetry
 
-`VehicleStateStore.save(_:)` passes:
+`VehicleHistoryRecorder.record(_:)` passes:
 
 - `state.location?.latitude`
 - `state.location?.longitude`
@@ -387,7 +392,7 @@ The SQLite `telemetry_logs` table therefore may contain precise historical coord
 
 ### Charging sessions
 
-When charging begins and coordinates are available, `VehicleStateStore` formats them to four decimal places and supplies the resulting value as the charging-session location.
+When charging begins and coordinates are available, `VehicleHistoryRecorder` formats them to four decimal places and supplies the resulting value as the charging-session location.
 
 The SQLite `charging_sessions.location_name` field can therefore contain an approximate coordinate pair.
 
@@ -423,7 +428,7 @@ This controls database growth but should not be treated as a privacy guarantee t
 
 ## Charging History
 
-`VehicleStateStore` maintains structured charging history in SQLite separately from the reduced
+`VehicleHistoryRecorder` maintains structured charging history in SQLite separately from the reduced
 cached snapshot. SQLite is authoritative; legacy `chargingSessions` arrays carried in cached
 snapshots are cleared during refresh and are not used to render history.
 
@@ -451,7 +456,7 @@ are stored with the header so every consumer reads the same interpretation.
 At read time, missing start/end boundary samples are reconstructed from the durable session
 header. If an older record contains zero energy but its samples prove an SoC gain, the estimate
 is recovered from the current usable-capacity reference. While history recording is enabled,
-`VehicleStateStore` also writes that recovered end SoC, energy, and power summary back to the
+`VehicleHistoryRecorder` also writes that recovered end SoC, energy, and power summary back to the
 completed row on the next vehicle refresh. This makes cards, dashboards, aggregate statistics,
 and later CSV exports agree; the repair is idempotent and never guesses when samples show no
 gain.

@@ -70,7 +70,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .features: return "feature capability vehicle data remote control lock climate charge schedule location weather"
         case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
         case .privacyData: return "privacy data database storage history retention export backup diagnostics location"
-        case .updates: return "update automatic download version channel release"
+        case .updates: return "update automatic frequency interval download version channel release"
         case .about: return "about help diagnostics quit sign out version reset"
         }
     }

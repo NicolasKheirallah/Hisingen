@@ -20,7 +20,7 @@ sequenceDiagram
     AD->>KC: Preferences.migrateLegacyPassword()
     AD->>SC: construct StatusItemController, wire closures
     AD->>RC: construct RefreshCoordinator(api: activeProvider, stateStore)
-    AD->>AD: connectCoordinator() — wire onState/onCars/onError/onDiagnostics/onSignedOut/onCleared
+    AD->>AD: construct VehicleSessionController — wire one typed RefreshCoordinatorEvent channel
     AD->>KC: read cached VIN + nickname, show initial CarSummary if any
     AD->>SC: render(cached snapshot, authenticated: hasResumableSession)
     AD->>OS: applyLaunchAtLogin() via SMAppService
@@ -29,7 +29,7 @@ sequenceDiagram
     AD->>RC: refreshCoordinator.start(...) (if a session can be resumed)
     RC->>API: authenticate / restoreSession
     API-->>RC: cars, then vehicle state (or error)
-    RC-->>AD: onCars / onState / onDiagnostics
+    RC-->>AD: onEvent(.sessionEstablished / .state / .diagnostics)
     AD->>SC: render(data:error:authenticated:)
     AD->>AD: cacheDormantBrandSnapshot() — pull last snapshot for the *other* brand
     AD->>OS: setupURLEventHandling() — register hisingen:// Apple Event handler

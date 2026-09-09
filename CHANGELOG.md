@@ -3,7 +3,52 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [1.3.3] - 2026-09-09
+
+### Changed
+
+- Charging updates arrive over one persistent stream per vehicle instead of separate
+  connections per reading, and the stream runs only while the vehicle is charging or a
+  remote command awaits confirmation. Climate activity keeps the normal polling cadence,
+  because the available stream carries battery state and cannot make climate fresher.
+- Streaming no longer reconnects on a two-minute cycle. Reconnects happen when the server
+  closes the stream, the network changes, the selected vehicle changes, or the session
+  actually expires, with increasing delays from 5 seconds to 5 minutes that respect
+  server-provided retry windows.
+- Repeated authorization, unsupported-service, or incompatible-schema failures pause that
+  stream capability for hours instead of reconnecting indefinitely. An authentication
+  failure reuses the shared single-flight token refresh once before any circuit opens.
+- Routine telemetry polling pauses while the stream is healthy, falls back to the normal
+  cadence while it reconnects, and the stream closes when charging ends or the vehicle
+  reports itself unavailable.
+- Background telemetry polls are less frequent: 120 seconds while charging or climate is
+  active, 10 minutes while idle, and a 30-minute floor while the vehicle reports itself
+  unavailable, reducing request volume against the provider.
+- Command-confirmation streams close when their two-minute window lapses, even when the
+  vehicle pushes no updates, so an expired confirmation cannot keep a connection open.
+- Access tokens are reused until their real renewal window; starting a stream no longer
+  acquires a token, and diagnostics exports report stream connection duration, disconnect
+  reasons, reconnect attempts, message counts, token refreshes, fallback polls, and
+  concurrent stream counts.
+- Live-account testing gains a configurable stream soak (`HISINGEN_SOAK_SECONDS`) that
+  verifies the single-stream, no-reconnect, and no-amplification invariants over
+  sustained time against the real backend.
+
+### Added
+
+- A check-frequency choice in Settings → Updates. Automatic update checks now run hourly,
+  every six hours, daily, weekly or monthly instead of the fixed daily cadence, and the
+  choice is included in exported settings archives.
+
+### Fixed
+
+- Indirect TPMS vehicles (Polestar 2 and other warning-level-only cars) no longer present
+  an unflagged reading as a verified all-clear. The tyre card, per-tyre dots, silhouette
+  wheel rings and the Info diagnostics row stay neutral until the vehicle reports an issue
+  or a real pressure measurement, and explain that the status comes from the vehicle's API
+  and changes only when an issue is reported.
+
 
 ## [1.3.2] - 2026-09-09
 

@@ -65,6 +65,7 @@ final class PreferencesStore {
             "store_charging_history", "private_notification_details",
             "low_battery_threshold",
             "automatically_check_for_updates", "automatically_download_updates",
+            "update_check_interval",
             "show_warning_badge", "grid_carbon_intensity_g_per_kwh"
         ]
         return exact.contains(key)
@@ -493,6 +494,9 @@ final class PreferencesStore {
     /// install executable updates until the user asks Sparkle to do so.
     var automaticallyChecksForUpdates: Bool { get { boolDefaultTrue("automatically_check_for_updates") } set { d.set(newValue, forKey: "automatically_check_for_updates") } }
     var automaticallyDownloadsUpdates: Bool { get { d.bool(forKey: "automatically_download_updates") } set { d.set(newValue, forKey: "automatically_download_updates") } }
+    /// Cadence of the automatic checks. Unknown stored values (a future version's case or
+    /// hand-edited defaults) fall back to the historical daily interval instead of failing.
+    var updateCheckInterval: UpdateCheckInterval { get { UpdateCheckInterval(rawValue: d.string(forKey: "update_check_interval") ?? "") ?? .daily } set { d.set(newValue.rawValue, forKey: "update_check_interval") } }
 
     /// Audible cue on urgent notifications (security, warnings, charging problems).
     /// Routine informational banners stay silent regardless.
@@ -531,17 +535,24 @@ final class PreferencesStore {
                 // The stored selection is authoritative. Earlier versions force-enabled
                 // three presentation features on every read, which made their Settings
                 // toggles appear to work only until the next launch.
-                return FeatureSelection(
-                    enabled: Set(values.compactMap(AppFeature.init))
-                        .intersection(AppFeature.permittedFeatures)
-                )
+                var enabled = Set(values.compactMap(AppFeature.init))
+                    .intersection(AppFeature.permittedFeatures)
+                // The stream lifecycle is now activity-gated, circuit-broken, and mutually
+                // aware of polling. Re-enable it once for installations migrated off the old
+                // reconnecting implementation; later user changes remain authoritative.
+                if !d.bool(forKey: "streaming_default_migration_v2") {
+                    enabled.insert(.realTimeUpdates)
+                    d.set(enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2")
+                    d.set(true, forKey: "streaming_default_migration_v2")
+                }
+                return FeatureSelection(enabled: enabled)
             }
             // v1 installs predate the .notifications case; it shipped default-on, so the
             // migration must carry it forward or upgraders silently lose every alert.
             if let values = d.array(forKey: "enabled_features_v1") as? [String] { var set = Set(values.compactMap(AppFeature.init)); set.formUnion([.exteriorStatus, .tyreAndWarnings, .softwareUpdates, .chargingSchedule, .climateStatus, .tripMeters, .notifications]); let result = FeatureSelection(enabled: set.intersection(AppFeature.permittedFeatures)); d.set(result.enabled.map(\.rawValue).sorted(), forKey: "enabled_features_v2"); return result }
             var result = FeatureSelection.default; if d.bool(forKey: "show_vehicle_image") { result.set(.vehicleImage, enabled: true) }; return result
         }
-        set { d.set(newValue.enabled.intersection(AppFeature.permittedFeatures).map(\.rawValue).sorted(), forKey: "enabled_features_v2"); d.removeObject(forKey: "enabled_features_v1"); d.removeObject(forKey: "show_vehicle_image") }
+        set { d.set(newValue.enabled.intersection(AppFeature.permittedFeatures).map(\.rawValue).sorted(), forKey: "enabled_features_v2"); d.set(true, forKey: "streaming_default_migration_v2"); d.removeObject(forKey: "enabled_features_v1"); d.removeObject(forKey: "show_vehicle_image") }
     }
 
     func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme { let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); if let values = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String], let theme = values[key].flatMap(AppTheme.init) { return theme }; let resolved = brand ?? (key.isEmpty ? activeBrand : (key.hasPrefix("YV") ? .volvo : activeBrand)); if let theme = d.string(forKey: "theme_for_\(resolved.rawValue)").flatMap(AppTheme.init) { return theme }; return resolved == .volvo ? .volvo : .polestar }

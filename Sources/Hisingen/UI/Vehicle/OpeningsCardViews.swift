@@ -197,14 +197,22 @@ struct TireStatusCardView: View {
         !tyres.isEmpty && tyres.allSatisfy { $0.kilopascals == nil }
     }
 
-    /// Header pill state: red/orange on any flagged tyre, green once every tyre explicitly
-    /// reported (or measured), green-with-caveat for partial reports, muted only when the
-    /// provider said nothing at all.
+    /// Header pill state: red/orange on any flagged tyre, green once every tyre is *measured*
+    /// fine, green-with-caveat for partial reports, muted only when the provider said nothing
+    /// at all. In iTPMS mode (warning level without measurements) no state is ever green:
+    /// the system only flags a tyre once it detects an issue, so an unflagged reading is
+    /// "no warnings reported", never a verified all-clear.
     private var summaryPill: (text: String, color: Color, symbol: String) {
         let reportedCount = tyres.filter { $0.kilopascals != nil || $0.warning != .unknown }.count
         let allReported = !tyres.isEmpty && reportedCount == tyres.count
         if tyres.contains(where: { $0.warning.needsAttention }) {
             return (L10n.text("Check Pressure"), HisingenTheme.semanticWarning, "exclamationmark.triangle.fill")
+        }
+        if reportsWarningLevelOnly {
+            if reportedCount > 0 {
+                return (L10n.text("No warnings reported"), Color.secondary, "circle.dashed")
+            }
+            return (L10n.text("Data unavailable"), Color.secondary, "questionmark.circle")
         }
         if allReported {
             return (L10n.text("Everything looks good"), HisingenTheme.semanticGood, "checkmark.circle.fill")
@@ -232,6 +240,10 @@ struct TireStatusCardView: View {
 
                 if reportsWarningLevelOnly {
                     Text(L10n.text("This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading."))
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(L10n.text("The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear."))
                         .font(.system(size: 9.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -287,10 +299,12 @@ struct TirePillView: View {
             default: return warningState.displayName
             }
         }()
-        // Green dot means "measured fine or explicitly OK". A reading with no flag counts as
-        // good even when the warning enum stayed unknown (e.g. a discovered pressure quadruple
-        // without warning fields). Only truly unreported tyres fall back to muted/unknown.
-        let knownGood = !attention && (warningState == .none || pressureText != nil)
+        // Green dot means "measured fine". A reading with no flag counts as good even when
+        // the warning enum stayed unknown (e.g. a discovered pressure quadruple without
+        // warning fields). An explicit iTPMS "OK" carries no measurement — the system only
+        // flags a tyre once it detects an issue — so it renders neutral rather than falsely
+        // healthy. Only truly unreported tyres fall back to muted/unknown.
+        let knownGood = !attention && pressureText != nil
         let statusColor: Color = attention
             ? HisingenTheme.tyreWarningColor(warningState)
             : (knownGood ? HisingenTheme.semanticGood : Color.secondary)

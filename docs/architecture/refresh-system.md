@@ -6,10 +6,10 @@
 
 `RefreshPolicy.regularInterval(isCharging:)`:
 
-- **60 seconds** while `latest.isCharging == true`
-- **300 seconds (5 minutes)** otherwise
+- **120 seconds** while charging or climate is active
+- **600 seconds (10 minutes)** otherwise
 
-Plus jitter on every scheduled refresh: `maxJitter = min(15, max(1, interval * 0.1))`, then `Double.random(in: 0...maxJitter)` added on top — so charging gets 0–6s of jitter, idle gets 0–15s, preventing every Hisingen instance from hitting the backend on a perfectly synchronized clock edge.
+Plus jitter on every scheduled refresh: `maxJitter = min(15, max(1, interval * 0.1))`, then `Double.random(in: 0...maxJitter)` added on top — so scheduled polls receive up to 15 seconds of jitter, preventing every Hisingen instance from hitting the backend on a perfectly synchronized clock edge.
 
 ## Retry / backoff
 
@@ -28,7 +28,7 @@ One `task: Task<Void, Never>?` plus a `generation: UInt64` counter. Every entry 
 guard task == nil else { return }   // an equivalent refresh is already in flight — drop this trigger
 ```
 
-Callers that arrive while a refresh is already running simply don't get a second network call — they'll receive the in-flight refresh's result through the same `onState`/`onError` callback everyone else is listening to. Every async completion additionally checks `requestGeneration == generation && !Task.isCancelled` before committing its result, so if `selectCar`/`credentialsChanged`/`signOut` bumped the generation while a fetch was in flight (superseding it), that stale result is silently discarded rather than overwriting newer state.
+Callers that arrive while a refresh is already running simply don't get a second network call — they'll receive the in-flight refresh's result through the single typed `onEvent` channel. Every async completion additionally checks `requestGeneration == generation && !Task.isCancelled` before committing its result, so if `selectCar`/`credentialsChanged`/`signOut` bumped the generation while a fetch was in flight (superseding it), that stale result is silently discarded rather than overwriting newer state.
 
 ```mermaid
 sequenceDiagram
@@ -44,9 +44,9 @@ sequenceDiagram
     W->>RC: refresh(.wake) — task != nil, dropped
     API-->>RC: VehicleState
     RC->>RC: generation check passes (still 7) → apply(state)
-    RC-->>T: onState(state)
-    RC-->>M: onState(state)
-    RC-->>W: onState(state)
+    RC-->>T: onEvent(.state(state))
+    RC-->>M: onEvent(.state(state))
+    RC-->>W: onEvent(.state(state))
 ```
 
 All three triggers converge on exactly one network call.
@@ -89,13 +89,79 @@ Distinct from staleness on the *data* (see [data-flow.md](data-flow.md#freshness
 
 ## Diagnostics
 
-`DiagnosticsSnapshot` is republished after nearly every state transition: `lastSuccess`, `lastError`, `latency`, `nextRefresh`, `sessionValid`, `networkAvailable`, `refreshInProgress` (`task != nil`). `AppDelegate` uses `diagnostics.sessionValid` (OR'd with `Preferences.hasResumableSession`) to decide whether the UI should be in the authenticated or sign-in state.
+`RefreshCoordinatorEvent` is the sole outward lifecycle channel. It carries state, loading,
+selection, session establishment, failures, clearing, and diagnostics as mutually explicit events;
+session establishment carries the fleet and selected VIN together, while a paused switch carries
+its rate-limit error in the same event. `VehicleSessionController` is the only consumer that maps
+these events into shell updates.
+
+`DiagnosticsSnapshot` is republished after nearly every state transition: `lastSuccess`, `lastError`, `latency`, `nextRefresh`, `sessionValid`, `networkAvailable`, `refreshInProgress` (`task != nil`). `VehicleSessionController` uses `diagnostics.sessionValid` (OR'd with `Preferences.hasResumableSession`) to decide whether the UI should be in the authenticated or sign-in state.
 
 ## Vehicle-asleep backoff (2026-08-22)
 
-`RefreshPolicy.interval` combines the activity cadence (60 s charging/climate, 300 s idle)
+`RefreshPolicy.interval` combines the activity cadence (120 s charging/climate, 600 s idle)
 with availability: when the vehicle reports `.unavailable` (asleep, power saving, service),
-the interval stretches to a **900 s floor** — a deep-sleeping car answers every poll with the
+the interval stretches to a **1,800 s floor** — a deep-sleeping car answers every poll with the
 same stale snapshot, so faster polling only burns the provider's rate budget. `.unknown`
 availability keeps the base cadence. Normal polling resumes on the first fetch where the
 vehicle reports available.
+
+## Live streaming (2026-09-09)
+
+Polestar exposes server-streaming gRPC endpoints for battery state (and exterior state for
+lock/window confirmation). `RefreshCoordinator` owns exactly **one stream task per selected
+vehicle**; the purpose (`VehicleLiveStreamPurpose`) selects which endpoint that task consumes.
+
+**The honesty gate.** `LiveStreamPolicy.shouldStream` streams only for an *available vehicle
+that is charging*. The Polestar stream carries battery/charging state only — keeping it open
+because climate is running would consume a connection without improving climate freshness, so
+climate stays on the 120 s poll. A `.unavailable` (asleep) vehicle never streams: its frames
+are stale on arrival.
+
+**Streaming and polling are mutually aware:**
+
+| Stream state | Polling |
+| --- | --- |
+| Connected | Routine polling disabled; only a 30-min integrity poll runs |
+| Degraded (retrying) | Normal activity cadence returns as fallback polling |
+| Disconnected (circuit open) | Fallback polling continues; reconnect waits out the circuit |
+| Command issued | A short confirmation stream opens (see below), plus one 12 s follow-up fetch |
+
+**Reconnect rules.** The stream reconnects only when the server closes it, the network
+changes, the user changes vehicle, or authentication actually expires — never on a timer.
+The per-request idle timeout is 20 minutes, because a parked car legitimately pushes no
+frames. Backoff is exponential with jitter (5 s → 15 s → 30 s → 1 m → 2 m → 5 m cap) and
+respects server `Retry-After` values (floored at 5 s, capped at 1 h). Failure counters
+reset only after a connection has held for `stabilityInterval` (10 minutes) — opening a
+socket is not stability.
+
+**Circuit breakers.** Authorization failures recover through the shared single-flight token
+refresh exactly once; a repeat failure opens a 30-minute circuit instead of looping 401s.
+Unsupported-method, permission-denied, and incompatible-schema failures open a 6-hour
+circuit. Generic transient failures open a circuit after `maximumFailuresBeforeCircuit`
+(6) consecutive failures. While a circuit is open, fallback polling covers the vehicle.
+
+**Command confirmation windows.** A successful charging or exterior command opens a
+purpose-scoped stream for `commandConfirmationWindow` (2 minutes). A watchdog task closes
+the window: without it, a held-open confirmation stream only re-evaluates its purpose on
+the next frame or reconnect, which on a quiet car could keep the connection open for the
+full idle timeout after its reason expired. When the window lapses, the charging gate
+decides again.
+
+**Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
+stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator
+state when it is still the registered owner — an expired confirmation stream can never
+clobber a newer stream's state or fake liveness.
+
+**Token reuse.** Starting a stream never acquires a token; it reuses the shared access
+token until its real renewal window. An authentication failure on the stream goes through
+`refreshLiveStreamAuthorization` (single-flight, replacing only the token the server
+rejected) and reconnects once.
+
+**Metrics.** `LiveStreamMetrics` (connection attempts, successful connections, disconnects,
+messages, authorization refreshes, fallback polls, concurrent streams, connection
+durations, disconnect reasons, circuit-open deadlines) is published through
+`DiagnosticsSnapshot` and exported in support bundles. A credential-gated soak test
+(`HISINGEN_SOAK_SECONDS`) asserts the invariants above against the real backend over
+sustained time; simulated-failure behavior is covered by `StreamPolicyTests` and
+`RefreshCoordinatorStreamTests`.

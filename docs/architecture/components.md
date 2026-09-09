@@ -28,13 +28,13 @@ Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refr
 
 **Purpose:** prevent timer, manual, wake, and network-recovery refreshes from racing each other or hammering the backend, and turn provider errors into UI-facing diagnostics.
 
-**Main types:** `RefreshCoordinator`, `RefreshPolicy`, `DiagnosticsSnapshot`, `Trigger`.
+**Main types:** `RefreshCoordinator`, `RefreshCoordinatorEvent`, `RefreshPolicy`, `DiagnosticsSnapshot`, `Trigger`.
 
 **State it owns:** in-flight `Task`, a `generation` counter, `failureCount`, `rateLimitedUntil`, `sleeping`, `networkAvailable`, the `NWPathMonitor`, and the last known `VehicleState`/`[CarSummary]`.
 
 **Isolation:** `@MainActor` class. Its `NWPathMonitor` callback runs on a private `DispatchQueue` and hops back via `Task { @MainActor in ... }` before touching any state.
 
-**Failure modes:** every failure is classified via `VehicleServiceError.isTransient`/`.requiresAuthentication` and either retried with backoff or surfaced through `onError`.
+**Failure modes:** every failure is classified via `VehicleServiceError.isTransient`/`.requiresAuthentication` and either retried with backoff or surfaced through `onEvent(.failed(...))`.
 
 **Relevant tests:** `Tests/HisingenTests/Unit/RefreshCoordinatorTests.swift`, `ChargingTransitionDetectorTests.swift` (shares the backoff-formula tests).
 
@@ -42,15 +42,22 @@ Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refr
 
 **Purpose:** the `VehicleProviding` conformance for Polestar. Owns OIDC login, GraphQL calls, and dispatches to a hand-rolled gRPC client for everything GraphQL doesn't cover.
 
-**Main types:** `actor PolestarAPI`, `actor PolestarGRPC`, `PolestarGRPCCapabilities` (extension), `PolestarGRPCRemote` (extension), `PolestarError`.
+**Main types:** `actor PolestarAPI`, `PolestarAuthorizationFlow`, `actor PolestarGRPC`, `PolestarGRPCCapabilities` (extension), `PolestarGRPCRemote` (extension), `PolestarError`.
 
-**State it owns:** access/refresh token and expiry (in-memory only — only the refresh token is persisted), `cars`, per-VIN capability cache and backoff tables, the discovered C3 gRPC host, an ephemeral `URLSession` (recreated on `resetSession()`).
+**State it owns:** access/refresh token and expiry (in-memory only — only the refresh token is persisted), two independent PKCE flow states, `cars`, per-VIN capability cache and backoff tables, the discovered C3 gRPC host, an ephemeral `URLSession` (recreated on `resetSession()`). `PolestarAuthorizationFlow` keeps each verifier, state, start time, progress flag, and invalidation generation atomic.
 
 **Isolation:** `actor`. Token refresh and C3 host discovery both use the "single stored `Task`, everyone awaits it" pattern to prevent duplicate concurrent requests.
 
 **Failure modes:** see [api/polestar.md](../api/polestar.md#error-handling) and [architecture/capabilities.md](capabilities.md) — a failed optional-capability fetch degrades that one field, not the whole refresh.
 
 **Relevant tests:** `GraphQLDecodingTests`, `VehicleCapabilityParsingTests`, `RequestConstructionTests`, `ResumePathTests`, `RemoteCommandTests`, plus `Integration/LivePolestarIntegrationTests.swift` (credential-gated, opt-in).
+
+## HTTPExchange (`Services/API/HTTPExchange.swift`)
+
+**Purpose:** the buffered HTTP boundary shared by both providers. One non-replaying operation
+enforces response-size limits, requires an HTTP response, maps transport errors into the provider
+error vocabulary, and records a redacted diagnostic result. Streaming gRPC keeps its dedicated
+byte-stream path because buffering would change cancellation and delivery semantics.
 
 ## VolvoAPI (`Services/API/VolvoAPI.swift`)
 
@@ -68,7 +75,7 @@ Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refr
 
 ## VehicleProviding (`Services/API/VehicleProviding.swift`)
 
-**Purpose:** the seam. A 9-method protocol both providers conform to; everything above this line in the app is brand-agnostic. See [providers.md](providers.md).
+**Purpose:** the read/session seam. It extends the smaller `RemoteCommandExecuting` seam so refresh consumers need not depend on every provider operation. `ProviderCommandCatalog` is the single provider-implementation map used by both UI gating and dispatch. See [providers.md](providers.md).
 
 ## Domain model (`Domain/*.swift`)
 
@@ -100,7 +107,7 @@ See [domain/notifications.md](../domain/notifications.md).
 
 **Preferences.swift** — `@MainActor enum Preferences`, a typed façade over `UserDefaults` for every non-secret setting (VIN, nicknames, feature selection, notification toggles, theme, etc.).
 
-**VehicleStateStore.swift** — plain `final class`, `UserDefaults`-backed cache of the last `VehicleState` and `ChargingBaseline` per VIN, both with a 7-day self-cleaning TTL.
+**VehicleStateStore.swift** — snapshot-cache entry point. It delegates each fresh snapshot to `VehicleHistoryRecorder`, whose `record(_:)` operation owns the complete activity, telemetry, charging, air-quality, connectivity, climate, and battery-health persistence workflow. SQLite remains authoritative and schema-compatible; the `UserDefaults` snapshot is migration-only.
 
 See [persistence.md](persistence.md) and [security/keychain.md](../security/keychain.md).
 

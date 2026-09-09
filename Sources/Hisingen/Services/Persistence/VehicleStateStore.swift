@@ -15,16 +15,14 @@ final class VehicleStateStore {
     private let logger = AppLog.logger("state-store")
 
     let database: VehicleDatabase
-    private let preferences: PreferencesStore
-    private let chargingSessionEngine: ChargingSessionEngine
-    private var parkedChargeLossDetector = ParkedChargeLossDetector()
+    private let historyRecorder: VehicleHistoryRecorder
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
          preferences: PreferencesStore? = nil) {
         self.defaults = defaults
         self.database = database
-        self.preferences = preferences ?? PreferencesStore(defaults: defaults)
-        self.chargingSessionEngine = ChargingSessionEngine(database: database)
+        let preferences = preferences ?? PreferencesStore(defaults: defaults)
+        self.historyRecorder = VehicleHistoryRecorder(database: database, preferences: preferences)
     }
 
     func snapshot(for vin: String) -> VehicleState? {
@@ -52,112 +50,7 @@ final class VehicleStateStore {
     }
 
     func save(_ state: VehicleState) {
-        if preferences.storeChargingHistory {
-            if let loss = parkedChargeLossDetector.ingest(state) { database.recordActivities([loss]) }
-        } else {
-            parkedChargeLossDetector.reset(vin: state.vin)
-        }
-        database.recordActivities(VehicleActivity.changes(from: database.loadSnapshot(for: state.vin), to: state))
-        database.saveSnapshot(state)
-
-        // Cabin AQI comes from Polestar's GetPreCleaning service. Do not persist a value on
-        // Volvo snapshots even if a stale/imported payload happens to carry that field.
-        if !state.isVolvo, let airQuality = state.airQuality {
-            database.recordAirQuality(
-                vin: state.vin,
-                airQualityIndex: airQuality.airQualityIndex.map(Double.init),
-                particulateMatter25: airQuality.particulateMatter25.map(Double.init),
-                particulateMatter10: airQuality.particulateMatter10.map(Double.init),
-                filterRemainingPercent: airQuality.filterRemainingPercent.map(Double.init)
-            )
-        }
-
-        if state.odometerKm != nil || state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil {
-            let persistLocation = preferences.persistLocationHistory
-            database.recordTelemetry(
-                vin: state.vin, odometerKm: state.odometerKm.map(Double.init),
-                tripManualKm: state.tripMeterManualKm,
-                tripAutoKm: state.tripMeterAutomaticKm,
-                avgConsumption: state.batteryDiagnostics?.averageConsumption
-                    ?? state.averageFuelConsumptionLPer100Km,
-                consumptionUnit: state.batteryDiagnostics?.averageConsumption != nil
-                    ? "kwh"
-                    : (state.averageFuelConsumptionLPer100Km != nil ? "l" : nil),
-                ambientTempC: state.weather?.temperatureCelsius,
-                latitude: persistLocation ? state.location?.latitude : nil,
-                longitude: persistLocation ? state.location?.longitude : nil
-            )
-        }
-
-        if let batteryPct = state.batteryPercentage {
-            // Connectivity trend (wake reason / signal / network) — change-gated inside.
-            database.recordConnectivity(
-                vin: state.vin,
-                networkType: state.connectivity?.networkType,
-                signalBars: state.connectivity?.signalBars,
-                wakeReason: state.connectivity?.wakeReason
-            )
-            // Cabin temperature trend — digital-twin platforms only; no-op when absent.
-            database.recordCabinClimate(
-                vin: state.vin,
-                interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
-                requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
-            )
-            let capacity = preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
-                ?? state.configuredUsableBatteryCapacityKwh
-            if preferences.storeChargingHistory {
-                database.repairLegacyChargingSessions(
-                    for: state.vin, usableCapacityKwh: capacity
-                )
-            }
-            let locationName: String? = {
-                guard preferences.persistLocationHistory else { return nil }
-                guard let location = state.location,
-                      let latitude = location.latitude,
-                      let longitude = location.longitude else { return nil }
-                return String(format: "%.4f°, %.4f°", latitude, longitude)
-            }()
-            chargingSessionEngine.ingest(
-                ChargingSessionObservation(
-                    vin: state.vin, timestamp: state.fetchedAt, soc: batteryPct,
-                    chargingState: state.chargingState,
-                    chargerConnection: state.chargerConnection,
-                    powerKw: state.chargingPowerWatts.map { Double($0) / 1_000 },
-                    voltageVolts: state.chargingVoltageVolts.map(Double.init),
-                    currentAmps: state.chargingCurrentAmps.map(Double.init),
-                    chargingType: state.chargingType,
-                    targetSoc: state.chargeTargetPercentage.map(Double.init)
-                ),
-                configuration: ChargingSessionEngineConfiguration(
-                    usableCapacityKwh: capacity,
-                    tariffPricePerKwh: preferences.electricityPricePerKwh,
-                    nightTariffEnabled: preferences.nightTariffEnabled,
-                    nightTariffPricePerKwh: preferences.nightElectricityPricePerKwh,
-                    nightTariffStartHour: preferences.nightTariffStartHour,
-                    nightTariffEndHour: preferences.nightTariffEndHour,
-                    currencySymbol: preferences.currencySymbol,
-                    locationName: locationName
-                ),
-                recordingEnabled: preferences.storeChargingHistory
-            )
-            let sessions = database.recentChargingSessions(for: state.vin, limit: 20)
-                .map { $0.toDomainSession(database: database, usableCapacityKwh: capacity) }
-                .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-            let previousHealth = database.batteryHealthHistory(for: state.vin, limit: 1).first
-                .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
-            if let odo = state.odometerKm, let estimate = BatteryHealthEstimator.estimate(
-                state: state, chargingSessions: sessions,
-                specification: preferences.vehicleSpecificationOverride(for: state.vin),
-                previous: previousHealth
-            ) {
-                database.recordBatteryHealthMilestone(
-                    vin: state.vin, odometerKm: Double(odo),
-                    sohPct: estimate.stateOfHealthPercent,
-                    degPct: estimate.degradationPercent,
-                    usableKwh: estimate.estimatedUsableCapacityKwh
-                )
-            }
-        }
+        historyRecorder.record(state)
 
         // SQLite is the authoritative snapshot store (`database.saveSnapshot` above). The
         // UserDefaults mirror is no longer written: it previously re-encoded the entire
@@ -188,7 +81,7 @@ final class VehicleStateStore {
     /// `eraseHistory` is set: the sign-out path passes the user's Settings → Privacy & Data
     /// choice, while the deliberate "Erase local vehicle data" action wipes directly.
     func clear(vin: String? = nil, eraseHistory: Bool = false) {
-        parkedChargeLossDetector.reset(vin: vin)
+        historyRecorder.resetTransientState(vin: vin)
         if eraseHistory {
             database.wipeAll(for: vin)
         } else if let vin {

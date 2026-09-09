@@ -45,3 +45,11 @@ refresh token can be replayed into a fresh login without user interaction.
   and never included in diagnostic exports.
 - A future migration to browser-first for both clients removes the long-term password storage
   requirement entirely; that is the target end-state.
+
+## Implementation note (2026-09-09)
+
+The two clients retain separate `PolestarAuthorizationFlow` values. Each value owns its PKCE
+verifier, callback state, start time, progress state, and invalidation generation as one unit.
+Callbacks are consumed only after redirect, state, and optional maximum-age validation; a new
+attempt invalidates completions from the previous generation. This deepens the existing decision
+without changing either client, redirect URI, credential-storage rule, or browser constraint.

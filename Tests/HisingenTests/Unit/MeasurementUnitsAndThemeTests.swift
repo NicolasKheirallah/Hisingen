@@ -305,9 +305,9 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testRefreshPolicyAdaptiveInterval() {
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: false), 300)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: false), 60)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true), 60)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: true), 60)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: false), 600)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: false), 120)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true), 120)
+        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: true), 120)
     }
 }

@@ -17,8 +17,12 @@
 ## The `VehicleProviding` protocol
 
 ```swift
-protocol VehicleProviding: Sendable {
+protocol RemoteCommandExecuting: Sendable {
     var brand: VehicleBrand { get }
+    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
+}
+
+protocol VehicleProviding: RemoteCommandExecuting {
     var cars: [CarSummary] { get async }
     var hasWarmSession: Bool { get async }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws
@@ -28,11 +32,10 @@ protocol VehicleProviding: Sendable {
     func resolvedVIN(preferred: String?) async -> String?
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
-    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult
 }
 ```
 
-`PolestarAPI` and `VolvoAPI` are the two production adapters at this seam. Refresh, vehicle switching, and garage scanning fetch directly by VIN without a preceding selection call. Polestar prepares identity, artwork, and owner information inside the fetch implementation; discovery retains identities for every returned vehicle. Volvo already loads details by VIN. Explicit metadata reload remains a separate operation.
+`PolestarAPI` and `VolvoAPI` are the two production adapters at this seam. Command-only consumers depend on `RemoteCommandExecuting`; refresh and session consumers use `VehicleProviding`. `ProviderCommandCatalog`, derived from the executor's brand, is the one conservative implementation map used by `CapabilityGate` and by provider dispatch guards. Vehicle capability and application policy remain separate runtime gates.
 
 `VehicleSessionController` owns the user's selected brand and VIN. `SessionManager.restore` owns stored credential resolution, Volvo configuration, and authentication fallback for foreground refresh, connection tests, and dormant-brand scans. Routine resume prefers the stored token; a credential change prefers a newly stored Polestar password. Only authentication failures permit password fallback, and a successful password sign-in deletes the stored password. Interactive browser sign-in remains in `SignInCoordinator`.
 
@@ -55,8 +58,7 @@ Polestar itself isn't one backend — `PolestarAPI` talks to at least four disti
 
 Documented honestly rather than smoothed over:
 
-- **Historical note, now fixed:** this section used to say the UI's enable/disable state was a separate hardcoded `isBrandVolvo` check independent of the capability system, and that Polestar's remote-command buttons were `.disabled(true)` unconditionally behind a `HISINGEN_EXPERIMENTAL_REMOTE` build flag. Neither is true of the current code. ADR-0009 removed that flag entirely, and `ControlsTabView.isDisabled(_:)`/`cardOpacity(_:)` now route every command's enable/disable state through one `CapabilityGate.availability(for:state:brand:enabledFeatures:commandInProgress:)` call — the same three-layer check (provider implementation × vehicle capability profile × busy state) for both brands. `isBrandVolvo` still exists in `ControlsTabView`, but only for presentation choices (which label/section to show), not for gating whether a control is enabled.
-- **`VolvoAPI.executeRemoteCommand` implements 10 of `RemoteCommand`'s ~20 cases** (lock, lock-reduced-guard, unlock, climate start/stop, engine start/stop, honk-flash, flash-lights, honk); everything else throws `RemoteCommandError.unsupported` even though the capability profile may say a Volvo vehicle `.permits` it. The capability system describes support at the *vehicle* level; it doesn't yet know whether *this provider's client code* has actually implemented the corresponding call — this part of the original observation still holds, only the exact count was stale.
+- UI availability and provider dispatch now consult the same `ProviderCommandCatalog`; adding a dispatch case without adding catalog support leaves it safely unavailable, and provider entry points also reject anything absent from the catalog. This preserves ADR-0009's separation between compiled implementation, provider support, vehicle capability, and application policy.
 - **Volvo's remote-command response parsing is untyped** (`JSONSerialization` dictionary lookups for `invokeStatus`/`error.description`) while every read-path DTO in the same file is a strongly-typed `Decodable` struct — a sign the write-path response contract was less confidently understood when it was implemented. Not visible from the `VehicleProviding` seam, but worth knowing if you're extending Volvo's command support.
 
 ## Adding a third provider

@@ -1637,6 +1637,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Tämä päivitys on ilmoitettu, mutta sitä ei ole vielä valtuutettu ladattavaksi. Ajoneuvo lataa sen itse, kun taustajärjestelmä valtuuttaa sen ja olosuhteet sallivat; asennuksen voi aloittaa vasta sen jälkeen.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Tämä ajoneuvo ei tue pilvipohjaista lataus-suostumusta — päivityksen voi ladata vain, kun auto ilmoittautuu itsenäisesti taustajärjestelmään. Polestar-huoltoaika voi asentaa sen suoraan.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Tämän ajoneuvon epäsuora TPMS raportoi varoitustason renkaitta kohden, eikä tarkkaa painelukemaa.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "Tila tulee ajoneuvon rajapinnasta ja muuttuu vasta, kun ongelmasta ilmoitetaan, joten se ei ole live-mittaus. Käsittele sitä suuntaa-antavana, ei varmistettuna tietona.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Vain varoitustila. Ajoneuvo raportoi varoitustason renkaitta kohden ja merkitsee renkaan ongelmalliseksi vasta havaitessaan ongelman, joten tämä ei ole live-painemittaus.";
 "To" = "Asti";
 "to" = "asti";
 "Trend" = "Trendi";
@@ -1867,7 +1869,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "Sulje";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

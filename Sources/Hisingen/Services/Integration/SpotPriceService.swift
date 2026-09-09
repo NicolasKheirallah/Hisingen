@@ -123,6 +123,41 @@ enum SpotPriceServiceError: LocalizedError {
     }
 }
 
+actor SpotPriceResponseCache {
+    static let shared = SpotPriceResponseCache()
+
+    enum Lookup: Sendable {
+        case values([SpotPriceInterval])
+        case notPublished
+        case miss
+    }
+
+    private struct Entry: Sendable {
+        let values: [SpotPriceInterval]?
+        let expiresAt: Date
+    }
+
+    private var entries: [URL: Entry] = [:]
+
+    func lookup(_ url: URL, now: Date = Date()) -> Lookup {
+        guard let entry = entries[url], entry.expiresAt > now else {
+            entries[url] = nil
+            return .miss
+        }
+        return entry.values.map(Lookup.values) ?? .notPublished
+    }
+
+    func store(_ values: [SpotPriceInterval], for url: URL, expiresAt: Date) {
+        entries[url] = Entry(values: values, expiresAt: expiresAt)
+    }
+
+    func storeNotPublished(for url: URL, now: Date = Date()) {
+        // A missing day-ahead document is expected before publication. One retry per hour is
+        // prompt enough for a recommendation and avoids a new 404 every time the panel opens.
+        entries[url] = Entry(values: nil, expiresAt: now.addingTimeInterval(3_600))
+    }
+}
+
 /// Fetches Swedish day-ahead electricity prices from elprisetjustnu.se — a free, key-less,
 /// public feed. It is recorded under the first-party `.hisingen` diagnostic provider (never
 /// Volvo/Polestar), which makes smart-charging failures inspectable without confusing vehicle
@@ -130,11 +165,13 @@ enum SpotPriceServiceError: LocalizedError {
 /// `User-Agent`, so this does.
 struct SpotPriceService: Sendable {
     let session: URLSession
+    let cache: SpotPriceResponseCache
 
     private static let userAgent = "Hisingen/1.x (+https://nicolaskheirallah.github.io/Hisingen/)"
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = .shared, cache: SpotPriceResponseCache = .shared) {
         self.session = session
+        self.cache = cache
     }
 
     static func endpoint(date: Date, area: SwedishPriceArea,
@@ -160,6 +197,11 @@ struct SpotPriceService: Sendable {
         guard let url = Self.endpoint(date: date, area: area) else {
             throw SpotPriceServiceError.invalidURL
         }
+        switch await cache.lookup(url) {
+        case .values(let values): return values
+        case .notPublished: throw SpotPriceServiceError.httpStatus(404)
+        case .miss: break
+        }
         var request = URLRequest(url: url)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
@@ -175,8 +217,17 @@ struct SpotPriceService: Sendable {
                 statusCode: http.statusCode, responseBytes: data.count,
                 responseData: data, startedAt: startedAt)
             responseRecorded = true
-            guard http.statusCode == 200 else { throw SpotPriceServiceError.httpStatus(http.statusCode) }
-            return try Self.decode(data)
+            guard http.statusCode == 200 else {
+                if http.statusCode == 404 { await cache.storeNotPublished(for: url) }
+                throw SpotPriceServiceError.httpStatus(http.statusCode)
+            }
+            let values = try Self.decode(data)
+            let calendar = Calendar.current
+            let dayStart = calendar.startOfDay(for: date)
+            let expiry = calendar.date(byAdding: .day, value: 2, to: dayStart)
+                ?? Date().addingTimeInterval(6 * 3_600)
+            await cache.store(values, for: url, expiresAt: expiry)
+            return values
         } catch {
             if !responseRecorded {
                 await APIDiagnosticLogStore.shared.record(

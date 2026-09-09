@@ -30,13 +30,15 @@ final class UpdateController {
     /// Applies the current feature / auto-check preferences to the updater. When update checks
     /// are disabled entirely it also clears any stale "update available" badge.
     func applyConfiguration() {
+        let interval = preferences.updateCheckInterval.seconds
         if preferences.features.contains(.updateChecks) {
             updateService.start(
                 automaticallyChecks: preferences.automaticallyChecksForUpdates,
-                automaticallyDownloads: preferences.automaticallyDownloadsUpdates
+                automaticallyDownloads: preferences.automaticallyDownloadsUpdates,
+                checkInterval: interval
             )
         } else {
-            updateService.configure(automaticallyChecks: false, automaticallyDownloads: false)
+            updateService.configure(automaticallyChecks: false, automaticallyDownloads: false, checkInterval: interval)
             context?.setAvailableUpdateVersion(nil)
         }
     }

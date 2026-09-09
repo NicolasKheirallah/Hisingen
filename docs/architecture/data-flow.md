@@ -16,13 +16,17 @@ VehicleState.mergingLastKnown(from: previous, features:)
         │  — fills gaps from the last good value per enabled feature
         ▼
 RefreshCoordinator.apply(_:latency:)
-        │  — appends a completed ChargingSession if one just finished,
-        │    caps chargingSessions at 20, resets failure/backoff counters
+        │  — resets failure/backoff counters and submits one fresh snapshot
         ▼
-VehicleStateStore.save(state.cacheableCopy)   (UserDefaults, PII-stripped)
+VehicleStateStore.save(state)
         │
         ▼
-RefreshCoordinator.onState(state)  →  AppDelegate.latest = state
+VehicleHistoryRecorder.record(state)
+        │  — atomically orders activity comparison, authoritative SQLite snapshot,
+        │    telemetry, charging, AQI, connectivity, climate, and health workflows
+        │
+        ▼
+RefreshCoordinator.onEvent(.state(state))  →  VehicleSessionController.latest = state
         │
         ▼
 StatusItemController.render(data:error:authenticated:)
@@ -103,8 +107,8 @@ sequenceDiagram
     Note over RC: manual trigger is dropped;<br/>caller will see the in-flight fetch's result
     API-->>RC: VehicleState (generation N still current)
     RC->>RC: apply(state) — merge, persist, reset backoff, schedule next timer
-    RC-->>Timer: onState(state)
-    RC-->>Manual: onState(state) (same callback, same value)
+    RC-->>Timer: onEvent(.state(state))
+    RC-->>Manual: onEvent(.state(state)) (same channel, same value)
 ```
 
 No duplicate API call is made — the manual click "rides along" on the timer-triggered fetch that was already in flight. See [refresh-system.md](refresh-system.md) for the coalescing mechanism in full and the retry/backoff formula for the failure case.

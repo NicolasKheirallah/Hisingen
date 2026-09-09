@@ -30,7 +30,7 @@ A lightweight, practical pass — not a compliance exercise. Scope: the Hisingen
 - **Threat:** a modified/tampered Hisingen build is distributed and used to harvest credentials.
   **Mitigation:** release builds are Developer ID signed, hardened-runtime, notarized, and stapled; `spctl --assess` and checksum verification happen as part of the release pipeline itself. Ad-hoc local builds (`make app`) are explicitly *not* trusted the same way and re-signing on every rebuild is a known friction point (see [operations/troubleshooting.md](../operations/troubleshooting.md)) rather than a hidden risk — the tradeoff is documented, not silent.
 - **Threat:** a malicious/compromised vehicle-API response is decoded into a value that corrupts app state or crashes the process.
-  **Mitigation:** all decoding uses `Codable`/`try?` with graceful degradation (a decode failure removes that one field, doesn't crash); response size is capped (`HTTPBodyReader`, 5MB image limit, 512KB update-check limit) to bound memory use from a malicious or broken response.
+  **Mitigation:** all decoding uses `Codable`/`try?` with graceful degradation (a decode failure removes that one field, doesn't crash); buffered provider traffic goes through `HTTPExchange`, which enforces per-operation response limits (including the 5 MB image limit), while other integrations apply their own bounded limits.
 
 ### Repudiation
 

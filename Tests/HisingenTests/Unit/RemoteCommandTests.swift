@@ -8,7 +8,7 @@ struct RemoteCommandTests {
         var state = vehicle(vin: "YSMSTALE")
         state.fetchedAt = Date().addingTimeInterval(-11 * 60)
         let availability = CapabilityGate().availability(
-            for: .lock, state: state, brand: .polestar,
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false)
         XCTAssertEqual(availability, .unavailableUntilRefresh)
     }
@@ -660,26 +660,17 @@ private final class CommandContextMock: CommandExecutionContext {
         self.vehicleState = vehicleState
     }
 
-    func currentProvider() -> any VehicleProviding { provider }
+    func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
     func commandInProgressDidChange() {}
     func presentResult(title: String, message: String, success: Bool) {}
+    func beginCommandConfirmation(_ command: RemoteCommand) {}
     func refreshNowAfterCommand() {}
 }
 
-private actor CommandContextProvider: VehicleProviding {
+private actor CommandContextProvider: RemoteCommandExecuting {
     nonisolated let brand: VehicleBrand = .polestar
-    let cars = [CarSummary(vin: "YSMFIRST", title: "First")]
-    var hasWarmSession: Bool { true }
     private var executedVINs: [String] = []
-
-    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func resetSession() async {}
-    func signOut() async throws {}
-    func resolvedVIN(preferred: String?) -> String? { preferred }
-    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
-    func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState { vehicle(vin: vin) }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         executedVINs.append(vin)
         return RemoteCommandResult(outcome: .completed, message: nil)

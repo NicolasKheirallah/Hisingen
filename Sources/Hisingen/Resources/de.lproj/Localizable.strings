@@ -1646,6 +1646,8 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Dieses Update wurde angekündigt, aber noch nicht zum Download freigegeben. Das Fahrzeug lädt es selbst herunter, sobald das Backend es freigibt und die Bedingungen es zulassen; die Installation kann erst danach gestartet werden.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Dieses Fahrzeug unterstützt keine cloudbasierte Download-Zustimmung — das Update kann nur geladen werden, wenn sich das Auto eigenständig beim Backend meldet. Ein Polestar-Servicetermin kann es direkt einspielen.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Das indirekte TPMS dieses Fahrzeugs meldet eine Warnstufe pro Reifen, keinen exakten Druckwert.";
+"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "Der Status stammt aus der API des Fahrzeugs und ändert sich erst, wenn ein Problem gemeldet wird, daher ist er keine Live-Messung. Behandeln Sie ihn als Hinweis, nicht als geprüfte Freigabe.";
+"Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Nur Warnstatus. Das Fahrzeug meldet eine Warnstufe pro Reifen und markiert einen Reifen erst, wenn es ein Problem erkennt, daher ist dies keine Live-Druckmessung.";
 "To" = "Bis";
 "to" = "bis";
 "Trend" = "Trend";
@@ -1877,7 +1879,7 @@
 "Charging current at location" = "Charging current at location";
 "Commands may not be delivered until it reconnects." = "Commands may not be delivered until it reconnects.";
 "Decrease target temperature" = "Decrease target temperature";
-"Dismiss" = "Dismiss";
+"Dismiss" = "Schließen";
 "Enabled: %@." = "Enabled: %@.";
 "Estimated %d min" = "Estimated %d min";
 "Home, Office…" = "Home, Office…";

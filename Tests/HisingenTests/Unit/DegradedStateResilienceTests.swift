@@ -229,7 +229,8 @@ struct AuthFailureReschedulingTests {
 
         var resumed = false
         await withCheckedContinuation { continuation in
-            coordinator.onError = { _ in
+            coordinator.onEvent = { event in
+                guard case .failed = event else { return }
                 guard !resumed else { return }
                 resumed = true
                 continuation.resume()

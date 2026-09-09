@@ -23,7 +23,7 @@ extension PolestarAPI {
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
         try Task.checkCancellation()
-        guard !webAuthorizationInProgress else { throw CancellationError() }
+        guard !webAuthorization.isInProgress else { throw CancellationError() }
         clearAccountState()
         try keychain.deleteCommandSessionToken()
         let epoch = sessionEpoch
@@ -61,7 +61,7 @@ extension PolestarAPI {
     /// replay fails while both paths then persist different rotated tokens (last writer
     /// wins, orphaning the other).
     func commandClientAuthorization() async -> CommandClientAuthorization {
-        guard !commandAuthorizationInProgress else { return .notAuthorized }
+        guard !commandAuthorization.isInProgress else { return .notAuthorized }
         if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
            let token = commandAccessToken { return .authorized(token) }
         if let existing = commandRefreshTask {
@@ -77,23 +77,23 @@ extension PolestarAPI {
         ])
         let currentSession = session
         let requestEpoch = sessionEpoch
-        let commandEpoch = commandAuthorizationEpoch
+        let commandEpoch = commandAuthorization.generation
         let taskID = UUID()
         let task = Task { [logger] () -> CommandClientAuthorization in
             do {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession)
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else { return .unavailable }
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
                 // Rotation already happened at the server, even if userinfo is unavailable.
                 self.commandRefreshToken = token.refreshToken ?? refresh
                 try await self.verifyCommandAccount(accessToken: token.accessToken)
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else {
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else {
                     return .unavailable
                 }
                 try self.applyCommandToken(token, fallbackRefresh: refresh)
                 return .authorized(token.accessToken)
             } catch let error as PolestarError where error.requiresAuthentication {
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorizationEpoch == commandEpoch else { return .unavailable }
+                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
                 // The refresh token itself is dead (invalid_grant / 401). Retrying it every
                 // command just re-fails; drop it so the UI flips to "not authorized" and the
                 // user is pointed at "Authorize Remote Commands" once.
@@ -133,14 +133,10 @@ extension PolestarAPI {
 
     /// Invalidates in-flight grants and memory state; restoration may still use the Keychain.
     func invalidateCommandAuthorization() {
-        commandAuthorizationEpoch &+= 1
-        commandAuthorizationInProgress = false
+        commandAuthorization.invalidate()
         commandRefreshTask?.cancel()
         commandRefreshTask = nil
         commandRefreshTaskID = nil
-        commandPendingVerifier = nil
-        commandPendingState = nil
-        commandPendingSince = nil
         commandAccessToken = nil
         commandRefreshToken = nil
         commandTokenExpiry = nil
@@ -160,7 +156,7 @@ extension PolestarAPI {
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         try Task.checkCancellation()
-        guard !webAuthorizationInProgress else { throw CancellationError() }
+        guard !webAuthorization.isInProgress else { throw CancellationError() }
         guard !token.isEmpty else { throw PolestarError.authenticationRequired(.noStoredSession) }
         clearAccountState(keepRefreshToken: true)
         let epoch = sessionEpoch
@@ -224,7 +220,7 @@ extension PolestarAPI {
                 request.httpBody = Self.formBody([
                     "client_id": clientID, "token": token, "token_type_hint": "refresh_token"
                 ])
-                _ = try? await HTTPBodyReader.data(for: request, using: revocationSession, limit: 64_000, operation: "session revocation", provider: .polestar)
+                _ = try? await HTTPExchange.data(for: request, using: revocationSession, limit: 64_000, operation: "session revocation", provider: .polestar)
             }
         }
         if let storageError { throw storageError }
@@ -232,8 +228,8 @@ extension PolestarAPI {
 
     func cancelAuthorization(state: String?) {
         guard let state else { return }
-        if webPendingState == state { clearAccountState() }
-        if commandPendingState == state { invalidateCommandAuthorization() }
+        if webAuthorization.pendingState == state { clearAccountState() }
+        if commandAuthorization.pendingState == state { invalidateCommandAuthorization() }
     }
 
     func requireSession(_ epoch: Int) throws {
@@ -269,10 +265,7 @@ extension PolestarAPI {
         func identity(token: String) async throws -> AccountIdentity {
             var request = URLRequest(url: endpoint)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await HTTPBodyReader.data(for: request, using: session, limit: 64_000, operation: "account verification", provider: .polestar)
-            guard let response = response as? HTTPURLResponse else {
-                throw PolestarError.incompatibleAPI(operation: "account verification")
-            }
+            let (data, response) = try await HTTPExchange.data(for: request, using: session, limit: 64_000, operation: "account verification", provider: .polestar)
             try validateHTTP(response, operation: "account verification")
             let identity = try JSONDecoder().decode(AccountIdentity.self, from: data)
             guard !identity.sub.isEmpty else { throw PolestarError.authenticationRequired(.callbackRejected) }

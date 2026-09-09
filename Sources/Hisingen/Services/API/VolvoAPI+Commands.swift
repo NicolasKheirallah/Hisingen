@@ -2,6 +2,7 @@ import Foundation
 
 extension VolvoAPI {
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        guard commandCatalog.implements(command) else { throw RemoteCommandError.unsupported }
         guard selectedVIN == vin || cars.contains(where: { $0.vin == vin }) else {
             throw RemoteCommandError.missingContext
         }

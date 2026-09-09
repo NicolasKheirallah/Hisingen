@@ -39,8 +39,6 @@ extension PolestarAPI {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
 
-        await grpc.setUseStreaming(features.contains(.realTimeUpdates))
-
         // All identity reads are scoped to the VIN being fetched. A background garage scan
         // selecting another vehicle concurrently can no longer leak its model name, plate,
         // or render image into this snapshot.
@@ -250,6 +248,7 @@ extension PolestarAPI {
         if climateTimers.value != nil { probes.record(.climateTimers, as: .supported) }
         if trips.value != nil { probes.record(.tripMeters, as: .supported) }
         if connectivity.value != nil { probes.record(.connectivity, as: .supported) }
+        else if connectivity.unsupported { probes.record(.connectivity, as: .unavailable) }
         if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
         if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
         if chargeLocations.value?.isEmpty == false { probes.record(.chargeLocations, as: .supported) }
@@ -412,7 +411,6 @@ extension PolestarAPI {
             battery {
               vin batteryChargeLevelPercentage estimatedDistanceToEmptyKm
               chargingStatusV2 estimatedChargingTimeToFullMinutes
-              reportedBatteryCapacityKwh
               timestamp { seconds }
             }
             \(odometerSelection)

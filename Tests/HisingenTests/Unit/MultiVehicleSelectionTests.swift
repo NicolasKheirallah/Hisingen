@@ -60,7 +60,10 @@ struct MultiVehicleSelectionTests {
     ) async -> VehicleState {
         await withCheckedContinuation { (continuation: CheckedContinuation<VehicleState, Never>) in
             let box = OnceBox(continuation)
-            coordinator.onState = { state in
+            let existing = coordinator.onEvent
+            coordinator.onEvent = { event in
+                existing?(event)
+                guard case .state(let state) = event else { return }
                 if let vin, state.vin != vin { return }
                 box.resume(state)
             }
@@ -70,7 +73,14 @@ struct MultiVehicleSelectionTests {
     private func awaitError(_ coordinator: RefreshCoordinator) async -> VehicleServiceError {
         await withCheckedContinuation { (continuation: CheckedContinuation<VehicleServiceError, Never>) in
             let box = OnceBox(continuation)
-            coordinator.onError = { error in box.resume(error) }
+            let existing = coordinator.onEvent
+            coordinator.onEvent = { event in
+                existing?(event)
+                switch event {
+                case .failed(let error), .switchPaused(let error): box.resume(error)
+                default: break
+                }
+            }
         }
     }
 
@@ -84,9 +94,16 @@ struct MultiVehicleSelectionTests {
         let coordinator = makeCoordinator(provider: provider, defaults: defaults, preferences: preferences)
 
         var selections: [String] = []
-        coordinator.onSelectionChanged = { selections.append($0) }
         var switchPendingFlags: [Bool] = []
-        coordinator.onDiagnostics = { switchPendingFlags.append($0.vehicleSwitchPending) }
+        coordinator.onEvent = { event in
+            switch event {
+            case .selectionChanged(let vin): selections.append(vin)
+            case .sessionEstablished(_, let vin): selections.append(vin)
+            case .diagnostics(let snapshot):
+                switchPendingFlags.append(snapshot.vehicleSwitchPending)
+            default: break
+            }
+        }
 
         coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
@@ -169,7 +186,10 @@ struct MultiVehicleSelectionTests {
                                           selectionRetryDelay: 0.02)
 
         var surfacedErrors: [VehicleServiceError] = []
-        coordinator.onError = { surfacedErrors.append($0) }
+        coordinator.onEvent = { event in
+            guard case .failed(let error) = event else { return }
+            surfacedErrors.append(error)
+        }
 
         coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)

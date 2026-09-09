@@ -74,40 +74,57 @@ extension PolestarAPI {
     ) async throws -> OptionalCapability<Value> {
         try Task.checkCancellation()
         let epoch = sessionEpoch
-        guard enabled else { return OptionalCapability(value: nil, unavailable: false) }
+        guard enabled else { return OptionalCapability(value: nil, unavailable: false, unsupported: false) }
         let cacheKey = Self.capabilityReadingKey(feature, key: key)
         let scopedCacheKey = "\(vin)|\(cacheKey)"
         if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
-            return OptionalCapability(value: cached.value as? Value, unavailable: false)
+            return OptionalCapability(value: cached.value as? Value, unavailable: false, unsupported: false)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-            return OptionalCapability(value: nil, unavailable: true)
+            let unsupported = unsupportedCapabilities.contains(scopedCacheKey)
+            return OptionalCapability(value: nil, unavailable: !unsupported, unsupported: unsupported)
         }
         do {
             let value = try await operation()
             try requireSession(epoch)
             capabilityBackoff[vin]?[cacheKey] = nil
+            unsupportedCapabilities.remove(scopedCacheKey)
             if value != nil {
                 capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
                     value: value,
                     expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
                 )
             }
-            return OptionalCapability(value: value, unavailable: false)
+            return OptionalCapability(value: value, unavailable: false, unsupported: false)
         } catch {
             try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             let interval: TimeInterval
+            let unsupported: Bool
             // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle —
             // treat it like `incompatibleAPI` and stay away for hours, not minutes. (The gRPC
             // layer also remembers the specific backend/VIN/path for 24 hours.)
-            if case PolestarError.incompatibleAPI = error { interval = 6 * 60 * 60 }
-            else if case PolestarError.grpcUnimplemented = error { interval = 6 * 60 * 60 }
-            else if case PolestarError.invalidResponse = error { interval = 60 * 60 }
-            else { interval = 5 * 60 }
+            if case PolestarError.incompatibleAPI = error {
+                interval = 6 * 60 * 60
+                unsupported = true
+            } else if case PolestarError.grpcUnimplemented = error {
+                interval = 6 * 60 * 60
+                unsupported = true
+            } else if case PolestarError.permissionDenied = error {
+                interval = 6 * 60 * 60
+                unsupported = true
+            } else if case PolestarError.invalidResponse = error {
+                interval = 60 * 60
+                unsupported = false
+            } else {
+                interval = 5 * 60
+                unsupported = false
+            }
             capabilityBackoff[vin, default: [:]][cacheKey] = Date().addingTimeInterval(interval)
+            if unsupported { unsupportedCapabilities.insert(scopedCacheKey) }
+            else { unsupportedCapabilities.remove(scopedCacheKey) }
             logger.debug("Optional \(feature.rawValue, privacy: .public) capability unavailable")
-            return OptionalCapability(value: nil, unavailable: true)
+            return OptionalCapability(value: nil, unavailable: !unsupported, unsupported: unsupported)
         }
     }
 

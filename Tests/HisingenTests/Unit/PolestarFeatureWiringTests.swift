@@ -96,7 +96,7 @@ struct PolestarFeatureWiringTests {
         let state = makeState(userIsOwner: false)
         let gate = CapabilityGate()
         let availability = gate.availability(
-            for: .lock, state: state, brand: .polestar,
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false
         )
         #expect(availability == .notVehicleOwner)
@@ -108,7 +108,7 @@ struct PolestarFeatureWiringTests {
         let gate = CapabilityGate()
         #expect(state.accountOwnsVehicle == nil)
         let availability = gate.availability(
-            for: .lock, state: state, brand: .polestar,
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false
         )
         #expect(availability != .notVehicleOwner)
@@ -118,7 +118,7 @@ struct PolestarFeatureWiringTests {
         let state = makeState(userIsOwner: true)
         let gate = CapabilityGate()
         let availability = gate.availability(
-            for: .lock, state: state, brand: .polestar,
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false
         )
         #expect(availability != .notVehicleOwner)
@@ -131,7 +131,7 @@ struct PolestarFeatureWiringTests {
         state.fetchedAt = Date().addingTimeInterval(-60 * 60)
         let gate = CapabilityGate()
         let availability = gate.availability(
-            for: .lock, state: state, brand: .polestar,
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false
         )
         #expect(availability == .notVehicleOwner)

@@ -12,6 +12,10 @@ on:
           - all
           - polestar
           - volvo
+      soak_seconds:
+        description: "Stream soak duration in seconds (default 600; multi-hour runs e.g. 14400)"
+        required: false
+        default: "600"
 
 permissions:
   contents: read
@@ -24,7 +28,7 @@ jobs:
   live-polestar:
     if: inputs.provider == 'all' || inputs.provider == 'polestar'
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 45
     environment: live-integration
     steps:
       - name: Check out source
@@ -53,9 +57,10 @@ jobs:
           HISINGEN_TEST_EMAIL: ${{ secrets.HISINGEN_TEST_EMAIL }}
           HISINGEN_TEST_PASSWORD: ${{ secrets.HISINGEN_TEST_PASSWORD }}
           HISINGEN_TEST_VIN: ${{ secrets.HISINGEN_TEST_VIN }}
+          HISINGEN_SOAK_SECONDS: ${{ inputs.soak_seconds }}
         run: >-
           swift test --disable-xctest --enable-swift-testing
-          --filter LivePolestarReadOnlyIntegrationTests
+          --filter "LivePolestarReadOnlyIntegrationTests|LivePolestarStreamSoakTests"
 
   live-volvo:
     if: inputs.provider == 'all' || inputs.provider == 'volvo'
