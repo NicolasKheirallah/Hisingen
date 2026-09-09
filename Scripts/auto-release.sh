@@ -45,8 +45,10 @@ fi
 
 [ -n "$COMMITS" ] || skip "no commits since ${LATEST_TAG:-the first release}"
 
-if printf '%s\n' "$COMMITS" | grep -Fq '[skip release]'; then
-    skip "a commit message contains [skip release]"
+HEAD_MESSAGE=$(git log -1 --format=%B)
+
+if printf '%s\n' "$HEAD_MESSAGE" | grep -Fq '[skip release]'; then
+    skip "HEAD commit contains [skip release]"
 fi
 
 RELEASABLE=$(printf '%s\n' "$COMMITS" | grep -v '^chore(release):' || true)
