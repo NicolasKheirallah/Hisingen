@@ -5,10 +5,8 @@ echo "=========================================="
 echo "🏎️  Hisingen Release & Deployment Pipeline"
 echo "=========================================="
 
-# 1. Pre-flight Checks
 echo "🔍 Running pre-flight checks..."
 
-# Check git status
 if [ -n "$(git status --porcelain=v1)" ]; then
     echo "❌ Working tree is not clean. Commit or stash all changes first."
     git status -s
@@ -21,17 +19,14 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     exit 1
 fi
 
-# Run test suite
 echo "🧪 Running full test suite..."
 sh Scripts/test.sh
 sh Scripts/validate-release.sh
 
-# Check documentation & localization if scripts exist
 if [ -f "Scripts/check-localization.py" ]; then
     python3 Scripts/check-localization.py
 fi
 
-# 2. Resolve version bump
 BUMP="${1:-patch}"
 LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 2>/dev/null || true)
 
@@ -78,23 +73,19 @@ fi
 
 echo "🚀 Preparing release v${NEW_VERSION} (previous tag: ${LATEST_TAG:-none})..."
 
-# 3. Update Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${NEW_VERSION}" Resources/Info.plist
 CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist 2>/dev/null || echo "0")
 NEXT_BUILD=$((CURRENT_BUILD + 1))
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${NEXT_BUILD}" Resources/Info.plist
 
-# 4. Build Universal Binary & DMG
 echo "📦 Building universal app and DMG installer..."
 make app-universal
 make dmg
 
-# Generate SHA256
 shasum -a 256 releases/Hisingen.dmg > releases/Hisingen.dmg.sha256
 echo "🔒 SHA256 Checksum: $(cat releases/Hisingen.dmg.sha256)"
 sh Scripts/validate-release.sh
 
-# 5. Commit and Tag
 git add Resources/Info.plist
 git commit -m "chore(release): bump version to v${NEW_VERSION} (build ${NEXT_BUILD})"
 git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"

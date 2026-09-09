@@ -11,6 +11,9 @@ enum CommandAvailability: Equatable, Sendable {
     /// (`GetMyCars.userIsOwner == false`). Distinct from "unknown" — an absent flag never
     /// blocks a command.
     case notVehicleOwner
+    /// The Volvo account token lacks the "Approved" (restricted) scopes a write needs —
+    /// the user must re-grant them in Settings before lock/unlock/locate can run.
+    case requiresAccountApproval
     case invalidSettings(String)
 
     var isAvailable: Bool { self == .available }
@@ -34,6 +37,8 @@ enum CommandAvailability: Equatable, Sendable {
             return L10n.text("Refresh vehicle data before sending a command.")
         case .notVehicleOwner:
             return L10n.text("The vehicle reports this account as not being its owner. Owner commands are disabled.")
+        case .requiresAccountApproval:
+            return L10n.text("Enable Approved Volvo permissions in Settings and sign in again first.")
         case .invalidSettings(let reason): return reason
         }
     }
@@ -47,10 +52,18 @@ struct CapabilityGate: Sendable {
         state: VehicleState,
         commandCatalog: ProviderCommandCatalog,
         enabledFeatures: Set<AppFeature>,
-        commandInProgress: Bool
+        commandInProgress: Bool,
+        volvoRestrictedScopesEnabled: Bool = true
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard commandCatalog.implements(command) else { return .unimplementedByProvider }
+        // Volvo's lock/unlock/locate writes need the restricted ("Approved") scope tier on
+        // the signed-in token; without it the provider would reject the command after the
+        // fact. One shared precondition keeps every entry point's answer identical.
+        if commandCatalog.brand == .volvo, !volvoRestrictedScopesEnabled,
+           command.feature == .remoteLocks || command.feature == .remoteHonkFlash {
+            return .requiresAccountApproval
+        }
         if commandCatalog.brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {
             return .unsupportedByVehicle
         }

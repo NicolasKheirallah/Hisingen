@@ -3,7 +3,6 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
 ## [1.3.3] - 2026-09-09
 
 ### Changed
@@ -34,6 +33,18 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Live-account testing gains a configurable stream soak (`HISINGEN_SOAK_SECONDS`) that
   verifies the single-stream, no-reconnect, and no-amplification invariants over
   sustained time against the real backend.
+  
+### Changed
+
+- Remote commands from deep links and Shortcuts now go through the same single dispatch as the Controls tab, so all three surfaces answer identically about what a vehicle accepts. Deep links like `hisingen://lock` work on Polestar vehicles (they previously showed a "paired mobile devices only" notice while the Controls tab dispatched the same command), and Shortcuts return the vehicle's actual result immediately instead of waiting up to 60 seconds for a database poll.
+- Lock/unlock/locate commands on Volvo now require the Approved permissions scope to be enabled everywhere — the Controls tab refuses with the same explanation Shortcuts always used, instead of letting the provider reject the command after the fact.
+
+### Internal
+
+- Charging history lives behind a single Charging Session ledger: the session state machine, sample integration, and its gap-tolerance policies now have one home, so the write-time summary and the read-time estimates (charging loss, tariff cost) can no longer disagree about what a "continuous charging period" means. Legacy summary reconciliation runs once per launch instead of re-scanning up to 1,000 rows on every vehicle refresh.
+- All other local history reads (battery health, air quality, telemetry, trips, command audit, connectivity, cabin climate, fuel) go through one Vehicle History read interface; dashboard row caps and date-range filtering are decided in one place instead of per view.
+- The app now uses exactly one SQLite database handle process-wide (previously up to three parallel connections to the same file from the app, Shortcuts intents, and image caching).
+- Vehicle History CSV exports are unchanged in format; charging session, trip, telemetry, and air-quality exports now read through the ledgers above.
 
 ### Added
 

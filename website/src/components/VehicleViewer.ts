@@ -135,7 +135,6 @@ export class VehicleViewer {
       tab.tabIndex = isActive ? 0 : -1;
     });
 
-    // Smooth transition
     this.imageEl.style.opacity = '0.3';
     setTimeout(() => {
       this.imageEl.src = angle.src;

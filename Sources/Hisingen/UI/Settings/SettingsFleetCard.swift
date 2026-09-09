@@ -221,7 +221,6 @@ struct FleetVehicleCardRow: View {
         VStack(alignment: .leading, spacing: 8) {
             // Clickable header area
             HStack(spacing: 8) {
-                // Vehicle Thumbnail or Icon
                 SettingsFleetThumbnailView(vin: vin, brandIcon: brandIcon, isActive: isActive, imageCache: imageCache)
 
                 VStack(alignment: .leading, spacing: 1.5) {

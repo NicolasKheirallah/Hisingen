@@ -19,6 +19,17 @@ reconfirmed — see [ADR-0006](adr/0006-runtime-capability-probing.md).
 **Developer ID** — the Apple code-signing certificate type used to sign
 software distributed outside the Mac App Store. Required for notarization.
 
+**Remote Command dispatch** — the awaited seam every Remote Command entry
+point (Controls tab, `hisingen://` deep links, Shortcuts intents) crosses once
+the app shell is wired: vehicle selection plus one dispatch that returns the
+outcome. Brand policy lives in `CapabilityGate` and the provider command
+catalog, never in an entry point — see
+[ADR-0012](adr/0012-single-remote-command-dispatch-authority.md).
+
+**Gatekeeper** — macOS's system that checks code signing and notarization
+status before allowing a downloaded app to run; `spctl --assess` simulates
+this check.
+
 **Charging Session ledger** — the module that owns the Charging Session
 lifecycle: it ingests observations into `charging_samples`, advances
 `charging_sessions` through its explicit states, produces each session's

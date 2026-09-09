@@ -32,7 +32,9 @@ struct RemoteCommandTests {
             context: context, preferences: preferences, database: .inMemory(), authorizer: authorizer
         )
 
-        coordinator.perform(.lock)
+        // Fire-and-forget like the interactive surfaces: the coordinator awaits the
+        // authorizer, and the test unblocks it below.
+        Task { await coordinator.perform(.lock) }
         await authorizer.waitForAuthorizationRequest()
         context.vehicleState = vehicle(vin: "YSMSECOND")
         preferences.vin = "YSMSECOND"

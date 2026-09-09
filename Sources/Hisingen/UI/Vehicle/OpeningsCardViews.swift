@@ -104,7 +104,6 @@ struct DoorsAndOpeningsCardView: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                // Header
                 HStack {
                     CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
                     Spacer()

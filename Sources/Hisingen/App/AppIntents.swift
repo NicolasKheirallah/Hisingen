@@ -5,9 +5,47 @@ import Foundation
 @available(macOS 13.0, *)
 @MainActor
 enum AutomationHandoff {
-    static func dispatch(_ route: String) -> Bool {
-        guard let url = URL(string: "hisingen://\(route)") else { return false }
-        return NSWorkspace.shared.open(url)
+    /// Installed by `AppDelegate` once composition is complete. Shortcuts intents await
+    /// this, so a shortcut that fires while the app is still launching dispatches as soon
+    /// as the shell is wired — no URL round-trip, no polling the command audit table.
+    private static var waiters: [UUID: CheckedContinuation<any RemoteCommandDispatching, Never>] = [:]
+    private(set) static var context: (any RemoteCommandDispatching)?
+
+    static func install(_ context: any RemoteCommandDispatching) {
+        self.context = context
+        let pending = waiters
+        waiters = [:]
+        for continuation in pending.values { continuation.resume(returning: context) }
+    }
+
+    static func waitForContext() async -> any RemoteCommandDispatching {
+        if let context { return context }
+        return await withCheckedContinuation { continuation in
+            waiters[UUID()] = continuation
+        }
+    }
+
+#if DEBUG
+    /// Test isolation for the process-wide hub.
+    static func resetForTesting() {
+        context = nil
+        waiters = [:]
+    }
+#endif
+
+    /// The one Remote Command path the Shortcuts surface uses: resolve the target vehicle,
+    /// select it (deep links always have, so the command runs against the car the user
+    /// named), dispatch through the shell, and describe the outcome in the intent dialog.
+    static func send(_ command: RemoteCommand, vehicle: String?,
+                     preferences: PreferencesStore = .shared) async -> String {
+        let context = await waitForContext()
+        let targetVin = resolveVIN(from: vehicle, preferences: preferences)
+        if !targetVin.isEmpty { context.selectVehicle(vin: targetVin) }
+        let outcome = await context.perform(command, origin: .userInitiated)
+        switch outcome {
+        case .sent: return command.outcomeDescription
+        case .refused(let reason): return reason
+        }
     }
 
     static func resolveVIN(from input: String?) -> String {
@@ -33,51 +71,6 @@ enum AutomationHandoff {
             }
         }
         return upper
-    }
-
-    static func canSendVolvoCommand(for input: String? = nil, requiresRestrictedScopes: Bool = false) -> String? {
-        let preferences = PreferencesStore.shared
-        let targetVin = resolveVIN(from: input)
-        guard !targetVin.isEmpty else { return "No vehicle is configured in Hisingen." }
-        let isVolvo = targetVin.hasPrefix("YV") || preferences.activeBrand == .volvo
-        guard isVolvo else {
-            return "This shortcut is available only for Volvo commands exposed by the official public API."
-        }
-        if requiresRestrictedScopes && !preferences.volvoRestrictedScopesEnabled {
-            return "Enable Approved Volvo permissions in Hisingen Settings and sign in again first."
-        }
-        return nil
-    }
-
-    static func dispatchAndWait(
-        _ route: String, command: String, vin: String? = nil, timeout: TimeInterval = 45
-    ) async -> String {
-        let targetVin = resolveVIN(from: vin)
-        let preferences = PreferencesStore.shared
-        let effectiveVin = targetVin.isEmpty ? preferences.vin : targetVin
-        let routeWithVin: String
-        if !targetVin.isEmpty {
-            routeWithVin = route.contains("?") ? "\(route)&vin=\(targetVin)" : "\(route)?vin=\(targetVin)"
-        } else {
-            routeWithVin = route
-        }
-        let startedAt = Date().addingTimeInterval(-1)
-        guard dispatch(routeWithVin) else { return "Hisingen could not be opened to send the request." }
-
-        let database = VehicleDatabase.shared
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
-            if let result = database.history.recentCommandAudits(for: effectiveVin, limit: 10).first(where: {
-                $0.command == command && $0.executedAt >= startedAt
-            }) {
-                if result.status == "failed" {
-                    return "The vehicle service rejected the request: \(result.errorMessage ?? "unknown error")"
-                }
-                return "Vehicle service result: \(result.status.replacingOccurrences(of: "-", with: " "))."
-            }
-        }
-        return "The request was handed to Hisingen, but no provider result arrived before the shortcut timed out. Check Command History in Hisingen."
     }
 
     static func snapshot(for input: String? = nil) -> (VehicleState, PreferencesStore)? {
@@ -186,10 +179,7 @@ struct LockVehicleIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("lock", command: "lock", vin: vehicle)
+        let result = await AutomationHandoff.send(.lock, vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -205,10 +195,7 @@ struct UnlockVehicleIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("unlock", command: "unlock", vin: vehicle, timeout: 60)
+        let result = await AutomationHandoff.send(.unlock, vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -224,10 +211,12 @@ struct StartClimateIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("climate/start", command: "start-climate", vin: vehicle)
+        let result = await AutomationHandoff.send(
+            .startClimate(
+                temperatureCelsius: Float(PreferencesStore.shared.remoteClimateTemperature),
+                frontLeftSeat: .off, frontRightSeat: .off,
+                rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+            vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -243,10 +232,7 @@ struct StopClimateIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("climate/stop", command: "stop-climate", vin: vehicle)
+        let result = await AutomationHandoff.send(.stopClimate, vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -336,10 +322,7 @@ struct FlashLightsIntent: AppIntent {
     var vehicle: String?
 
     @MainActor func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("flash-lights", command: "flash-lights", vin: vehicle)
+        let result = await AutomationHandoff.send(.flashLights, vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -353,10 +336,7 @@ struct HonkAndFlashIntent: AppIntent {
     var vehicle: String?
 
     @MainActor func perform() async throws -> some ProvidesDialog {
-        if let reason = AutomationHandoff.canSendVolvoCommand(for: vehicle, requiresRestrictedScopes: true) {
-            return .result(dialog: IntentDialog(stringLiteral: reason))
-        }
-        let result = await AutomationHandoff.dispatchAndWait("honk-flash", command: "honk-flash", vin: vehicle)
+        let result = await AutomationHandoff.send(.honkAndFlash, vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
@@ -378,9 +358,7 @@ struct SetChargeTargetIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
-        let result = await AutomationHandoff.dispatchAndWait(
-            "charge-target/\(percent)", command: "set-charge-target", vin: vehicle, timeout: 60
-        )
+        let result = await AutomationHandoff.send(.setChargeTarget(percent), vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }

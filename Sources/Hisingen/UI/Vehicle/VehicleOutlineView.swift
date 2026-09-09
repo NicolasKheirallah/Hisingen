@@ -173,8 +173,6 @@ struct VehicleSideProfileDoorsView: View {
                         .frame(width: w, height: h)
                 }
 
-                // --- INTERACTIVE ANIMATED GLOW ZONES ---
-
                 // 1. Front Headlights Beam (traced lamp cluster: SVG X=[1419..1583], Y=[347..407])
                 if hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered {
                     headlightsGlow(og: og, active: hoodOpen || frontDoorOpen || frontWindowOpen, hovered: hoodHovered || frontDoorHovered || frontWindowHovered)

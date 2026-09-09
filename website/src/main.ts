@@ -7,13 +7,10 @@ import { VehicleViewer } from './components/VehicleViewer';
 
 document.documentElement.classList.add('js');
 
-// Initialize Luxury Inertial Smooth Scrolling (Lenis)
 const smoothScroll = new SmoothScrollManager();
 
-// Initialize GSAP Motion & ScrollTrigger Choreography
 const gsapMotion = new GsapMotionManager(smoothScroll.getLenis());
 
-// Initialize Interactive Charge Simulator & Power Curve
 new ChargeCalc('charge-calc');
 let chargingCurve: ChargingCurve | null = null;
 if (document.getElementById('charging-curve-stage')) {
@@ -28,7 +25,6 @@ if (document.getElementById('charging-curve-stage')) {
   }
 }
 
-// Initialize Interactive Polestar 2 Studio Showcase
 if (document.getElementById('vehicle-showcase')) {
   try {
     new VehicleViewer('vehicle-showcase');

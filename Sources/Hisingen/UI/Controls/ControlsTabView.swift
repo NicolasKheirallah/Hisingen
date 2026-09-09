@@ -83,7 +83,8 @@ struct ControlsTabView: View {
             state: state,
             commandCatalog: ProviderCommandCatalog(brand: preferences.activeBrand),
             enabledFeatures: features,
-            commandInProgress: ignoreBusy ? false : remoteCommandInProgress
+            commandInProgress: ignoreBusy ? false : remoteCommandInProgress,
+            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
         )
     }
 

@@ -113,24 +113,24 @@ final class URLCommandRouter: NSObject {
         case "climate/start", "climatization/start":
             let temp = queryItems?.first(where: { $0.name == "temp" || $0.name == "temperature" })?
                 .value.flatMap { Float($0) } ?? Float(context.defaultRemoteClimateTemperatureCelsius)
-            dispatchVolvoWrite(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off,
-                                             frontRightSeat: .off, rearLeftSeat: .off,
-                                             rearRightSeat: .off, steeringWheel: .off))
+            dispatch(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off,
+                                   frontRightSeat: .off, rearLeftSeat: .off,
+                                   rearRightSeat: .off, steeringWheel: .off))
 
         case "climate/stop", "climatization/stop":
-            dispatchVolvoWrite(.stopClimate)
+            dispatch(.stopClimate)
 
         case "lock":
-            dispatchVolvoWrite(.lock)
+            dispatch(.lock)
 
         case "unlock":
-            dispatchVolvoWrite(.unlock)
+            dispatch(.unlock)
 
         case "flash", "flash-lights":
-            dispatchVolvoWrite(.flashLights)
+            dispatch(.flashLights)
 
         case "honk-flash", "honk":
-            dispatchVolvoWrite(.honkAndFlash)
+            dispatch(.honkAndFlash)
 
         case "charge-target":
             // Polestar-only: Volvo's official API exposes no charging writes.
@@ -150,18 +150,10 @@ final class URLCommandRouter: NSObject {
         }
     }
 
-    /// Volvo is the only brand whose official API accepts remote write commands; on Polestar
-    /// the deep link is acknowledged with an explanatory notice instead.
-    private func dispatchVolvoWrite(_ command: RemoteCommand) {
-        guard let context else { return }
-        if context.activeBrand == .volvo {
-            context.performRemoteCommand(command)
-        } else {
-            // Polestar blocks remote *write* commands from anything but a paired mobile device.
-            context.notifyCommandNotice(
-                title: L10n.text("Command Restricted"),
-                body: L10n.text("Polestar restricts remote write commands to paired mobile devices.")
-            )
-        }
+    /// Deep-link command dispatch. Brand policy lives in `CapabilityGate` + the provider
+    /// command catalog — the same single answer the Controls tab and Shortcuts intents get —
+    /// so a deep link cannot contradict the in-app surface for the same command.
+    private func dispatch(_ command: RemoteCommand) {
+        context?.performRemoteCommand(command)
     }
 }

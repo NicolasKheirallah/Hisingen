@@ -33,6 +33,26 @@ protocol CommandExecutionContext: AnyObject {
     func refreshNowAfterCommand()
 }
 
+/// What a dispatch returned. The human presentation always flows through
+/// `presentResult` regardless; the value exists so programmatic entry points
+/// (Shortcuts intents) can surface the same answer the banner showed without
+/// polling the command audit table.
+enum RemoteCommandDispatchOutcome: Sendable {
+    case sent(RemoteCommandOutcome)
+    /// Not sent: busy, missing context, gate refusal, declined authorization, or a
+    /// provider failure. `reason` is the same copy `presentResult` showed.
+    case refused(reason: String)
+}
+
+/// The seam every Remote Command entry point crosses once the app shell is wired:
+/// vehicle selection plus the awaited dispatch. Entrypoints (Controls tab, deep links,
+/// Shortcuts intents) hold this, never the shell itself.
+@MainActor
+protocol RemoteCommandDispatching: AnyObject, Sendable {
+    func selectVehicle(vin: String)
+    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome
+}
+
 /// Owns the full remote-command pipeline: capability gating, biometric authorization,
 /// provider execution, audit logging, display-only optimistic state patching, user-visible
 /// outcomes, and the single follow-up refresh ~12 s after a successful command.
@@ -71,13 +91,18 @@ final class CommandCoordinator {
         followUpRefreshTask = nil
     }
 
-    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin = .userInitiated) {
-        guard let context else { return }
+    /// Dispatches one Remote Command end to end: gating, authorization, provider execution,
+    /// audit, optimistic patching, user-visible outcome, and the single follow-up refresh.
+    /// The full human presentation still flows through `presentResult`; the return value is
+    /// for programmatic callers that await the answer.
+    @discardableResult
+    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin = .userInitiated) async -> RemoteCommandDispatchOutcome {
+        guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
         guard !isInProgress else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
                 message: RemoteCommandError.busy.localizedDescription, success: false)
-            return
+            return .refused(reason: RemoteCommandError.busy.localizedDescription)
         }
         guard context.sessionIsValid, let state = context.vehicleState,
               (preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
@@ -85,66 +110,73 @@ final class CommandCoordinator {
             // right after launch) from "you need to refresh" — the command is hard-gated on a
             // snapshot for capability checks and the optimistic patch.
             let stillLoading = context.sessionIsValid && context.vehicleState == nil
+            let message = stillLoading
+                ? L10n.text("Vehicle data is still loading — try again in a moment.")
+                : RemoteCommandError.missingContext.localizedDescription
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: stillLoading
-                    ? L10n.text("Vehicle data is still loading — try again in a moment.")
-                    : RemoteCommandError.missingContext.localizedDescription,
+                message: message,
                 success: false)
-            return
+            return .refused(reason: message)
         }
         let availability = gate.availability(
             for: command,
             state: state,
             commandCatalog: context.currentCommandExecutor().commandCatalog,
             enabledFeatures: preferences.features.enabled,
-            commandInProgress: isInProgress
+            commandInProgress: isInProgress,
+            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
         )
         guard availability == .available else {
+            let message: String = {
+                switch availability {
+                case .disabledBySettings: return RemoteCommandError.disabled.localizedDescription
+                case .unavailableUntilRefresh: return RemoteCommandError.missingContext.localizedDescription
+                case .unavailableWhileBusy: return RemoteCommandError.busy.localizedDescription
+                case .notVehicleOwner: return availability.shortReason
+                    ?? RemoteCommandError.unsupported.localizedDescription
+                case .requiresAccountApproval: return availability.shortReason
+                    ?? RemoteCommandError.unsupported.localizedDescription
+                case .invalidSettings(let reason): return reason
+                default: return RemoteCommandError.unsupported.localizedDescription
+                }
+            }()
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: {
-                    switch availability {
-                    case .disabledBySettings: return RemoteCommandError.disabled.localizedDescription
-                    case .unavailableUntilRefresh: return RemoteCommandError.missingContext.localizedDescription
-                    case .unavailableWhileBusy: return RemoteCommandError.busy.localizedDescription
-                    case .notVehicleOwner: return availability.shortReason
-                        ?? RemoteCommandError.unsupported.localizedDescription
-                    case .invalidSettings(let reason): return reason
-                    default: return RemoteCommandError.unsupported.localizedDescription
-                    }
-                }(),
+                message: message,
                 success: false)
-            return
+            return .refused(reason: message)
         }
         let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
         let providerBrand = context.currentCommandExecutor().brand
         let vehicle = [state.modelName, state.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
         }.joined(separator: " - ")
-        Task { [weak self] in
-            guard let self else { return }
-            let approved: Bool
-            switch origin {
-            case .userInitiated:
-                approved = await self.authorizer.authorize(
-                    adapted,
-                    vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
-                )
-            case .automation:
-                // A user-configured automation pre-authorizes routine commands; there is no
-                // one present to answer a confirmation sheet or a device-owner prompt when it
-                // fires. Anything non-routine still requires an explicit person.
-                approved = adapted.risk == .routine
-            }
-            guard approved else { return }
-            guard !self.isInProgress else { return }
-            // Authorization can show a modal sheet or biometric prompt. The active account,
-            // provider, or vehicle may change while it is visible; never send the command
-            // that was approved for the old snapshot through the newly selected provider.
-            guard self.isCurrentExecutionContext(vin: state.vin, brand: providerBrand) else { return }
-            await self.execute(adapted, vin: state.vin)
+
+        let approved: Bool
+        switch origin {
+        case .userInitiated:
+            approved = await self.authorizer.authorize(
+                adapted,
+                vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
+            )
+        case .automation:
+            // A user-configured automation pre-authorizes routine commands; there is no
+            // one present to answer a confirmation sheet or a device-owner prompt when it
+            // fires. Anything non-routine still requires an explicit person.
+            approved = adapted.risk == .routine
         }
+        guard approved else { return .refused(reason: L10n.text("Authorization was not granted.")) }
+        guard !isInProgress else {
+            return .refused(reason: RemoteCommandError.busy.localizedDescription)
+        }
+        // Authorization can show a modal sheet or biometric prompt. The active account,
+        // provider, or vehicle may change while it is visible; never send the command
+        // that was approved for the old snapshot through the newly selected provider.
+        guard isCurrentExecutionContext(vin: state.vin, brand: providerBrand) else {
+            return .refused(reason: L10n.text("The selected vehicle changed while authorization was pending."))
+        }
+        return await execute(adapted, vin: state.vin)
     }
 
     private func isCurrentExecutionContext(vin: String, brand: VehicleBrand) -> Bool {
@@ -154,8 +186,8 @@ final class CommandCoordinator {
         return currentState.vin.caseInsensitiveCompare(vin) == .orderedSame
     }
 
-    private func execute(_ command: RemoteCommand, vin: String) async {
-        guard let context else { return }
+    private func execute(_ command: RemoteCommand, vin: String) async -> RemoteCommandDispatchOutcome {
+        guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
         isInProgress = true
         inProgressCommandIdentifier = command.identifier
         context.commandInProgressDidChange()
@@ -195,23 +227,24 @@ final class CommandCoordinator {
             )
             context.beginCommandConfirmation(command)
             scheduleFollowUpRefresh(vin: vin)
+            return .sent(result.outcome)
         } catch {
             let mapped = error as? LocalizedError
             logger.error("Remote command \(command.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            let message = mapped?.errorDescription ?? error.localizedDescription
             database.recordCommandAudit(
                 vin: vin,
                 command: command.identifier,
                 status: "failed",
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000),
-                error: mapped?.errorDescription ?? error.localizedDescription
+                error: message
             )
             context.presentResult(
                 title: L10n.text("Command failed"),
-                message: L10n.format("%@ failed. %@",
-                                     command.title,
-                                     mapped?.errorDescription ?? error.localizedDescription),
+                message: L10n.format("%@ failed. %@", command.title, message),
                 success: false
             )
+            return .refused(reason: message)
         }
     }
 

@@ -51,7 +51,7 @@ struct PolestarFeatureWiringTests {
     @Test @MainActor func factoryPassportCSVCoversAllIdentityFields() throws {
         let prefs = makePreferences("passport")
         let state = makeState()
-        let csv = try #require(InfoTabView.factoryPassportCSV(state: state, preferences: prefs))
+        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         for header in ["VIN", "Nickname", "Model", "Registration No", "Internal Vehicle ID",
                        "Factory Spec (PNO34)", "Factory Build Week", "Market",
                        "Exterior Paint", "Upholstery", "Wheels", "Factory Packages"] {
@@ -67,7 +67,7 @@ struct PolestarFeatureWiringTests {
     @Test @MainActor func factoryPassportCSVEscapesCommasAndQuotes() throws {
         let prefs = makePreferences("passport-esc")
         let state = makeState(packages: [], externalColour: "Space Black, \"Limited\"")
-        let csv = try #require(InfoTabView.factoryPassportCSV(state: state, preferences: prefs))
+        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
         let line = try #require(paintLine)
         #expect(line.contains("\"Space Black, \"\"Limited\"\"\""))
@@ -76,7 +76,7 @@ struct PolestarFeatureWiringTests {
     @Test @MainActor func factoryPassportCSVOmitsUnknownFieldsInsteadOfPlaceholders() throws {
         let prefs = makePreferences("passport-sparse")
         let state = makeState(externalColour: nil, upholstery: nil, wheels: nil, registrationNo: nil)
-        let csv = try #require(InfoTabView.factoryPassportCSV(state: state, preferences: prefs))
+        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
         let line = try #require(paintLine)
         #expect(line.hasSuffix("Exterior Paint,"))
@@ -85,7 +85,7 @@ struct PolestarFeatureWiringTests {
     @Test @MainActor func factoryPassportCSVListsEachPackageAsItsOwnRow() throws {
         let prefs = makePreferences("passport-pkgs")
         let state = makeState(packages: ["Pilot Lite", "Climate Pack"])
-        let csv = try #require(InfoTabView.factoryPassportCSV(state: state, preferences: prefs))
+        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         #expect(csv.contains("Package 1,Pilot Lite"))
         #expect(csv.contains("Package 2,Climate Pack"))
     }

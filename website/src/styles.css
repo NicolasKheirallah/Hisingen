@@ -3,7 +3,7 @@
    Precision · Restraint · Warm graphite surfaces · Editorial type
    ============================================================ */
 
-/* ---------- Tokens ---------- */
+/* Tokens */
 
 :root {
   /* surfaces */
@@ -158,7 +158,7 @@
   color: var(--ink);
 }
 
-/* ---------- Base ---------- */
+/* Base */
 
 * { box-sizing: border-box; }
 
@@ -225,7 +225,7 @@ h1, h2, h3 {
 }
 .skip-link:focus-visible { transform: none; }
 
-/* ---------- Shared primitives ---------- */
+/* Shared primitives */
 
 .shell {
   width: min(var(--shell), 100% - var(--gutter) * 2);
@@ -314,7 +314,7 @@ h1, h2, h3 {
 
 .button-small { height: 38px; padding: 0 18px; font-size: 0.875rem; }
 
-/* ---------- Header ---------- */
+/* Header */
 
 .site-header {
   position: fixed;
@@ -435,7 +435,7 @@ h1, h2, h3 {
 }
 .mobile-nav .button { margin-top: 1.75rem; }
 
-/* ---------- Hero ---------- */
+/* Hero */
 
 .hero {
   padding-top: calc(var(--header-h) + clamp(4.5rem, 11vh, 8.5rem));
@@ -576,7 +576,7 @@ h1, h2, h3 {
 }
 .stage-caption span:first-child { color: var(--accent); }
 
-/* ---------- Instruments strip ---------- */
+/* Instruments strip */
 
 .instruments {
   border-top: 1px solid var(--line);
@@ -612,7 +612,7 @@ h1, h2, h3 {
   color: var(--ink-3);
 }
 
-/* ---------- Section scaffolding ---------- */
+/* Section scaffolding */
 
 .section { padding-block: var(--section-pad); }
 .section-tight { padding-block: clamp(4.5rem, 9vh, 7.5rem); }
@@ -648,7 +648,7 @@ h1, h2, h3 {
   margin-top: 0;
 }
 
-/* ---------- 01 · At a glance ---------- */
+/* 01 · At a glance */
 
 .glance-stats {
   display: flex;
@@ -720,7 +720,7 @@ h1, h2, h3 {
 .spec-list-compact dt { font-size: 0.875rem; }
 .spec-list-compact dd { font-size: 0.875rem; }
 
-/* ---------- Shots — product photography treatment ---------- */
+/* Shots — product photography treatment */
 
 .shot { margin: 0; position: relative; }
 .shot img {
@@ -742,7 +742,7 @@ h1, h2, h3 {
 .shot-tall { max-width: 420px; }
 .shot-hero { max-width: 520px; }
 
-/* ---------- 02 · Menu bar (dark) ---------- */
+/* 02 · Menu bar (dark) */
 
 .section-dark { background: var(--bg); }
 
@@ -849,7 +849,7 @@ h1, h2, h3 {
 
 .shot-float img { box-shadow: var(--shadow-float); }
 
-/* ---------- 03 · Why Hisingen Section ---------- */
+/* 03 · Why Hisingen Section */
 
 .section-why {
   background: var(--bg);
@@ -922,7 +922,7 @@ h1, h2, h3 {
   font-size: 0.84em;
 }
 
-/* ---------- 04 · Control ---------- */
+/* 04 · Control */
 
 .control-grid {
   display: grid;
@@ -1112,7 +1112,7 @@ h1, h2, h3 {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- 04 · Vehicles ---------- */
+/* 05 · Vehicles */
 
 .brand-grid {
   display: grid;
@@ -1176,7 +1176,7 @@ h1, h2, h3 {
   max-width: 30em;
 }
 
-/* ---------- Vehicle Showcase (Multi-Angle Studio Gallery) ---------- */
+/* Vehicle Showcase (Multi-Angle Studio Gallery) */
 
 .vehicle-showcase {
   margin-top: clamp(2.5rem, 5vw, 4rem);
@@ -1479,7 +1479,7 @@ h1, h2, h3 {
   text-align: center;
 }
 
-/* ---------- 05 · Capability matrix ---------- */
+/* 06 · Capability matrix */
 
 .matrix-grid {
   display: grid;
@@ -1556,7 +1556,7 @@ tbody td {
 .matrix-grid + .matrix-legend { margin-top: 3rem; }
 .shot-matrix figcaption { margin-top: 1rem; }
 
-/* ---------- Settings & Feature Directory (Compact macOS Layout) ---------- */
+/* Settings & Feature Directory (Compact macOS Layout) */
 
 .settings-directory {
   margin-top: clamp(2.5rem, 4vh, 3.5rem);
@@ -1762,7 +1762,7 @@ tbody td {
   margin: 0;
 }
 
-/* ---------- 06 · Native (dark) ---------- */
+/* 07 · Native (dark) */
 
 .native-grid {
   display: grid;
@@ -1811,9 +1811,7 @@ tbody td {
   color: var(--ink-2);
 }
 
-/* ---------- Native Engineering Metrics Grid ---------- */
-
-/* ---------- Native Engineering Metrics Grid & Three.js Canvas ---------- */
+/* Native Engineering Metrics Grid & Three.js Canvas */
 
 .metrics-wrap {
   grid-column: 1 / -1;
@@ -1905,7 +1903,7 @@ tbody td {
   margin: 0;
 }
 
-/* ---------- 07 · Privacy ---------- */
+/* 08 · Privacy */
 
 .diagram {
   display: grid;
@@ -1999,7 +1997,7 @@ tbody td {
 .link-list svg { width: 10px; height: 10px; color: var(--ink-3); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
 .link-list a:hover svg { transform: translate(2px, -2px); color: var(--ink); }
 
-/* ---------- Open source band ---------- */
+/* Open source band */
 
 .oss-band {
   border-top: 1px solid var(--line);
@@ -2042,7 +2040,7 @@ tbody td {
   flex-wrap: wrap;
 }
 
-/* ---------- Gallery ---------- */
+/* Gallery */
 
 .section-gallery { padding-bottom: clamp(4.5rem, 9vh, 8rem); }
 .section-gallery .section-head { margin-bottom: clamp(3rem, 6vh, 5rem); }
@@ -2180,7 +2178,7 @@ tbody td {
   color: var(--ink-3);
 }
 
-/* ---------- Download (dark) ---------- */
+/* Download (dark) */
 
 .download {
   background: var(--bg);
@@ -2200,7 +2198,7 @@ tbody td {
   margin-top: 1.25rem;
 }
 
-/* ---------- Installation Methods Component ---------- */
+/* Installation Methods Component */
 
 .install-methods-card {
   margin-top: 2rem;
@@ -2410,7 +2408,7 @@ tbody td {
 .download-notes a:hover { border-color: currentColor; }
 .download-notes details > *:not(summary) { margin-inline: 0; }
 
-/* ---------- Footer ---------- */
+/* Footer */
 
 .site-footer {
   background: var(--bg);
@@ -2489,7 +2487,7 @@ tbody td {
 .footer-bottom p:first-child { max-width: 56em; }
 .footer-bottom p:last-child { flex: none; }
 
-/* ---------- Lightbox ---------- */
+/* Lightbox */
 
 .lightbox {
   border: 0;
@@ -2566,7 +2564,7 @@ tbody td {
   text-align: center;
 }
 
-/* ---------- Reveal choreography ---------- */
+/* Reveal choreography */
 
 .reveal, .reveal-late { will-change: opacity, transform; }
 
@@ -2599,7 +2597,7 @@ html.js .reveal-late.is-in {
   }
 }
 
-/* ---------- Responsive ---------- */
+/* Responsive */
 
 @media (max-width: 1180px) {
   .control-grid {
@@ -2728,7 +2726,7 @@ html.js .reveal-late.is-in {
   .hero-actions .button-primary { flex: 1; }
 }
 
-/* ---------- GSAP Scroll Progress Indicator ---------- */
+/* GSAP Scroll Progress Indicator */
 .scroll-progress-bar {
   position: fixed;
   top: 0;

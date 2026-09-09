@@ -160,7 +160,6 @@ export class ThreeMetricsField {
       this.velocities[idx + 1] = (Math.random() - 0.5) * 0.2;
       this.velocities[idx + 2] = (Math.random() - 0.5) * 0.2;
 
-      // Initial Gold / Blue mix
       const isGold = Math.random() > 0.4;
       const col = isGold ? THEMES.default.primary : THEMES.default.secondary;
       this.colors[idx] = col.r;
@@ -316,16 +315,13 @@ export class ThreeMetricsField {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Smooth Mouse Interpolation
     this.mouse.lerp(this.targetMouse, delta * 4);
 
-    // Smooth Theme Interpolation
     this.currentTheme.primary.lerp(this.targetTheme.primary, delta * 3);
     this.currentTheme.secondary.lerp(this.targetTheme.secondary, delta * 3);
     this.currentTheme.speed += (this.targetTheme.speed - this.currentTheme.speed) * delta * 3;
     this.currentTheme.waveFreq += (this.targetTheme.waveFreq - this.currentTheme.waveFreq) * delta * 3;
 
-    // Update Particles
     const posAttr = this.pointsMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
     const colAttr = this.pointsMesh.geometry.getAttribute('color') as THREE.BufferAttribute;
     const posArray = posAttr.array as Float32Array;
@@ -359,7 +355,7 @@ export class ThreeMetricsField {
       posArray[idx + 1] = initY + (dy / (dist + 0.001)) * influence + wave;
       posArray[idx + 2] = initZ + Math.sin(elapsedTime + i) * 1.5;
 
-      // Color Lerp based on spatial position & theme
+      // Pulse between the theme colors
       const mixRatio = (Math.sin(elapsedTime + i * 0.2) + 1) * 0.5;
       const r = THREE.MathUtils.lerp(this.currentTheme.primary.r, this.currentTheme.secondary.r, mixRatio);
       const g = THREE.MathUtils.lerp(this.currentTheme.primary.g, this.currentTheme.secondary.g, mixRatio);
@@ -369,7 +365,6 @@ export class ThreeMetricsField {
       colArray[idx + 1] = g;
       colArray[idx + 2] = b;
 
-      // Connect lines
       for (let j = i + 1; j < this.particleCount; j++) {
         if (lineIndex >= linePosArray.length - 6) break;
         const jdx = j * 3;

@@ -121,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try await sessionManager.restore(api: provider, preferences: preferences)
             })
         urlRouter = URLCommandRouter(context: self)
+        // Composition is complete: Shortcuts intents may now dispatch in-process. They
+        // await this install, so a cold-launch intent waits here instead of round-tripping
+        // through a URL open and polling the command audit table.
+        AutomationHandoff.install(self)
         updateController = UpdateController(context: self, preferences: preferences)
         vehicleSession.primeDisplayState()
         let initiallyAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
@@ -203,7 +207,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func performRemoteCommand(_ command: RemoteCommand) {
-        commandCoordinator.perform(command)
+        // Interactive surfaces stay fire-and-forget: the banner/notification presentation
+        // happens inside the coordinator; nothing here needs the outcome.
+        Task { _ = await commandCoordinator.perform(command) }
     }
 
     private func settingsChanged(_ change: SettingsChange) {
@@ -277,14 +283,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // turned the remote-climate feature off. Capability/session gating still happens
         // inside `CommandCoordinator`.
         guard preferences.features.contains(.remoteClimate) else { return }
-        commandCoordinator.perform(.startClimate(
-            temperatureCelsius: Float(preferences.remoteClimateTemperature),
-            frontLeftSeat: preferences.remoteDriverSeatHeating,
-            frontRightSeat: preferences.remoteFrontRightSeatHeating,
-            rearLeftSeat: preferences.remoteRearLeftSeatHeating,
-            rearRightSeat: preferences.remoteRearRightSeatHeating,
-            steeringWheel: preferences.remoteSteeringWheelHeating
-        ), origin: .automation)
+        Task { _ = await commandCoordinator.perform(
+            .startClimate(
+                temperatureCelsius: Float(preferences.remoteClimateTemperature),
+                frontLeftSeat: preferences.remoteDriverSeatHeating,
+                frontRightSeat: preferences.remoteFrontRightSeatHeating,
+                rearLeftSeat: preferences.remoteRearLeftSeatHeating,
+                rearRightSeat: preferences.remoteRearRightSeatHeating,
+                steeringWheel: preferences.remoteSteeringWheelHeating
+            ),
+            origin: .automation)
+        }
     }
 
     @objc private func systemAppearanceDidChange() {
@@ -300,6 +309,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             urlRouter.route(url)
         }
+    }
+}
+
+// MARK: - RemoteCommandDispatching
+
+extension AppDelegate: RemoteCommandDispatching {
+    // `selectVehicle(vin:)` is declared on the class above; the dispatch protocol shares it
+    // so entry points select then send through one seam.
+    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome {
+        await commandCoordinator.perform(command, origin: origin)
     }
 }
 

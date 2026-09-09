@@ -8,7 +8,6 @@ if ! echo "$BUMP" | grep -Eq '^(patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$'; the
     exit 1
 fi
 
-# Check working tree
 if [ -n "$(git status --porcelain=v1)" ]; then
     echo "❌ Working tree is not clean. Commit or stash your changes first."
     exit 1
