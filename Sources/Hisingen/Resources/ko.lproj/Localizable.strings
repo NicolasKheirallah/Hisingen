@@ -1742,7 +1742,6 @@
 "Every card uses the entire panel width" = "각 카드가 패널 전체 너비를 사용합니다";
 "Cards flow side by side in two columns" = "카드가 두 열로 나란히 배치됩니다";
 
-// English fallback values pending translation
 "Estimate Quality" = "Estimate Quality";
 "Integrated observed power" = "Integrated observed power";
 "SoC and usable-capacity estimate" = "SoC and usable-capacity estimate";
@@ -1930,7 +1929,6 @@
 "Enter a valid email address." = "Enter a valid email address.";
 "A VIN must contain 17 valid letters or digits." = "A VIN must contain 17 valid letters or digits.";
 
-// English fallback values pending translation
 "Enter a rate between 0.01 and 1,000." = "Enter a rate between 0.01 and 1,000.";
 "Enter a currency symbol or code using 1–8 characters." = "Enter a currency symbol or code using 1–8 characters.";
 "Enter a night rate between 0.01 and 1,000." = "Enter a night rate between 0.01 and 1,000.";
@@ -2001,7 +1999,6 @@
 "Move %@ up" = "Move %@ up";
 "Move %@ down" = "Move %@ down";
 
-// English fallback values pending translation
 "Saved coordinates for every vehicle will be permanently removed. Live parking location will still work." = "Saved coordinates for every vehicle will be permanently removed. Live parking location will still work.";
 "Export All History (JSON)" = "Export All History (JSON)";
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed. Account credentials are kept." = "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed. Account credentials are kept.";
@@ -2011,7 +2008,6 @@
 "The selected settings archive is larger than 1 MB." = "The selected settings archive is larger than 1 MB.";
 "Settings imported." = "Settings imported.";
 
-// English fallback values pending translation
 "Erase local history on sign out" = "Erase local history on sign out";
 "Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session." = "Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session.";
 
@@ -2387,3 +2383,11 @@
 "Vehicle Dynamic Calculation. Estimated time until the high-voltage battery reaches the configured charge target." = "Vehicle Dynamic Calculation. Estimated time until the high-voltage battery reaches the configured charge target.";
 "Who authored the software schedule, as reported by the backend." = "Who authored the software schedule, as reported by the backend.";
 "Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports." = "Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.";
+
+"Check frequency" = "Check frequency";
+"Check quietly in the background while Hisingen is running" = "Check quietly in the background while Hisingen is running";
+"How often Hisingen looks for new versions" = "How often Hisingen looks for new versions";
+"Every Hour" = "Every Hour";
+"Every 6 Hours" = "Every 6 Hours";
+"Weekly" = "Weekly";
+"Monthly" = "Monthly";
