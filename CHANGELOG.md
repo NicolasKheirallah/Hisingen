@@ -3,6 +3,38 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-09-09
+
+### Fixed
+
+- CI documentation-link validation: the glossary's ADR-0012 target is committed, and
+  the docs checker now catches files that exist locally but were never committed
+  before they can break the CI job.
+- The vehicle connection layer is more stable and makes fewer requests: one persistent
+  stream per vehicle instead of separate connections per reading, reconnects happen
+  only when the server closes the stream or the session actually expires, and
+  background telemetry polls less often.
+
+### Changed
+
+- Vehicle history persistence deepened behind ChargingSessionLedger and
+  VehicleHistoryLedger.
+- Remote Command dispatch is unified: the Controls tab, `hisingen://` deep links, and
+  Shortcuts intents cross one awaited dispatch authority with brand policy in the
+  capability gate (ADR-0012). Deep-link remote commands now work on Polestar, and
+  Shortcuts intents return the awaited provider outcome instead of polling.
+
+### Added
+
+- `make ci` mirrors every CI job locally (workflows, scripts, localization, docs
+  links, build, tests, bundle and DMG validation), so a sync cannot fail on checks
+  that only run on GitHub.
+- Local Developer ID builds are notarized and stapled automatically when notarization
+  credentials are configured, and `make notarize` staples an existing build.
+- Releases cut themselves: after a green CI run on main the patch version bumps, a
+  changelog entry is generated from commit history, and the release workflow is
+  dispatched automatically. `[skip release]` in a commit message opts out.
+
 ## [1.3.3] - 2026-09-09
 
 ### Changed
