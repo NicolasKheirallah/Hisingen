@@ -563,7 +563,6 @@ Sanitization must occur **before the first Git commit**.
 See:
 
 * [Testing Strategy](../testing/strategy.md)
-* [Fixtures](../testing/fixtures.md)
 * [Security Policy](../../SECURITY.md)
 
 ---

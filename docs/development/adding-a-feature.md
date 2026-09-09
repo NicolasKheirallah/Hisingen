@@ -32,7 +32,7 @@ Add the field to `VehicleState.mergingLastKnown(from:features:)` following the e
 
 ## 8. Add fixtures and tests
 
-A sanitized JSON fixture in `Tests/HisingenTests/Fixtures/` (see [testing/fixtures.md](../testing/fixtures.md)), a decode test against it, and — if the field affects capability resolution or merging — a targeted unit test for that logic. Follow the existing `VehicleCapabilityParsingTests.swift`/`VolvoDecodingTests.swift` patterns rather than inventing a new test-organization scheme.
+A sanitized JSON fixture in a decode test against it, and — if the field affects capability resolution or merging — a targeted unit test for that logic. Follow the existing `VehicleCapabilityParsingTests.swift`/`VolvoDecodingTests.swift` patterns rather than inventing a new test-organization scheme.
 
 ## 9. Expose it in the UI
 

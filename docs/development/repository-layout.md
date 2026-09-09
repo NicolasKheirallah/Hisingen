@@ -52,8 +52,7 @@
 
 **`UI/`** — AppKit shell (`StatusItemController`) and every SwiftUI view. Should only ever import `Domain` types and call through `VehicleProviding`-adjacent closures — never a provider-specific DTO.
 
-**`Tests/HisingenTests/Unit/`** — no network calls, ever. **`Integration/`** — real network calls, always credential-gated via a runtime `.disabled(if:)` trait, never a compile flag. **`Fixtures/`** — sanitized JSON only; see [testing/fixtures.md](../testing/fixtures.md) for what "sanitized" means here and how to add a new one.
-
+**`Tests/HisingenTests/Unit/`** — no network calls, ever. **`Integration/`** — real network calls, always credential-gated via a runtime `.disabled(if:)` trait, never a compile flag. **`Fixtures/`** — sanitized JSON only;
 ## Important entry points
 
 | If you're... | Start here |

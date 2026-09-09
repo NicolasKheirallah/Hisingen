@@ -37,4 +37,3 @@ requires manually updating the hand-rolled parser rather than regenerating
 from an updated `.proto` file, and the parsing code itself needs to earn its
 own test coverage that a generated-code approach would get for free — see
 [api/polestar.md](../api/polestar.md) and
-[testing/fixtures.md](../testing/fixtures.md).

@@ -92,7 +92,7 @@ architecture/overview.md
 - **domain/** — [vehicle](domain/vehicle.md), [capability-matrix](domain/capability-matrix.md), [charging](domain/charging.md), [notifications](domain/notifications.md)
 - **security/** — [overview](security/overview.md), [keychain](security/keychain.md), [threat-model](security/threat-model.md), [privacy](security/privacy.md)
 - **development/** — [getting-started](development/getting-started.md), [repository-layout](development/repository-layout.md), [development-workflow](development/development-workflow.md), [adding-a-feature](development/adding-a-feature.md), [adding-a-provider](development/adding-a-provider.md)
-- **testing/** — [strategy](testing/strategy.md), [fixtures](testing/fixtures.md)
+- **testing/** — [strategy](testing/strategy.md), 
 - **operations/** — [build](operations/build.md), [ci](operations/ci.md), [releases](operations/releases.md), [troubleshooting](operations/troubleshooting.md)
 - [native macOS updater](updater-architecture.md) — Sparkle packaging, trust model, appcast publication, and failure behavior
 - **adr/** — [index](adr/README.md)

@@ -134,7 +134,7 @@ Much lower risk — this is a standard, documented OAuth2/PKCE flow against a st
 
 ### An API response schema changes
 
-For a fixture-covered field: the relevant decode test starts failing — that's the intended early-warning signal. Capture a sanitized real response, update the fixture (see [testing/fixtures.md](../testing/fixtures.md#updating-an-existing-fixture)), and adjust the DTO. For an uncovered field (see [testing/strategy.md](../testing/strategy.md#known-gaps) for known gaps), the symptom is a silent decode failure — the optional-capability wrapper absorbs it into `unavailableFeatures` rather than crashing, so the first sign is usually a user reporting a field went missing, not a test failure. Treat any such report as a prompt to add fixture coverage for that field, not just a one-off fix.
+For a fixture-covered field: the relevant decode test starts failing — that's the intended early-warning signal. Capture a sanitized real response, update the fixture, and adjust the DTO. For an uncovered field (see [testing/strategy.md](../testing/strategy.md#known-gaps) for known gaps), the symptom is a silent decode failure — the optional-capability wrapper absorbs it into `unavailableFeatures` rather than crashing, so the first sign is usually a user reporting a field went missing, not a test failure. Treat any such report as a prompt to add fixture coverage for that field, not just a one-off fix.
 
 ### A protobuf field changes (Polestar gRPC)
 

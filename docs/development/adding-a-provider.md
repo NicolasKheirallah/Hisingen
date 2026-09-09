@@ -24,7 +24,7 @@ Everything above `VehicleProviding` — you do not need to touch or understand:
 7. **Telemetry, refresh behavior.** Just implement `fetchVehicleState` correctly and wrap optional fields defensively — `RefreshCoordinator`'s cadence/backoff/coalescing applies automatically to any `VehicleProviding` conformance, no brand-specific refresh code needed.
 8. **Images (if applicable).** Whatever your brand's studio-image endpoint looks like, following the existing image-caching pattern (fetch once per session, cache the raw `Data`).
 9. **Remote commands.** Implement as many `RemoteCommand` cases as your API actually supports; return `RemoteCommandError.unsupported` for the rest, following Volvo's partial-implementation pattern — don't claim support you haven't built.
-10. **Tests.** Fixture-based decode tests (see [testing/fixtures.md](../testing/fixtures.md)) plus a credential-gated live integration test following `LivePolestarIntegrationTests.swift`/`LiveVolvoIntegrationTests.swift`'s pattern — runtime `.disabled(if:)` trait based on environment variables, never a compile-time flag, and read-only by default.
+10. **Tests.** Fixture-based decode tests plus a credential-gated live integration test following `LivePolestarIntegrationTests.swift`/`LiveVolvoIntegrationTests.swift`'s pattern — runtime `.disabled(if:)` trait based on environment variables, never a compile-time flag, and read-only by default.
 
 ## What you should not need to do
 
