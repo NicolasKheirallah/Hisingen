@@ -1,0 +1,20 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Hisingen</title>
+        <item>
+            <title>1.3.4</title>
+            <pubDate>Wed, 09 Sep 2026 21:48:00 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/NicolasKheirallah/Hisingen/blob/main/CHANGELOG.md</sparkle:fullReleaseNotesLink>
+            <sparkle:version>11</sparkle:version>
+            <sparkle:shortVersionString>1.3.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink sparkle:edSignature="nYyrbaVwg4kOzRD2MnCnkOX7ZLIDDzDZPcPF10Hc105TmQqD4Thc3lWPvI44DhkTVwoyLDlIcJ+ejeQoUQHyAw==" sparkle:length="1804">https://github.com/NicolasKheirallah/Hisingen/releases/download/v1.3.4/Hisingen.app.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v1.3.4/Hisingen.app.zip" length="14552012" type="application/octet-stream" sparkle:edSignature="NWst3TAM7JVEmII85d+Dq5xW23o0jIlV8t+BHs47tRUPVkwpM2e3TeydXkCinkb+GpTPgtoQDC/+UreWKV3MDQ=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: OvAX3T68Af2Ly2HJ3NX8IVpKGSm7Kb1Sxfw+RE8hn7BgtvXC0oTbcGvhltUqIAz/F8gmi/ZPuR7eb8J+8GGrBA==
+length: 1477
+-->
