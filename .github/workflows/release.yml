@@ -257,6 +257,9 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v2.2.3
         with:
+          # Workflow-dispatch runs check out a branch ref, so the tag must be
+          # explicit; on tag pushes TAG is the pushed tag either way.
+          tag_name: ${{ env.TAG }}
           files: |
             Hisingen.dmg
             Hisingen.zip
