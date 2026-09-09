@@ -48,6 +48,18 @@ def check_fences(path, text):
     return errors
 
 
+def is_tracked(path: pathlib.Path) -> bool:
+    try:
+        res = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", str(path.relative_to(ROOT))],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
 def check_links(path, text):
     errors = []
     for lineno, line in enumerate(text.splitlines(), start=1):
@@ -63,6 +75,15 @@ def check_links(path, text):
             resolved = (path.parent / file_part).resolve()
             if not resolved.exists() or is_gitignored(resolved):
                 errors.append(f"{path}:{lineno}: broken link -> {target}")
+            elif not is_tracked(resolved):
+                # CI checks out the committed tree only, so a target that exists
+                # locally but was never committed breaks the check there. The
+                # docs/ directory is gitignored wholesale, so `git add` refuses
+                # it silently and the gap is invisible in git status.
+                errors.append(
+                    f"{path}:{lineno}: broken link -> {target} "
+                    "(file exists locally but is not committed — CI will not see it; run git add -f)"
+                )
     return errors
 
 

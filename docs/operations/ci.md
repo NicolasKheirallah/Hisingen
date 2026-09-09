@@ -160,6 +160,10 @@ points, uploads the Pages artifact, and deploys it with job-scoped `pages: write
 and `id-token: write` permissions. Every third-party action is commit-pinned and
 checkout credentials are not persisted.
 
+## Running ci.yml locally
+
+`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac — the ubuntu lint job (`actionlint` + `shellcheck` + the localization and docs-link checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths — CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
+
 ## Troubleshooting
 
 - **Bundle validation fails**: re-run locally with `make app` then run the

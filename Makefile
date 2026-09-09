@@ -35,12 +35,12 @@ all: app dmg
 
 dist: app dmg
 
-## Run the deterministic build and test validation used by pull requests.
+## Run the full ci.yml job set locally — lint, docs, uncommitted-input checks,
+## build, tests, repository validation, and ad-hoc bundle/DMG validation.
 ## Complete concurrency checking and the Swift 6 language mode are declared in
 ## Package.swift, so every build path is checked without extra flags here.
-ci: doctor inject-secrets
-	swift build
-	sh Scripts/test.sh --skip Live
+ci:
+	sh Scripts/ci-local.sh
 
 doctor:
 	sh Scripts/doctor.sh

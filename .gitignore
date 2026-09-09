@@ -46,3 +46,6 @@ docs/research/feature-roadmap.md
 
 # Local acceptance-gate ledgers
 GATES*.md
+
+# Python bytecode from the docs/QA checkers
+__pycache__/
