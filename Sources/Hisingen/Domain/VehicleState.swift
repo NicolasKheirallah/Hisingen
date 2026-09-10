@@ -202,11 +202,13 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
     var regeneratedEnergyKwh: Double?
 }
 
-/// A remote command that was accepted but whose effect has not yet been confirmed by a
-/// fresh vehicle fetch. Display-only: the UI renders it as "waiting for the vehicle" instead
+/// A remote command that was accepted but whose effect has not yet been confirmed by fresh
+/// vehicle telemetry. Display-only: the UI renders it as "waiting for the vehicle" instead
 /// of presenting requested values as vehicle-reported truth. The session controller
 /// checks subsequent readings; a refresh alone does not confirm the outcome.
 struct PendingCommandSummary: Codable, Equatable, Sendable {
+    static let maximumConfirmationDuration: TimeInterval = 5 * 60
+
     /// Matches `RemoteCommand.identifier` and the command-audit trail.
     var commandIdentifier: String
     var issuedAt: Date
@@ -511,7 +513,8 @@ struct VehicleState: Codable, Equatable, Sendable {
 
     var isAwaitingVehicleConfirmation: Bool {
         guard let pendingCommand, pendingCommand.confirmedAt == nil else { return false }
-        return Date().timeIntervalSince(pendingCommand.issuedAt) < 120
+        return Date().timeIntervalSince(pendingCommand.issuedAt)
+            < PendingCommandSummary.maximumConfirmationDuration
     }
 
     // Private forwarding keeps derived behavior compact without exposing a flat API.

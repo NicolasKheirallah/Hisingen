@@ -176,9 +176,11 @@ final class RefreshCoordinator {
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
     /// Delay between automatic retries of a raced vehicle selection. Injectable for tests.
     private let selectionRetryDelay: TimeInterval
-    /// How long a command-confirmation stream stays open after a command. Injectable so
-    /// tests can collapse the two-minute window.
+    /// Maximum time to seek fresh telemetry after a command. Injectable so tests can
+    /// collapse the production safety cap.
     private let commandConfirmationWindow: TimeInterval
+    private let commandConfirmationInitialPollDelay: TimeInterval
+    private let commandConfirmationPollInterval: TimeInterval
     private let liveStreamPolicy: LiveStreamPolicy
     private let liveStreamJitter: () -> Double
     private let logger = AppLog.logger("refresh")
@@ -205,6 +207,7 @@ final class RefreshCoordinator {
     private var liveStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamUntil: Date?
+    private var pendingCommandConfirmation: PendingCommandSummary?
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
@@ -252,7 +255,9 @@ final class RefreshCoordinator {
          selectionRetryDelay: TimeInterval = 2,
          liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
          liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
-         commandConfirmationWindow: TimeInterval = 2 * 60) {
+         commandConfirmationWindow: TimeInterval = PendingCommandSummary.maximumConfirmationDuration,
+         commandConfirmationInitialPollDelay: TimeInterval = 12,
+         commandConfirmationPollInterval: TimeInterval = 15) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
@@ -263,6 +268,8 @@ final class RefreshCoordinator {
         self.liveStreamPolicy = liveStreamPolicy
         self.liveStreamJitter = liveStreamJitter
         self.commandConfirmationWindow = commandConfirmationWindow
+        self.commandConfirmationInitialPollDelay = commandConfirmationInitialPollDelay
+        self.commandConfirmationPollInterval = commandConfirmationPollInterval
         guard observesEnvironment else { return }
         installSystemObservers()
         monitor.pathUpdateHandler = { [weak self] path in
@@ -336,27 +343,42 @@ final class RefreshCoordinator {
         refresh(trigger: .manual)
     }
 
-    func beginCommandConfirmation(_ command: RemoteCommand) {
+    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
+        if pendingCommandConfirmation != nil, let vin = latest?.identity.vin {
+            finishCommandConfirmation(vin: vin)
+        }
+        guard pending.supportsTelemetryConfirmation else {
+            schedule(after: commandConfirmationInitialPollDelay, retrySession: false)
+            publishDiagnostics()
+            return
+        }
+        pendingCommandConfirmation = pending
         let purpose: VehicleLiveStreamPurpose?
-        switch command.feature {
-        case .remoteCharging:
+        switch pending.command {
+        case .setChargeTarget, .setAmpLimit, .startChargingOverride:
             purpose = .charging
-        case .remoteLocks, .remoteWindows, .remoteHonkFlash:
+        case .lock, .lockReducedGuard, .unlock,
+             .openTailgate, .closeTailgate, .openWindows, .closeWindows:
             purpose = .exteriorConfirmation
         default:
-            // No climate, schedules, or OTA stream exists; the 12 s follow-up refresh
-            // is the confirmation path for those commands.
             purpose = nil
         }
-        guard let purpose, let vin = latest?.identity.vin,
-              preferences.features.contains(.realTimeUpdates) else { return }
-        commandStreamPurpose = purpose
         commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
-        if liveStreamPurpose != purpose {
-            stopLiveStreaming()
+        if let purpose, preferences.features.contains(.realTimeUpdates),
+           let vin = latest?.identity.vin {
+            commandStreamPurpose = purpose
+            if liveStreamPurpose != purpose {
+                stopLiveStreaming()
+            }
+            startLiveStreamingIfNeeded(vin: vin)
+            scheduleConfirmationWatchdog(vin: vin)
+        } else if let vin = latest?.identity.vin {
+            commandStreamPurpose = nil
+            scheduleConfirmationWatchdog(vin: vin)
         }
-        startLiveStreamingIfNeeded(vin: vin)
-        scheduleConfirmationWatchdog(vin: vin)
+        schedule(after: min(commandConfirmationInitialPollDelay, commandConfirmationPollInterval),
+                 retrySession: false)
+        publishDiagnostics()
     }
 
     /// The confirmation window must actually end. A held-open exterior stream only
@@ -381,8 +403,10 @@ final class RefreshCoordinator {
         let expiredPurpose = commandStreamPurpose
         commandStreamUntil = nil
         commandStreamPurpose = nil
+        pendingCommandConfirmation = nil
         guard latest?.identity.vin == vin else { return }
         guard let expiredPurpose, liveStreamPurpose == expiredPurpose else {
+            scheduleFallbackPoll(for: latest)
             publishDiagnostics()
             return
         }
@@ -483,6 +507,7 @@ final class RefreshCoordinator {
         commandWatchdogTask = nil
         commandStreamPurpose = nil
         commandStreamUntil = nil
+        pendingCommandConfirmation = nil
         streamTask?.cancel()
         streamTask = nil
         streamTaskID = nil
@@ -718,25 +743,17 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(state)
         SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.identity.vin))
-        onEvent?(.state(state))
+        let confirmation = reconcileCommandConfirmation(in: state)
+        onEvent?(.state(confirmation.state))
+        if confirmation.confirmed {
+            finishCommandConfirmation(vin: state.identity.vin)
+        }
         if desiredLiveStreamPurpose(for: state) == nil {
             stopLiveStreaming()
         } else {
             startLiveStreamingIfNeeded(vin: state.identity.vin)
         }
-        let pollingInterval = liveStreamConnected
-            ? liveStreamPolicy.integrityPollInterval
-            : RefreshPolicy.interval(
-            isCharging: state.isCharging,
-            isClimateActive: state.isClimateActive,
-            isVehicleAvailable: {
-                switch state.identity.availability {
-                case .available: return true
-                case .unavailable: return false
-                case .unknown: return nil
-                }
-            }()
-        )
+        let pollingInterval = pollingInterval(for: state)
         schedule(after: pollingInterval, retrySession: false)
         publishDiagnostics()
     }
@@ -840,6 +857,9 @@ final class RefreshCoordinator {
         task = nil
         commandWatchdogTask?.cancel()
         commandWatchdogTask = nil
+        commandStreamPurpose = nil
+        commandStreamUntil = nil
+        pendingCommandConfirmation = nil
         streamTask?.cancel()
         streamTask = nil
         liveStreamPurpose = nil
@@ -928,8 +948,12 @@ final class RefreshCoordinator {
                             self.liveStreamMetrics.activeTransportStreams = activeTransportStreams
                             self.liveStreamMetrics.connectedAt = now
                             self.liveStreamMetrics.circuitOpenUntil = nil
-                            self.schedule(after: self.liveStreamPolicy.integrityPollInterval,
-                                          retrySession: false)
+                            if self.isCommandConfirmationPending {
+                                self.scheduleCommandConfirmationPoll()
+                            } else {
+                                self.schedule(after: self.liveStreamPolicy.integrityPollInterval,
+                                              retrySession: false)
+                            }
                             self.publishDiagnostics()
                             continue
                         }
@@ -943,7 +967,12 @@ final class RefreshCoordinator {
                             lastPersistAt = now
                             self.stateStore.save(current)
                         }
-                        self.onEvent?(.state(current))
+                        let confirmation = self.reconcileCommandConfirmation(in: current)
+                        self.onEvent?(.state(confirmation.state))
+                        if confirmation.confirmed {
+                            self.finishCommandConfirmation(vin: vin)
+                            return
+                        }
                     }
                     throw VehicleServiceError.temporarilyUnavailable(
                         provider: self.api.brand, service: "live vehicle stream"
@@ -1012,12 +1041,35 @@ final class RefreshCoordinator {
         }
         commandStreamUntil = nil
         commandStreamPurpose = nil
+        pendingCommandConfirmation = nil
         return liveStreamPolicy.shouldStream(state) ? .charging : nil
     }
 
     private func scheduleFallbackPoll(for state: VehicleState?) {
         guard let state else { return }
-        schedule(after: RefreshPolicy.interval(
+        if isCommandConfirmationPending {
+            scheduleCommandConfirmationPoll()
+            return
+        }
+        schedule(after: pollingInterval(for: state), retrySession: false)
+    }
+
+    private var isCommandConfirmationPending: Bool {
+        pendingCommandConfirmation != nil
+            && commandStreamUntil.map { $0 > Date() } == true
+    }
+
+    private func scheduleCommandConfirmationPoll() {
+        if timer?.isValid == true, nextRefresh != nil { return }
+        schedule(after: commandConfirmationPollInterval, retrySession: false)
+    }
+
+    private func pollingInterval(for state: VehicleState) -> TimeInterval {
+        if isCommandConfirmationPending {
+            return commandConfirmationPollInterval
+        }
+        if liveStreamConnected { return liveStreamPolicy.integrityPollInterval }
+        return RefreshPolicy.interval(
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
             isVehicleAvailable: {
@@ -1025,7 +1077,35 @@ final class RefreshCoordinator {
                 if case .available = state.identity.availability { return true }
                 return nil
             }()
-        ), retrySession: false)
+        )
+    }
+
+    private func reconcileCommandConfirmation(
+        in state: VehicleState
+    ) -> (state: VehicleState, confirmed: Bool) {
+        guard let pending = pendingCommandConfirmation else { return (state, false) }
+        let updated = pending.updatingConfirmation(from: state)
+        var displayState = state
+        displayState.commandState.pending = updated
+        pendingCommandConfirmation = updated
+        return (displayState, updated.confirmedAt != nil)
+    }
+
+    private func finishCommandConfirmation(vin: String) {
+        let confirmationPurpose = commandStreamPurpose
+        pendingCommandConfirmation = nil
+        commandStreamPurpose = nil
+        commandStreamUntil = nil
+        commandWatchdogTask?.cancel()
+        commandWatchdogTask = nil
+        guard latest?.identity.vin == vin,
+              let confirmationPurpose, liveStreamPurpose == confirmationPurpose else { return }
+        let nextPurpose = desiredLiveStreamPurpose(for: latest)
+        guard nextPurpose != confirmationPurpose else { return }
+        stopLiveStreaming()
+        if nextPurpose != nil {
+            startLiveStreamingIfNeeded(vin: vin)
+        }
     }
 
     private func stopLiveStreaming() {

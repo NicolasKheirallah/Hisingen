@@ -1,14 +1,32 @@
 import Foundation
 
 extension PendingCommandSummary {
+    var supportsTelemetryConfirmation: Bool {
+        switch command {
+        case .lock, .lockReducedGuard, .unlock,
+             .openTailgate, .closeTailgate, .openWindows, .closeWindows,
+             .startPreCleaning, .stopPreCleaning,
+             .setChargeTarget, .setAmpLimit, .startChargingOverride:
+            return true
+        default:
+            return false
+        }
+    }
+
     func updatingConfirmation(from state: VehicleState) -> PendingCommandSummary {
         guard confirmedAt == nil, let command else { return self }
         let reading: VehicleReading
         let matches: Bool
         switch command {
-        case .lock, .unlock:
+        case .lock, .lockReducedGuard, .unlock:
             reading = .locks
-            matches = state.exteriorStatus?.isLocked == (command == .lock)
+            matches = state.exteriorStatus?.isLocked == (command != .unlock)
+        case .openTailgate, .closeTailgate:
+            reading = .openings
+            let expected: OpeningState = command == .openTailgate ? .open : .closed
+            matches = state.exteriorStatus?.openings.first {
+                $0.opening == .tailgate
+            }?.state == expected
         case .openWindows, .closeWindows:
             reading = .openings
             let windows: [VehicleOpening] = [.frontLeftWindow, .frontRightWindow, .rearLeftWindow, .rearRightWindow]
@@ -19,8 +37,17 @@ extension PendingCommandSummary {
         case .startPreCleaning, .stopPreCleaning:
             reading = .airQuality
             matches = state.airQuality?.cleaningState == (command == .startPreCleaning ? .on : .off)
+        case .setChargeTarget(let target):
+            reading = .charging
+            matches = state.energy.targetPercentage == target
+        case .setAmpLimit(let amps):
+            reading = .charging
+            matches = state.energy.currentLimitAmps == amps
+        case .startChargingOverride:
+            reading = .charging
+            matches = state.energy.chargingState == .charging
+                || state.energy.chargingState == .smartCharging
         default:
-            // Other responses lack a timestamped reading that proves the requested setting.
             return self
         }
         guard matches, state.hasFreshReading(reading),

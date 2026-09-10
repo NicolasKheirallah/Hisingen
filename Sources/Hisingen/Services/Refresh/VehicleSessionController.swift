@@ -110,8 +110,8 @@ final class VehicleSessionController {
     // MARK: - Passthroughs
 
     func refreshNow() { refreshCoordinator.refreshNow() }
-    func beginCommandConfirmation(_ command: RemoteCommand) {
-        refreshCoordinator.beginCommandConfirmation(command)
+    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
+        refreshCoordinator.beginCommandConfirmation(pending)
     }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }

@@ -364,8 +364,7 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
     func commandInProgressDidChange() {}
     func presentResult(title: String, message: String, success: Bool) {}
-    func beginCommandConfirmation(_ command: RemoteCommand) {}
-    func refreshNowAfterCommand() {}
+    func beginCommandConfirmation(_ pending: PendingCommandSummary) {}
 }
 
 @MainActor

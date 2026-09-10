@@ -123,9 +123,9 @@ are stale on arrival.
 | Stream state | Polling |
 | --- | --- |
 | Connected | Routine polling disabled; only a 30-min integrity poll runs |
-| Degraded (retrying) | Normal activity cadence returns as fallback polling |
+| Degraded (retrying) | Normal activity cadence returns; pending commands use a 15 s targeted poll |
 | Disconnected (circuit open) | Fallback polling continues; reconnect waits out the circuit |
-| Command issued | A short confirmation stream opens (see below), plus one 12 s follow-up fetch |
+| Observable command pending | Confirmation stream plus a 12 s first fetch and 15 s polls until confirmed |
 
 **Reconnect rules.** The stream reconnects only when the server closes it, the network
 changes, the user changes vehicle, or authentication actually expires — never on a timer.
@@ -141,12 +141,18 @@ Unsupported-method, permission-denied, and incompatible-schema failures open a 6
 circuit. Generic transient failures open a circuit after `maximumFailuresBeforeCircuit`
 (6) consecutive failures. While a circuit is open, fallback polling covers the vehicle.
 
-**Command confirmation windows.** A successful charging or exterior command opens a
-purpose-scoped stream for `commandConfirmationWindow` (2 minutes). A watchdog task closes
-the window: without it, a held-open confirmation stream only re-evaluates its purpose on
-the next frame or reconnect, which on a quiet car could keep the connection open for the
-full idle timeout after its reason expired. When the window lapses, the charging gate
-decides again.
+**Command confirmation.** A successful command whose result is observable in timestamped
+telemetry starts a state-driven confirmation period. Charging commands use the battery stream;
+lock, window, and tailgate commands use the exterior stream. A fresh matching reading ends the
+confirmation immediately. If the stream drops, it reconnects while the command remains pending
+and a targeted full-state poll runs every 15 seconds. The first full-state check remains at
+12 seconds. Commands such as honk and flash do not open a stream because no returned reading can
+prove their effect.
+
+The five-minute `commandConfirmationWindow` is a safety cap, not the normal close condition. A
+watchdog ends an unconfirmed period even when the stream is quiet, then the normal charging gate
+and polling cadence resume. If confirmation ends while the vehicle still qualifies for the same
+charging stream, the transport remains open and simply returns to its normal purpose.
 
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator

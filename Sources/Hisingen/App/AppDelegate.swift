@@ -153,7 +153,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        commandCoordinator.cancelPendingWork()
         calendarPreconditioning.stop()
         garageScanner.stop()
         vehicleSession.stop()
@@ -174,7 +173,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func signOut() {
         signInCoordinator.cancelPolestarSignIn()
-        commandCoordinator.cancelPendingWork()
         SpotlightIndexer.removeAll()
         vehicleSession.signOut()
     }
@@ -347,11 +345,8 @@ extension AppDelegate: CommandExecutionContext {
         render()
         resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
     }
-    func beginCommandConfirmation(_ command: RemoteCommand) {
-        vehicleSession.beginCommandConfirmation(command)
-    }
-    func refreshNowAfterCommand() {
-        vehicleSession.refreshNow()
+    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
+        vehicleSession.beginCommandConfirmation(pending)
     }
 }
 

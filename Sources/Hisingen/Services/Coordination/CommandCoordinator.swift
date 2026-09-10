@@ -28,9 +28,8 @@ protocol CommandExecutionContext: AnyObject {
     func commandInProgressDidChange()
     /// Presents a command outcome to the user.
     func presentResult(title: String, message: String, success: Bool)
-    /// Requests the post-command authoritative refresh.
-    func beginCommandConfirmation(_ command: RemoteCommand)
-    func refreshNowAfterCommand()
+    /// Hands the accepted command to the refresh module for telemetry confirmation.
+    func beginCommandConfirmation(_ pending: PendingCommandSummary)
 }
 
 /// What a dispatch returned. The human presentation always flows through
@@ -55,7 +54,7 @@ protocol RemoteCommandDispatching: AnyObject, Sendable {
 
 /// Owns the full remote-command pipeline: capability gating, biometric authorization,
 /// provider execution, audit logging, display-only optimistic state patching, user-visible
-/// outcomes, and the single follow-up refresh ~12 s after a successful command.
+/// outcomes, and handoff to state-driven command confirmation.
 ///
 /// Extracted from `AppDelegate`, which had become the de-facto command service while also
 /// being the lifecycle owner, URL router, and garage scanner.
@@ -73,7 +72,6 @@ final class CommandCoordinator {
     /// show a "Sending…" state on the specific control that was tapped rather than dimming the
     /// whole page. `nil` whenever `isInProgress` is false.
     private(set) var inProgressCommandIdentifier: String?
-    private var followUpRefreshTask: Task<Void, Never>?
 
     init(context: any CommandExecutionContext,
          preferences: PreferencesStore,
@@ -85,14 +83,8 @@ final class CommandCoordinator {
         self.authorizer = authorizer
     }
 
-    /// Cancels any pending follow-up refresh (sign-out, brand switch, termination).
-    func cancelPendingWork() {
-        followUpRefreshTask?.cancel()
-        followUpRefreshTask = nil
-    }
-
     /// Dispatches one Remote Command end to end: gating, authorization, provider execution,
-    /// audit, optimistic patching, user-visible outcome, and the single follow-up refresh.
+    /// audit, optimistic patching, user-visible outcome, and confirmation handoff.
     /// The full human presentation still flows through `presentResult`; the return value is
     /// for programmatic callers that await the answer.
     @discardableResult
@@ -225,8 +217,11 @@ final class CommandCoordinator {
                 message: L10n.format("%@ — %@", command.title, detail),
                 success: true
             )
-            context.beginCommandConfirmation(command)
-            scheduleFollowUpRefresh(vin: vin)
+            context.beginCommandConfirmation(PendingCommandSummary(
+                commandIdentifier: command.identifier,
+                issuedAt: startedAt,
+                command: command
+            ))
             return .sent(result.outcome)
         } catch {
             let mapped = error as? LocalizedError
@@ -245,26 +240,6 @@ final class CommandCoordinator {
                 success: false
             )
             return .refused(reason: message)
-        }
-    }
-
-    /// One authoritative refresh ~12 s after a successful command; superseded by a newer
-    /// command, sign-out, or termination via `cancelPendingWork()`.
-    private func scheduleFollowUpRefresh(vin: String) {
-        followUpRefreshTask?.cancel()
-        followUpRefreshTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: .seconds(12))
-            } catch is CancellationError {
-                return
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            guard let self, let context = self.context else { return }
-            self.followUpRefreshTask = nil
-            guard context.sessionIsValid, context.vehicleState?.identity.vin == vin else { return }
-            context.refreshNowAfterCommand()
         }
     }
 

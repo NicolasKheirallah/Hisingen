@@ -22,7 +22,9 @@ struct RefreshCoordinatorStreamTests {
     private func makeCoordinator(
         provider: StreamingMockProvider, defaults: UserDefaults,
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
-        commandWindow: TimeInterval = 2 * 60
+        commandWindow: TimeInterval = 5 * 60,
+        commandInitialPollDelay: TimeInterval = 12,
+        commandPollInterval: TimeInterval = 15
     ) -> RefreshCoordinator {
         let preferences = PreferencesStore(defaults: defaults)
         var features = FeatureSelection.default
@@ -38,7 +40,9 @@ struct RefreshCoordinatorStreamTests {
             sessionManager: SessionManager(readToken: { _ in "test-session" },
                                            readPassword: { nil }, clearPassword: {}),
             liveStreamPolicy: policy,
-            commandConfirmationWindow: commandWindow
+            commandConfirmationWindow: commandWindow,
+            commandConfirmationInitialPollDelay: commandInitialPollDelay,
+            commandConfirmationPollInterval: commandPollInterval
         )
     }
 
@@ -224,7 +228,11 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected }, "Expected the charging stream to connect")
 
-        coordinator.beginCommandConfirmation(.lock)
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date(),
+            command: .lock
+        ))
         _ = try #require(
             await waitUntil(events) { _ in recorder.purposes.last == .exteriorConfirmation },
             "Expected the exterior confirmation stream to replace the battery stream"
@@ -240,6 +248,92 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    @Test
+    func matchingExteriorFrameEndsConfirmationBeforeTheSafetyCap() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(
+            script: [.healthy(frames: 1), .exteriorLocked, .healthy(frames: 1)],
+            recorder: recorder
+        )
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider, defaults: defaults, commandWindow: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date().addingTimeInterval(-1),
+            command: .lock
+        ))
+
+        let resumed = await waitUntil(events, timeout: 2) { _ in
+            recorder.purposes == [.charging, .exteriorConfirmation, .charging]
+        }
+        _ = try #require(resumed, "Expected fresh lock telemetry to end confirmation immediately")
+        #expect(events.states.contains { $0.commandState.pending?.confirmedAt != nil })
+        #expect(recorder.maxConcurrent == 1)
+        coordinator.stop()
+    }
+
+    @Test
+    func disconnectedConfirmationStreamUsesFastFallbackPollAndReconnects() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let transient = VehicleServiceError.temporarilyUnavailable(
+            provider: .polestar, service: "exterior"
+        )
+        let provider = StreamingMockProvider(
+            script: [.healthy(frames: 1), .fail(transient), .healthy(frames: 1)],
+            recorder: recorder
+        )
+        let events = DiagnosticsRecorder()
+        let policy = LiveStreamPolicy(retrySteps: [0.2])
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            policy: policy,
+            commandWindow: 3,
+            commandPollInterval: 0.1
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date(),
+            command: .lock
+        ))
+
+        let retrying = await waitUntil(events, timeout: 2) {
+            !$0.liveStreamConnected && $0.liveStreamRetryAt != nil
+        }
+        let snapshot = try #require(retrying, "Expected the failed confirmation stream to retry")
+        let fallbackDelay = snapshot.nextRefresh?.timeIntervalSinceNow ?? .infinity
+        #expect(fallbackDelay < 1.2, "Expected a targeted confirmation poll, got \(fallbackDelay) s")
+        let reconnected = try #require(await waitUntil(events, timeout: 3) { diagnostics in
+            recorder.purposes.filter { $0 == .exteriorConfirmation }.count >= 1
+                && recorder.opened >= 2 && diagnostics.liveStreamConnected
+        })
+        if let fallbackDeadline = snapshot.nextRefresh, let reconnectedDeadline = reconnected.nextRefresh {
+            #expect(reconnectedDeadline <= fallbackDeadline.addingTimeInterval(0.05),
+                    "Reconnect must not postpone an already scheduled confirmation poll")
+        }
+        let pollDeadline = Date().addingTimeInterval(2)
+        while await provider.fetchCount < 2, Date() < pollDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(await provider.fetchCount >= 2, "Expected a confirmation poll before the normal cadence")
+        #expect(recorder.maxConcurrent == 1)
+        coordinator.stop()
+    }
+
     /// Climate commands open no stream at all: the provider's only stream is battery state,
     /// and a battery connection cannot make climate fresher.
     @Test
@@ -249,7 +343,9 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        let coordinator = makeCoordinator(
+            provider: provider, defaults: defaults, commandInitialPollDelay: 0.1
+        )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -257,10 +353,19 @@ struct RefreshCoordinatorStreamTests {
         // comparison is against a settled state.
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
         let before = recorder.purposes.count
-        coordinator.beginCommandConfirmation(.stopClimate)
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: Date(),
+            command: .stopClimate
+        ))
         try await Task.sleep(for: .milliseconds(300))
         #expect(recorder.purposes.count == before, "Climate commands must not open any stream")
         #expect(recorder.purposes == [.charging])
+        let pollDeadline = Date().addingTimeInterval(2)
+        while await provider.fetchCount < 2, Date() < pollDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(await provider.fetchCount == 2, "Climate commands retain one authoritative follow-up poll")
         coordinator.stop()
     }
 
@@ -295,6 +400,7 @@ struct RefreshCoordinatorStreamTests {
 private enum StreamBehavior: Sendable {
     case fail(Error)
     case healthy(frames: Int)
+    case exteriorLocked
 }
 
 /// Lock-protected record of stream opens. `onTermination` runs on an arbitrary executor, so
@@ -328,9 +434,11 @@ private final class StreamRecorder: @unchecked Sendable {
 @MainActor
 private final class DiagnosticsRecorder {
     private(set) var snapshots: [DiagnosticsSnapshot] = []
+    private(set) var states: [VehicleState] = []
 
     func record(_ event: RefreshCoordinatorEvent) {
         if case .diagnostics(let snapshot) = event { snapshots.append(snapshot) }
+        if case .state(let state) = event { states.append(state) }
     }
 }
 
@@ -400,6 +508,20 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
                 }
                 // No finish: the connection holds open until cancelled, like the real
                 // server-streaming gRPC endpoint.
+                continuation.onTermination = { _ in recorder.close() }
+            }
+        case .exteriorLocked:
+            recorder.open(purpose: purpose, vin: vin)
+            let recorder = self.recorder
+            return AsyncThrowingStream(bufferingPolicy: .unbounded) { continuation in
+                continuation.yield(.connected(activeTransportStreams: 1))
+                continuation.yield(.exterior(
+                    ExteriorSnapshot(
+                        openings: [], isLocked: true, alarmTriggered: false,
+                        reportedAt: Date()
+                    ),
+                    reportedAt: Date()
+                ))
                 continuation.onTermination = { _ in recorder.close() }
             }
         }

@@ -77,6 +77,8 @@ struct VehicleActivityTests {
         #expect(current.commandState.optimisticLockUntil == nil)
         #expect(current.isAwaitingVehicleConfirmation)
         current.commandState.pending?.issuedAt = Date().addingTimeInterval(-121)
+        #expect(current.isAwaitingVehicleConfirmation)
+        current.commandState.pending?.issuedAt = Date().addingTimeInterval(-301)
         #expect(!current.isAwaitingVehicleConfirmation)
     }
 
@@ -96,6 +98,38 @@ struct VehicleActivityTests {
         #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
         let unobservable = PendingCommandSummary(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
         #expect(unobservable.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(!unobservable.supportsTelemetryConfirmation)
+    }
+
+    @Test func chargingAndTailgateCommandsRequireFreshMatchingTelemetry() {
+        let now = Date()
+        var current = state(at: now)
+        current.freshness.readingDates[.charging] = now
+        current.energy.targetPercentage = 90
+        current.energy.currentLimitAmps = 16
+
+        let target = PendingCommandSummary(
+            commandIdentifier: "set-charge-target", issuedAt: now.addingTimeInterval(-1),
+            command: .setChargeTarget(90)
+        )
+        let amps = PendingCommandSummary(
+            commandIdentifier: "set-amp-limit", issuedAt: now.addingTimeInterval(-1),
+            command: .setAmpLimit(16)
+        )
+        #expect(target.supportsTelemetryConfirmation)
+        #expect(target.updatingConfirmation(from: current).confirmedAt == now)
+        #expect(amps.updatingConfirmation(from: current).confirmedAt == now)
+
+        current.exteriorStatus = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .tailgate, state: .open)],
+            isLocked: true, alarmTriggered: nil, reportedAt: now
+        )
+        let tailgate = PendingCommandSummary(
+            commandIdentifier: "open-tailgate", issuedAt: now.addingTimeInterval(-1),
+            command: .openTailgate
+        )
+        #expect(tailgate.supportsTelemetryConfirmation)
+        #expect(tailgate.updatingConfirmation(from: current).confirmedAt == now)
     }
 
     @Test func parkedLossRequiresContinuousFreshStationaryObservations() throws {
