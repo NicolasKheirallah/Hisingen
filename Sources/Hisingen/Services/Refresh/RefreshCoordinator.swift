@@ -1036,12 +1036,17 @@ final class RefreshCoordinator {
 
     private func desiredLiveStreamPurpose(for state: VehicleState?) -> VehicleLiveStreamPurpose? {
         guard let state else { return nil }
-        if let until = commandStreamUntil, until > Date(), let commandStreamPurpose {
-            return commandStreamPurpose
+        if let until = commandStreamUntil {
+            if until > Date() {
+                if let commandStreamPurpose {
+                    return commandStreamPurpose
+                }
+            } else {
+                commandStreamUntil = nil
+                commandStreamPurpose = nil
+                pendingCommandConfirmation = nil
+            }
         }
-        commandStreamUntil = nil
-        commandStreamPurpose = nil
-        pendingCommandConfirmation = nil
         return liveStreamPolicy.shouldStream(state) ? .charging : nil
     }
 

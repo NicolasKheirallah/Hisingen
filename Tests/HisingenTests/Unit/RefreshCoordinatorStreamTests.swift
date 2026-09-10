@@ -369,6 +369,43 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    @Test
+    func pollOnlyConfirmationSchedulesAnotherPollAfterTheFirstFetch() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandWindow: 3,
+            commandInitialPollDelay: 0.05,
+            commandPollInterval: 0.05
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.startPreCleaning.identifier,
+            issuedAt: Date(),
+            command: .startPreCleaning
+        ))
+
+        let firstPoll = try #require(await waitUntil(events, timeout: 2) {
+            $0.refreshSuccesses >= 2
+        })
+        let nextDelay = firstPoll.nextRefresh?.timeIntervalSinceNow ?? .infinity
+        #expect(nextDelay < 1.2, "Poll-only confirmation must retain its short repeat cadence")
+        #expect(recorder.purposes.isEmpty, "Pre-cleaning confirmation must not open an unrelated stream")
+        _ = try #require(await waitUntil(events, timeout: 2) {
+            $0.refreshSuccesses >= 3
+        }, "Expected poll-only confirmation to fetch repeatedly")
+        coordinator.stop()
+    }
+
     /// Switching vehicles cancels the old stream and opens at most one stream for the new
     /// VIN — the expired task's cleanup must not resurrect state for a car we left.
     @Test
