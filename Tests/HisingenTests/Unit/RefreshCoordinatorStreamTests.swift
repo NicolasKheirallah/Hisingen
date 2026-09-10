@@ -23,8 +23,8 @@ struct RefreshCoordinatorStreamTests {
         provider: StreamingMockProvider, defaults: UserDefaults,
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
         commandWindow: TimeInterval = 5 * 60,
-        commandInitialPollDelay: TimeInterval = 12,
-        commandPollInterval: TimeInterval = 15
+        commandInitialPollDelay: TimeInterval = 2,
+        commandPollInterval: TimeInterval = 5
     ) -> RefreshCoordinator {
         let preferences = PreferencesStore(defaults: defaults)
         var features = FeatureSelection.default
@@ -369,8 +369,13 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
-    @Test
-    func pollOnlyConfirmationSchedulesAnotherPollAfterTheFirstFetch() async throws {
+    @Test(arguments: [
+        RemoteCommand.setChargeTarget(80),
+        RemoteCommand.setAmpLimit(16)
+    ])
+    func pollOnlyChargingSettingConfirmationRepeatsWithoutOpeningAStream(
+        command: RemoteCommand
+    ) async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let recorder = StreamRecorder()
@@ -389,9 +394,9 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
         coordinator.beginCommandConfirmation(PendingCommandSummary(
-            commandIdentifier: RemoteCommand.startPreCleaning.identifier,
+            commandIdentifier: command.identifier,
             issuedAt: Date(),
-            command: .startPreCleaning
+            command: command
         ))
 
         let firstPoll = try #require(await waitUntil(events, timeout: 2) {
@@ -399,10 +404,62 @@ struct RefreshCoordinatorStreamTests {
         })
         let nextDelay = firstPoll.nextRefresh?.timeIntervalSinceNow ?? .infinity
         #expect(nextDelay < 1.2, "Poll-only confirmation must retain its short repeat cadence")
-        #expect(recorder.purposes.isEmpty, "Pre-cleaning confirmation must not open an unrelated stream")
+        #expect(recorder.purposes.isEmpty, "Charging-setting confirmation must not open the battery stream")
         _ = try #require(await waitUntil(events, timeout: 2) {
             $0.refreshSuccesses >= 3
         }, "Expected poll-only confirmation to fetch repeatedly")
+        coordinator.stop()
+    }
+
+    @Test
+    func chargingOverrideConfirmationStillUsesTheBatteryStream() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.startChargingOverride.identifier,
+            issuedAt: Date(),
+            command: .startChargingOverride
+        ))
+
+        _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
+        #expect(!recorder.purposes.isEmpty)
+        #expect(recorder.purposes.allSatisfy { $0 == .charging })
+        coordinator.stop()
+    }
+
+    @Test
+    func confirmationUsesTheFastProductionInitialPollDelay() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(80)
+        ))
+
+        let scheduled = try #require(await waitUntil(events) {
+            guard let delay = $0.nextRefresh?.timeIntervalSinceNow else { return false }
+            return delay > 1.5 && delay < 3.1
+        })
+        #expect(scheduled.nextRefresh != nil)
         coordinator.stop()
     }
 

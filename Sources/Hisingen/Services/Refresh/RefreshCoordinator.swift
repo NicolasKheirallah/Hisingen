@@ -256,8 +256,8 @@ final class RefreshCoordinator {
          liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
          liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
          commandConfirmationWindow: TimeInterval = PendingCommandSummary.maximumConfirmationDuration,
-         commandConfirmationInitialPollDelay: TimeInterval = 12,
-         commandConfirmationPollInterval: TimeInterval = 15) {
+         commandConfirmationInitialPollDelay: TimeInterval = 2,
+         commandConfirmationPollInterval: TimeInterval = 5) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
@@ -355,8 +355,10 @@ final class RefreshCoordinator {
         pendingCommandConfirmation = pending
         let purpose: VehicleLiveStreamPurpose?
         switch pending.command {
-        case .setChargeTarget, .setAmpLimit, .startChargingOverride:
+        case .startChargingOverride:
             purpose = .charging
+        case .setChargeTarget, .setAmpLimit:
+            purpose = nil
         case .lock, .lockReducedGuard, .unlock,
              .openTailgate, .closeTailgate, .openWindows, .closeWindows:
             purpose = .exteriorConfirmation
