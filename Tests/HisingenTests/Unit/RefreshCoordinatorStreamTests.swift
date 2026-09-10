@@ -559,6 +559,72 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    @Test
+    func networkLossPreservesConfirmationAndItsRemainingWindow() async throws {
+        try await verifyTemporarySuspensionPreservesConfirmation { coordinator in
+            coordinator.networkDidChange(false)
+        } resume: { coordinator in
+            coordinator.networkDidChange(true)
+        }
+    }
+
+    @Test
+    func systemSleepPreservesConfirmationAndItsRemainingWindow() async throws {
+        try await verifyTemporarySuspensionPreservesConfirmation { coordinator in
+            coordinator.systemWillSleep()
+        } resume: { coordinator in
+            coordinator.systemDidWake()
+        }
+    }
+
+    private func verifyTemporarySuspensionPreservesConfirmation(
+        suspend: (RefreshCoordinator) -> Void,
+        resume: (RefreshCoordinator) -> Void
+    ) async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(
+            script: [
+                .healthy(frames: 1),
+                .healthy(frames: 1),
+                .healthy(frames: 1)
+            ],
+            recorder: recorder
+        )
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandWindow: 0.1,
+            commandInitialPollDelay: 5,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date(),
+            command: .lock
+        ))
+        _ = try #require(await waitUntil(events) { _ in
+            recorder.purposes.filter { $0 == .exteriorConfirmation }.count == 1
+        })
+
+        suspend(coordinator)
+        try await Task.sleep(for: .milliseconds(200))
+        resume(coordinator)
+
+        _ = try #require(await waitUntil(events) { diagnostics in
+            diagnostics.liveStreamConnected
+                && recorder.purposes.filter { $0 == .exteriorConfirmation }.count == 2
+        }, "Expected confirmation streaming to resume after temporary suspension")
+        #expect(recorder.purposes.last == .exteriorConfirmation)
+        coordinator.stop()
+    }
+
     /// Switching vehicles cancels the old stream and opens at most one stream for the new
     /// VIN — the expired task's cleanup must not resurrect state for a car we left.
     @Test

@@ -208,6 +208,7 @@ final class RefreshCoordinator {
     private var commandStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamUntil: Date?
     private var pendingCommandConfirmation: PendingCommandSummary?
+    private var commandConfirmationSuspendedAt: Date?
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
@@ -353,6 +354,7 @@ final class RefreshCoordinator {
             return
         }
         pendingCommandConfirmation = pending
+        commandConfirmationSuspendedAt = nil
         let purpose: VehicleLiveStreamPurpose?
         switch pending.command {
         case .startChargingOverride:
@@ -406,6 +408,7 @@ final class RefreshCoordinator {
         commandStreamUntil = nil
         commandStreamPurpose = nil
         pendingCommandConfirmation = nil
+        commandConfirmationSuspendedAt = nil
         guard latest?.identity.vin == vin else { return }
         guard let expiredPurpose, liveStreamPurpose == expiredPurpose else {
             scheduleFallbackPoll(for: latest)
@@ -510,6 +513,7 @@ final class RefreshCoordinator {
         commandStreamPurpose = nil
         commandStreamUntil = nil
         pendingCommandConfirmation = nil
+        commandConfirmationSuspendedAt = nil
         streamTask?.cancel()
         streamTask = nil
         streamTaskID = nil
@@ -831,27 +835,41 @@ final class RefreshCoordinator {
         }
     }
 
-    private func networkDidChange(_ available: Bool) {
+    func networkDidChange(_ available: Bool) {
         let restored = available && !networkAvailable
         networkAvailable = available
         if !available {
-            cancelCurrentWork()
+            cancelCurrentWork(preservingCommandConfirmation: true)
         } else if restored && !sleeping {
+            resumeCommandConfirmationIfNeeded()
             if sessionReady { refresh(trigger: .networkRestored) }
             else { beginSession(preferredVIN: preferences.vin.nilIfEmpty) }
         }
         publishDiagnostics()
     }
 
+    func systemWillSleep() {
+        sleeping = true
+        cancelCurrentWork(preservingCommandConfirmation: true)
+    }
+
+    func systemDidWake() {
+        sleeping = false
+        guard networkAvailable else {
+            publishDiagnostics()
+            return
+        }
+        resumeCommandConfirmationIfNeeded()
+        if sessionReady { refresh(trigger: .wake) }
+        else { beginSession(preferredVIN: preferences.vin.nilIfEmpty) }
+    }
+
     private func installSystemObservers() {
         observerTokens.append(addMainActorObserver(for: NSWorkspace.willSleepNotification) { coordinator in
-            coordinator.sleeping = true
-            coordinator.cancelCurrentWork()
+            coordinator.systemWillSleep()
         })
         observerTokens.append(addMainActorObserver(for: NSWorkspace.didWakeNotification) { coordinator in
-            coordinator.sleeping = false
-            if coordinator.sessionReady { coordinator.refresh(trigger: .wake) }
-            else { coordinator.beginSession(preferredVIN: coordinator.preferences.vin.nilIfEmpty) }
+            coordinator.systemDidWake()
         })
     }
 
@@ -876,17 +894,26 @@ final class RefreshCoordinator {
         }
     }
 
-    private func cancelCurrentWork() {
+    private func cancelCurrentWork(preservingCommandConfirmation: Bool = false) {
+        let preserveConfirmation = preservingCommandConfirmation
+            && pendingCommandConfirmation != nil
+        if preserveConfirmation, commandConfirmationSuspendedAt == nil {
+            commandConfirmationSuspendedAt = Date()
+        }
         generation &+= 1
         task?.cancel()
         task = nil
         commandWatchdogTask?.cancel()
         commandWatchdogTask = nil
-        commandStreamPurpose = nil
-        commandStreamUntil = nil
-        pendingCommandConfirmation = nil
+        if !preserveConfirmation {
+            commandStreamPurpose = nil
+            commandStreamUntil = nil
+            pendingCommandConfirmation = nil
+            commandConfirmationSuspendedAt = nil
+        }
         streamTask?.cancel()
         streamTask = nil
+        streamTaskID = nil
         liveStreamPurpose = nil
         liveStreamConnected = false
         liveStreamRetryAt = nil
@@ -895,6 +922,16 @@ final class RefreshCoordinator {
         timer?.invalidate()
         timer = nil
         nextRefresh = nil
+    }
+
+    private func resumeCommandConfirmationIfNeeded() {
+        guard let suspendedAt = commandConfirmationSuspendedAt else { return }
+        commandConfirmationSuspendedAt = nil
+        guard pendingCommandConfirmation != nil, let until = commandStreamUntil else { return }
+        commandStreamUntil = until.addingTimeInterval(max(0, Date().timeIntervalSince(suspendedAt)))
+        if let vin = latest?.identity.vin {
+            scheduleConfirmationWatchdog(vin: vin)
+        }
     }
 
     private func publishDiagnostics() {
@@ -1070,6 +1107,7 @@ final class RefreshCoordinator {
                 commandStreamUntil = nil
                 commandStreamPurpose = nil
                 pendingCommandConfirmation = nil
+                commandConfirmationSuspendedAt = nil
             }
         }
         return liveStreamPolicy.shouldStream(state) ? .charging : nil
@@ -1126,6 +1164,7 @@ final class RefreshCoordinator {
         pendingCommandConfirmation = nil
         commandStreamPurpose = nil
         commandStreamUntil = nil
+        commandConfirmationSuspendedAt = nil
         commandWatchdogTask?.cancel()
         commandWatchdogTask = nil
         guard latest?.identity.vin == vin,
