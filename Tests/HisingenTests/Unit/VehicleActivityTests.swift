@@ -78,7 +78,7 @@ struct VehicleActivityTests {
         #expect(current.isAwaitingVehicleConfirmation)
         current.commandState.pending?.issuedAt = Date().addingTimeInterval(-121)
         #expect(current.isAwaitingVehicleConfirmation)
-        current.commandState.pending?.issuedAt = Date().addingTimeInterval(-301)
+        current.commandState.pending?.status = .timedOut(at: Date())
         #expect(!current.isAwaitingVehicleConfirmation)
     }
 
@@ -88,17 +88,37 @@ struct VehicleActivityTests {
         var current = state(at: now)
         current.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: nil,
                                                   reportedAt: now.addingTimeInterval(-20))
-        #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         current.exteriorStatus?.reportedAt = now
-        #expect(pending.updatingConfirmation(from: current).confirmedAt == now)
+        #expect(pending.updatingConfirmation(from: current).status == .confirmed(at: now))
         current.exteriorStatus?.isLocked = false
-        #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         current.exteriorStatus?.isLocked = true
         current.freshness.isCached = true
-        #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         let unobservable = PendingCommandSummary(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
-        #expect(unobservable.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(unobservable.updatingConfirmation(from: current).status == .awaiting)
         #expect(!unobservable.supportsTelemetryConfirmation)
+    }
+
+    @Test func terminalCommandConfirmationStatusCannotBeRewrittenByTelemetry() {
+        let now = Date()
+        let timedOutAt = now.addingTimeInterval(-1)
+        let timedOut = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: now.addingTimeInterval(-10),
+            command: .lock,
+            status: .timedOut(at: timedOutAt)
+        )
+        var current = state(at: now)
+        current.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: true, alarmTriggered: false, reportedAt: now
+        )
+        current.freshness.readingDates[.locks] = now
+
+        #expect(timedOut.status.isTerminal)
+        #expect(!timedOut.status.isConfirmed)
+        #expect(timedOut.updatingConfirmation(from: current) == timedOut)
     }
 
     @Test func reducedGuardLockIsNotTelemetryConfirmable() {
@@ -115,14 +135,14 @@ struct VehicleActivityTests {
         current.freshness.readingDates[.locks] = now
 
         #expect(!pending.supportsTelemetryConfirmation)
-        #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
+        #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         let ordinaryLock = PendingCommandSummary(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: pending.issuedAt,
             command: .lock
         )
         #expect(ordinaryLock.supportsTelemetryConfirmation)
-        #expect(ordinaryLock.updatingConfirmation(from: current).confirmedAt == now)
+        #expect(ordinaryLock.updatingConfirmation(from: current).status == .confirmed(at: now))
     }
 
     @Test func commandConfirmationSelectsOnlyItsRequiredTelemetry() {
@@ -280,8 +300,8 @@ struct VehicleActivityTests {
             command: .setAmpLimit(16)
         )
         #expect(target.supportsTelemetryConfirmation)
-        #expect(target.updatingConfirmation(from: current).confirmedAt == now)
-        #expect(amps.updatingConfirmation(from: current).confirmedAt == now)
+        #expect(target.updatingConfirmation(from: current).status == .confirmed(at: now))
+        #expect(amps.updatingConfirmation(from: current).status == .confirmed(at: now))
 
         current.exteriorStatus = ExteriorSnapshot(
             openings: [OpeningReading(opening: .tailgate, state: .open)],
@@ -292,7 +312,7 @@ struct VehicleActivityTests {
             command: .openTailgate
         )
         #expect(tailgate.supportsTelemetryConfirmation)
-        #expect(tailgate.updatingConfirmation(from: current).confirmedAt == now)
+        #expect(tailgate.updatingConfirmation(from: current).status == .confirmed(at: now))
     }
 
     @Test func parkedLossRequiresContinuousFreshStationaryObservations() throws {

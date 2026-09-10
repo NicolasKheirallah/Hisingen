@@ -348,13 +348,18 @@ final class RefreshCoordinator {
         if pendingCommandConfirmation != nil, let vin = latest?.identity.vin {
             finishCommandConfirmation(vin: vin)
         }
+        pendingCommandConfirmation = pending
+        commandConfirmationSuspendedAt = nil
+        commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
         guard pending.supportsTelemetryConfirmation else {
+            commandStreamPurpose = nil
+            if let vin = latest?.identity.vin {
+                scheduleConfirmationWatchdog(vin: vin)
+            }
             schedule(after: commandConfirmationInitialPollDelay, retrySession: false)
             publishDiagnostics()
             return
         }
-        pendingCommandConfirmation = pending
-        commandConfirmationSuspendedAt = nil
         let purpose: VehicleLiveStreamPurpose?
         switch pending.command {
         case .startChargingOverride:
@@ -367,7 +372,6 @@ final class RefreshCoordinator {
         default:
             purpose = nil
         }
-        commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
         if let purpose, preferences.features.contains(.realTimeUpdates),
            let vin = latest?.identity.vin {
             commandStreamPurpose = purpose
@@ -405,6 +409,13 @@ final class RefreshCoordinator {
         commandWatchdogTask = nil
         guard let until = commandStreamUntil, until <= Date() else { return }
         let expiredPurpose = commandStreamPurpose
+        if var timedOut = pendingCommandConfirmation, timedOut.status.isAwaiting {
+            timedOut.status = .timedOut(at: until)
+            if var displayState = latest {
+                displayState.commandState.pending = timedOut
+                onEvent?(.state(displayState))
+            }
+        }
         commandStreamUntil = nil
         commandStreamPurpose = nil
         pendingCommandConfirmation = nil
@@ -1123,7 +1134,7 @@ final class RefreshCoordinator {
     }
 
     private var isCommandConfirmationPending: Bool {
-        pendingCommandConfirmation != nil
+        pendingCommandConfirmation?.supportsTelemetryConfirmation == true
             && commandStreamUntil.map { $0 > Date() } == true
     }
 
@@ -1156,7 +1167,7 @@ final class RefreshCoordinator {
         var displayState = state
         displayState.commandState.pending = updated
         pendingCommandConfirmation = updated
-        return (displayState, updated.confirmedAt != nil)
+        return (displayState, updated.status.isConfirmed)
     }
 
     private func finishCommandConfirmation(vin: String) {

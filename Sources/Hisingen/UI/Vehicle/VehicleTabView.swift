@@ -137,14 +137,8 @@ struct VehicleTabView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .foregroundStyle(HisingenTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                TimelineView(.periodic(from: .now, by: 10)) { context in
-                    let confirmed = state.commandState.pending?.confirmedAt != nil
-                    let expired = context.date.timeIntervalSince(state.commandState.pending?.issuedAt ?? context.date) >= 120
-                    Text(confirmed ? L10n.text("Matching vehicle reading observed")
-                         : expired ? L10n.text("Command outcome not confirmed")
-                         : L10n.text("Command sent — waiting for the vehicle"))
-                        .font(.system(size: 11, weight: .semibold))
-                }
+                Text(commandConfirmationLabel)
+                    .font(.system(size: 11, weight: .semibold))
                 Text(state.commandState.pending?.command?.title ?? L10n.text("Values below may update once the car reports in."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
@@ -165,6 +159,14 @@ struct VehicleTabView: View {
                 .stroke(HisingenTheme.accent.opacity(0.25), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
+    }
+
+    private var commandConfirmationLabel: String {
+        switch state.commandState.pending?.status {
+        case .confirmed: return L10n.text("Matching vehicle reading observed")
+        case .timedOut: return L10n.text("Command outcome not confirmed")
+        case .awaiting, nil: return L10n.text("Command sent — waiting for the vehicle")
+        }
     }
 
     @ViewBuilder

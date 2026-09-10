@@ -19,7 +19,7 @@ extension PendingCommandSummary {
     }
 
     func updatingConfirmation(from state: VehicleState) -> PendingCommandSummary {
-        guard confirmedAt == nil, let command else { return self }
+        guard status.isAwaiting, let command else { return self }
         let reading: VehicleReading
         let matches: Bool
         switch command {
@@ -58,7 +58,7 @@ extension PendingCommandSummary {
         guard matches, state.hasFreshReading(reading),
               let date = state.reportedDate(for: reading), date > issuedAt else { return self }
         var updated = self
-        updated.confirmedAt = date
+        updated.status = .confirmed(at: date)
         return updated
     }
 }

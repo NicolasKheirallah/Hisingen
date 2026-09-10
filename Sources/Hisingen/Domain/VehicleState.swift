@@ -202,10 +202,27 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
     var regeneratedEnergyKwh: Double?
 }
 
-/// A remote command that was accepted but whose effect has not yet been confirmed by fresh
-/// vehicle telemetry. Display-only: the UI renders it as "waiting for the vehicle" instead
-/// of presenting requested values as vehicle-reported truth. The session controller
-/// checks subsequent readings; a refresh alone does not confirm the outcome.
+enum CommandConfirmationStatus: Codable, Equatable, Sendable {
+    case awaiting
+    case confirmed(at: Date)
+    case timedOut(at: Date)
+
+    var isAwaiting: Bool {
+        if case .awaiting = self { return true }
+        return false
+    }
+
+    var isConfirmed: Bool {
+        if case .confirmed = self { return true }
+        return false
+    }
+
+    var isTerminal: Bool { !isAwaiting }
+}
+
+/// Display-only receipt for a remote command and its authoritative confirmation lifecycle.
+/// Requested values remain optimistic until fresh vehicle telemetry moves `status` to
+/// `confirmed`; the refresh coordinator owns the only timeout transition.
 struct PendingCommandSummary: Codable, Equatable, Sendable {
     static let maximumConfirmationDuration: TimeInterval = 5 * 60
 
@@ -213,7 +230,45 @@ struct PendingCommandSummary: Codable, Equatable, Sendable {
     var commandIdentifier: String
     var issuedAt: Date
     var command: RemoteCommand? = nil
-    var confirmedAt: Date? = nil
+    var status: CommandConfirmationStatus = .awaiting
+
+    init(
+        commandIdentifier: String,
+        issuedAt: Date,
+        command: RemoteCommand? = nil,
+        status: CommandConfirmationStatus = .awaiting
+    ) {
+        self.commandIdentifier = commandIdentifier
+        self.issuedAt = issuedAt
+        self.command = command
+        self.status = status
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case commandIdentifier, issuedAt, command, status, confirmedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        commandIdentifier = try values.decode(String.self, forKey: .commandIdentifier)
+        issuedAt = try values.decode(Date.self, forKey: .issuedAt)
+        command = try values.decodeIfPresent(RemoteCommand.self, forKey: .command)
+        if let decoded = try values.decodeIfPresent(CommandConfirmationStatus.self, forKey: .status) {
+            status = decoded
+        } else if let confirmedAt = try values.decodeIfPresent(Date.self, forKey: .confirmedAt) {
+            status = .confirmed(at: confirmedAt)
+        } else {
+            status = .awaiting
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(commandIdentifier, forKey: .commandIdentifier)
+        try values.encode(issuedAt, forKey: .issuedAt)
+        try values.encodeIfPresent(command, forKey: .command)
+        try values.encode(status, forKey: .status)
+    }
 }
 
 struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
@@ -512,9 +567,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     private var pendingCommand: PendingCommandSummary? { get { commandState.pending } set { commandState.pending = newValue } }
 
     var isAwaitingVehicleConfirmation: Bool {
-        guard let pendingCommand, pendingCommand.confirmedAt == nil else { return false }
-        return Date().timeIntervalSince(pendingCommand.issuedAt)
-            < PendingCommandSummary.maximumConfirmationDuration
+        pendingCommand?.status.isAwaiting == true
     }
 
     // Private forwarding keeps derived behavior compact without exposing a flat API.

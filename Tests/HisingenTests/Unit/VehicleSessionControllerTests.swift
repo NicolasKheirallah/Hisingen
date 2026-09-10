@@ -31,6 +31,17 @@ struct VehicleSessionControllerTests {
         #expect(context.receivedStates > previousCount)
         #expect(controller.latest?.commandState.pending == receipt)
         #expect(store.database.loadSnapshot(for: "P1")?.commandState.pending == nil)
+
+        let timeout = Date()
+        current = try #require(controller.latest)
+        current.commandState.pending?.status = .timedOut(at: timeout)
+        controller.applyOptimisticState(current)
+        let countBeforeTerminalRefresh = context.receivedStates
+        controller.refreshNow()
+        for _ in 0..<200 where context.receivedStates == countBeforeTerminalRefresh {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(controller.latest?.commandState.pending?.status == .timedOut(at: timeout))
     }
     @Test(arguments: [VehicleBrand.polestar, .volvo])
     func credentialChangeAdoptsPolestarAndReconcilesBeforeRestoring(from originalBrand: VehicleBrand) async throws {

@@ -233,7 +233,9 @@ final class VehicleSessionController {
             setFleet(cars, activeVIN: selectedVIN)
             context?.sessionDidEstablish()
         case .state(var state):
-            if latest?.identity.vin == state.identity.vin, let pending = latest?.commandState.pending {
+            if state.commandState.pending?.status.isTerminal != true,
+               latest?.identity.vin == state.identity.vin,
+               let pending = latest?.commandState.pending {
                 state.commandState.pending = pending.updatingConfirmation(from: state)
             }
             context?.didReceiveVehicleState(state)

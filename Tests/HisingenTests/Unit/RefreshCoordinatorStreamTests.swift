@@ -275,7 +275,7 @@ struct RefreshCoordinatorStreamTests {
             recorder.purposes == [.charging, .exteriorConfirmation, .charging]
         }
         _ = try #require(resumed, "Expected fresh lock telemetry to end confirmation immediately")
-        #expect(events.states.contains { $0.commandState.pending?.confirmedAt != nil })
+        #expect(events.states.contains { $0.commandState.pending?.status.isConfirmed == true })
         #expect(recorder.maxConcurrent == 1)
         coordinator.stop()
     }
@@ -575,6 +575,45 @@ struct RefreshCoordinatorStreamTests {
         } resume: { coordinator in
             coordinator.systemDidWake()
         }
+    }
+
+    @Test(arguments: [RemoteCommand.lock, .stopClimate])
+    func confirmationWatchdogPublishesTheTimedOutTerminalStatus(
+        command: RemoteCommand
+    ) async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(
+            script: [.healthy(frames: 1), .healthy(frames: 1)],
+            recorder: recorder
+        )
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandWindow: 0.1,
+            commandInitialPollDelay: 5,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: command.identifier,
+            issuedAt: Date(),
+            command: command
+        ))
+
+        _ = try #require(await waitUntil(events) { _ in
+            events.states.contains {
+                guard $0.commandState.pending?.command == command,
+                      case .timedOut = $0.commandState.pending?.status else { return false }
+                return true
+            }
+        }, "Expected the watchdog to publish the timed-out receipt")
+        coordinator.stop()
     }
 
     private func verifyTemporarySuspensionPreservesConfirmation(

@@ -163,6 +163,26 @@ struct VehicleStateCodableTests {
         #expect(bare.commandState.pending == nil)
     }
 
+    @Test("Legacy confirmedAt receipts migrate to the unified terminal status")
+    func legacyPendingCommandStatusMigration() throws {
+        struct LegacyReceipt: Encodable {
+            let commandIdentifier: String
+            let issuedAt: Date
+            let command: RemoteCommand
+            let confirmedAt: Date
+        }
+        let confirmedAt = Date(timeIntervalSince1970: 1_750_000_200)
+        let data = try JSONEncoder().encode(LegacyReceipt(
+            commandIdentifier: "lock",
+            issuedAt: Date(timeIntervalSince1970: 1_750_000_100),
+            command: .lock,
+            confirmedAt: confirmedAt
+        ))
+
+        let decoded = try JSONDecoder().decode(PendingCommandSummary.self, from: data)
+        #expect(decoded.status == .confirmed(at: confirmedAt))
+    }
+
     /// Builds a pre-cluster snapshot payload: takes a genuine modern encoding, removes the
     /// nested `fuelSystem` object and re-injects its fields under the flat legacy keys.
     private func legacyPayload(fuel: FuelSystemSnapshot) throws -> Data {
