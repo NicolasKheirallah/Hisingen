@@ -281,6 +281,41 @@ struct RefreshCoordinatorStreamTests {
     }
 
     @Test
+    func optimisticStateAndReceiptPublishAsOneCoordinatorState() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandInitialPollDelay: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        var optimisticState = try #require(coordinator.latest)
+        optimisticState.energy.targetPercentage = 90
+        let receipt = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.setChargeTarget(90).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(90)
+        )
+
+        coordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
+
+        let published = try #require(events.states.last)
+        #expect(published.energy.targetPercentage == 90)
+        #expect(published.commandState.pending == receipt)
+        #expect(coordinator.latest?.energy.targetPercentage == 90)
+        #expect(coordinator.latest?.commandState.pending == nil)
+        coordinator.stop()
+    }
+
+    @Test
     func disconnectedConfirmationStreamUsesFastFallbackPollAndReconnects() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -613,6 +648,54 @@ struct RefreshCoordinatorStreamTests {
                 return true
             }
         }, "Expected the watchdog to publish the timed-out receipt")
+        coordinator.stop()
+    }
+
+    @Test
+    func terminalReceiptSurvivesLaterRefreshes() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandWindow: 0.1,
+            commandInitialPollDelay: 5,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let receipt = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: Date(),
+            command: .stopClimate
+        )
+        coordinator.beginCommandConfirmation(receipt)
+        _ = try #require(await waitUntil(events) { _ in
+            events.states.contains {
+                guard $0.commandState.pending?.commandIdentifier == receipt.commandIdentifier,
+                      case .timedOut = $0.commandState.pending?.status else { return false }
+                return true
+            }
+        })
+
+        coordinator.refreshNow()
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
+        let refreshed = try #require(events.states.last)
+        #expect(refreshed.commandState.pending?.commandIdentifier == receipt.commandIdentifier)
+        let retainedTimedOut: Bool
+        if case .timedOut = refreshed.commandState.pending?.status {
+            retainedTimedOut = true
+        } else {
+            retainedTimedOut = false
+        }
+        #expect(retainedTimedOut, "Expected the coordinator to retain the timed-out receipt")
         coordinator.stop()
     }
 

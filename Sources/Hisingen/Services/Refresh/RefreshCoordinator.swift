@@ -207,7 +207,7 @@ final class RefreshCoordinator {
     private var liveStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamUntil: Date?
-    private var pendingCommandConfirmation: PendingCommandSummary?
+    private var commandReceipt: PendingCommandSummary?
     private var commandConfirmationSuspendedAt: Date?
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
@@ -344,13 +344,22 @@ final class RefreshCoordinator {
         refresh(trigger: .manual)
     }
 
-    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
-        if pendingCommandConfirmation != nil, let vin = latest?.identity.vin {
+    func beginCommandConfirmation(
+        _ pending: PendingCommandSummary,
+        optimisticState: VehicleState? = nil
+    ) {
+        if commandReceipt != nil, let vin = latest?.identity.vin {
             finishCommandConfirmation(vin: vin)
         }
-        pendingCommandConfirmation = pending
+        if var optimisticState,
+           optimisticState.identity.vin == latest?.identity.vin {
+            optimisticState.commandState.pending = nil
+            latest = optimisticState
+        }
+        commandReceipt = pending
         commandConfirmationSuspendedAt = nil
         commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
+        publishCommandReceipt(pending)
         guard pending.supportsTelemetryConfirmation else {
             commandStreamPurpose = nil
             if let vin = latest?.identity.vin {
@@ -409,16 +418,9 @@ final class RefreshCoordinator {
         commandWatchdogTask = nil
         guard let until = commandStreamUntil, until <= Date() else { return }
         let expiredPurpose = commandStreamPurpose
-        if var timedOut = pendingCommandConfirmation, timedOut.status.isAwaiting {
-            timedOut.status = .timedOut(at: until)
-            if var displayState = latest {
-                displayState.commandState.pending = timedOut
-                onEvent?(.state(displayState))
-            }
-        }
+        timeOutCommandConfirmation(at: until)
         commandStreamUntil = nil
         commandStreamPurpose = nil
-        pendingCommandConfirmation = nil
         commandConfirmationSuspendedAt = nil
         guard latest?.identity.vin == vin else { return }
         guard let expiredPurpose, liveStreamPurpose == expiredPurpose else {
@@ -523,7 +525,7 @@ final class RefreshCoordinator {
         commandWatchdogTask = nil
         commandStreamPurpose = nil
         commandStreamUntil = nil
-        pendingCommandConfirmation = nil
+        commandReceipt = nil
         commandConfirmationSuspendedAt = nil
         streamTask?.cancel()
         streamTask = nil
@@ -748,7 +750,8 @@ final class RefreshCoordinator {
 
     private func confirmationFeatures(for trigger: Trigger) -> FeatureSelection? {
         guard case .timer = trigger,
-              let confirmationFeatures = pendingCommandConfirmation?.confirmationFeatures else {
+              isCommandConfirmationPending,
+              let confirmationFeatures = commandReceipt?.confirmationFeatures else {
             return nil
         }
         return confirmationFeatures
@@ -766,8 +769,7 @@ final class RefreshCoordinator {
             refreshedFeatures: refreshedFeatures,
             imageCache: imageCache
         )
-        // Command receipts are reconciled separately by the session controller against
-        // timestamped readings, rather than being persisted as vehicle telemetry.
+        // Command receipts are coordinator-owned display state, never provider telemetry.
         state.commandState.pending = nil
         // SQLite is the single source of truth for completed charging history. Clear legacy
         // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
@@ -906,9 +908,9 @@ final class RefreshCoordinator {
     }
 
     private func cancelCurrentWork(preservingCommandConfirmation: Bool = false) {
-        let preserveConfirmation = preservingCommandConfirmation
-            && pendingCommandConfirmation != nil
-        if preserveConfirmation, commandConfirmationSuspendedAt == nil {
+        let preserveReceipt = preservingCommandConfirmation && commandReceipt != nil
+        if preserveReceipt, commandReceipt?.status.isAwaiting == true,
+           commandConfirmationSuspendedAt == nil {
             commandConfirmationSuspendedAt = Date()
         }
         generation &+= 1
@@ -916,10 +918,10 @@ final class RefreshCoordinator {
         task = nil
         commandWatchdogTask?.cancel()
         commandWatchdogTask = nil
-        if !preserveConfirmation {
+        if !preserveReceipt {
             commandStreamPurpose = nil
             commandStreamUntil = nil
-            pendingCommandConfirmation = nil
+            commandReceipt = nil
             commandConfirmationSuspendedAt = nil
         }
         streamTask?.cancel()
@@ -938,7 +940,8 @@ final class RefreshCoordinator {
     private func resumeCommandConfirmationIfNeeded() {
         guard let suspendedAt = commandConfirmationSuspendedAt else { return }
         commandConfirmationSuspendedAt = nil
-        guard pendingCommandConfirmation != nil, let until = commandStreamUntil else { return }
+        guard commandReceipt?.status.isAwaiting == true,
+              let until = commandStreamUntil else { return }
         commandStreamUntil = until.addingTimeInterval(max(0, Date().timeIntervalSince(suspendedAt)))
         if let vin = latest?.identity.vin {
             scheduleConfirmationWatchdog(vin: vin)
@@ -1115,9 +1118,9 @@ final class RefreshCoordinator {
                     return commandStreamPurpose
                 }
             } else {
+                timeOutCommandConfirmation(at: until)
                 commandStreamUntil = nil
                 commandStreamPurpose = nil
-                pendingCommandConfirmation = nil
                 commandConfirmationSuspendedAt = nil
             }
         }
@@ -1134,7 +1137,8 @@ final class RefreshCoordinator {
     }
 
     private var isCommandConfirmationPending: Bool {
-        pendingCommandConfirmation?.supportsTelemetryConfirmation == true
+        commandReceipt?.status.isAwaiting == true
+            && commandReceipt?.supportsTelemetryConfirmation == true
             && commandStreamUntil.map { $0 > Date() } == true
     }
 
@@ -1162,17 +1166,16 @@ final class RefreshCoordinator {
     private func reconcileCommandConfirmation(
         in state: VehicleState
     ) -> (state: VehicleState, confirmed: Bool) {
-        guard let pending = pendingCommandConfirmation else { return (state, false) }
+        guard let pending = commandReceipt else { return (state, false) }
         let updated = pending.updatingConfirmation(from: state)
         var displayState = state
         displayState.commandState.pending = updated
-        pendingCommandConfirmation = updated
-        return (displayState, updated.status.isConfirmed)
+        commandReceipt = updated
+        return (displayState, pending.status.isAwaiting && updated.status.isConfirmed)
     }
 
     private func finishCommandConfirmation(vin: String) {
         let confirmationPurpose = commandStreamPurpose
-        pendingCommandConfirmation = nil
         commandStreamPurpose = nil
         commandStreamUntil = nil
         commandConfirmationSuspendedAt = nil
@@ -1186,6 +1189,19 @@ final class RefreshCoordinator {
         if nextPurpose != nil {
             startLiveStreamingIfNeeded(vin: vin)
         }
+    }
+
+    private func timeOutCommandConfirmation(at date: Date) {
+        guard var receipt = commandReceipt, receipt.status.isAwaiting else { return }
+        receipt.status = .timedOut(at: date)
+        commandReceipt = receipt
+        publishCommandReceipt(receipt)
+    }
+
+    private func publishCommandReceipt(_ receipt: PendingCommandSummary) {
+        guard var displayState = latest else { return }
+        displayState.commandState.pending = receipt
+        onEvent?(.state(displayState))
     }
 
     private func stopLiveStreaming() {

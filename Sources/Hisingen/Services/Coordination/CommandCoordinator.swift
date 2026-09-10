@@ -30,14 +30,16 @@ protocol CommandExecutionContext: AnyObject {
     var sessionIsValid: Bool { get }
 
     func currentCommandExecutor() -> any RemoteCommandExecuting
-    /// Applies an optimistic post-command state (display-only; never persisted).
-    func applyOptimisticState(_ state: VehicleState)
     /// Called when command-busyness changes so the shell can re-render controls.
     func commandInProgressDidChange()
     /// Presents a command outcome to the user.
     func presentResult(title: String, message: String, success: Bool, target: RemoteCommandTarget?)
-    /// Hands the accepted command to the refresh module for telemetry confirmation.
-    func beginCommandConfirmation(_ pending: PendingCommandSummary)
+    /// Atomically hands the optimistic display state and accepted command to the refresh
+    /// module, which exclusively owns the receipt's confirmation lifecycle.
+    func beginCommandConfirmation(
+        _ pending: PendingCommandSummary,
+        optimisticState: VehicleState
+    )
 }
 
 /// What a dispatch returned. The human presentation always flows through
@@ -224,13 +226,12 @@ final class CommandCoordinator {
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             let targetIsCurrent = isCurrentExecutionContext(target)
-            if targetIsCurrent {
-                applyOptimisticPatch(
+            let optimisticState = targetIsCurrent
+                ? makeOptimisticState(
                     for: command,
                     outcome: result.outcome,
-                    issuedAt: startedAt,
                     providerBrand: target.brand)
-            }
+                : nil
             // The banner must say *what* ran, not just that something did — a bare
             // "Command sent" while two cars are in range reads as noise.
             let detail: String
@@ -252,12 +253,12 @@ final class CommandCoordinator {
                 success: true,
                 target: target
             )
-            if targetIsCurrent {
+            if let optimisticState {
                 context.beginCommandConfirmation(PendingCommandSummary(
                     commandIdentifier: command.identifier,
                     issuedAt: startedAt,
                     command: command
-                ))
+                ), optimisticState: optimisticState)
             }
             return .sent(result.outcome)
         } catch {
@@ -293,14 +294,13 @@ final class CommandCoordinator {
     ///
     /// The patch is partly synthesized (an assumed 30-minute climate window), so it is
     /// display-only and must never be persisted.
-    private func applyOptimisticPatch(
+    private func makeOptimisticState(
         for command: RemoteCommand,
         outcome: RemoteCommandOutcome,
-        issuedAt: Date,
         providerBrand: VehicleBrand
-    ) {
-        guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return }
-        guard let context, var current = context.vehicleState else { return }
+    ) -> VehicleState? {
+        guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return nil }
+        guard let context, var current = context.vehicleState else { return nil }
         switch command {
         case .startClimate(let temperature, _, _, _, _, _):
             current.climateStatus = VehicleClimateStatus(
@@ -370,8 +370,7 @@ final class CommandCoordinator {
         }
         current.freshness.fetchedAt = Date()
         current.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
-        current.commandState.pending = PendingCommandSummary(
-            commandIdentifier: command.identifier, issuedAt: issuedAt, command: command)
-        context.applyOptimisticState(current)
+        current.commandState.pending = nil
+        return current
     }
 }

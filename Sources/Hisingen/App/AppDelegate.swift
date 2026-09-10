@@ -327,9 +327,6 @@ extension AppDelegate: CommandExecutionContext {
     var sessionIsValid: Bool { vehicleSession.sessionValid }
 
     func currentCommandExecutor() -> any RemoteCommandExecuting { vehicleSession.currentProvider() }
-    func applyOptimisticState(_ state: VehicleState) {
-        vehicleSession.applyOptimisticState(state)
-    }
     func commandInProgressDidChange() {
         render()
     }
@@ -350,8 +347,11 @@ extension AppDelegate: CommandExecutionContext {
         render()
         resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
     }
-    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
-        vehicleSession.beginCommandConfirmation(pending)
+    func beginCommandConfirmation(
+        _ pending: PendingCommandSummary,
+        optimisticState: VehicleState
+    ) {
+        vehicleSession.beginCommandConfirmation(pending, optimisticState: optimisticState)
     }
 }
 

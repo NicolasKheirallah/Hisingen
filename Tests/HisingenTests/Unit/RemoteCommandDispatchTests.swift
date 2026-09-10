@@ -229,7 +229,7 @@ struct RemoteCommandDispatchTests {
 
     @Test
     @MainActor
-    func pendingReceiptStartsBeforeProviderExecution() async throws {
+    func pendingReceiptUsesProviderExecutionStartTime() async throws {
         let context = makeContext(features: [.remoteLocks])
         context.vehicleState?.exteriorStatus = ExteriorSnapshot(
             openings: [], isLocked: false, alarmTriggered: false)
@@ -423,15 +423,19 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     }
 
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
-    func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
     func commandInProgressDidChange() {}
     func presentResult(
         title: String, message: String, success: Bool, target: RemoteCommandTarget?
     ) {
         presentations.append((title, message, success, target))
     }
-    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
+    func beginCommandConfirmation(
+        _ pending: PendingCommandSummary,
+        optimisticState: VehicleState
+    ) {
         confirmationCount += 1
+        vehicleState = optimisticState
+        vehicleState?.commandState.pending = pending
     }
 }
 

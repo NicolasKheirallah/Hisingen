@@ -21,27 +21,15 @@ struct VehicleSessionControllerTests {
         defer { controller.stop() }
         controller.resume()
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
-        var current = try #require(controller.latest)
+        let current = try #require(controller.latest)
         let receipt = PendingCommandSummary(commandIdentifier: "honk-horn", issuedAt: Date(), command: .honkHorn)
-        current.commandState.pending = receipt
-        controller.applyOptimisticState(current)
+        controller.beginCommandConfirmation(receipt, optimisticState: current)
         let previousCount = context.receivedStates
         controller.refreshNow()
         for _ in 0..<200 where context.receivedStates == previousCount { try await Task.sleep(for: .milliseconds(10)) }
         #expect(context.receivedStates > previousCount)
         #expect(controller.latest?.commandState.pending == receipt)
         #expect(store.database.loadSnapshot(for: "P1")?.commandState.pending == nil)
-
-        let timeout = Date()
-        current = try #require(controller.latest)
-        current.commandState.pending?.status = .timedOut(at: timeout)
-        controller.applyOptimisticState(current)
-        let countBeforeTerminalRefresh = context.receivedStates
-        controller.refreshNow()
-        for _ in 0..<200 where context.receivedStates == countBeforeTerminalRefresh {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(controller.latest?.commandState.pending?.status == .timedOut(at: timeout))
     }
     @Test(arguments: [VehicleBrand.polestar, .volvo])
     func credentialChangeAdoptsPolestarAndReconcilesBeforeRestoring(from originalBrand: VehicleBrand) async throws {

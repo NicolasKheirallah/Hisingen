@@ -110,8 +110,11 @@ final class VehicleSessionController {
     // MARK: - Passthroughs
 
     func refreshNow() { refreshCoordinator.refreshNow() }
-    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
-        refreshCoordinator.beginCommandConfirmation(pending)
+    func beginCommandConfirmation(
+        _ pending: PendingCommandSummary,
+        optimisticState: VehicleState
+    ) {
+        refreshCoordinator.beginCommandConfirmation(pending, optimisticState: optimisticState)
     }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
@@ -119,12 +122,6 @@ final class VehicleSessionController {
     func stop() { refreshCoordinator.stop() }
 
     func currentProvider() -> any VehicleProviding { activeProvider }
-
-    /// Display-only post-command patch from `CommandCoordinator`; never persisted here.
-    func applyOptimisticState(_ state: VehicleState) {
-        latest = state
-        context?.sessionStateDidChange()
-    }
 
     // MARK: - Brand & vehicle selection
 
@@ -232,12 +229,7 @@ final class VehicleSessionController {
         case .sessionEstablished(let cars, let selectedVIN):
             setFleet(cars, activeVIN: selectedVIN)
             context?.sessionDidEstablish()
-        case .state(var state):
-            if state.commandState.pending?.status.isTerminal != true,
-               latest?.identity.vin == state.identity.vin,
-               let pending = latest?.commandState.pending {
-                state.commandState.pending = pending.updatingConfirmation(from: state)
-            }
+        case .state(let state):
             context?.didReceiveVehicleState(state)
             latest = state
             lastError = nil
