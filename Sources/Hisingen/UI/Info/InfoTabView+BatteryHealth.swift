@@ -145,10 +145,10 @@ extension InfoTabView {
     }
 
     func exportBatteryHealthCSV() {
-        let csv = database.history.exportBatteryHealthCSV(for: state.vin)
+        let csv = database.history.exportBatteryHealthCSV(for: state.identity.vin)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "battery_health_\(state.vin.prefix(8)).csv"
+        panel.nameFieldStringValue = "battery_health_\(state.identity.vin.prefix(8)).csv"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {

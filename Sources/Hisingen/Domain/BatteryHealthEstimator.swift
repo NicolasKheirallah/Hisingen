@@ -78,7 +78,7 @@ enum BatteryHealthEstimator {
         // pack spec (Volvo's `batteryCapacityKWH` — exact for that VIN), then the generic
         // per-model-family table (can't distinguish Standard Range/Long Range trims).
         let referenceCapacity = specification?.usableBatteryCapacityKwh
-            ?? state.reportedBatteryCapacityKwh.flatMap(positive)
+            ?? state.energy.reportedBatteryCapacityKwh.flatMap(positive)
             ?? positive(state.factoryUsableBatteryCapacityKwh)
         let referenceRange = specification?.wltpRangeKm
             ?? positive(state.model.nominalWltpRangeKm)
@@ -101,7 +101,7 @@ enum BatteryHealthEstimator {
             ))
         }
 
-        if let range = state.rangeKm.map(Double.init), let soc = state.batteryPercentage,
+        if let range = state.energy.rangeKm.map(Double.init), let soc = state.energy.batteryPercentage,
            soc >= 20, let referenceRange, referenceRange > 0 {
             let expectedAtSOC = referenceRange * soc / 100 * expectedRangeFactor(at: recentAmbientTemperature(state: state))
             if expectedAtSOC > 0 {
@@ -119,7 +119,7 @@ enum BatteryHealthEstimator {
         // verified. The plausibility band below (5–60 kWh/100km covers every real BEV) exists
         // specifically so an unverified 10x unit mismatch degrades to "signal skipped" instead
         // of silently corrupting the blended SoH.
-        if let observed = state.batteryDiagnostics?.averageConsumption, observed > 5, observed < 60,
+        if let observed = state.energy.diagnostics?.averageConsumption, observed > 5, observed < 60,
            let referenceWhPerKm = state.model.averageConsumptionWhPerKm {
             signals.append(BatteryHealthSignal(
                 id: "consumption", title: L10n.text("long-term consumption"),
@@ -224,12 +224,12 @@ enum BatteryHealthEstimator {
     }
 
     private static func ageAndMileagePrior(state: VehicleState, now: Date) -> Double? {
-        let year = state.modelYear.flatMap(Int.init)
+        let year = state.identity.modelYear.flatMap(Int.init)
         let currentYear = Calendar(identifier: .gregorian).component(.year, from: now)
-        guard year != nil || state.odometerKm != nil else { return nil }
+        guard year != nil || state.maintenance.odometerKm != nil else { return nil }
         let age = Double(max(0, currentYear - (year ?? currentYear)))
         let loss = (age == 0 ? 0.5 : 1.8 + max(0, age - 1) * 1.1)
-            + Double(state.odometerKm ?? 0) / 20_000 * 0.7
+            + Double(state.maintenance.odometerKm ?? 0) / 20_000 * 0.7
         return bounded(100 - loss, lower: 70, upper: 100)
     }
 

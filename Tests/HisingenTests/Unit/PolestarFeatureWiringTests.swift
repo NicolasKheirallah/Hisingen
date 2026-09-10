@@ -24,14 +24,14 @@ struct PolestarFeatureWiringTests {
             vin: vin, ownerFirstName: nil, odometerKm: nil, imageData: nil, fetchedAt: Date(),
             vehicleReportedAt: nil, dataWarnings: []
         )
-        state.externalColour = externalColour
-        state.upholstery = upholstery
-        state.wheels = wheels
-        state.packages = packages
-        state.internalVehicleIdentifier = "iv-1"
-        state.pno34 = "PNO34-XX"
-        state.structureWeek = "202326"
-        state.accountMarket = "SE"
+        state.identity.externalColour = externalColour
+        state.identity.upholstery = upholstery
+        state.identity.wheels = wheels
+        state.identity.packages = packages
+        state.identity.internalVehicleIdentifier = "iv-1"
+        state.identity.pno34 = "PNO34-XX"
+        state.identity.structureWeek = "202326"
+        state.identity.accountMarket = "SE"
         if let userIsOwner {
             state.otaCapabilities = VehicleOTACapabilities(userIsOwner: userIsOwner)
         }
@@ -128,7 +128,7 @@ struct PolestarFeatureWiringTests {
         // An owner-explicit-false state with a stale snapshot must report the ownership
         // reason, not the refresh reason — ownership is a policy fact, not a timing one.
         var state = makeState(userIsOwner: false)
-        state.fetchedAt = Date().addingTimeInterval(-60 * 60)
+        state.freshness.fetchedAt = Date().addingTimeInterval(-60 * 60)
         let gate = CapabilityGate()
         let availability = gate.availability(
             for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),

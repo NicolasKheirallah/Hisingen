@@ -37,18 +37,18 @@ struct VehicleActivity: Codable, Equatable, Identifiable, Sendable {
     }
 
     static func changes(from previous: VehicleState?, to current: VehicleState) -> [VehicleActivity] {
-        guard let previous, previous.vin == current.vin, !current.isCachedSnapshot,
-              current.fetchedAt > previous.fetchedAt else { return [] }
+        guard let previous, previous.identity.vin == current.identity.vin, !current.freshness.isCached,
+              current.freshness.fetchedAt > previous.freshness.fetchedAt else { return [] }
         var events: [VehicleActivity] = []
         func changed(_ kind: Kind, _ reading: VehicleReading, _ subject: String, _ before: String?, _ after: String?) {
             guard let before, let after, before != after,
                   let date = current.reportedDate(for: reading),
                   let oldDate = previous.reportedDate(for: reading), date > oldDate,
-                  current.hasFreshReading(reading, now: current.fetchedAt) else { return }
-            events.append(VehicleActivity(vin: current.vin, timestamp: date, kind: kind,
+                  current.hasFreshReading(reading, now: current.freshness.fetchedAt) else { return }
+            events.append(VehicleActivity(vin: current.identity.vin, timestamp: date, kind: kind,
                                           subject: subject, before: before, after: after))
         }
-        if let old = previous.healthDetails, let new = current.healthDetails {
+        if let old = previous.maintenance.details, let new = current.maintenance.details {
             for warning in Set(old.reportedWarnings).intersection(new.reportedWarnings) {
                 changed(.warning, .health, warning.rawValue,
                         old.warnings.contains(warning) ? "Active" : "Clear",
@@ -58,14 +58,14 @@ struct VehicleActivity: Codable, Equatable, Identifiable, Sendable {
         // Installed version is a configuration observation; MyCars has no vehicle timestamp.
         if let before = previous.softwareInfo?.installedVersion,
            let after = current.softwareInfo?.installedVersion, before != after,
-           !current.retainedDataCategories.contains(.softwareUpdates) {
-            events.append(VehicleActivity(vin: current.vin, timestamp: current.fetchedAt,
+           !current.freshness.retainedDataCategories.contains(.softwareUpdates) {
+            events.append(VehicleActivity(vin: current.identity.vin, timestamp: current.freshness.fetchedAt,
                                           kind: .software, subject: "installed", before: before, after: after))
         }
         changed(.locks, .locks, "centralLock", previous.exteriorStatus?.isLocked.map { $0 ? "Locked" : "Unlocked" },
                 current.exteriorStatus?.isLocked.map { $0 ? "Locked" : "Unlocked" })
-        if case .unknown = current.chargingState { } else if case .unknown = previous.chargingState { } else {
-            changed(.charging, .charging, "state", previous.chargingState.displayName, current.chargingState.displayName)
+        if case .unknown = current.energy.chargingState { } else if case .unknown = previous.energy.chargingState { } else {
+            changed(.charging, .charging, "state", previous.energy.chargingState.displayName, current.energy.chargingState.displayName)
         }
         if let old = previous.airQuality, let new = current.airQuality,
            old.cleaningState != .unknown, new.cleaningState != .unknown {

@@ -849,29 +849,6 @@ struct VehicleWarrantyInfo: Codable, Equatable, Sendable {
     let digitalServicesValidUntil: Date?
     let assistanceContact: String?
 
-    init(
-        planName: String? = nil,
-        status: String? = nil,
-        factoryWarrantyValidUntil: Date? = nil,
-        batteryWarrantyValidUntil: Date? = nil,
-        batteryWarrantyKm: Int? = nil,
-        roadsideAssistanceValidUntil: Date? = nil,
-        includedMaintenance: Bool? = nil,
-        corrosionWarrantyValidUntil: Date? = nil,
-        digitalServicesValidUntil: Date? = nil,
-        assistanceContact: String? = nil
-    ) {
-        self.planName = planName
-        self.status = status
-        self.factoryWarrantyValidUntil = factoryWarrantyValidUntil
-        self.batteryWarrantyValidUntil = batteryWarrantyValidUntil
-        self.batteryWarrantyKm = batteryWarrantyKm
-        self.roadsideAssistanceValidUntil = roadsideAssistanceValidUntil
-        self.includedMaintenance = includedMaintenance
-        self.corrosionWarrantyValidUntil = corrosionWarrantyValidUntil
-        self.digitalServicesValidUntil = digitalServicesValidUntil
-        self.assistanceContact = assistanceContact
-    }
 }
 
 
@@ -1035,10 +1012,10 @@ struct ChargingSession: Codable, Equatable, Sendable {
         pricePerKwh: Double,
         usableCapacityKwh: Double? = nil
     ) -> ChargingSession? {
-        guard let previous, previous.vin == current.vin,
+        guard let previous, previous.identity.vin == current.identity.vin,
               previous.isCharging, !current.isCharging,
-              let first = previous.chargingSamples.first,
-              let endBattery = current.batteryPercentage,
+              let first = previous.energy.samples.first,
+              let endBattery = current.energy.batteryPercentage,
               endBattery > first.batteryPercentage else { return nil }
         let percentageAdded = endBattery - first.batteryPercentage
         // Prefer an explicitly supplied (user-calibrated) usable capacity; the model-table
@@ -1048,16 +1025,16 @@ struct ChargingSession: Codable, Equatable, Sendable {
         guard estimatedKwh > 0 else { return nil }
         return ChargingSession(
             id: UUID(),
-            vin: current.vin,
+            vin: current.identity.vin,
             startDate: first.timestamp,
-            endDate: current.fetchedAt,
+            endDate: current.freshness.fetchedAt,
             startBatteryPercentage: first.batteryPercentage,
             endBatteryPercentage: endBattery,
             kwhDelivered: estimatedKwh,
-            peakPowerWatts: previous.chargingSamples.compactMap(\.powerWatts).max(),
+            peakPowerWatts: previous.energy.samples.compactMap(\.powerWatts).max(),
             cost: pricePerKwh > 0 ? estimatedKwh * pricePerKwh : nil,
-            targetPercentage: previous.chargeTargetPercentage ?? current.chargeTargetPercentage,
-            samples: previous.chargingSamples
+            targetPercentage: previous.energy.targetPercentage ?? current.energy.targetPercentage,
+            samples: previous.energy.samples
         )
     }
 }

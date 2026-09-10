@@ -189,7 +189,7 @@ struct SettingsDatabaseCard: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        let vin = state?.vin
+                        let vin = state?.identity.vin
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
@@ -208,7 +208,7 @@ struct SettingsDatabaseCard: View {
                     .controlSize(.small)
 
                     Button {
-                        let vin = state?.vin
+                        let vin = state?.identity.vin
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
@@ -229,7 +229,7 @@ struct SettingsDatabaseCard: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        guard let vin = state?.vin else { return }
+                        guard let vin = state?.identity.vin else { return }
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
@@ -249,7 +249,7 @@ struct SettingsDatabaseCard: View {
                     .disabled(state == nil)
 
                     Button {
-                        guard let vin = state?.vin else { return }
+                        guard let vin = state?.identity.vin else { return }
                         let db = database
                         Task { @MainActor in
                             let csv = await Task.detached(priority: .userInitiated) {
@@ -270,7 +270,7 @@ struct SettingsDatabaseCard: View {
                 }
 
                 Button {
-                    guard let vin = state?.vin else { return }
+                    guard let vin = state?.identity.vin else { return }
                     let db = database
                     Task { @MainActor in
                         let csv = await Task.detached(priority: .userInitiated) {
@@ -429,7 +429,7 @@ struct SettingsDatabaseCard: View {
         feedback = nil
         let db = database
         let selectedRetentionDays = retentionDays
-        let selectedVIN = state?.vin
+        let selectedVIN = state?.identity.vin
         Task { @MainActor in
             do {
                 try await Task.detached(priority: .utility) {

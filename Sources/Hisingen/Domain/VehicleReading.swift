@@ -23,34 +23,34 @@ enum VehicleReading: String, Codable, CaseIterable, Sendable {
 
 extension VehicleState {
     var remainingChargingMinutes: Int? {
-        [estimatedChargingTimeToTargetMinutes, batteryDiagnostics?.timeToTargetMinutes,
-         estimatedChargingTimeToFullMinutes].compactMap { $0 }.first { $0 > 0 }
+        [energy.estimatedTimeToTargetMinutes, energy.diagnostics?.timeToTargetMinutes,
+         energy.estimatedTimeToFullMinutes].compactMap { $0 }.first { $0 > 0 }
     }
 
     var chargingEstimateDestination: String {
-        if (estimatedChargingTimeToTargetMinutes ?? batteryDiagnostics?.timeToTargetMinutes ?? 0) > 0 {
-            return chargeTargetPercentage.map { L10n.format("Target %@", Format.percent(Double($0))) }
+        if (energy.estimatedTimeToTargetMinutes ?? energy.diagnostics?.timeToTargetMinutes ?? 0) > 0 {
+            return energy.targetPercentage.map { L10n.format("Target %@", Format.percent(Double($0))) }
                 ?? L10n.text("Charge target")
         }
         return L10n.text("Full charge")
     }
 
     var chargingExplanation: String {
-        if chargerConnection == .fault { return L10n.text("The vehicle reports a charger connection fault.") }
-        if chargingState == .fault { return L10n.text("The vehicle reports a charging fault.") }
-        if chargerConnection == .disconnected { return L10n.text("The charging cable is disconnected.") }
-        switch chargingState {
+        if energy.connection == .fault { return L10n.text("The vehicle reports a charger connection fault.") }
+        if energy.chargingState == .fault { return L10n.text("The vehicle reports a charging fault.") }
+        if energy.connection == .disconnected { return L10n.text("The charging cable is disconnected.") }
+        switch energy.chargingState {
         case .fault: return L10n.text("The vehicle reports a charging fault.")
         case .scheduled: return L10n.text("Charging is scheduled by the vehicle.")
         case .paused: return L10n.text("Smart charging is paused by the vehicle.")
         case .complete: return L10n.text("The vehicle reports charging complete.")
         case .charging, .smartCharging:
-            return chargingPowerWatts.map { $0 > 0 } == true
+            return energy.powerWatts.map { $0 > 0 } == true
                 ? L10n.text("The vehicle reports active charging and power delivery.")
                 : L10n.text("Charging is reported active; power delivery is not confirmed by this reading.")
         case .discharging: return L10n.text("The vehicle reports discharging.")
         case .idle:
-            return chargerConnection == .connected
+            return energy.connection == .connected
                 ? L10n.text("The cable is connected, but the vehicle reports no active charging.")
                 : L10n.text("The vehicle reports no active charging.")
         case .unknown: return L10n.text("The vehicle has not reported a known charging state.")
@@ -58,7 +58,7 @@ extension VehicleState {
     }
 
     func reportedDate(for reading: VehicleReading) -> Date? {
-        if let explicit = readingDates[reading] { return explicit }
+        if let explicit = freshness.readingDates[reading] { return explicit }
         switch reading {
         case .locks, .openings: return exteriorStatus?.reportedAt
         case .software: return softwareInfo?.updatedAt
@@ -70,7 +70,7 @@ extension VehicleState {
     }
 
     func hasFreshReading(_ reading: VehicleReading, now: Date = Date(), maximumAge: TimeInterval = 600) -> Bool {
-        guard !isCachedSnapshot, let date = reportedDate(for: reading) else { return false }
+        guard !freshness.isCached, let date = reportedDate(for: reading) else { return false }
         let age = now.timeIntervalSince(date)
         return age >= -60 && age <= maximumAge
     }

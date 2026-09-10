@@ -43,7 +43,7 @@ final class VehicleStateStore {
             return sqliteSnapshot
         }
         guard let snapshot = load([String: VehicleState].self, key: snapshotsKey)?[vin] else { return nil }
-        guard Date().timeIntervalSince(snapshot.fetchedAt) <= 7 * 24 * 60 * 60 else {
+        guard Date().timeIntervalSince(snapshot.freshness.fetchedAt) <= 7 * 24 * 60 * 60 else {
             clear(vin: vin)
             return nil
         }
@@ -58,7 +58,7 @@ final class VehicleStateStore {
         legacySnapshots.removeValue(forKey: vin)
         store(legacySnapshots, key: snapshotsKey)
         var migrated = sanitized
-        migrated.isCachedSnapshot = true
+        migrated.freshness.isCached = true
         return migrated
     }
 

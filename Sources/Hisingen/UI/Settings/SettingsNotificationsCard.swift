@@ -11,7 +11,7 @@ struct SettingsNotificationsCard: View {
     let binder: PreferenceBinder
 
     private var prefs: PreferencesStore { binder.preferences }
-    private var settingsVehicleVIN: String { state?.vin ?? prefs.vin }
+    private var settingsVehicleVIN: String { state?.identity.vin ?? prefs.vin }
 
     var body: some View {
         Card {

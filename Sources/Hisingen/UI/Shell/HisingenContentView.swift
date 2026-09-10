@@ -10,10 +10,10 @@ struct RetainedDataNoticeID: Hashable {
     let categories: [String]
 
     init?(state: VehicleState) {
-        guard !state.retainedDataCategories.isEmpty else { return nil }
-        vin = state.vin
-        sourceAt = state.retainedDataAt
-        categories = state.retainedDataCategories.map(\.rawValue).sorted()
+        guard !state.freshness.retainedDataCategories.isEmpty else { return nil }
+        vin = state.identity.vin
+        sourceAt = state.freshness.retainedDataAt
+        categories = state.freshness.retainedDataCategories.map(\.rawValue).sorted()
     }
 }
 
@@ -193,7 +193,7 @@ struct HisingenContentView: View {
                                                onSelectCar: onSelectCar, error: error,
                                                database: database, reverseGeocoder: reverseGeocoder,
                                                imageCache: imageCache)
-                                    .id(state.vin)
+                                    .id(state.identity.vin)
                             case .info:
                                 InfoTabView(state: state, database: database, imageCache: imageCache,
                                             reverseGeocoder: reverseGeocoder,
@@ -203,10 +203,10 @@ struct HisingenContentView: View {
                                                 tabSelection.wrappedValue = .history
                                             },
                                             onRemoteCommand: onRemoteCommand)
-                                    .id(state.vin)
+                                    .id(state.identity.vin)
                             case .history:
                                 HistoryDashboardView(state: state, database: database)
-                                    .id(state.vin)
+                                    .id(state.identity.vin)
                             case .controls:
                                 ControlsTabView(state: state,
                                                 remoteCommandInProgress: remoteCommandInProgress,
@@ -250,12 +250,12 @@ struct HisingenContentView: View {
     private var garageStates: [VehicleState] {
         fleet.vehicles.compactMap { fleet.snapshot(for: $0) }.sorted {
             if $0.model.brand != $1.model.brand { return $0.model.brand.rawValue < $1.model.brand.rawValue }
-            return ($0.modelName ?? $0.vin) < ($1.modelName ?? $1.vin)
+            return ($0.identity.modelName ?? $0.identity.vin) < ($1.identity.modelName ?? $1.identity.vin)
         }
     }
 
     private func retainedDataNotice(_ state: VehicleState, id: RetainedDataNoticeID) -> some View {
-        let names = state.retainedDataCategories.map(\.title).joined(separator: ", ")
+        let names = state.freshness.retainedDataCategories.map(\.title).joined(separator: ", ")
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: "clock.badge.exclamationmark")
                 .foregroundStyle(HisingenTheme.semanticWarning)
@@ -267,7 +267,7 @@ struct HisingenContentView: View {
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let timestamp = state.retainedDataAt {
+                if let timestamp = state.freshness.retainedDataAt {
                     Text(L10n.format("Source data from %@", Format.relativeAge(since: timestamp)))
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
@@ -374,20 +374,20 @@ struct HisingenContentView: View {
         let baseTitle: String = {
             if let snap = snapshot {
                 return preferences.formattedVehicleTitle(
-                    vin: snap.vin,
-                    modelName: snap.modelName,
-                    modelYear: snap.modelYear,
-                    registrationNo: snap.registrationNo
+                    vin: snap.identity.vin,
+                    modelName: snap.identity.modelName,
+                    modelYear: snap.identity.modelYear,
+                    registrationNo: snap.identity.registrationNo
                 )
             }
             return car.displayTitle()
         }()
         guard let snapshot else { return baseTitle }
         var label = baseTitle
-        if let battery = snapshot.batteryPercentage {
+        if let battery = snapshot.energy.batteryPercentage {
             label += " · \(Int(battery))%"
             if snapshot.isCharging { label += "⚡" }
-        } else if let fuel = snapshot.fuelLevelPercent {
+        } else if let fuel = snapshot.fuelSystem.levelPercent {
             label += " · \(Int(fuel))%"
         }
         let summary = snapshot.stateSummary
@@ -401,19 +401,19 @@ struct HisingenContentView: View {
     }
 
     private func vehicleMenuLabel(state: VehicleState) -> String {
-        let isActive = state.vin == activeVin
+        let isActive = state.identity.vin == activeVin
         let baseTitle = preferences.formattedVehicleTitle(
-            vin: state.vin,
-            modelName: state.modelName,
-            modelYear: state.modelYear,
-            registrationNo: state.registrationNo,
+            vin: state.identity.vin,
+            modelName: state.identity.modelName,
+            modelYear: state.identity.modelYear,
+            registrationNo: state.identity.registrationNo,
             fallbackBrand: state.model.brand
         )
         var label = baseTitle
-        if let battery = state.batteryPercentage {
+        if let battery = state.energy.batteryPercentage {
             label += " · \(Int(battery))%"
             if state.isCharging { label += "⚡" }
-        } else if let fuel = state.fuelLevelPercent {
+        } else if let fuel = state.fuelSystem.levelPercent {
             label += " · \(Int(fuel))%"
         }
         let summary = state.stateSummary
@@ -439,7 +439,7 @@ struct HisingenContentView: View {
     private func otherBrandMenuLabel() -> String {
         let name = preferences.lastVehicleLabel(for: otherBrand)
         let vin = preferences.vin(for: otherBrand)
-        if !vin.isEmpty, let battery = fleet.snapshot(for: vin)?.batteryPercentage {
+        if !vin.isEmpty, let battery = fleet.snapshot(for: vin)?.energy.batteryPercentage {
             return L10n.format("Switch to %@ (%@ · %d%%)…", otherBrand.displayName, name, Int(battery))
         }
         return L10n.format("Switch to %@ (%@)…", otherBrand.displayName, name)
@@ -449,20 +449,20 @@ struct HisingenContentView: View {
         let currentVin = activeVin ?? cars.first?.vin ?? ""
         let currentCar = cars.first { $0.vin == currentVin }
         let currentTitle: String = {
-            if let state, state.vin == currentVin {
+            if let state, state.identity.vin == currentVin {
                 return preferences.formattedVehicleTitle(
-                    vin: state.vin,
-                    modelName: state.modelName,
-                    modelYear: state.modelYear,
-                    registrationNo: state.registrationNo
+                    vin: state.identity.vin,
+                    modelName: state.identity.modelName,
+                    modelYear: state.identity.modelYear,
+                    registrationNo: state.identity.registrationNo
                 )
             }
             if let snap = fleet.snapshot(for: currentVin) {
                 return preferences.formattedVehicleTitle(
-                    vin: snap.vin,
-                    modelName: snap.modelName,
-                    modelYear: snap.modelYear,
-                    registrationNo: snap.registrationNo
+                    vin: snap.identity.vin,
+                    modelName: snap.identity.modelName,
+                    modelYear: snap.identity.modelYear,
+                    registrationNo: snap.identity.registrationNo
                 )
             }
             if let currentCar {
@@ -476,20 +476,20 @@ struct HisingenContentView: View {
 
         return Menu {
             if fleetStates.count > 1 {
-                ForEach(Array(fleetStates.enumerated().prefix(9)), id: \.element.vin) { index, vehicle in
-                    let isSelected = vehicle.vin == currentVin
+                ForEach(Array(fleetStates.enumerated().prefix(9)), id: \.element.identity.vin) { index, vehicle in
+                    let isSelected = vehicle.identity.vin == currentVin
                     Button {
-                        onSelectCar(vehicle.vin)
+                        onSelectCar(vehicle.identity.vin)
                     } label: {
                         Label(vehicleMenuLabel(state: vehicle), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
                     }
                     .accessibilityLabel(vehicleMenuAccessibilityLabel(vehicle, isSelected: isSelected))
                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.option, .control])
                 }
-                ForEach(Array(fleetStates.enumerated().dropFirst(9)), id: \.element.vin) { _, vehicle in
-                    let isSelected = vehicle.vin == currentVin
+                ForEach(Array(fleetStates.enumerated().dropFirst(9)), id: \.element.identity.vin) { _, vehicle in
+                    let isSelected = vehicle.identity.vin == currentVin
                     Button {
-                        onSelectCar(vehicle.vin)
+                        onSelectCar(vehicle.identity.vin)
                     } label: {
                         Label(vehicleMenuLabel(state: vehicle), systemImage: isSelected ? "checkmark.circle.fill" : "circle")
                     }
@@ -558,7 +558,7 @@ struct HisingenContentView: View {
                 vehicleSwitcher
             }
             // Data freshness indicator
-            if let fetchedAt = state?.fetchedAt, state?.isStale() == false {
+            if let fetchedAt = state?.freshness.fetchedAt, state?.isStale() == false {
                 let age = Date().timeIntervalSince(fetchedAt)
                 let freshnessColor: Color = age < 30 ? .green : (age < 120 ? .yellow : .red)
                 let ageText: String = age < 60 ? "\(Int(age))s" : "\(Int(age / 60))m"

@@ -19,7 +19,7 @@ struct SettingsCapabilityMatrixCard: View {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
-                    Text(L10n.format("Capability assessment for %@ (%@)", state.modelName ?? L10n.text("Vehicle"), state.vin))
+                    Text(L10n.format("Capability assessment for %@ (%@)", state.identity.modelName ?? L10n.text("Vehicle"), state.identity.vin))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
 
@@ -52,17 +52,17 @@ struct SettingsCapabilityMatrixCard: View {
                     // A degraded dashboard should explain itself here rather than only in the
                     // unified log — the cached snapshot keeps very little telemetry, so cards
                     // going quiet is otherwise indistinguishable from an unsupported vehicle.
-                    if state.isCachedSnapshot {
+                    if state.freshness.isCached {
                         degradedNotice(
                             symbol: "internaldrive",
                             text: L10n.text("Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.")
                         )
-                    } else if !state.unavailableFeatures.isEmpty {
+                    } else if !state.freshness.unavailableFeatures.isEmpty {
                         degradedNotice(
                             symbol: "exclamationmark.arrow.triangle.2.circlepath",
                             text: L10n.format(
                                 "The last refresh could not read: %@",
-                                state.unavailableFeatures.map(\.title).sorted().joined(separator: ", ")
+                                state.freshness.unavailableFeatures.map(\.title).sorted().joined(separator: ", ")
                             )
                         )
                     }
@@ -129,7 +129,7 @@ struct SettingsCapabilityMatrixCard: View {
         let csv = (["capability,support"] + rows).joined(separator: "\n") + "\n"
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "capabilities_\(state.vin.prefix(8)).csv"
+        panel.nameFieldStringValue = "capabilities_\(state.identity.vin.prefix(8)).csv"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {

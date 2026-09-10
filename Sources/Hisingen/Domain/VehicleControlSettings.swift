@@ -51,7 +51,7 @@ struct VehicleControlSettings: Codable, Equatable, Sendable {
                 return L10n.text("Vehicle-managed optimized charging is not supported.")
             }
             if let maximum = chargeLocationMaximum, let state,
-               state.chargeLocations.filter(\.isSavedLocation).count >= maximum {
+               state.energy.locations.filter(\.isSavedLocation).count >= maximum {
                 return L10n.format("The vehicle allows at most %d charging locations.", maximum)
             }
         case .updateChargeLocationAmpLimit(_, let amps):

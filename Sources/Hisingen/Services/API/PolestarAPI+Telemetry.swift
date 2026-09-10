@@ -286,72 +286,83 @@ extension PolestarAPI {
         )
 
         var state = VehicleState(
-            batteryPercentage: batteryPercentage,
-            rangeKm: range,
-            chargingState: chargingState,
-            estimatedChargingTimeToFullMinutes: Self.positive(minutes),
-            chargeTargetPercentage: chargeTarget,
-            chargingPowerWatts: needsChargingContext ? Self.positive(extras?.chargingPowerWatts) : nil,
-            chargingCurrentAmps: needsChargingContext
-                ? Self.positive(extras?.chargingCurrentAmps) : nil,
-            chargingVoltageVolts: needsChargingContext ? Self.positive(extras?.chargingVoltageVolts) : nil,
-            chargingType: needsChargingContext ? (extras?.chargingType ?? .unknown) : .unknown,
-            chargerConnection: needsChargingContext ? (extras?.chargerConnection ?? .unknown) : .unknown,
-            availability: vehicleAvailability,
-
-
-            modelName: carIdentity.modelName ?? otaCapabilities.value?.identity?.modelName,
-            modelYear: features.contains(.vehicleIdentity) ? (carIdentity.modelYear ?? otaCapabilities.value?.identity?.modelYear) : nil,
-            registrationNo: features.contains(.vehicleIdentity) ? carIdentity.registrationNo : nil,
-            vin: vin,
-            ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
-            odometerKm: (odometer?.odometerMeters?.value).map { $0 / 1_000 }
-                ?? (features.contains(.vehicleHealth) ? trips.value?.odometerKm : nil),
-            daysToService: health?.daysToService?.value ?? c3ServiceHealth?.daysToService,
-            distanceToServiceKm: health?.distanceToServiceKm?.value ?? c3ServiceHealth?.distanceToServiceKm,
-            serviceWarning: Self.hasWarning(health?.serviceWarning) || (c3ServiceHealth?.serviceWarning ?? false),
-            fluidWarnings: Self.fluidWarnings(health),
+            energy: EnergyAndChargingSnapshot(
+                batteryPercentage: batteryPercentage,
+                rangeKm: range,
+                chargingState: chargingState,
+                estimatedTimeToFullMinutes: Self.positive(minutes),
+                targetPercentage: chargeTarget,
+                powerWatts: needsChargingContext ? Self.positive(extras?.chargingPowerWatts) : nil,
+                currentAmps: needsChargingContext ? Self.positive(extras?.chargingCurrentAmps) : nil,
+                voltageVolts: needsChargingContext ? Self.positive(extras?.chargingVoltageVolts) : nil,
+                type: needsChargingContext ? (extras?.chargingType ?? .unknown) : .unknown,
+                connection: needsChargingContext ? (extras?.chargerConnection ?? .unknown) : .unknown,
+                diagnostics: features.contains(.batteryDiagnostics)
+                    ? extras.map { diag -> BatteryDiagnostics in
+                        var enriched = diag.diagnostics
+                        enriched.unknownWireFields = diag.unknownFields
+                        return enriched
+                    } : nil,
+                schedules: schedules.value ?? []
+            ),
+            identity: VehicleIdentitySnapshot(
+                availability: vehicleAvailability,
+                modelName: carIdentity.modelName ?? otaCapabilities.value?.identity?.modelName,
+                modelYear: features.contains(.vehicleIdentity)
+                    ? (carIdentity.modelYear ?? otaCapabilities.value?.identity?.modelYear) : nil,
+                registrationNo: features.contains(.vehicleIdentity) ? carIdentity.registrationNo : nil,
+                vin: vin,
+                ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
+                imageData: features.contains(.vehicleImage) ? carImages[vin] : nil
+            ),
+            maintenance: MaintenanceAndHealthSnapshot(
+                odometerKm: (odometer?.odometerMeters?.value).map { $0 / 1_000 }
+                    ?? (features.contains(.vehicleHealth) ? trips.value?.odometerKm : nil),
+                details: healthDetails,
+                service: ServiceSnapshot(
+                    daysToService: health?.daysToService?.value ?? c3ServiceHealth?.daysToService,
+                    distanceToServiceKm: health?.distanceToServiceKm?.value ?? c3ServiceHealth?.distanceToServiceKm,
+                    serviceWarning: Self.hasWarning(health?.serviceWarning) || (c3ServiceHealth?.serviceWarning ?? false),
+                    fluidWarnings: Self.fluidWarnings(health)
+                )
+            ),
+            freshness: SnapshotFreshness(
+                fetchedAt: Date(),
+                vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
+                dataWarnings: warnings,
+                unavailableFeatures: unavailable
+            ),
             exteriorStatus: exterior.value,
-            healthDetails: healthDetails,
             softwareInfo: software.value,
-            chargingSchedules: schedules.value ?? [],
             climateStatus: climate.value,
             climateTimers: climateTimers.value ?? [],
-            tripMeterManualKm: trips.value?.manualTripKm,
-            tripMeterAutomaticKm: trips.value?.automaticTripKm,
+            tripComputer: TripComputerSnapshot(
+                manualTripKm: trips.value?.manualTripKm,
+                automaticTripKm: trips.value?.automaticTripKm
+            ),
             connectivity: connectivity.value,
             airQuality: air.value,
-            batteryDiagnostics: features.contains(.batteryDiagnostics)
-                ? extras.map { diag -> BatteryDiagnostics in
-                    var enriched = diag.diagnostics
-                    enriched.unknownWireFields = diag.unknownFields
-                    return enriched
-                } : nil,
             weather: features.contains(.vehicleWeather) ? weather.value : nil,
             location: features.contains(.vehicleLocation) ? location.value : nil,
-            unavailableFeatures: unavailable,
             probedCapabilities: probes.count > 0 ? probes : nil,
-            imageData: features.contains(.vehicleImage) ? carImages[vin] : nil,
-            fetchedAt: Date(),
-            vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
-            dataWarnings: warnings
+            otaCapabilities: otaCapabilities.value
         )
-        state.reportedBatteryCapacityKwh = capacityKwh
-        state.estimatedChargingTimeToTargetMinutes = extras?.diagnostics.timeToTargetMinutes
+        state.energy.reportedBatteryCapacityKwh = capacityKwh
+        state.energy.estimatedTimeToTargetMinutes = extras?.diagnostics.timeToTargetMinutes
         func batteryDate(primaryPresent: Bool, secondaryPresent: Bool) -> Date? {
             let usesSecondary = extrasAreNewer ? secondaryPresent : !primaryPresent && secondaryPresent
             return usesSecondary ? extras?.reportedAt : primaryPresent ? primaryReportedAt : nil
         }
-        state.readingDates[.battery] = batteryDate(primaryPresent: battery?.batteryChargeLevelPercentage != nil,
+        state.freshness.readingDates[.battery] = batteryDate(primaryPresent: battery?.batteryChargeLevelPercentage != nil,
                                                   secondaryPresent: extras?.batteryPercentage != nil)
-        state.readingDates[.range] = batteryDate(primaryPresent: battery?.estimatedDistanceToEmptyKm != nil,
+        state.freshness.readingDates[.range] = batteryDate(primaryPresent: battery?.estimatedDistanceToEmptyKm != nil,
                                                 secondaryPresent: extras?.rangeKm != nil)
-        state.readingDates[.charging] = batteryDate(primaryPresent: primaryChargingState != nil,
+        state.freshness.readingDates[.charging] = batteryDate(primaryPresent: primaryChargingState != nil,
                                                    secondaryPresent: extras?.chargingState != nil)
-        state.readingDates[.locks] = exterior.value?.isLocked != nil ? exterior.value?.reportedAt : nil
-        state.readingDates[.openings] = exterior.value?.reportedAt
-        state.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date
-        state.readingDates[.odometer] = odometer?.odometerMeters != nil ? odometer?.timestamp?.date : trips.value?.reportedAt
+        state.freshness.readingDates[.locks] = exterior.value?.isLocked != nil ? exterior.value?.reportedAt : nil
+        state.freshness.readingDates[.openings] = exterior.value?.reportedAt
+        state.freshness.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date
+        state.freshness.readingDates[.odometer] = odometer?.odometerMeters != nil ? odometer?.timestamp?.date : trips.value?.reportedAt
         state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
         // Odometer average speeds arrive per trip period, with explicit km/h units; keep
         // them out of the blended `averageSpeedKmH` (Volvo statistics) so sources never
@@ -360,25 +371,24 @@ extension PolestarAPI {
         state.tripComputer.automaticAverageSpeedKmH = trips.value?.automaticAverageSpeedKmH
         // Engine hours to service is a real service-interval input (upstream Health field 2),
         // distinct from the GraphQL-engineHours Volvo path; GraphQL keeps precedence.
-        if let engineHours = c3Health.value?.engineHoursToService, state.engineHoursToService == nil {
-            state.engineHoursToService = engineHours
+        if let engineHours = c3Health.value?.engineHoursToService, state.maintenance.service.engineHoursToService == nil {
+            state.maintenance.service.engineHoursToService = engineHours
         }
 
-        state.otaCapabilities = otaCapabilities.value
         if needsSoftware {
             state.softwareInfo = Self.mergingSoftwareInfo(software.value, myCars: otaCapabilities.value)
         }
-        state.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
-        state.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
-        state.pno34 = features.contains(.vehicleIdentity) ? carIdentity.pno34 : nil
-        state.externalColour = features.contains(.vehicleIdentity) ? carIdentity.exteriorColorName : nil
-        state.upholstery = features.contains(.vehicleIdentity) ? carIdentity.upholsteryName : nil
-        state.wheels = features.contains(.vehicleIdentity) ? carIdentity.wheelsName : nil
-        state.packages = features.contains(.vehicleIdentity) ? carIdentity.packageNames : []
-        state.accountMarket = market
-        state.chargingCurrentLimitAmps = ampLimit.value
-        state.chargeLocations = chargeLocations.value ?? []
-        state.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
+        state.identity.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
+        state.identity.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
+        state.identity.pno34 = features.contains(.vehicleIdentity) ? carIdentity.pno34 : nil
+        state.identity.externalColour = features.contains(.vehicleIdentity) ? carIdentity.exteriorColorName : nil
+        state.identity.upholstery = features.contains(.vehicleIdentity) ? carIdentity.upholsteryName : nil
+        state.identity.wheels = features.contains(.vehicleIdentity) ? carIdentity.wheelsName : nil
+        state.identity.packages = features.contains(.vehicleIdentity) ? carIdentity.packageNames : []
+        state.identity.accountMarket = market
+        state.energy.currentLimitAmps = ampLimit.value
+        state.energy.locations = chargeLocations.value ?? []
+        state.identity.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
         try requireSession(epoch)
         return state
     }

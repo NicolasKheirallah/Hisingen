@@ -64,7 +64,7 @@ struct MultiVehicleSelectionTests {
             coordinator.onEvent = { event in
                 existing?(event)
                 guard case .state(let state) = event else { return }
-                if let vin, state.vin != vin { return }
+                if let vin, state.identity.vin != vin { return }
                 box.resume(state)
             }
         }
@@ -112,13 +112,13 @@ struct MultiVehicleSelectionTests {
         // Forward switch.
         coordinator.selectCar(vin: Self.vinB)
         let stateB = await awaitState(coordinator, vin: Self.vinB)
-        XCTAssertEqual(stateB.vin, Self.vinB)
+        XCTAssertEqual(stateB.identity.vin, Self.vinB)
         XCTAssertEqual(preferences.vin, Self.vinB)
 
         // Switch back — this was the direction permanently blocked before the fix.
         coordinator.selectCar(vin: Self.vinA)
         let stateA = await awaitState(coordinator, vin: Self.vinA)
-        XCTAssertEqual(stateA.vin, Self.vinA)
+        XCTAssertEqual(stateA.identity.vin, Self.vinA)
         XCTAssertEqual(preferences.vin, Self.vinA)
 
         let orderRoundTrip = await provider.selectionOrder
@@ -199,7 +199,7 @@ struct MultiVehicleSelectionTests {
         // must retry on its own instead of dead-ending the refresh loop.
         coordinator.selectCar(vin: Self.vinB)
         let stateB = await awaitState(coordinator, vin: Self.vinB)
-        XCTAssertEqual(stateB.vin, Self.vinB)
+        XCTAssertEqual(stateB.identity.vin, Self.vinB)
         XCTAssertEqual(preferences.vin, Self.vinB)
         let attemptsRaced = await provider.selectCount
         XCTAssertEqual(attemptsRaced, 2, "Expected exactly one automatic retry after the raced failure")

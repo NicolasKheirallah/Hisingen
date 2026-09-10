@@ -12,7 +12,7 @@ struct VehicleReadiness {
     static func checks(_ state: VehicleState, lowBatteryThreshold: Int, now: Date = Date()) -> [Check] {
         var checks: [Check] = []
         if state.powertrain.hasElectricRange {
-            let battery = state.batteryPercentage
+            let battery = state.energy.batteryPercentage
             let fresh = state.hasFreshReading(.battery, now: now)
             checks.append(Check(id: "battery", title: L10n.text("Battery"),
                                 detail: battery.map { Format.percent($0) } ?? L10n.text("Unavailable"),
@@ -21,8 +21,8 @@ struct VehicleReadiness {
         if state.powertrain.hasFuelRange {
             let fresh = state.hasFreshReading(.fuel, now: now)
             checks.append(Check(id: "fuel", title: L10n.text("Fuel"),
-                                detail: state.fuelLevelPercent.map { Format.percent($0) } ?? L10n.text("Unavailable"),
-                                status: fresh && state.fuelLevelPercent != nil ? .reported : .unknown))
+                                detail: state.fuelSystem.levelPercent.map { Format.percent($0) } ?? L10n.text("Unavailable"),
+                                status: fresh && state.fuelSystem.levelPercent != nil ? .reported : .unknown))
         }
         let locked = state.exteriorStatus?.isLocked
         checks.append(Check(id: "locks", title: L10n.text("Locks"),
@@ -35,18 +35,18 @@ struct VehicleReadiness {
                                 status: !state.hasFreshReading(.openings, now: now) || exterior.openings.contains(where: { $0.state == .unknown })
                                     ? .unknown : open.isEmpty ? .reported : .attention))
         }
-        let warnings = state.healthDetails?.warnings ?? []
+        let warnings = state.maintenance.details?.warnings ?? []
         checks.append(Check(id: "health", title: L10n.text("Vehicle Health"),
                             detail: warnings.isEmpty ? L10n.text("No active warnings reported") : warnings.map(\.displayName).joined(separator: ", "),
-                            status: !state.hasFreshReading(.health, now: now) || state.healthDetails?.reportedWarnings.isEmpty != false
+                            status: !state.hasFreshReading(.health, now: now) || state.maintenance.details?.reportedWarnings.isEmpty != false
                                 ? .unknown : warnings.isEmpty ? .reported : .attention))
         return checks
     }
 
     static func chargingByDeparture(_ state: VehicleState, departure: Date, now: Date = Date()) -> String {
         guard departure > now else { return L10n.text("Choose a future departure time.") }
-        guard state.hasFreshReading(.battery, now: now), let battery = state.batteryPercentage,
-              let target = state.chargeTargetPercentage else { return L10n.text("Fresh battery and charge-target readings are required.") }
+        guard state.hasFreshReading(.battery, now: now), let battery = state.energy.batteryPercentage,
+              let target = state.energy.targetPercentage else { return L10n.text("Fresh battery and charge-target readings are required.") }
         if battery >= Double(target) { return L10n.text("The reported charge target has been reached.") }
         guard state.isCharging, state.hasFreshReading(.charging, now: now),
               let minutes = state.remainingChargingMinutes, let timestamp = state.reportedDate(for: .charging) else {

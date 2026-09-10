@@ -10,7 +10,7 @@ struct FleetSnapshot {
          snapshots: [String: VehicleState] = [:], activeState: VehicleState? = nil) {
         self.cars = cars
         var values = snapshots
-        if let activeState { values[activeState.vin] = activeState }
+        if let activeState { values[activeState.identity.vin] = activeState }
         self.snapshots = values
         var seen = Set<String>()
         vehicles = (cars.map(\.vin) + configuredVINs + values.keys.sorted())
@@ -43,7 +43,7 @@ final class FleetStore {
 
     func updateCars(_ cars: [CarSummary]) { carsByBrand[preferences.activeBrand] = cars }
 
-    func retain(_ state: VehicleState) { snapshots[state.vin] = state }
+    func retain(_ state: VehicleState) { snapshots[state.identity.vin] = state }
 
     func snapshot(for vin: String) -> VehicleState? {
         if let state = snapshots[vin] { return state }

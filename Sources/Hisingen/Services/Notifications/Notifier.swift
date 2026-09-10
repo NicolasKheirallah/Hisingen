@@ -193,10 +193,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func vehicleStateDidUpdate(_ state: VehicleState) {
-        let previousState = previousStateByVIN[state.vin]
-        previousStateByVIN[state.vin] = state
+        let previousState = previousStateByVIN[state.identity.vin]
+        previousStateByVIN[state.identity.vin] = state
         let result = detector.evaluate(
-            previous: stateStore.baseline(for: state.vin),
+            previous: stateStore.baseline(for: state.identity.vin),
             current: state,
             lowBatteryThreshold: preferences.lowBatteryThreshold
         )
@@ -207,7 +207,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         // Muted vehicles keep their baselines advancing above, so un-muting never
         // replays a burst of stale edge events accumulated during the quiet period.
         guard preferences.features.contains(.notifications), available, authorized,
-              !preferences.isMuted(vin: state.vin) else { return }
+              !preferences.isMuted(vin: state.identity.vin) else { return }
 
         for event in result.events {
             let reading: VehicleReading
@@ -253,7 +253,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// telemetry, so a parked-open car still escalates even if polling stalls.
     private func recheckSustainedConditions() {
         guard available, authorized, preferences.features.contains(.notifications) else { return }
-        for state in previousStateByVIN.values where !preferences.isMuted(vin: state.vin) {
+        for state in previousStateByVIN.values where !preferences.isMuted(vin: state.identity.vin) {
             checkOpeningsLeftOpen(current: state)
             checkSlowCharging(current: state)
             checkStaleTelemetry(current: state)
@@ -273,9 +273,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let hasWarning = !warningLabels(state).isEmpty || state.exteriorStatus?.alarmTriggered == true
         let changed: Bool
         if hasWarning {
-            changed = warningVehicles.insert(state.vin).inserted
+            changed = warningVehicles.insert(state.identity.vin).inserted
         } else {
-            changed = warningVehicles.remove(state.vin) != nil
+            changed = warningVehicles.remove(state.identity.vin) != nil
         }
         if changed { onWarningVehicleCountChanged?(warningVehicles.count) }
     }
@@ -283,31 +283,31 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func checkChargerConnection(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyChargerConnection,
               current.hasFreshReading(.charging),
-              let previous, previous.vin == current.vin,
-              [.connected, .disconnected].contains(previous.chargerConnection),
-              [.connected, .disconnected].contains(current.chargerConnection) else { return }
-        let wasConnected = previous.chargerConnection == .connected
-        let isConnected = current.chargerConnection == .connected
+              let previous, previous.identity.vin == current.identity.vin,
+              [.connected, .disconnected].contains(previous.energy.connection),
+              [.connected, .disconnected].contains(current.energy.connection) else { return }
+        let wasConnected = previous.energy.connection == .connected
+        let isConnected = current.energy.connection == .connected
         guard isConnected != wasConnected else { return }
         if isConnected {
-            postNotice(identifier: "hisingen.\(current.vin).cable-connected",
-                       thread: "hisingen.charging.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).cable-connected",
+                       thread: "hisingen.charging.\(current.identity.vin)",
                        title: L10n.text("Cable connected"),
-                       body: privateBody(cableBody(battery: current.batteryPercentage)),
-                       subtitle: displayName(for: current), vin: current.vin)
+                       body: privateBody(cableBody(battery: current.energy.batteryPercentage)),
+                       subtitle: displayName(for: current), vin: current.identity.vin)
         } else {
-            postNotice(identifier: "hisingen.\(current.vin).cable-disconnected",
-                       thread: "hisingen.charging.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).cable-disconnected",
+                       thread: "hisingen.charging.\(current.identity.vin)",
                        title: L10n.text("Cable disconnected"),
                        body: privateBody(L10n.text("Charging cable disconnected.")),
-                       subtitle: displayName(for: current), vin: current.vin)
+                       subtitle: displayName(for: current), vin: current.identity.vin)
         }
     }
 
     private func checkClimateChanges(previous: VehicleState?, current: VehicleState) {
         guard preferences.notifyClimateChanges,
-              !current.isCachedSnapshot, !current.isStale(),
-              !current.retainedDataCategories.contains(.climateStatus),
+              !current.freshness.isCached, !current.isStale(),
+              !current.freshness.retainedDataCategories.contains(.climateStatus),
               let previousActivity = previous?.climateStatus?.activity,
               let currentActivity = current.climateStatus?.activity,
               currentActivity != previousActivity else { return }
@@ -316,76 +316,76 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let isActive = currentActivity.isActiveClimate
         guard isActive != wasActive else { return }
         if isActive {
-            postNotice(identifier: "hisingen.\(current.vin).climate-started",
-                       thread: "hisingen.climate.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).climate-started",
+                       thread: "hisingen.climate.\(current.identity.vin)",
                        title: L10n.text("Climate started"),
                        body: privateBody(L10n.text("Cabin climate is now active.")),
-                       subtitle: displayName(for: current), vin: current.vin)
+                       subtitle: displayName(for: current), vin: current.identity.vin)
         } else {
-            postNotice(identifier: "hisingen.\(current.vin).climate-stopped",
-                       thread: "hisingen.climate.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).climate-stopped",
+                       thread: "hisingen.climate.\(current.identity.vin)",
                        title: L10n.text("Climate stopped"),
                        body: privateBody(L10n.text("Cabin climate has turned off.")),
-                       subtitle: displayName(for: current), vin: current.vin)
+                       subtitle: displayName(for: current), vin: current.identity.vin)
         }
     }
 
     private func checkOpeningsLeftOpen(current: VehicleState) {
         let openings = current.exteriorStatus?.itemsNeedingAttention.map(\.displayName) ?? []
-        let condition = current.hasFreshReading(.openings) && current.isEngineRunning != true && !openings.isEmpty
-        trackSustained(condition: condition, key: "\(current.vin).openings", duration: TimeInterval(preferences.openingsAlertDelayMinutes * 60)) {
+        let condition = current.hasFreshReading(.openings) && current.fuelSystem.isEngineRunning != true && !openings.isEmpty
+        trackSustained(condition: condition, key: "\(current.identity.vin).openings", duration: TimeInterval(preferences.openingsAlertDelayMinutes * 60)) {
             guard self.preferences.notifyOpeningsLeftOpen else { return }
-            self.postNotice(identifier: "hisingen.\(current.vin).openings-left-open",
-                            thread: "hisingen.security.\(current.vin)",
+            self.postNotice(identifier: "hisingen.\(current.identity.vin).openings-left-open",
+                            thread: "hisingen.security.\(current.identity.vin)",
                             title: L10n.text("Vehicle left open"),
                             body: self.privateBody(openings.joined(separator: " · ")),
                             subtitle: self.displayName(for: current),
-                            vin: current.vin,
+                            vin: current.identity.vin,
                             urgency: .urgent)
         }
     }
 
     private func checkServiceDue(current: VehicleState) {
         guard preferences.notifyServiceDue, current.hasFreshReading(.health) else { return }
-        let due = current.serviceWarning || (current.daysToService.map { $0 <= 30 } ?? false)
-            || (current.distanceToServiceKm.map { $0 <= 1_000 } ?? false)
+        let due = current.maintenance.service.serviceWarning || (current.maintenance.service.daysToService.map { $0 <= 30 } ?? false)
+            || (current.maintenance.service.distanceToServiceKm.map { $0 <= 1_000 } ?? false)
         // The was-due flag persists across launches: without it, staying due re-fired
         // the banner on every relaunch because the in-memory previous state was empty.
-        let wasDue = serviceDueByVIN[current.vin] ?? false
-        serviceDueByVIN[current.vin] = due
+        let wasDue = serviceDueByVIN[current.identity.vin] ?? false
+        serviceDueByVIN[current.identity.vin] = due
         defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
         guard due, !wasDue else { return }
         var details: [String] = []
-        if let days = current.daysToService { details.append(L10n.format("%d days", days)) }
-        if let km = current.distanceToServiceKm { details.append(Format.distance(km: km, unit: preferences.distanceUnit)) }
-        postNotice(identifier: "hisingen.\(current.vin).service-due", thread: "hisingen.service.\(current.vin)",
+        if let days = current.maintenance.service.daysToService { details.append(L10n.format("%d days", days)) }
+        if let km = current.maintenance.service.distanceToServiceKm { details.append(Format.distance(km: km, unit: preferences.distanceUnit)) }
+        postNotice(identifier: "hisingen.\(current.identity.vin).service-due", thread: "hisingen.service.\(current.identity.vin)",
                    title: L10n.text("Vehicle service due soon"),
                    body: privateBody(details.isEmpty ? L10n.text("Open Hisingen for details.") : details.joined(separator: " · ")),
-                   subtitle: displayName(for: current), vin: current.vin,
+                   subtitle: displayName(for: current), vin: current.identity.vin,
                    urgency: .background)
     }
 
     private func checkStaleTelemetry(current: VehicleState) {
         let condition = current.isStale()
-        trackSustained(condition: condition, key: "\(current.vin).stale", duration: 1) {
+        trackSustained(condition: condition, key: "\(current.identity.vin).stale", duration: 1) {
             guard self.preferences.notifyStaleTelemetry else { return }
-            self.postNotice(identifier: "hisingen.\(current.vin).stale-telemetry", thread: "hisingen.telemetry.\(current.vin)",
+            self.postNotice(identifier: "hisingen.\(current.identity.vin).stale-telemetry", thread: "hisingen.telemetry.\(current.identity.vin)",
                             title: L10n.text("Vehicle data is stale"),
                             body: self.privateBody(current.freshnessDescription),
-                            subtitle: self.displayName(for: current), vin: current.vin,
+                            subtitle: self.displayName(for: current), vin: current.identity.vin,
                             urgency: .background)
         }
     }
 
     private func checkSlowCharging(current: VehicleState) {
         let condition = current.hasFreshReading(.charging) && current.isCharging
-            && (current.chargingPowerWatts.map { $0 > 0 && $0 < 2_000 } ?? false)
-        trackSustained(condition: condition, key: "\(current.vin).slow-charging", duration: 15 * 60) {
+            && (current.energy.powerWatts.map { $0 > 0 && $0 < 2_000 } ?? false)
+        trackSustained(condition: condition, key: "\(current.identity.vin).slow-charging", duration: 15 * 60) {
             guard self.preferences.notifySlowCharging else { return }
-            let power = current.chargingPowerWatts.map(Format.kilowatts) ?? L10n.text("Unavailable")
-            self.postNotice(identifier: "hisingen.\(current.vin).slow-charging", thread: "hisingen.charging.\(current.vin)",
+            let power = current.energy.powerWatts.map(Format.kilowatts) ?? L10n.text("Unavailable")
+            self.postNotice(identifier: "hisingen.\(current.identity.vin).slow-charging", thread: "hisingen.charging.\(current.identity.vin)",
                             title: L10n.text("Charging power is unusually low"), body: self.privateBody(power),
-                            subtitle: self.displayName(for: current), vin: current.vin,
+                            subtitle: self.displayName(for: current), vin: current.identity.vin,
                             urgency: .background)
         }
     }
@@ -458,9 +458,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         default:
             return
         }
-        postNotice(identifier: "hisingen.\(current.vin).software", thread: "hisingen.software.\(current.vin)",
+        postNotice(identifier: "hisingen.\(current.identity.vin).software", thread: "hisingen.software.\(current.identity.vin)",
                    title: title, body: privateBody(body), subtitle: displayName(for: current),
-                   vin: current.vin, urgency: .background)
+                   vin: current.identity.vin, urgency: .background)
     }
 
     private func checkVehicleWarnings(previous: VehicleState?, current: VehicleState) {
@@ -469,28 +469,28 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let currentWarnings = warningLabels(current)
         let added = currentWarnings.subtracting(previousWarnings).sorted()
         if current.hasFreshReading(.health), !added.isEmpty {
-            postNotice(identifier: "hisingen.\(current.vin).vehicle-warnings",
-                       thread: "hisingen.warnings.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).vehicle-warnings",
+                       thread: "hisingen.warnings.\(current.identity.vin)",
                        title: L10n.text("Vehicle warning"),
                        body: privateBody(added.joined(separator: " · ")),
-                       subtitle: displayName(for: current), vin: current.vin,
+                       subtitle: displayName(for: current), vin: current.identity.vin,
                        urgency: .urgent)
         }
         if current.hasFreshReading(.openings), current.exteriorStatus?.alarmTriggered == true,
            previous.exteriorStatus?.alarmTriggered != true {
-            postNotice(identifier: "hisingen.\(current.vin).alarm",
-                       thread: "hisingen.security.\(current.vin)",
+            postNotice(identifier: "hisingen.\(current.identity.vin).alarm",
+                       thread: "hisingen.security.\(current.identity.vin)",
                        title: L10n.text("Vehicle alarm triggered"),
                        body: privateBody(L10n.text("Open Hisingen for details.")),
-                       subtitle: displayName(for: current), vin: current.vin,
+                       subtitle: displayName(for: current), vin: current.identity.vin,
                        urgency: .urgent)
         }
     }
 
     private func warningLabels(_ state: VehicleState) -> Set<String> {
-        var labels = Set(state.healthDetails?.warnings.map(\.displayName) ?? [])
-        labels.formUnion(state.fluidWarnings)
-        if state.serviceWarning { labels.insert(L10n.text("Service warning")) }
+        var labels = Set(state.maintenance.details?.warnings.map(\.displayName) ?? [])
+        labels.formUnion(state.maintenance.service.fluidWarnings)
+        if state.maintenance.service.serviceWarning { labels.insert(L10n.text("Service warning")) }
         return labels
     }
 
@@ -513,18 +513,18 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
         // Titles stay emoji-free across all notification builders for visual consistency;
         // the charging/security semantics live in the thread identifiers and actions.
-        postNotice(identifier: "hisingen.\(current.vin).rain-windows",
-                   thread: "hisingen.weather.\(current.vin)",
+        postNotice(identifier: "hisingen.\(current.identity.vin).rain-windows",
+                   thread: "hisingen.weather.\(current.identity.vin)",
                    title: L10n.text("Rain Alert"),
                    body: privateBody(L10n.text("Rain detected near your vehicle with windows left open!")),
-                   subtitle: displayName(for: current), vin: current.vin,
+                   subtitle: displayName(for: current), vin: current.identity.vin,
                    urgency: .urgent)
     }
 
 
     nonisolated static func eveningUnlockedCondition(_ state: VehicleState?, startHour: Int = 21) -> Bool {
         guard let state, let ext = state.exteriorStatus, ext.isLocked == false else { return false }
-        let hour = Calendar.current.component(.hour, from: state.fetchedAt)
+        let hour = Calendar.current.component(.hour, from: state.freshness.fetchedAt)
         return hour >= min(max(startHour, 18), 23) || hour < 6
     }
 
@@ -540,19 +540,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         } else {
             body = L10n.format("Your %@ is parked and currently unlocked.", displayName(for: current))
         }
-        postNotice(identifier: "hisingen.\(current.vin).evening-unlocked",
-                   thread: "hisingen.security.\(current.vin)",
+        postNotice(identifier: "hisingen.\(current.identity.vin).evening-unlocked",
+                   thread: "hisingen.security.\(current.identity.vin)",
                    title: L10n.text("Security Reminder"),
                    body: privateBody(body),
-                   subtitle: displayName(for: current), vin: current.vin,
+                   subtitle: displayName(for: current), vin: current.identity.vin,
                    urgency: .urgent,
                    category: Self.unlockedCategoryID)
     }
 
     nonisolated static func plugInReminderCondition(_ state: VehicleState?, threshold: Int = 40) -> Bool {
         guard let state, state.powertrain.hasElectricRange,
-              let battery = state.batteryPercentage, battery <= Double(min(max(threshold, 10), 80)),
-              state.chargerConnection == .disconnected, !state.isCharging else { return false }
+              let battery = state.energy.batteryPercentage, battery <= Double(min(max(threshold, 10), 80)),
+              state.energy.connection == .disconnected, !state.isCharging else { return false }
         return true
     }
 
@@ -566,16 +566,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let detailedBody: String
         if preferences.privateNotificationDetails {
             detailedBody = L10n.text("Parked and unplugged. Connect to a charger to ensure departure range.")
-        } else if let battery = current.batteryPercentage {
+        } else if let battery = current.energy.batteryPercentage {
             detailedBody = L10n.format("Parked at %.0f%% and unplugged. Connect to a charger to ensure departure range.", battery)
         } else {
             detailedBody = L10n.text("Parked and unplugged. Connect to a charger to ensure departure range.")
         }
-        postNotice(identifier: "hisingen.\(current.vin).plugin-reminder",
-                   thread: "hisingen.charging.\(current.vin)",
+        postNotice(identifier: "hisingen.\(current.identity.vin).plugin-reminder",
+                   thread: "hisingen.charging.\(current.identity.vin)",
                    title: L10n.text("Plug-In Reminder"),
                    body: privateBody(detailedBody),
-                   subtitle: name, vin: current.vin)
+                   subtitle: name, vin: current.identity.vin)
     }
 
     func authenticationRequired() {
@@ -629,8 +629,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         // vehicle name — repeating it here said the same thing twice.
         guard !preferences.privateNotificationDetails else { return L10n.text("Started charging.") }
         var values: [String] = []
-        if let battery = state.batteryPercentage { values.append(percentText(battery)) }
-        if let minutes = state.estimatedChargingTimeToFullMinutes {
+        if let battery = state.energy.batteryPercentage { values.append(percentText(battery)) }
+        if let minutes = state.energy.estimatedTimeToFullMinutes {
             values.append(L10n.format("full in %@", Format.shortDuration(minutes: minutes)))
         }
         return values.isEmpty ? L10n.format("Your %@ started charging.", brandName) : values.joined(separator: " · ")
@@ -640,8 +640,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let brandName = displayName(for: state)
         guard !preferences.privateNotificationDetails else { return L10n.text("Finished charging.") }
         var values: [String] = []
-        if let battery = state.batteryPercentage { values.append(percentText(battery)) }
-        if let range = state.rangeKm {
+        if let battery = state.energy.batteryPercentage { values.append(percentText(battery)) }
+        if let range = state.energy.rangeKm {
             values.append(L10n.format("%@ range", Format.distance(km: range, unit: preferences.distanceUnit)))
         }
         return values.isEmpty ? L10n.format("Your %@ finished charging.", brandName) : values.joined(separator: " · ")
@@ -660,7 +660,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// Vehicle display name for notification copy: user nickname when set, brand fallback.
     private func displayName(for state: VehicleState) -> String {
-        let nick = preferences.vehicleNickname(for: state.vin)
+        let nick = preferences.vehicleNickname(for: state.identity.vin)
         return nick.isEmpty ? state.model.brand.displayName : nick
     }
 
@@ -682,12 +682,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func post(_ event: ChargingEvent, state: VehicleState, title: String,
                       body: String, urgency: Urgency = .info, category: String? = nil) {
         postNotice(
-            identifier: "hisingen.\(state.vin).\(event.identifierComponent)",
-            thread: "hisingen.charging.\(state.vin)",
+            identifier: "hisingen.\(state.identity.vin).\(event.identifierComponent)",
+            thread: "hisingen.charging.\(state.identity.vin)",
             title: title,
             body: body,
             subtitle: displayName(for: state),
-            vin: state.vin,
+            vin: state.identity.vin,
             urgency: urgency,
             category: category
         )
@@ -722,19 +722,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func notifyChargingAnomalyIfNeeded(for state: VehicleState) {
         let ledger = stateStore.database.charging
         guard preferences.features.contains(.notifications),
-              let last = ledger.recentChargingSessions(for: state.vin, limit: 1).first,
+              let last = ledger.recentChargingSessions(for: state.identity.vin, limit: 1).first,
               last.locationName?.isEmpty == false,
               let ended = last.endedAt,
               Date().timeIntervalSince(ended) < 600 else { return }
         let key = "anomaly_\(last.id)"
         guard !defaults.bool(forKey: key) else { return }
         let priors = ledger.priorSessionPeaks(
-            vin: state.vin, locationName: last.locationName ?? "",
+            vin: state.identity.vin, locationName: last.locationName ?? "",
             excludingSessionID: last.id)
         guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,
                                                  priorPeaksKwAtSameLocation: priors) else { return }
         defaults.set(true, forKey: key)
-        notifyChargingAnomaly(locationName: last.locationName ?? "", vin: state.vin)
+        notifyChargingAnomaly(locationName: last.locationName ?? "", vin: state.identity.vin)
     }
 
     /// Quiet-hours window check: start == end means "disabled", and a window that wraps

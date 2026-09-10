@@ -47,8 +47,7 @@ struct RequestConstructionTests {
         // `invalid_scope` stays distinguishable so the coordinator can cascade.
         let callback = try #require(URL(string: "https://example.invalid/callback?error=invalid_scope"))
         do {
-            try await api.completeSignIn(callbackURL: callback, preferredVIN: nil,
-                                         features: preferences.features)
+            try await api.completeSignIn(callbackURL: callback, preferredVIN: nil)
             Issue.record("invalid_scope must reach the caller as permissionDenied(\"invalid_scope\")")
         } catch VolvoError.permissionDenied(let operation) {
             #expect(operation == "invalid_scope")

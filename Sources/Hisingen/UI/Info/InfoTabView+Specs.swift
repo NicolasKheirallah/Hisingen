@@ -7,17 +7,17 @@ extension InfoTabView {
     var exteriorStylingCard: some View {
         var rows: [KVRow] = []
 
-        if let color = state.externalColour, !color.isEmpty {
+        if let color = state.identity.externalColour, !color.isEmpty {
             rows.append(KVRow(L10n.text("Exterior Paint"), color, symbol: "paintpalette.fill"))
         }
-        if let wheels = state.wheels, !wheels.isEmpty {
+        if let wheels = state.identity.wheels, !wheels.isEmpty {
             rows.append(KVRow(L10n.text("Wheels & Rims"), wheels, symbol: "circle.circle.fill"))
         }
         if let doorCount = state.exteriorStatus?.physicalDoorCount, doorCount > 0 {
             rows.append(KVRow(L10n.text("Door Sensors Reported"), L10n.format("%d Doors", doorCount), symbol: "car.side.fill", info: L10n.text("Count of physical door records returned by the vehicle API; this is not a decoded body-style specification.")))
         }
 
-        guard !rows.isEmpty || !state.packages.isEmpty else { return AnyView(EmptyView()) }
+        guard !rows.isEmpty || !state.identity.packages.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -26,7 +26,7 @@ extension InfoTabView {
                 VStack(spacing: 6) {
                     ForEach(rows.indices, id: \.self) { rows[$0] }
 
-                    if !state.packages.isEmpty {
+                    if !state.identity.packages.isEmpty {
                         HStack(alignment: .top) {
                             HStack(spacing: 6) {
                                 Image(systemName: "shippingbox.fill")
@@ -39,7 +39,7 @@ extension InfoTabView {
                             }
                             Spacer()
                             HStack(spacing: 4) {
-                                ForEach(state.packages, id: \.self) { pkg in
+                                ForEach(state.identity.packages, id: \.self) { pkg in
                                     Text(pkg)
                                         .font(.system(size: 9.5, weight: .semibold))
                                         .padding(.horizontal, 6)
@@ -61,7 +61,7 @@ extension InfoTabView {
     var interiorCabinCard: some View {
         var rows: [KVRow] = []
 
-        if let upholstery = state.upholstery, !upholstery.isEmpty {
+        if let upholstery = state.identity.upholstery, !upholstery.isEmpty {
             rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left.fill"))
         }
         if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
@@ -116,14 +116,14 @@ extension InfoTabView {
         var rows: [KVRow] = []
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
-        let specification = preferences.vehicleSpecificationOverride(for: state.vin)
+        let specification = preferences.vehicleSpecificationOverride(for: state.identity.vin)
         let configuredCapacity = state.powertrain.hasElectricRange
             ? (specification?.usableBatteryCapacityKwh
-                ?? state.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
+                ?? state.energy.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
             : nil
         if let capacity = configuredCapacity, capacity > 0 {
             let isUserReference = specification?.usableBatteryCapacityKwh != nil
-            let isProviderReported = !isUserReference && state.reportedBatteryCapacityKwh != nil
+            let isProviderReported = !isUserReference && state.energy.reportedBatteryCapacityKwh != nil
             rows.append(KVRow(
                 isUserReference ? L10n.text("User-Entered Usable Capacity")
                     : (isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity")),
@@ -154,16 +154,16 @@ extension InfoTabView {
                 info: L10n.text("Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating.")
             ))
         }
-        if let gearbox = state.gearbox, !gearbox.isEmpty {
+        if let gearbox = state.identity.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
         }
-        if let fuel = state.fuelType, !fuel.isEmpty {
+        if let fuel = state.fuelSystem.type, !fuel.isEmpty {
             rows.append(KVRow(L10n.text("Fuel Type"), fuel, symbol: "fuelpump.fill"))
         }
-        if let liters = state.fuelAmountLiters, liters > 0 {
+        if let liters = state.fuelSystem.amountLiters, liters > 0 {
             rows.append(KVRow(L10n.text("Fuel Level"), Format.fuelVolume(liters: liters, unit: preferences.fuelVolumeUnit), symbol: "drop.fill", info: L10n.text("Vehicle Sensor. Liquid fuel volume remaining in the tank.")))
         }
-        if let avgFuel = state.averageFuelConsumptionLPer100Km, avgFuel > 0 {
+        if let avgFuel = state.fuelSystem.averageConsumptionLPer100Km, avgFuel > 0 {
             rows.append(KVRow(L10n.text("Avg Consumption"), Format.fuelEconomy(lPer100Km: avgFuel, unit: preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average fuel consumption recorded by the vehicle trip computer.")))
         }
 
@@ -180,20 +180,20 @@ extension InfoTabView {
     var serviceAndHealthCard: some View {
         var rows: [KVRow] = []
 
-        if let days = state.daysToService {
+        if let days = state.maintenance.service.daysToService {
             var val = L10n.format("in %d days", days)
-            if let km = state.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: preferences.distanceUnit))" }
+            if let km = state.maintenance.service.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: preferences.distanceUnit))" }
             if let trigger = state.formattedServiceTrigger { val += " (\(trigger))" }
             rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
         }
-        if let hours = state.engineHoursToService, hours > 0 {
+        if let hours = state.maintenance.service.engineHoursToService, hours > 0 {
             rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
         }
-        if let workshopName = state.preferredWorkshopName, !workshopName.isEmpty {
+        if let workshopName = state.maintenance.service.preferredWorkshopName, !workshopName.isEmpty {
             var val = workshopName
-            if let id = state.preferredWorkshopId, !id.isEmpty { val += " (\(id))" }
+            if let id = state.maintenance.service.preferredWorkshopID, !id.isEmpty { val += " (\(id))" }
             rows.append(KVRow(L10n.text("Service Center"), val, symbol: "building.2.fill"))
-        } else if let id = state.preferredWorkshopId, !id.isEmpty {
+        } else if let id = state.maintenance.service.preferredWorkshopID, !id.isEmpty {
             rows.append(KVRow(L10n.text("Service Center ID"), id, symbol: "building.2.fill"))
         }
 
@@ -228,7 +228,7 @@ extension InfoTabView {
                         Spacer()
                         Button {
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(state.vin, forType: .string)
+                            NSPasteboard.general.setString(state.identity.vin, forType: .string)
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
                                 vinCopied = true
                             }
@@ -238,7 +238,7 @@ extension InfoTabView {
                             }
                         } label: {
                             HStack(spacing: 4) {
-                                Text(state.vin)
+                                Text(state.identity.vin)
                                     .font(.system(size: 10.5, design: .monospaced))
                                     .foregroundStyle(.primary)
                                     .privacySensitive()
@@ -255,20 +255,20 @@ extension InfoTabView {
                     }
                     .padding(.vertical, 2)
 
-                    if let internalID = state.internalVehicleIdentifier, !internalID.isEmpty {
+                    if let internalID = state.identity.internalVehicleIdentifier, !internalID.isEmpty {
                         KVRow(L10n.text("Vehicle ID"), internalID, symbol: "barcode")
                     }
-                    if let week = state.formattedBuildWeek ?? state.structureWeek, !week.isEmpty {
+                    if let week = state.formattedBuildWeek ?? state.identity.structureWeek, !week.isEmpty {
                         KVRow(L10n.text("Factory Build Week"), week, symbol: "calendar")
                     }
-                    if let pno = state.pno34, !pno.isEmpty {
+                    if let pno = state.identity.pno34, !pno.isEmpty {
                         KVRow(L10n.text("Factory Spec (PNO34)"), pno, symbol: "tag.fill")
                     }
-                    if let market = state.otaCapabilities?.identity?.market ?? state.accountMarket, !market.isEmpty {
+                    if let market = state.otaCapabilities?.identity?.market ?? state.identity.accountMarket, !market.isEmpty {
                         KVRow(L10n.text("Market Delivery"), market, symbol: "globe")
                     }
-                    if state.availability == .available {
-                        KVRow(L10n.text("Cloud Connectivity"), state.availability.displayName, symbol: "antenna.radiowaves.left.and.right")
+                    if state.identity.availability == .available {
+                        KVRow(L10n.text("Cloud Connectivity"), state.identity.availability.displayName, symbol: "antenna.radiowaves.left.and.right")
                     }
                     if let sw = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version, !sw.isEmpty {
                         KVRow(L10n.text("Backend-Reported Software"), sw, symbol: "arrow.triangle.2.circlepath.doc.on.clipboard", info: L10n.text("Unverified value from an undocumented Polestar backend field; compare it with the version shown in the vehicle."))
@@ -280,7 +280,7 @@ extension InfoTabView {
                     Button {
                         let panel = NSSavePanel()
                         panel.allowedContentTypes = [.commaSeparatedText]
-                        panel.nameFieldStringValue = "Hisingen-Factory-Passport-\(state.vin.suffix(6)).csv"
+                        panel.nameFieldStringValue = "Hisingen-Factory-Passport-\(state.identity.vin.suffix(6)).csv"
                         guard panel.runModal() == .OK, let url = panel.url else { return }
                         do {
                             try Self.factoryPassportCSV(state: state, preferences: preferences)
@@ -311,29 +311,29 @@ extension InfoTabView {
             return value.contains(",") || value.contains("\"") || value.contains("\n")
                 ? "\"\(escaped)\"" : value
         }
-        let model = [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " ")
-        let paint = state.externalColour
-        let interior = state.upholstery
-        let wheels = state.wheels
-        let packages = state.packages.joined(separator: "; ")
-        let nickname = preferences.vehicleNickname(for: state.vin)
-        let market = state.otaCapabilities?.identity?.market ?? state.accountMarket
+        let model = [state.identity.modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " ")
+        let paint = state.identity.externalColour
+        let interior = state.identity.upholstery
+        let wheels = state.identity.wheels
+        let packages = state.identity.packages.joined(separator: "; ")
+        let nickname = preferences.vehicleNickname(for: state.identity.vin)
+        let market = state.otaCapabilities?.identity?.market ?? state.identity.accountMarket
         var rows: [[String]] = [
             ["Field", "Value"],
-            ["VIN", state.vin],
+            ["VIN", state.identity.vin],
             ["Nickname", nickname],
             ["Model", model],
-            ["Registration No", state.registrationNo ?? ""],
-            ["Internal Vehicle ID", state.internalVehicleIdentifier ?? ""],
-            ["Factory Spec (PNO34)", state.pno34 ?? ""],
-            ["Factory Build Week", state.formattedBuildWeek ?? state.structureWeek ?? ""],
+            ["Registration No", state.identity.registrationNo ?? ""],
+            ["Internal Vehicle ID", state.identity.internalVehicleIdentifier ?? ""],
+            ["Factory Spec (PNO34)", state.identity.pno34 ?? ""],
+            ["Factory Build Week", state.formattedBuildWeek ?? state.identity.structureWeek ?? ""],
             ["Market", market ?? ""],
             ["Exterior Paint", paint ?? ""],
             ["Upholstery", interior ?? ""],
             ["Wheels", wheels ?? ""],
             ["Factory Packages", packages],
         ]
-        rows.append(contentsOf: state.packages.enumerated().map { index, name in
+        rows.append(contentsOf: state.identity.packages.enumerated().map { index, name in
             ["Package \(index + 1)", name]
         })
         if let equipment = state.otaCapabilities?.equipment {
@@ -349,9 +349,9 @@ extension InfoTabView {
     // MARK: - Warranty & protection
 
     var warrantyAndProtectionCard: AnyView {
-        let warranty = state.warrantyInfo
-        let userInServiceDate = preferences.warrantyInServiceDate(for: state.vin)
-        let isVolvo = (state.modelName?.lowercased().contains("volvo") == true) || (state.vin.uppercased().hasPrefix("YV"))
+        let warranty = state.maintenance.warranty
+        let userInServiceDate = preferences.warrantyInServiceDate(for: state.identity.vin)
+        let isVolvo = (state.identity.modelName?.lowercased().contains("volvo") == true) || (state.identity.vin.uppercased().hasPrefix("YV"))
         let planTitle = warranty?.planName
         let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
         let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
@@ -416,7 +416,7 @@ extension InfoTabView {
 
                     if state.powertrain.hasElectricRange,
                        let maxKm = warranty?.batteryWarrantyKm,
-                       let odo = state.odometerKm {
+                       let odo = state.maintenance.odometerKm {
                         let remainingKm = max(0, maxKm - odo)
                         let isMileageExpired = odo >= maxKm
                         KVRow(

@@ -17,32 +17,32 @@ struct VehicleActivityTests {
     @Test func readingFreshnessDoesNotBorrowAnotherSensorsTimestamp() throws {
         let now = Date()
         var current = state(at: now)
-        current.readingDates = [.battery: now, .locks: now.addingTimeInterval(-3600)]
+        current.freshness.readingDates = [.battery: now, .locks: now.addingTimeInterval(-3600)]
         #expect(current.hasFreshReading(.battery, now: now))
         #expect(!current.hasFreshReading(.locks, now: now))
         #expect(!current.hasFreshReading(.health, now: now))
         let decoded = try JSONDecoder().decode(VehicleState.self, from: JSONEncoder().encode(current.cacheableCopy))
-        #expect(decoded.readingDates == current.readingDates)
-        current.isCachedSnapshot = true
+        #expect(decoded.freshness.readingDates == current.freshness.readingDates)
+        current.freshness.isCached = true
         #expect(!current.hasFreshReading(.battery, now: now))
     }
 
     @Test func departureAssessmentKeepsTargetAndFullEstimatesDistinct() {
         let now = Date()
         var current = state(at: now)
-        current.chargingState = .charging
-        current.readingDates = [.battery: now, .charging: now]
-        current.estimatedChargingTimeToTargetMinutes = 20
-        current.estimatedChargingTimeToFullMinutes = 90
+        current.energy.chargingState = .charging
+        current.freshness.readingDates = [.battery: now, .charging: now]
+        current.energy.estimatedTimeToTargetMinutes = 20
+        current.energy.estimatedTimeToFullMinutes = 90
         #expect(current.remainingChargingMinutes == 20)
         #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
             == L10n.text("The current vehicle estimate finishes before departure."))
-        current.estimatedChargingTimeToTargetMinutes = nil
+        current.energy.estimatedTimeToTargetMinutes = nil
         #expect(current.remainingChargingMinutes == 90)
         #expect(current.chargingEstimateDestination == L10n.text("Full charge"))
         #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
             == L10n.text("The current vehicle estimate finishes after departure."))
-        current.readingDates[.charging] = now.addingTimeInterval(-3600)
+        current.freshness.readingDates[.charging] = now.addingTimeInterval(-3600)
         #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
             == L10n.text("No current charging estimate is available for this departure."))
     }
@@ -62,21 +62,21 @@ struct VehicleActivityTests {
     @Test func readinessDoesNotTreatEmptyHealthCoverageAsHealthy() {
         let now = Date()
         var current = state(at: now)
-        current.readingDates[.health] = now
-        current.healthDetails = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [])
+        current.freshness.readingDates[.health] = now
+        current.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [])
         #expect(VehicleReadiness.checks(current, lowBatteryThreshold: 20, now: now)
             .first { $0.id == "health" }?.status == .unknown)
-        current.healthDetails = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [.washerFluid])
+        current.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [.washerFluid])
         #expect(VehicleReadiness.checks(current, lowBatteryThreshold: 20, now: now)
             .first { $0.id == "health" }?.status == .reported)
     }
 
     @Test func pendingReceiptDoesNotRequireAnOptimisticSensorLock() {
         var current = state(at: Date())
-        current.pendingCommand = PendingCommandSummary(commandIdentifier: "lock", issuedAt: Date())
-        #expect(current.optimisticCommandLockUntil == nil)
+        current.commandState.pending = PendingCommandSummary(commandIdentifier: "lock", issuedAt: Date())
+        #expect(current.commandState.optimisticLockUntil == nil)
         #expect(current.isAwaitingVehicleConfirmation)
-        current.pendingCommand?.issuedAt = Date().addingTimeInterval(-121)
+        current.commandState.pending?.issuedAt = Date().addingTimeInterval(-121)
         #expect(!current.isAwaitingVehicleConfirmation)
     }
 
@@ -92,7 +92,7 @@ struct VehicleActivityTests {
         current.exteriorStatus?.isLocked = false
         #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
         current.exteriorStatus?.isLocked = true
-        current.isCachedSnapshot = true
+        current.freshness.isCached = true
         #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
         let unobservable = PendingCommandSummary(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
         #expect(unobservable.updatingConfirmation(from: current).confirmedAt == nil)
@@ -103,8 +103,8 @@ struct VehicleActivityTests {
         func sample(_ minutes: Double, battery: Double = 60, odometer: Int = 1000) -> VehicleState {
             let date = start.addingTimeInterval(minutes * 60)
             var current = state(at: date, odometer: odometer)
-            current.batteryPercentage = battery
-            current.readingDates = [.battery: date, .charging: date, .odometer: date]
+            current.energy.batteryPercentage = battery
+            current.freshness.readingDates = [.battery: date, .charging: date, .odometer: date]
             return current
         }
         var detector = ParkedChargeLossDetector()
@@ -126,7 +126,7 @@ struct VehicleActivityTests {
         #expect(detector.ingest(sample(45, battery: 58, odometer: 1001)) == nil)
         #expect(detector.ingest(sample(60, battery: 57, odometer: 1001)) == nil)
         var stale = sample(75, battery: 56, odometer: 1001)
-        stale.readingDates[.odometer] = start
+        stale.freshness.readingDates[.odometer] = start
         #expect(detector.ingest(stale) == nil)
         #expect(detector.ingest(sample(90, battery: 55, odometer: 1001)) == nil)
     }
@@ -134,16 +134,16 @@ struct VehicleActivityTests {
     @Test func fleetTotalsExcludeStaleAndUnknownReadings() {
         let now = Date()
         var fresh = state(at: now)
-        fresh.readingDates = [.range: now, .odometer: now, .charging: now]
+        fresh.freshness.readingDates = [.range: now, .odometer: now, .charging: now]
         var stale = state(at: now)
-        stale.chargingState = .charging
-        stale.readingDates = [.range: now.addingTimeInterval(-3600), .charging: now.addingTimeInterval(-3600)]
+        stale.energy.chargingState = .charging
+        stale.freshness.readingDates = [.range: now.addingTimeInterval(-3600), .charging: now.addingTimeInterval(-3600)]
         let summary = VehicleFleetSummary(states: [fresh, stale], now: now)
         #expect(summary.rangeKm == fresh.primaryRangeKm)
-        #expect(summary.odometerKm == fresh.odometerKm)
+        #expect(summary.odometerKm == fresh.maintenance.odometerKm)
         #expect(summary.chargingCount == 0)
         #expect(summary.chargingCoverage == 1)
-        fresh.chargingState = .unknown("NEW_STATE")
+        fresh.energy.chargingState = .unknown("NEW_STATE")
         #expect(VehicleFleetSummary(states: [fresh], now: now).chargingCoverage == 0)
         #expect(VehicleFleetSummary(states: [], now: now).rangeKm == nil)
     }
@@ -165,17 +165,17 @@ struct VehicleActivityTests {
     @Test func warningTransitionsRequireKnownFreshOrderedObservations() {
         let now = Date()
         var previous = state(at: now.addingTimeInterval(-60))
-        previous.readingDates[.health] = previous.fetchedAt
-        previous.healthDetails = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [.washerFluid])
+        previous.freshness.readingDates[.health] = previous.freshness.fetchedAt
+        previous.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [.washerFluid])
         var current = state(at: now)
-        current.readingDates[.health] = now
-        current.healthDetails = VehicleHealthDetails(tyres: [], warnings: [.washerFluid], reportedWarnings: [.washerFluid])
+        current.freshness.readingDates[.health] = now
+        current.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [.washerFluid], reportedWarnings: [.washerFluid])
         let events = VehicleActivity.changes(from: previous, to: current)
         #expect(events.count == 1)
         #expect(events.first?.after == "Active")
-        current.healthDetails = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [])
+        current.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [], reportedWarnings: [])
         #expect(VehicleActivity.changes(from: previous, to: current).isEmpty)
-        current.readingDates[.health] = now.addingTimeInterval(-3600)
+        current.freshness.readingDates[.health] = now.addingTimeInterval(-3600)
         #expect(VehicleActivity.changes(from: previous, to: current).isEmpty)
     }
 
@@ -183,18 +183,18 @@ struct VehicleActivityTests {
         let now = Date()
         var previous = state(at: now.addingTimeInterval(-60))
         previous.softwareInfo = VehicleSoftwareInfo(version: nil, state: .unknown, installedVersion: "4.2")
-        previous.readingDates[.charging] = previous.fetchedAt
+        previous.freshness.readingDates[.charging] = previous.freshness.fetchedAt
         var current = state(at: now)
         current.softwareInfo = VehicleSoftwareInfo(version: nil, state: .unknown, installedVersion: "5.1")
-        current.chargingState = .charging
-        current.readingDates[.charging] = now
+        current.energy.chargingState = .charging
+        current.freshness.readingDates[.charging] = now
         let events = VehicleActivity.changes(from: previous, to: current)
         #expect(events.count == 2)
         #expect(VehicleActivity.changes(from: current, to: current).isEmpty)
         let database = VehicleDatabase.inMemory()
         database.recordActivities(events)
         database.recordActivities(events)
-        #expect(database.history.recentActivities(for: current.vin).count == 2)
+        #expect(database.history.recentActivities(for: current.identity.vin).count == 2)
         #expect(database.history.recentActivities(for: "OTHER-VIN").isEmpty)
         let version = try database.db.query(sql: "PRAGMA user_version;") { statement in
             statement.step() ? statement.columnInt64(at: 0) : nil

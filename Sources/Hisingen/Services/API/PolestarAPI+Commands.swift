@@ -54,7 +54,7 @@ extension PolestarAPI {
         for key in capabilityCache.keys.filter({ $0.hasPrefix("\(vin)|") && !$0.hasSuffix("|my-cars") }) {
             capabilityCache[key] = nil
         }
-        capabilityBackoff[vin] = nil
+        clearTransientCapabilityBackoffAfterCommand(for: vin)
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }

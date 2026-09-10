@@ -106,28 +106,28 @@ struct ChargingTransitionDetector {
     func evaluate(previous: ChargingBaseline?, current: VehicleState,
                   lowBatteryThreshold: Int, now: Date = Date()) -> ChargingDetectionResult {
         var baseline = ChargingBaseline(
-            vin: current.vin,
-            state: current.chargingState,
-            connection: current.chargerConnection,
-            batteryPercentage: current.batteryPercentage,
-            targetPercentage: current.chargeTargetPercentage,
-            vehicleReportedAt: current.vehicleReportedAt,
-            sampledAt: current.vehicleReportedAt ?? current.fetchedAt,
+            vin: current.identity.vin,
+            state: current.energy.chargingState,
+            connection: current.energy.connection,
+            batteryPercentage: current.energy.batteryPercentage,
+            targetPercentage: current.energy.targetPercentage,
+            vehicleReportedAt: current.freshness.vehicleReportedAt,
+            sampledAt: current.freshness.vehicleReportedAt ?? current.freshness.fetchedAt,
             chargingSessionActive: current.isCharging,
             interruptionSamples: 0,
             lowBatteryNotified: false
         )
-        guard let previous, previous.vin == current.vin else {
+        guard let previous, previous.vin == current.identity.vin else {
             return ChargingDetectionResult(events: [], baseline: baseline)
         }
 
         let isNewSample: Bool
-        if let oldDate = previous.vehicleReportedAt, let newDate = current.vehicleReportedAt {
+        if let oldDate = previous.vehicleReportedAt, let newDate = current.freshness.vehicleReportedAt {
             isNewSample = newDate > oldDate
         } else {
-            isNewSample = (current.vehicleReportedAt ?? current.fetchedAt) > (previous.sampledAt ?? .distantPast)
+            isNewSample = (current.freshness.vehicleReportedAt ?? current.freshness.fetchedAt) > (previous.sampledAt ?? .distantPast)
         }
-        let isRecent = current.vehicleReportedAt.map { now.timeIntervalSince($0) <= maximumEventAge } ?? true
+        let isRecent = current.freshness.vehicleReportedAt.map { now.timeIntervalSince($0) <= maximumEventAge } ?? true
         guard isNewSample else {
             return ChargingDetectionResult(events: [], baseline: previous)
         }
@@ -137,7 +137,7 @@ struct ChargingTransitionDetector {
         baseline.recentEventFingerprints = previous.recentEventFingerprints
         var events: [ChargingEvent] = []
 
-        let explicitFault = current.chargingState == .fault || current.chargerConnection == .fault
+        let explicitFault = current.energy.chargingState == .fault || current.energy.connection == .fault
         if explicitFault && previous.state != .fault && previous.connection != .fault {
             events.append(.fault)
             baseline.chargingSessionActive = false
@@ -161,9 +161,9 @@ struct ChargingTransitionDetector {
             baseline.interruptionSamples = 0
         }
 
-        if current.isCharging || current.batteryPercentage.map({ $0 > Double(lowBatteryThreshold + 5) }) == true {
+        if current.isCharging || current.energy.batteryPercentage.map({ $0 > Double(lowBatteryThreshold + 5) }) == true {
             baseline.lowBatteryNotified = false
-        } else if let level = current.batteryPercentage,
+        } else if let level = current.energy.batteryPercentage,
                   level <= Double(lowBatteryThreshold), !previous.lowBatteryNotified {
             events.append(.lowBattery(threshold: lowBatteryThreshold))
             baseline.lowBatteryNotified = true
@@ -186,16 +186,16 @@ struct ChargingTransitionDetector {
 
     private func isInterruptionCandidate(_ state: VehicleState) -> Bool {
         guard !state.isComplete else { return false }
-        switch state.chargingState {
+        switch state.energy.chargingState {
         case .paused, .scheduled, .smartCharging: return false
         default: break
         }
-        return state.chargerConnection == .disconnected || state.chargingState == .idle
+        return state.energy.connection == .disconnected || state.energy.chargingState == .idle
     }
 
     private static func fingerprint(event: ChargingEvent, state: VehicleState) -> String {
-        let timestamp = Int((state.vehicleReportedAt ?? state.fetchedAt).timeIntervalSince1970)
-        return "\(state.vin)|\(event.identifierComponent)|\(timestamp)"
+        let timestamp = Int((state.freshness.vehicleReportedAt ?? state.freshness.fetchedAt).timeIntervalSince1970)
+        return "\(state.identity.vin)|\(event.identifierComponent)|\(timestamp)"
     }
 }
 

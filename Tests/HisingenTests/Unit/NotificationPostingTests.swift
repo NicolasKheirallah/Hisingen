@@ -93,7 +93,7 @@ struct NotificationTestHarness {
             dataWarnings: []
         )
         let sensorDate = min(reportedAt, Date())
-        state.readingDates = [.battery: sensorDate, .charging: sensorDate, .health: sensorDate]
+        state.freshness.readingDates = [.battery: sensorDate, .charging: sensorDate, .health: sensorDate]
         return state
     }
 }
@@ -109,8 +109,8 @@ struct NotificationPostingTests {
         harness.dispatcher.added.removeAll()
         var current = harness.makeState(chargingState: .charging, chargerConnection: .connected,
                                         serviceWarning: true)
-        current.readingDates[.charging] = Date().addingTimeInterval(-3600)
-        current.readingDates[.health] = Date().addingTimeInterval(-3600)
+        current.freshness.readingDates[.charging] = Date().addingTimeInterval(-3600)
+        current.freshness.readingDates[.health] = Date().addingTimeInterval(-3600)
         notifier.vehicleStateDidUpdate(current)
         #expect(harness.dispatcher.added.isEmpty)
     }
@@ -330,8 +330,8 @@ struct ChargingBaselineFingerprintTests {
         // Fault AND low-battery land in the same sample. (Started + low battery can
         // never co-occur: actively charging resets the low-battery latch first.)
         var faulty = state(vin: vin, charging: false, battery: 15, reportedAt: t0.addingTimeInterval(60))
-        faulty.chargingState = .fault
-        faulty.chargerConnection = .fault
+        faulty.energy.chargingState = .fault
+        faulty.energy.connection = .fault
         let result = detector.evaluate(
             previous: previous.baseline,
             current: faulty,

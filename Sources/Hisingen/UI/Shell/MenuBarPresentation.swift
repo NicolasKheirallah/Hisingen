@@ -118,7 +118,7 @@ extension MenuBarIconState {
         let activity = state.climateStatus?.activity
         let climateActive = activity == .active || activity == .heating
             || activity == .cooling || activity == .ventilating || activity == .starting
-        let fault = state.chargingState == .fault || state.chargerConnection == .fault
+        let fault = state.energy.chargingState == .fault || state.energy.connection == .fault
         return MenuBarIconInputs(
             isCharging: state.isCharging,
             chargingRecentlyCompleted: chargingRecentlyCompleted,

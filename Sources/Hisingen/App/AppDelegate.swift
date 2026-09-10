@@ -337,7 +337,7 @@ extension AppDelegate: CommandExecutionContext {
     }
     func presentResult(title: String, message: String, success: Bool) {
         let subtitle = vehicleSession.latest.map { state -> String in
-            let nick = preferences.vehicleNickname(for: state.vin)
+            let nick = preferences.vehicleNickname(for: state.identity.vin)
             return nick.isEmpty ? state.model.brand.displayName : nick
         }
         // Inline banner in the Controls tab first — it is visible regardless of the system
@@ -399,7 +399,7 @@ extension AppDelegate: GarageScanContext {
 // MARK: - URLCommandRouterContext
 
 extension AppDelegate: URLCommandRouterContext {
-    var selectedVehicleVIN: String? { vehicleSession.latest?.vin }
+    var selectedVehicleVIN: String? { vehicleSession.latest?.identity.vin }
     var activeBrand: VehicleBrand { preferences.activeBrand }
     var defaultRemoteClimateTemperatureCelsius: Double { preferences.remoteClimateTemperature }
 

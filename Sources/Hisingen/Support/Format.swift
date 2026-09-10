@@ -54,7 +54,7 @@ enum Format {
         }
         if data.powertrain.isHybrid {
             if includeConnection, data.isCharging { return "bolt.car.fill" }
-            if data.isEngineRunning == true { return "engine.combustion.fill" }
+            if data.fuelSystem.isEngineRunning == true { return "engine.combustion.fill" }
             return "bolt.and.leaf.fill"
         }
         if includeConnection, data.isCharging { return "bolt.car.fill" }
@@ -279,12 +279,12 @@ enum Format {
         guard let data else { return "--" }
         let primaryPct: String? = {
             if data.powertrain.isCombustionOnly {
-                return data.fuelLevelPercent.map { String(format: "%.0f%%", $0) }
+                return data.fuelSystem.levelPercent.map { String(format: "%.0f%%", $0) }
             }
-            return data.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? data.fuelLevelPercent.map { String(format: "%.0f%%", $0) }
+            return data.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? data.fuelSystem.levelPercent.map { String(format: "%.0f%%", $0) }
         }()
         let primaryRange: String? = {
-            if let km = data.totalCombinedRangeKm ?? data.rangeKm ?? data.fuelRangeKm {
+            if let km = data.totalCombinedRangeKm ?? data.energy.rangeKm ?? data.fuelSystem.rangeKm {
                 return "\(unit.convert(km: km))\(unit.suffix)"
             }
             return nil
@@ -305,11 +305,11 @@ enum Format {
                 // Prefer time-to-TARGET when a sub-100 % target is set; fall back to the
                 // backend's time-to-full. Renders as "⚡72→80 · 25m" so the menu bar answers
                 // "when do I unplug" rather than "when is it 100 %".
-                let minutes = data.batteryDiagnostics?.timeToTargetMinutes
-                    ?? data.estimatedChargingTimeToFullMinutes
+                let minutes = data.energy.diagnostics?.timeToTargetMinutes
+                    ?? data.energy.estimatedTimeToFullMinutes
                 if let minutes, minutes > 0 {
-                    let arrow = (data.chargeTargetPercentage.map { $0 < 100 } ?? false)
-                        ? "→\(data.chargeTargetPercentage!)" : ""
+                    let arrow = (data.energy.targetPercentage.map { $0 < 100 } ?? false)
+                        ? "→\(data.energy.targetPercentage!)" : ""
                     let head = [primaryPct ?? "", arrow].filter { !$0.isEmpty }.joined(separator: "")
                     return "\(head) · \(Format.shortDuration(minutes: minutes))"
                 }
@@ -318,14 +318,14 @@ enum Format {
 
         case .compactCharging:
             if includeChargingContext, data.isCharging,
-               let minutes = data.estimatedChargingTimeToFullMinutes, minutes > 0 {
+               let minutes = data.energy.estimatedTimeToFullMinutes, minutes > 0 {
                 return "\(primaryPct ?? "--") (\(Format.shortDuration(minutes: minutes)))"
             }
             return primaryPct ?? "--"
 
         case .batteryAndPower:
             if includeChargingContext, data.isCharging,
-               let power = data.chargingPowerWatts, power > 0 {
+               let power = data.energy.powerWatts, power > 0 {
                 return [primaryPct, Format.kilowatts(watts: power)].compactMap { $0 }.joined(separator: " · ")
             }
             return [primaryPct, primaryRange].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "--"

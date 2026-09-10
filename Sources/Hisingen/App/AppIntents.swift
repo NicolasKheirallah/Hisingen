@@ -66,7 +66,7 @@ enum AutomationHandoff {
             if nick.localizedCaseInsensitiveContains(input) || vin.localizedCaseInsensitiveContains(input) {
                 return vin
             }
-            if let snap = store.snapshot(for: vin), snap.modelName?.localizedCaseInsensitiveContains(input) == true {
+            if let snap = store.snapshot(for: vin), snap.identity.modelName?.localizedCaseInsensitiveContains(input) == true {
                 return vin
             }
         }
@@ -101,16 +101,16 @@ struct GetVehicleBatteryIntent: AppIntent {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
         var parts: [String] = []
-        if let battery = state.batteryPercentage {
+        if let battery = state.energy.batteryPercentage {
             parts.append(String(format: "%.0f%% battery", battery))
-        } else if let fuel = state.fuelLevelPercent {
+        } else if let fuel = state.fuelSystem.levelPercent {
             parts.append(String(format: "%.0f%% fuel", fuel))
         }
         if let range = state.primaryRangeKm {
             parts.append(String(format: "%d %@ range", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
         }
         if state.isCharging {
-            if let power = state.chargingPowerWatts, power > 0 {
+            if let power = state.energy.powerWatts, power > 0 {
                 parts.append("charging at \(Format.kilowatts(watts: power))")
             } else {
                 parts.append("currently charging")
@@ -118,7 +118,7 @@ struct GetVehicleBatteryIntent: AppIntent {
         }
         let summary = parts.joined(separator: ", ")
         let nick = preferences.vehicleNickname(for: vin)
-        let model = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
+        let model = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
         let response = "\(model): \(summary)."
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
@@ -145,11 +145,11 @@ struct GetGarageStatusIntent: AppIntent {
         for vin in knownVINs {
             guard let state = store.snapshot(for: vin) else { continue }
             let nick = preferences.vehicleNickname(for: vin)
-            let name = nick.isEmpty ? (state.modelName ?? state.model.brand.displayName) : nick
+            let name = nick.isEmpty ? (state.identity.modelName ?? state.model.brand.displayName) : nick
             var parts: [String] = []
-            if let battery = state.batteryPercentage {
+            if let battery = state.energy.batteryPercentage {
                 parts.append(String(format: "%.0f%%", battery))
-            } else if let fuel = state.fuelLevelPercent {
+            } else if let fuel = state.fuelSystem.levelPercent {
                 parts.append(String(format: "%.0f%% fuel", fuel))
             }
             if let range = state.primaryRangeKm {
@@ -257,8 +257,8 @@ struct GetVehicleStatusIntent: AppIntent {
             details.append(exterior.itemsNeedingAttention.map(\.displayName).joined(separator: ", "))
         }
         details.append(state.stateSummary.message)
-        let nick = preferences.vehicleNickname(for: state.vin)
-        let name = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
+        let nick = preferences.vehicleNickname(for: state.identity.vin)
+        let name = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
         let response = "\(name): \(details.joined(separator: "; ")). Data \(Format.relativeAge(since: state.dataTimestamp))."
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
@@ -278,13 +278,13 @@ struct GetChargingStatusIntent: AppIntent {
         guard let (state, _) = AutomationHandoff.snapshot(for: vehicle) else {
             return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
         }
-        var parts = [state.chargingState.displayName]
-        if let power = state.chargingPowerWatts, power > 0 { parts.append(Format.kilowatts(watts: power)) }
-        if let target = state.chargeTargetPercentage { parts.append("target \(target)%") }
-        if let minutes = state.estimatedChargingTimeToFullMinutes, minutes > 0 {
+        var parts = [state.energy.chargingState.displayName]
+        if let power = state.energy.powerWatts, power > 0 { parts.append(Format.kilowatts(watts: power)) }
+        if let target = state.energy.targetPercentage { parts.append("target \(target)%") }
+        if let minutes = state.energy.estimatedTimeToFullMinutes, minutes > 0 {
             parts.append("\(Format.shortDuration(minutes: minutes)) remaining")
         }
-        let response = "\(state.modelName ?? "Vehicle"): \(parts.joined(separator: ", "))."
+        let response = "\(state.identity.modelName ?? "Vehicle"): \(parts.joined(separator: ", "))."
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
@@ -305,7 +305,7 @@ struct GetRecentTripsIntent: AppIntent {
         }
         // Push the 7-day bound into SQL instead of decoding up to 20k telemetry rows per run.
         let cutoff = Date().addingTimeInterval(-7 * 86_400)
-        let trips = VehicleDatabase.shared.history.derivedTrips(for: state.vin, limit: 1_000, since: cutoff)
+        let trips = VehicleDatabase.shared.history.derivedTrips(for: state.identity.vin, limit: 1_000, since: cutoff)
         let distance = trips.reduce(0) { $0 + $1.distanceKm }
         let minutes = Int(trips.reduce(0) { $0 + $1.duration } / 60)
         let response = "Last 7 days: \(trips.count) inferred trips, \(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit)), \(Format.shortDuration(minutes: minutes)) driving."
@@ -383,8 +383,8 @@ struct WhereIsMyCarIntent: AppIntent {
                            dialog: "No location has been reported for this vehicle yet.")
         }
         let when = state.location?.timestamp.map { Format.relativeAge(since: $0) } ?? "unknown time"
-        let nick = preferences.vehicleNickname(for: state.vin)
-        let name = nick.isEmpty ? (state.modelName ?? "Vehicle") : nick
+        let nick = preferences.vehicleNickname(for: state.identity.vin)
+        let name = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
         let response = "\(name): \(String(format: "%.5f, %.5f", lat, lon)), reported \(when)."
         let mapsURL = MapLinks.appleMapsPin(latitude: lat, longitude: lon)?.absoluteString ?? ""
         return .result(value: "\(response) Map: \(mapsURL)",

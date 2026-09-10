@@ -28,11 +28,11 @@ final class ChargingMiniPanelController {
         guard let panel else { return }
 
         let content = ChargingMiniPanelView(
-            batteryPercentage: state.batteryPercentage,
-            powerWatts: state.chargingPowerWatts,
-            minutesToTarget: state.batteryDiagnostics?.timeToTargetMinutes
-                ?? state.estimatedChargingTimeToFullMinutes,
-            targetPercent: state.chargeTargetPercentage
+            batteryPercentage: state.energy.batteryPercentage,
+            powerWatts: state.energy.powerWatts,
+            minutesToTarget: state.energy.diagnostics?.timeToTargetMinutes
+                ?? state.energy.estimatedTimeToFullMinutes,
+            targetPercent: state.energy.targetPercentage
         )
         if let host {
             host.rootView = content

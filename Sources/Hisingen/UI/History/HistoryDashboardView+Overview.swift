@@ -96,9 +96,9 @@ extension HistoryDashboardView {
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
         let estimatedCost = aggregateChargingCost()
         let serviceProjection = HistoryInsights.projectService(
-            currentOdometerKm: state.odometerKm.map(Double.init),
-            distanceToServiceKm: state.distanceToServiceKm,
-            daysToService: state.daysToService,
+            currentOdometerKm: state.maintenance.odometerKm.map(Double.init),
+            distanceToServiceKm: state.maintenance.service.distanceToServiceKm,
+            daysToService: state.maintenance.service.daysToService,
             odometerPoints: allTimeOdometerPoints
         )
         return Card {
@@ -183,14 +183,14 @@ extension HistoryDashboardView {
             Button(L10n.text("Trips")) {
                 let csv = exportScope == .selectedPeriod
                     ? HistoryExport.tripsCSV(trips)
-                    : database.history.exportTripsCSV(for: state.vin)
+                    : database.history.exportTripsCSV(for: state.identity.vin)
                 exportCSV(csv, name: "Trips")
             }
             .disabled(trips.isEmpty)
             Button(L10n.text("Charging Sessions")) {
                 let csv = exportScope == .selectedPeriod
                     ? HistoryExport.chargingSessionsCSV(chargingSessions)
-                    : database.charging.exportChargingSessionsCSV(for: state.vin)
+                    : database.charging.exportChargingSessionsCSV(for: state.identity.vin)
                 exportCSV(csv, name: "Charging-Sessions")
             }
             .disabled(chargingSessions.isEmpty)
@@ -200,29 +200,29 @@ extension HistoryDashboardView {
             }
             .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
             Button(L10n.text("Battery Health")) {
-                exportCSV(database.history.exportBatteryHealthCSV(for: state.vin), name: "Battery-Health")
+                exportCSV(database.history.exportBatteryHealthCSV(for: state.identity.vin), name: "Battery-Health")
             }
             .disabled(batteryHealthRecords.isEmpty)
             Button(L10n.text("Air Quality")) {
-                exportCSV(database.history.exportAirQualityCSV(for: state.vin), name: "Air-Quality")
+                exportCSV(database.history.exportAirQualityCSV(for: state.identity.vin), name: "Air-Quality")
             }
             .disabled(airQualityRecords.isEmpty)
             Button(L10n.text("Telemetry")) {
-                exportCSV(database.history.exportTelemetryCSV(for: state.vin), name: "Telemetry")
+                exportCSV(database.history.exportTelemetryCSV(for: state.identity.vin), name: "Telemetry")
             }
             .disabled(telemetryRecords.isEmpty)
             Button(L10n.text("Automation Log")) {
-                exportCSV(database.history.exportCommandAuditsCSV(for: state.vin), name: "Automation-Log")
+                exportCSV(database.history.exportCommandAuditsCSV(for: state.identity.vin), name: "Automation-Log")
             }
             .disabled(commands.isEmpty)
             if state.powertrain.hasCombustionEngine {
                 Button(L10n.text("Fuel Fill-Ups")) {
-                    exportCSV(database.history.exportFuelEntriesCSV(for: state.vin), name: "Fuel")
+                    exportCSV(database.history.exportFuelEntriesCSV(for: state.identity.vin), name: "Fuel")
                 }
                 .disabled(fuelEntries.isEmpty)
             }
             Button(L10n.text("Cabin Climate")) {
-                exportCSV(database.history.exportCabinClimateCSV(for: state.vin), name: "Cabin-Climate")
+                exportCSV(database.history.exportCabinClimateCSV(for: state.identity.vin), name: "Cabin-Climate")
             }
             .disabled(cabinClimateRecords.isEmpty)
             Divider()
@@ -231,7 +231,7 @@ extension HistoryDashboardView {
             }
             Button(L10n.text("Print / Save as PDF…")) {
                 HistoryExport.printText(historySummaryText,
-                                        jobTitle: "Hisingen History \(state.vin.suffix(6))")
+                                        jobTitle: "Hisingen History \(state.identity.vin.suffix(6))")
             }
         } label: {
             Label(L10n.text("Export"), systemImage: "square.and.arrow.up")
@@ -406,7 +406,7 @@ extension HistoryDashboardView {
     func exportCSV(_ contents: String, name: String) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.vin.suffix(6)).csv"
+        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try contents.write(to: url, atomically: true, encoding: .utf8)
@@ -418,7 +418,7 @@ extension HistoryDashboardView {
     var historySummaryText: String {
         var lines: [String] = []
         lines.append("Hisingen — History summary")
-        lines.append("Vehicle: …\(state.vin.suffix(6))")
+        lines.append("Vehicle: …\(state.identity.vin.suffix(6))")
         lines.append("Range: \(period.rawValue)")
         if let range = activeRange {
             lines.append("       \(Format.dateFormatter.string(from: range.lowerBound)) – \(Format.dateFormatter.string(from: range.upperBound))")

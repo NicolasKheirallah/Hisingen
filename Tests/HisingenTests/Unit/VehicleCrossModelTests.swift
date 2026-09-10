@@ -123,45 +123,45 @@ struct VehicleCrossModelTests {
 
 
         let merged = p2State.mergingLastKnown(from: p4State, features: FeatureSelection.default)
-        XCTAssertEqual(merged.vin, "YS2P2000000000002")
-        XCTAssertEqual(merged.modelName, "Polestar 2")
-        XCTAssertEqual(merged.batteryPercentage, 55.0)
+        XCTAssertEqual(merged.identity.vin, "YS2P2000000000002")
+        XCTAssertEqual(merged.identity.modelName, "Polestar 2")
+        XCTAssertEqual(merged.energy.batteryPercentage, 55.0)
         XCTAssertFalse(merged.capabilityProfile.hasSelectableClimateTemperature)
     }
 
     @Test
     func testVehicleBuildOptionsAndSpecs() {
         var state = makeVehicleState(vin: "YS2P2000000000001", modelName: "Polestar 2", battery: 78.0)
-        state.externalColour = "Thunder Grey"
-        state.upholstery = "WeaveTech Charcoal"
-        state.wheels = "20\" 4-V Spoke"
-        state.packages = ["Pilot", "Plus", "Performance"]
-        state.structureWeek = "202342"
-        state.gearbox = "1-speed automatic"
-        state.reportedBatteryCapacityKwh = 78.0
+        state.identity.externalColour = "Thunder Grey"
+        state.identity.upholstery = "WeaveTech Charcoal"
+        state.identity.wheels = "20\" 4-V Spoke"
+        state.identity.packages = ["Pilot", "Plus", "Performance"]
+        state.identity.structureWeek = "202342"
+        state.identity.gearbox = "1-speed automatic"
+        state.energy.reportedBatteryCapacityKwh = 78.0
 
-        XCTAssertEqual(state.externalColour, "Thunder Grey")
-        XCTAssertEqual(state.upholstery, "WeaveTech Charcoal")
-        XCTAssertEqual(state.wheels, "20\" 4-V Spoke")
-        XCTAssertEqual(state.packages.count, 3)
+        XCTAssertEqual(state.identity.externalColour, "Thunder Grey")
+        XCTAssertEqual(state.identity.upholstery, "WeaveTech Charcoal")
+        XCTAssertEqual(state.identity.wheels, "20\" 4-V Spoke")
+        XCTAssertEqual(state.identity.packages.count, 3)
         XCTAssertEqual(state.formattedBuildWeek, "2023 · W42")
-        XCTAssertEqual(state.reportedBatteryCapacityKwh, 78.0)
+        XCTAssertEqual(state.energy.reportedBatteryCapacityKwh, 78.0)
     }
 
     @Test
     func testVehicleInfoTabFieldCompleteness() {
         var state = makeVehicleState(vin: "YS2ED400000000002", modelName: "Polestar 2 Long Range Dual Motor", battery: 72.0)
-        state.externalColour = "Thunder"
-        state.upholstery = "Charcoal Embossed Textile"
-        state.wheels = "19\" 5-Double Spoke Black Diamond Cut"
-        state.packages = ["Pilot Pack", "Plus Pack"]
-        state.structureWeek = "202401"
-        state.pno34 = "P20412"
-        state.internalVehicleIdentifier = "V-12345"
-        state.accountMarket = "SE"
-        state.gearbox = "automatic"
-        state.steeringOrientation = "LEFT_HAND_DRIVE"
-        state.reportedBatteryCapacityKwh = 78.0
+        state.identity.externalColour = "Thunder"
+        state.identity.upholstery = "Charcoal Embossed Textile"
+        state.identity.wheels = "19\" 5-Double Spoke Black Diamond Cut"
+        state.identity.packages = ["Pilot Pack", "Plus Pack"]
+        state.identity.structureWeek = "202401"
+        state.identity.pno34 = "P20412"
+        state.identity.internalVehicleIdentifier = "V-12345"
+        state.identity.accountMarket = "SE"
+        state.identity.gearbox = "automatic"
+        state.identity.steeringOrientation = "LEFT_HAND_DRIVE"
+        state.energy.reportedBatteryCapacityKwh = 78.0
         state.airQuality = VehicleAirQuality(
             cleaningState: .on,
             airQualityIndex: 12,
@@ -188,12 +188,12 @@ struct VehicleCrossModelTests {
             steeringWheelHeatingLevel: 1
         )
 
-        XCTAssertEqual(state.externalColour, "Thunder")
-        XCTAssertEqual(state.upholstery, "Charcoal Embossed Textile")
-        XCTAssertEqual(state.wheels, "19\" 5-Double Spoke Black Diamond Cut")
-        XCTAssertEqual(state.packages.count, 2)
+        XCTAssertEqual(state.identity.externalColour, "Thunder")
+        XCTAssertEqual(state.identity.upholstery, "Charcoal Embossed Textile")
+        XCTAssertEqual(state.identity.wheels, "19\" 5-Double Spoke Black Diamond Cut")
+        XCTAssertEqual(state.identity.packages.count, 2)
         XCTAssertEqual(state.formattedBuildWeek, "2024 · W01")
-        XCTAssertEqual(state.pno34, "P20412")
+        XCTAssertEqual(state.identity.pno34, "P20412")
         XCTAssertEqual(state.formattedSteeringOrientation, "Left_Hand_Drive")
         XCTAssertEqual(state.airQuality?.airQualityIndex, 12)
         XCTAssertEqual(state.airQuality?.particulateMatter25, 3)
@@ -219,7 +219,7 @@ struct VehicleCrossModelTests {
             fluidWarnings: [], powertrain: .bev, reportedBatteryCapacityKwh: nil,
             imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
         )
-        my23State.structureWeek = "202240"
+        my23State.identity.structureWeek = "202240"
 
         XCTAssertEqual(my23State.factoryNominalBatteryCapacityKwh, 78.0)
         XCTAssertEqual(my23State.factoryUsableBatteryCapacityKwh, 75.0)
@@ -303,7 +303,7 @@ struct VehicleCrossModelTests {
             chargerConnection: .connected,
             powerWatts: 11000
         )
-        startState.chargingSamples = [
+        startState.energy.samples = [
             ChargingSample(timestamp: Date().addingTimeInterval(-3600), batteryPercentage: 20.0, powerWatts: 11000),
             ChargingSample(timestamp: Date().addingTimeInterval(-1800), batteryPercentage: 50.0, powerWatts: 11000)
         ]
@@ -328,10 +328,10 @@ struct VehicleCrossModelTests {
     @Test
     func testWorkshopIDAndPlugInReminder() {
         var state = makeVehicleState(vin: "YSMVSEDE6PL147228", modelName: "Polestar 2", battery: 35.0)
-        state.preferredWorkshopId = "SE-GOT-001"
-        state.preferredWorkshopName = "Bilia Sisjön"
-        XCTAssertEqual(state.preferredWorkshopId, "SE-GOT-001")
-        XCTAssertEqual(state.preferredWorkshopName, "Bilia Sisjön")
+        state.maintenance.service.preferredWorkshopID = "SE-GOT-001"
+        state.maintenance.service.preferredWorkshopName = "Bilia Sisjön"
+        XCTAssertEqual(state.maintenance.service.preferredWorkshopID, "SE-GOT-001")
+        XCTAssertEqual(state.maintenance.service.preferredWorkshopName, "Bilia Sisjön")
 
         XCTAssertTrue(Notifier.plugInReminderCondition(state))
 

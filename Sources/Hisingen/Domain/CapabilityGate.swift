@@ -74,7 +74,7 @@ struct CapabilityGate: Sendable {
         if let reason = settings.rejection(for: adaptedCommand, state: state) {
             return .invalidSettings(reason)
         }
-        guard Date().timeIntervalSince(state.fetchedAt) < 10 * 60 else { return .unavailableUntilRefresh }
+        guard Date().timeIntervalSince(state.freshness.fetchedAt) < 10 * 60 else { return .unavailableUntilRefresh }
         guard !commandInProgress else { return .unavailableWhileBusy }
         return .available
     }

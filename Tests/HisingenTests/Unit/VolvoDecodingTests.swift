@@ -465,16 +465,16 @@ struct VolvoDecodingTests {
             serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: Date(),
             vehicleReportedAt: Date(), dataWarnings: []
         )
-        state.serviceTrigger = "CALENDAR_TIME"
-        state.steeringOrientation = "Left"
-        state.upholstery = "Nordico"
-        state.tripComputerElectricRangeKm = 310
-        state.chargingCurrentLimitAmps = 32
+        state.maintenance.service.trigger = "CALENDAR_TIME"
+        state.identity.steeringOrientation = "Left"
+        state.identity.upholstery = "Nordico"
+        state.tripComputer.electricRangeKm = 310
+        state.energy.currentLimitAmps = 32
 
         XCTAssertEqual(state.formattedServiceTrigger, "Time")
         XCTAssertEqual(state.formattedSteeringOrientation, "Left-hand drive")
-        XCTAssertEqual(state.upholstery, "Nordico")
-        XCTAssertEqual(state.tripComputerElectricRangeKm, 310)
-        XCTAssertEqual(state.chargingCurrentLimitAmps, 32)
+        XCTAssertEqual(state.identity.upholstery, "Nordico")
+        XCTAssertEqual(state.tripComputer.electricRangeKm, 310)
+        XCTAssertEqual(state.energy.currentLimitAmps, 32)
     }
 }

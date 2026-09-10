@@ -76,14 +76,14 @@ struct CommandBoundsAndSessionEnergyTests {
             serviceWarning: false, fluidWarnings: [],
             imageData: nil, fetchedAt: start, vehicleReportedAt: nil, dataWarnings: []
         )
-        previous.chargingSamples = [
+        previous.energy.samples = [
             ChargingSample(timestamp: start, batteryPercentage: 20),
             ChargingSample(timestamp: start.addingTimeInterval(600), batteryPercentage: 35),
         ]
         var current = previous
-        current.chargingState = .complete
-        current.batteryPercentage = 70
-        current.fetchedAt = start.addingTimeInterval(3_600)
+        current.energy.chargingState = .complete
+        current.energy.batteryPercentage = 70
+        current.freshness.fetchedAt = start.addingTimeInterval(3_600)
 
         // 50 % gained × 82 kWh override = 41 kWh — not the model-table default.
         let session = try XCTUnwrap(ChargingSession.completed(

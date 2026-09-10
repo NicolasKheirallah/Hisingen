@@ -528,11 +528,11 @@ final class VehicleDatabase: @unchecked Sendable {
             payload=excluded.payload;
         """
         try? db.query(sql: sql) { stmt in
-            try stmt.bindText(state.vin, at: 1)
+            try stmt.bindText(state.identity.vin, at: 1)
             try stmt.bindText(brandName, at: 2)
-            try stmt.bindText(state.modelName, at: 3)
-            try stmt.bindDate(state.fetchedAt, at: 4)
-            try stmt.bindDate(state.vehicleReportedAt, at: 5)
+            try stmt.bindText(state.identity.modelName, at: 3)
+            try stmt.bindDate(state.freshness.fetchedAt, at: 4)
+            try stmt.bindDate(state.freshness.vehicleReportedAt, at: 5)
             try stmt.bindBlob(data, at: 6)
             try stmt.executeUpdate()
         } process: { _ in }
@@ -556,7 +556,7 @@ final class VehicleDatabase: @unchecked Sendable {
                     return nil
                 }
             }
-            state.isCachedSnapshot = true
+            state.freshness.isCached = true
             return state
         }
         if snapshotExpired {

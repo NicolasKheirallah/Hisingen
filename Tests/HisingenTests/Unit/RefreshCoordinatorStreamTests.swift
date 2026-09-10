@@ -20,7 +20,7 @@ struct RefreshCoordinatorStreamTests {
     }
 
     private func makeCoordinator(
-        provider: StreamingMockProvider, defaults: UserDefaults, suite: String,
+        provider: StreamingMockProvider, defaults: UserDefaults,
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
         commandWindow: TimeInterval = 2 * 60
     ) -> RefreshCoordinator {
@@ -70,7 +70,7 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [.healthy(frames: 2)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite)
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -100,7 +100,7 @@ struct RefreshCoordinatorStreamTests {
         let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
         let policy = LiveStreamPolicy(integrityPollInterval: 0.3, retrySteps: [0.1])
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite,
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults,
                                           policy: policy)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -129,7 +129,7 @@ struct RefreshCoordinatorStreamTests {
         let provider = StreamingMockProvider(
             script: [.fail(transient), .fail(transient), .healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite)
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -163,7 +163,7 @@ struct RefreshCoordinatorStreamTests {
             script: [.fail(auth), .fail(auth), .healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
         let policy = LiveStreamPolicy(repeatedFailureCircuitInterval: 0.2, retrySteps: [0.05])
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite,
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults,
                                           policy: policy)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -187,7 +187,7 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite)
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -217,7 +217,7 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite,
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults,
                                           commandWindow: 0.2)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -249,7 +249,7 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite)
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -273,7 +273,7 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults, suite: suite)
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 

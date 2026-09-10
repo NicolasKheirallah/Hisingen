@@ -212,9 +212,9 @@ struct FleetVehicleCardRow: View {
         let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
         let displayTitle = preferences.formattedVehicleTitle(
             vin: vin,
-            modelName: vehicleState?.modelName,
-            modelYear: vehicleState?.modelYear,
-            registrationNo: vehicleState?.registrationNo,
+            modelName: vehicleState?.identity.modelName,
+            modelYear: vehicleState?.identity.modelYear,
+            registrationNo: vehicleState?.identity.registrationNo,
             fallbackBrand: brand
         )
 
@@ -269,20 +269,20 @@ struct FleetVehicleCardRow: View {
 
             if let vehicleState {
                 HStack(spacing: 12) {
-                    if let battery = vehicleState.batteryPercentage {
+                    if let battery = vehicleState.energy.batteryPercentage {
                         HStack(spacing: 4) {
                             Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
                                 .font(.system(size: 9.5))
                                 .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
                             Text(String(format: "%.0f%%", battery))
                                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            if vehicleState.isCharging, let power = vehicleState.chargingPowerWatts, power > 0 {
+                            if vehicleState.isCharging, let power = vehicleState.energy.powerWatts, power > 0 {
                                 Text(Format.kilowatts(watts: power))
                                     .font(.system(size: 8.5))
                                     .foregroundStyle(.secondary)
                             }
                         }
-                    } else if let fuel = vehicleState.fuelLevelPercent {
+                    } else if let fuel = vehicleState.fuelSystem.levelPercent {
                         HStack(spacing: 4) {
                             Image(systemName: "fuelpump.fill")
                                 .font(.system(size: 9.5))

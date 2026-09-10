@@ -124,7 +124,7 @@ struct SettingsView: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var settingsVehicleVIN: String { state?.vin ?? preferences.vin }
+    private var settingsVehicleVIN: String { state?.identity.vin ?? preferences.vin }
 
     /// Bumped by every `bind(...)` write so the settings screen re-renders immediately —
     /// covers same-screen mirrored readouts (e.g. the Privacy Dashboard rows) whose source
@@ -745,9 +745,9 @@ struct SettingsView: View {
 
                     let previewTitle = preferences.formattedVehicleTitle(
                         vin: preferences.vin.isEmpty ? "YS2TESTVIN123456" : preferences.vin,
-                        modelName: state?.modelName ?? (preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
-                        modelYear: state?.modelYear ?? "2024",
-                        registrationNo: state?.registrationNo ?? "ZCJ 06G",
+                        modelName: state?.identity.modelName ?? (preferences.activeBrand == .polestar ? "Polestar 2" : "Volvo EX40"),
+                        modelYear: state?.identity.modelYear ?? "2024",
+                        registrationNo: state?.identity.registrationNo ?? "ZCJ 06G",
                         format: preferences.vehicleLabelFormat
                     )
                     HStack(spacing: 6) {
@@ -803,15 +803,27 @@ struct SettingsView: View {
 
 
                     let previewSample = VehicleState(
-                        batteryPercentage: 82, rangeKm: 348, chargingState: .charging,
-                        estimatedChargingTimeToFullMinutes: 102, chargeTargetPercentage: 90,
-                        chargingPowerWatts: 7200, chargingCurrentAmps: 16, chargingVoltageVolts: 230,
-                        chargingType: .ac, chargerConnection: .connected, availability: .available,
-                        modelName: "Polestar 2", modelYear: "2024", registrationNo: nil, vin: "YSMTEST",
-                        ownerFirstName: nil, odometerKm: 12500, daysToService: nil, distanceToServiceKm: nil,
-                        serviceWarning: false, fluidWarnings: [],
+                        energy: EnergyAndChargingSnapshot(
+                            batteryPercentage: 82,
+                            rangeKm: 348,
+                            chargingState: .charging,
+                            estimatedTimeToFullMinutes: 102,
+                            targetPercentage: 90,
+                            powerWatts: 7200,
+                            currentAmps: 16,
+                            voltageVolts: 230,
+                            type: .ac,
+                            connection: .connected
+                        ),
+                        identity: VehicleIdentitySnapshot(
+                            availability: .available,
+                            modelName: "Polestar 2",
+                            modelYear: "2024",
+                            vin: "YSMTEST"
+                        ),
+                        maintenance: MaintenanceAndHealthSnapshot(odometerKm: 12500),
+                        freshness: SnapshotFreshness(fetchedAt: Date(), vehicleReportedAt: Date()),
                         exteriorStatus: ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false),
-                        imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
                     )
                     let previewText = Format.barTitle(for: previewSample, style: preferences.menuBarStyle, unit: distanceUnit)
                     let previewIcon = Format.icon(for: previewSample)

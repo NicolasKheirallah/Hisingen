@@ -42,11 +42,11 @@ struct ControlsTabView: View {
     /// When a command is in progress or the optimistic lock is active, use the optimistic
     /// value from the state; otherwise use the backend-reported value.
     private var chargeTarget: Int? {
-        state.chargeTargetPercentage.flatMap { $0 > 0 ? $0 : nil }
+        state.energy.targetPercentage.flatMap { $0 > 0 ? $0 : nil }
     }
     /// Amp limit derived from state (not @State) for the same reason.
     private var ampLimit: Int? {
-        state.chargingCurrentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
+        state.energy.currentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
     }
     private var chargeBounds: VehicleChargeBounds {
         VehicleChargeBounds(capabilities: state.otaCapabilities)
@@ -61,7 +61,7 @@ struct ControlsTabView: View {
     /// / in privacy mode). Distinct from "asleep" (`state.isStale()`), which still accepts most
     /// commands as a wake-up.
     private var vehicleOffline: Bool {
-        if case .unavailable = state.availability { return true }
+        if case .unavailable = state.identity.availability { return true }
         return false
     }
 
@@ -969,7 +969,7 @@ struct ControlsTabView: View {
 
     /// Per-location charging settings from Polestar's ChargeLocationService.
     private var chargeLocationsSection: some View {
-        let locations = state.chargeLocations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
+        let locations = state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
         guard profile.permits(.chargeLocations), features.contains(.remoteCharging) else {
             return AnyView(EmptyView())
         }
@@ -1471,7 +1471,7 @@ struct ControlsTabView: View {
                 HStack {
                     CardHeader(symbol: "flame.fill", title: L10n.text("Remote Engine Start (RES)"), color: .orange)
                     Spacer()
-                    if state.isEngineRunning == true {
+                    if state.fuelSystem.isEngineRunning == true {
                         HStack(spacing: 4) {
                             Circle().fill(HisingenTheme.semanticGood).frame(width: 6, height: 6)
                             Text(L10n.text("Engine Running"))
@@ -1481,7 +1481,7 @@ struct ControlsTabView: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
-                    } else if state.isEngineRunning == false {
+                    } else if state.fuelSystem.isEngineRunning == false {
                         Text(L10n.text("Engine Stopped"))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
@@ -1512,7 +1512,7 @@ struct ControlsTabView: View {
                     .pickerStyle(.segmented)
                     .controlSize(.small)
                     .frame(width: 170)
-                    .disabled(isDisabled(startCommand) || (state.isEngineRunning == true))
+                    .disabled(isDisabled(startCommand) || (state.fuelSystem.isEngineRunning == true))
                     .onChange(of: engineRuntimeMinutes) { _, newValue in
                         preferences.remoteEngineRuntimeMinutes = newValue
                     }
@@ -1532,7 +1532,7 @@ struct ControlsTabView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
-                    .disabled(isDisabled(startCommand) || (state.isEngineRunning == true))
+                    .disabled(isDisabled(startCommand) || (state.fuelSystem.isEngineRunning == true))
 
                     Button {
                         send(.stopEngine)
@@ -1545,7 +1545,7 @@ struct ControlsTabView: View {
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isDisabled(.stopEngine) || (state.isEngineRunning != true))
+                    .disabled(isDisabled(.stopEngine) || (state.fuelSystem.isEngineRunning != true))
                 }
             }
         }

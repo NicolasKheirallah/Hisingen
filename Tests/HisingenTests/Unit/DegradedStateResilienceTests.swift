@@ -89,14 +89,14 @@ struct DegradedStateResilienceTests {
         let cached = full.cacheableCopy
 
         // Kept: identity, build specs, odometer, battery, options
-        XCTAssertEqual(cached.vin, full.vin)
-        XCTAssertEqual(cached.batteryPercentage, full.batteryPercentage)
-        XCTAssertEqual(cached.rangeKm, full.rangeKm)
-        XCTAssertEqual(cached.modelName, full.modelName)
+        XCTAssertEqual(cached.identity.vin, full.identity.vin)
+        XCTAssertEqual(cached.energy.batteryPercentage, full.energy.batteryPercentage)
+        XCTAssertEqual(cached.energy.rangeKm, full.energy.rangeKm)
+        XCTAssertEqual(cached.identity.modelName, full.identity.modelName)
         // Dropped for privacy: live GPS location coordinates, owner greeting, and registration plate
         XCTAssertNil(cached.location)
-        XCTAssertNil(cached.ownerFirstName)
-        XCTAssertNil(cached.registrationNo)
+        XCTAssertNil(cached.identity.ownerFirstName)
+        XCTAssertNil(cached.identity.registrationNo)
     }
 
     @Test
@@ -107,11 +107,11 @@ struct DegradedStateResilienceTests {
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
 
         let live = stateWithFullTelemetry()
-        XCTAssertFalse(live.isCachedSnapshot)
+        XCTAssertFalse(live.freshness.isCached)
         store.save(live)
 
-        let restored = try XCTUnwrap(store.snapshot(for: live.vin))
-        XCTAssertTrue(restored.isCachedSnapshot)
+        let restored = try XCTUnwrap(store.snapshot(for: live.identity.vin))
+        XCTAssertTrue(restored.freshness.isCached)
         // Cached snapshots must not retain precise location data.
         XCTAssertNil(restored.location)
     }
@@ -141,23 +141,23 @@ struct DegradedStateResilienceTests {
         legacy["fluidWarnings"] = []
         legacy["tripMeterManualKm"] = 12.5
         legacy["tripMeterAutomaticKm"] = 48.0
-        let cached = try JSONSerialization.data(withJSONObject: [live.vin: legacy])
+        let cached = try JSONSerialization.data(withJSONObject: [live.identity.vin: legacy])
         defaults.set(cached, forKey: "cached_vehicle_snapshots_v1")
 
         let store = VehicleStateStore(defaults: defaults, database: database)
-        let migrated = try XCTUnwrap(store.snapshot(for: live.vin))
-        XCTAssertTrue(migrated.isCachedSnapshot)
-        XCTAssertEqual(migrated.fuelLevelPercent, 55.0)
-        XCTAssertEqual(migrated.daysToService, 200)
-        XCTAssertEqual(migrated.tripMeterManualKm, 12.5)
+        let migrated = try XCTUnwrap(store.snapshot(for: live.identity.vin))
+        XCTAssertTrue(migrated.freshness.isCached)
+        XCTAssertEqual(migrated.fuelSystem.levelPercent, 55.0)
+        XCTAssertEqual(migrated.maintenance.service.daysToService, 200)
+        XCTAssertEqual(migrated.tripComputer.manualTripKm, 12.5)
         XCTAssertNil(migrated.location)
-        XCTAssertNil(migrated.ownerFirstName)
-        XCTAssertNil(migrated.registrationNo)
+        XCTAssertNil(migrated.identity.ownerFirstName)
+        XCTAssertNil(migrated.identity.registrationNo)
 
         let remainingData = try XCTUnwrap(defaults.data(forKey: "cached_vehicle_snapshots_v1"))
         let remaining = try JSONDecoder().decode([String: VehicleState].self, from: remainingData)
-        XCTAssertNil(remaining[live.vin])
-        XCTAssertNil(database.loadSnapshot(for: live.vin)?.location)
+        XCTAssertNil(remaining[live.identity.vin])
+        XCTAssertNil(database.loadSnapshot(for: live.identity.vin)?.location)
     }
 
     // MARK: - Helpers

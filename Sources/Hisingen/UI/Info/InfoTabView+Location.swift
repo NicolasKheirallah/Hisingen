@@ -151,7 +151,7 @@ extension InfoTabView {
 
         let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? L10n.text("N") : L10n.text("S"))
         let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? L10n.text("E") : L10n.text("W"))
-        let modelTitle = state.modelName ?? L10n.text("Vehicle")
+        let modelTitle = state.identity.modelName ?? L10n.text("Vehicle")
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {

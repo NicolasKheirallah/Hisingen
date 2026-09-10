@@ -18,10 +18,10 @@ struct SmartChargingRecommendationView: View {
 
     private static let powerOptions: [Double] = [2.3, 3.7, 7.4, 11.0, 22.0]
 
-    private var targetSOC: Double { Double(state.chargeTargetPercentage ?? 80) }
-    private var currentSOC: Double { state.batteryPercentage ?? 0 }
+    private var targetSOC: Double { Double(state.energy.targetPercentage ?? 80) }
+    private var currentSOC: Double { state.energy.batteryPercentage ?? 0 }
     private var usableCapacity: Double {
-        preferences.vehicleSpecificationOverride(for: state.vin)?.usableBatteryCapacityKwh
+        preferences.vehicleSpecificationOverride(for: state.identity.vin)?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
     }
     /// Grid energy includes a conservative 10% AC conversion/loss allowance.
@@ -29,7 +29,7 @@ struct SmartChargingRecommendationView: View {
         max(0, targetSOC - currentSOC) / 100 * max(0, usableCapacity) / 0.90
     }
     private var isSwedishMarket: Bool {
-        let market = state.accountMarket?.uppercased()
+        let market = state.identity.accountMarket?.uppercased()
         return market == nil || market == "SE"
     }
 
@@ -68,7 +68,7 @@ struct SmartChargingRecommendationView: View {
 
                 if !isSwedishMarket {
                     Text(L10n.format("These are Swedish (Nord Pool SE) day-ahead prices. Your account market is %@.",
-                                     state.accountMarket ?? "?"))
+                                     state.identity.accountMarket ?? "?"))
                         .font(.system(size: 8.5)).foregroundStyle(.tertiary)
                 }
 
@@ -131,7 +131,7 @@ struct SmartChargingRecommendationView: View {
         .onAppear {
             area = preferences.smartChargingPriceArea
             powerKW = Self.nearestPowerOption(preferences.smartChargingPowerKW)
-            if let livePower = state.chargingPowerWatts, livePower > 1_000,
+            if let livePower = state.energy.powerWatts, livePower > 1_000,
                preferences.smartChargingPowerWasCustomized == false {
                 powerKW = Self.nearestPowerOption(Double(livePower) / 1_000)
             }

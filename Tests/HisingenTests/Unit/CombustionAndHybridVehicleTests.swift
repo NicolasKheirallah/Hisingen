@@ -75,9 +75,9 @@ struct CombustionAndHybridVehicleTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        hybridState.fuelAmountLiters = 45.0
-        hybridState.averageFuelConsumptionLPer100Km = 5.2
-        hybridState.isEngineRunning = false
+        hybridState.fuelSystem.amountLiters = 45.0
+        hybridState.fuelSystem.averageConsumptionLPer100Km = 5.2
+        hybridState.fuelSystem.isEngineRunning = false
 
         XCTAssertEqual(hybridState.totalCombinedRangeKm, 600)
         XCTAssertEqual(hybridState.primaryRangeKm, 600)
@@ -112,9 +112,9 @@ struct CombustionAndHybridVehicleTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        iceState.fuelAmountLiters = 48.0
-        iceState.averageFuelConsumptionLPer100Km = 7.4
-        iceState.isEngineRunning = true
+        iceState.fuelSystem.amountLiters = 48.0
+        iceState.fuelSystem.averageConsumptionLPer100Km = 7.4
+        iceState.fuelSystem.isEngineRunning = true
 
         XCTAssertEqual(iceState.totalCombinedRangeKm, 620)
         XCTAssertEqual(iceState.primaryRangeKm, 620)

@@ -87,7 +87,7 @@ extension InfoTabView {
     // MARK: - Vehicle errors (Chronos)
 
     var vehicleErrorsCard: some View {
-        let errors = VehicleDiagnosticGroup.grouped(state.vehicleErrors, vin: state.vin)
+        let errors = VehicleDiagnosticGroup.grouped(state.vehicleErrors, vin: state.identity.vin)
         guard !errors.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -156,7 +156,7 @@ extension InfoTabView {
     // MARK: - Battery diagnostics
 
     var batteryDiagnosticsRows: [KVRow] {
-        guard let diag = state.batteryDiagnostics else { return [] }
+        guard let diag = state.energy.diagnostics else { return [] }
         var rows: [KVRow] = []
         if diag.chargerPowerState != .unknown {
             rows.append(KVRow(L10n.text("Power Module"), diag.chargerPowerState.displayName,
@@ -218,42 +218,42 @@ extension InfoTabView {
     var tripComputerCard: some View {
         var rows: [KVRow] = []
 
-        if let manualKm = state.tripMeterManualKm {
+        if let manualKm = state.tripComputer.manualTripKm {
             rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle.fill"))
         }
-        if let autoKm = state.tripMeterAutomaticKm {
+        if let autoKm = state.tripComputer.automaticTripKm {
             rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
         }
-        if let speed = state.tripManualAverageSpeedKmH, speed > 0 {
+        if let speed = state.tripComputer.manualAverageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed (TM)"),
                               Format.speed(kmH: speed, unit: preferences.distanceUnit),
                               symbol: "gauge.with.needle",
                               info: L10n.text("Vehicle Calculation. Average speed over the manual trip-meter period, reported by the odometer service.")))
         }
-        if let speed = state.tripAutomaticAverageSpeedKmH, speed > 0 {
+        if let speed = state.tripComputer.automaticAverageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed (AT)"),
                               Format.speed(kmH: speed, unit: preferences.distanceUnit),
                               symbol: "gauge.with.needle",
                               info: L10n.text("Vehicle Calculation. Average speed over the automatic trip-meter period, reported by the odometer service.")))
         }
-        if let electricKm = state.electricDistanceKm, electricKm > 0 {
+        if let electricKm = state.tripComputer.electricDistanceKm, electricKm > 0 {
             rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
         }
-        if let fuelKm = state.fuelDistanceKm, fuelKm > 0 {
+        if let fuelKm = state.tripComputer.fuelDistanceKm, fuelKm > 0 {
             rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump.fill"))
         }
-        if let regen = state.regeneratedEnergyKwh, regen > 0 {
+        if let regen = state.tripComputer.regeneratedEnergyKwh, regen > 0 {
             rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
         }
-        if let speed = state.averageSpeedKmH, speed > 0 {
+        if let speed = state.tripComputer.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
         }
-        if let speed = state.tripAutomaticAverageSpeedKmH, speed > 0 {
+        if let speed = state.tripComputer.automaticAverageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed (AT)"),
                               Format.speed(kmH: speed, unit: preferences.distanceUnit),
                               symbol: "gauge.with.needle.fill"))
         }
-        if let odo = state.odometerKm {
+        if let odo = state.maintenance.odometerKm {
             rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
         }
 
@@ -331,7 +331,7 @@ extension InfoTabView {
     var fluidsAndLightingCard: some View {
         var rows: [KVRow] = []
 
-        if let health = state.healthDetails {
+        if let health = state.maintenance.details {
             let hasBrake = health.warnings.contains(.brakeFluid)
             let brakeReported = health.reportedWarnings.contains(.brakeFluid)
             rows.append(KVRow(
@@ -342,11 +342,11 @@ extension InfoTabView {
                 info: L10n.text("Warning status only. The provider does not report a measured brake-fluid level.")
             ))
 
-            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+            if let frontPads = state.maintenance.frontBrakePadStatus, !frontPads.isEmpty {
                 let warn = frontPads.uppercased() != "NORMAL" && !frontPads.uppercased().contains("NO_WARNING")
                 rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle", valueWarning: warn))
             }
-            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+            if let rearPads = state.maintenance.rearBrakePadStatus, !rearPads.isEmpty {
                 let warn = rearPads.uppercased() != "NORMAL" && !rearPads.uppercased().contains("NO_WARNING")
                 rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle", valueWarning: warn))
             }
@@ -382,10 +382,10 @@ extension InfoTabView {
             }
         } else {
             rows.append(KVRow(L10n.text("Brake Fluid"), L10n.text("Unavailable"), symbol: "circle.circle"))
-            if let frontPads = state.frontBrakePadStatus, !frontPads.isEmpty {
+            if let frontPads = state.maintenance.frontBrakePadStatus, !frontPads.isEmpty {
                 rows.append(KVRow(L10n.text("Front Brake Pads"), frontPads.capitalized, symbol: "circle.circle"))
             }
-            if let rearPads = state.rearBrakePadStatus, !rearPads.isEmpty {
+            if let rearPads = state.maintenance.rearBrakePadStatus, !rearPads.isEmpty {
                 rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
             }
             rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Unavailable"), symbol: "drop.triangle.fill"))

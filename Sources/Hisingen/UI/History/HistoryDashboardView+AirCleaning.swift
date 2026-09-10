@@ -2,7 +2,7 @@ import SwiftUI
 
 extension HistoryDashboardView {
     var airCleaningCyclesCard: some View {
-        let cycles = HistoryInsights.airCleaningCycles(from: snapshot.activities, vin: state.vin)
+        let cycles = HistoryInsights.airCleaningCycles(from: snapshot.activities, vin: state.identity.vin)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "wind", title: L10n.text("Observed Air-Cleaning Runs"), color: .mint)

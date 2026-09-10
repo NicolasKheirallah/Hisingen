@@ -42,7 +42,7 @@ extension VolvoAPI {
         return url
     }
 
-    func completeSignIn(callbackURL: URL, preferredVIN: String?, features: FeatureSelection) async throws {
+    func completeSignIn(callbackURL: URL, preferredVIN: String?) async throws {
         guard let verifier = pendingVerifier, let expectedState = pendingState else {
             throw VolvoError.authenticationRequired(.callbackRejected)
         }

@@ -19,9 +19,9 @@ enum SpotlightIndexer {
 
     /// Re-indexes (or replaces) the entry for this VIN.
     static func indexVehicle(_ state: VehicleState, nickname: String) {
-        guard !indexingUnavailable, !state.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
+        guard !indexingUnavailable, !state.identity.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
         let item = CSSearchableItem(
-            uniqueIdentifier: state.vin,
+            uniqueIdentifier: state.identity.vin,
             domainIdentifier: domainIdentifier,
             attributeSet: attributeSet(for: state, nickname: nickname)
         )
@@ -53,12 +53,12 @@ enum SpotlightIndexer {
     private static func attributeSet(for state: VehicleState,
                                      nickname: String) -> CSSearchableItemAttributeSet {
         let attributes = CSSearchableItemAttributeSet(contentType: .item)
-        let title = nickname.isEmpty ? (state.modelName ?? L10n.text("Vehicle")) : nickname
+        let title = nickname.isEmpty ? (state.identity.modelName ?? L10n.text("Vehicle")) : nickname
         attributes.title = title
         attributes.domainIdentifier = domainIdentifier
 
         var summary: [String] = []
-        if let battery = state.batteryPercentage {
+        if let battery = state.energy.batteryPercentage {
             summary.append(String(format: "%.0f%%", battery))
         }
         if let range = state.primaryRangeKm {
@@ -69,7 +69,7 @@ enum SpotlightIndexer {
         }
         attributes.contentDescription = summary.joined(separator: " · ")
         attributes.keywords = [state.model.brand.displayName, title, "Hisingen",
-                               state.modelName ?? "", "EV"].filter { !$0.isEmpty }
+                               state.identity.modelName ?? "", "EV"].filter { !$0.isEmpty }
         // Display names are not identifiers: the VIN stays out of the index entirely.
         attributes.relatedUniqueIdentifier = nil
         return attributes

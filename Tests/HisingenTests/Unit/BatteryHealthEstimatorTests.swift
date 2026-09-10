@@ -91,7 +91,7 @@ struct BatteryHealthEstimatorTests {
     @Test("Volvo's exact reported pack capacity is preferred over the generic model table")
     func reportedCapacityTakesPriorityOverFactoryTable() throws {
         var state = vehicle(battery: 50)
-        state.reportedBatteryCapacityKwh = 70
+        state.energy.reportedBatteryCapacityKwh = 70
         let estimate = try #require(BatteryHealthEstimator.estimate(state: state, chargingSessions: []))
         // Polestar 2's generic table value is 75 kWh usable; the VIN-specific reported value
         // should win when no manual Settings override exists.
@@ -101,7 +101,7 @@ struct BatteryHealthEstimatorTests {
     @Test("An implausible consumption reading is treated as skipped, not trusted")
     func implausibleConsumptionIsRejected() throws {
         var plausible = vehicle(battery: 50)
-        plausible.batteryDiagnostics = BatteryDiagnostics(
+        plausible.energy.diagnostics = BatteryDiagnostics(
             timeToTargetMinutes: nil, timeToMinimumSOCMinutes: nil, chargerPowerState: .unknown,
             averageConsumption: 18, averageConsumptionSinceCharge: nil, energyUsedSinceChargeWh: nil
         )
@@ -109,7 +109,7 @@ struct BatteryHealthEstimatorTests {
         #expect(plausibleEstimate.signals.contains { $0.id == "consumption" })
 
         var implausible = vehicle(battery: 50)
-        implausible.batteryDiagnostics = BatteryDiagnostics(
+        implausible.energy.diagnostics = BatteryDiagnostics(
             timeToTargetMinutes: nil, timeToMinimumSOCMinutes: nil, chargerPowerState: .unknown,
             averageConsumption: 1_800, averageConsumptionSinceCharge: nil, energyUsedSinceChargeWh: nil
         )

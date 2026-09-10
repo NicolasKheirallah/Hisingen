@@ -148,10 +148,10 @@ struct SQLiteDatabaseTests {
         let loaded = vdb.loadSnapshot(for: "TESTVIN1234567890")
 
         #expect(loaded != nil)
-        #expect(loaded?.vin == "TESTVIN1234567890")
-        #expect(loaded?.modelName == "Polestar 2")
-        #expect(loaded?.batteryPercentage == 82.5)
-        #expect(loaded?.isCachedSnapshot == true)
+        #expect(loaded?.identity.vin == "TESTVIN1234567890")
+        #expect(loaded?.identity.modelName == "Polestar 2")
+        #expect(loaded?.energy.batteryPercentage == 82.5)
+        #expect(loaded?.freshness.isCached == true)
 
         vdb.deleteSnapshot(for: "TESTVIN1234567890")
         #expect(vdb.loadSnapshot(for: "TESTVIN1234567890") == nil)

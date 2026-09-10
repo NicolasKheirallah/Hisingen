@@ -67,12 +67,12 @@ struct LiveVolvoReadOnlyIntegrationTests {
         let vin = try XCTUnwrap(resolvedVIN)
 
         let state = try await api.fetchVehicleState(vin: vin, features: features)
-        XCTAssertEqual(state.vin, vin)
+        XCTAssertEqual(state.identity.vin, vin)
 
 
         XCTAssertTrue(
-            state.batteryPercentage != nil || state.rangeKm != nil
-                || state.fuelRangeKm != nil || state.odometerKm != nil
+            state.energy.batteryPercentage != nil || state.energy.rangeKm != nil
+                || state.fuelSystem.rangeKm != nil || state.maintenance.odometerKm != nil
         )
         XCTAssertNotEqual(state.powertrain, .unknown)
 
@@ -83,7 +83,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
         await resumed.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
         try await resumed.restoreSession(token: persistedToken, preferredVIN: vin, features: features)
         let resumedState = try await resumed.fetchVehicleState(vin: vin, features: features)
-        XCTAssertEqual(resumedState.vin, vin)
+        XCTAssertEqual(resumedState.identity.vin, vin)
 
         try? keychain.deleteVolvoSessionToken()
     }
@@ -293,5 +293,4 @@ struct LiveVolvoReadOnlyIntegrationTests {
     }
 }
 #endif
-
 

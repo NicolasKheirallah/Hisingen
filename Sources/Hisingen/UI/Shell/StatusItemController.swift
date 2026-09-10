@@ -244,13 +244,13 @@ final class StatusItemController: NSObject {
 
         if let state = latestState {
             let vehicleName = preferences.formattedVehicleTitle(
-                vin: state.vin,
-                modelName: state.modelName,
-                modelYear: state.modelYear,
-                registrationNo: state.registrationNo
+                vin: state.identity.vin,
+                modelName: state.identity.modelName,
+                modelYear: state.identity.modelYear,
+                registrationNo: state.identity.registrationNo
             )
-            let battery = state.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
-            let range = state.rangeKm.map {
+            let battery = state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
+            let range = state.energy.rangeKm.map {
                 "\(preferences.distanceUnit.convert(km: $0)) \(preferences.distanceUnit.suffix)"
             } ?? "--"
             let summary = "\(vehicleName) · \(battery) (\(range))"
@@ -262,7 +262,7 @@ final class StatusItemController: NSObject {
             menu.addItem(headerItem)
 
             if state.isCharging {
-                let power = state.chargingPowerWatts.map { Format.kilowatts(watts: $0) } ?? ""
+                let power = state.energy.powerWatts.map { Format.kilowatts(watts: $0) } ?? ""
                 let title = power.isEmpty
                     ? "⚡ \(L10n.text("Charging Active"))"
                     : "⚡ \(L10n.format("Charging at %@", power))"
@@ -293,7 +293,7 @@ final class StatusItemController: NSObject {
             mapsItem.target = self
         }
 
-        if let vin = latestState?.vin, !vin.isEmpty {
+        if let vin = latestState?.identity.vin, !vin.isEmpty {
             let copyItem = menu.addItem(
                 withTitle: L10n.format("Copy VIN (%@)…", String(vin.prefix(8))),
                 action: #selector(contextCopyVIN),
@@ -313,7 +313,7 @@ final class StatusItemController: NSObject {
                 let name: String = {
                     if let snapshot {
                         return preferences.formattedVehicleTitle(
-                            vin: snapshot.vin, modelName: snapshot.modelName, modelYear: snapshot.modelYear, registrationNo: snapshot.registrationNo, fallbackBrand: snapshot.model.brand
+                            vin: snapshot.identity.vin, modelName: snapshot.identity.modelName, modelYear: snapshot.identity.modelYear, registrationNo: snapshot.identity.registrationNo, fallbackBrand: snapshot.model.brand
                         )
                     }
                     if let car = cars.first(where: { $0.vin == vin }) {
@@ -321,7 +321,7 @@ final class StatusItemController: NSObject {
                     }
                     return vin
                 }()
-                let battery = snapshot?.batteryPercentage.map { " · \(Int($0))%" } ?? ""
+                let battery = snapshot?.energy.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌃⌥\(index + 1)" : ""
                 let title = shortcut.isEmpty
                     ? "\(name)\(battery) (\(vin.prefix(8))...)"
@@ -468,7 +468,7 @@ final class StatusItemController: NSObject {
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
             remoteSection.submenu = controlsMenu
 
-            if !state.chargingSessions.isEmpty {
+            if !state.energy.sessions.isEmpty {
                 let exportItem = menu.addItem(
                     withTitle: L10n.text("Export Charging History (CSV)…"),
                     action: #selector(contextExportChargingCSV),
@@ -550,7 +550,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextCopyVIN() {
-        guard let vin = latestState?.vin, !vin.isEmpty else { return }
+        guard let vin = latestState?.identity.vin, !vin.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(vin, forType: .string)
     }
@@ -629,16 +629,16 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextExportChargingCSV() {
-        guard let state = latestState, !state.chargingSessions.isEmpty else { return }
+        guard let state = latestState, !state.energy.sessions.isEmpty else { return }
         let csvData = ChargingHistoryExport.csv(
-            sessions: state.chargingSessions,
+            sessions: state.energy.sessions,
             tariffPricePerKwh: preferences.electricityPricePerKwh,
             currencySymbol: preferences.currencySymbol
         )
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "charging_history_\(state.vin.prefix(8)).csv"
+        panel.nameFieldStringValue = "charging_history_\(state.identity.vin.prefix(8)).csv"
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 try? csvData.write(to: url, atomically: true, encoding: .utf8)
@@ -740,7 +740,7 @@ final class StatusItemController: NSObject {
          let iconName = Format.icon(for: data, includeConnection: preferences.features.contains(.chargingDetails))
         var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
         if preferences.tintMenuBarIcon, let data {
-            let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
+            let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.energy.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
             if let configured = icon?.withSymbolConfiguration(.init(paletteColors: [tintColor])) {
                 icon = configured
                 icon?.isTemplate = false
@@ -810,25 +810,25 @@ final class StatusItemController: NSObject {
     private func updateFleetToolTip(activeState: VehicleState?) {
         let fleet = fleetStore.snapshot(activeState: activeState)
         var lines: [String] = []
-        let currentVin = activeState?.vin ?? activeVin ?? preferences.vin
+        let currentVin = activeState?.identity.vin ?? activeVin ?? preferences.vin
         let vins = fleet.vehicles
         for vin in vins {
             let state = fleet.snapshot(for: vin)
             let name = preferences.formattedVehicleTitle(
                 vin: vin,
-                modelName: state?.modelName,
-                modelYear: state?.modelYear,
-                registrationNo: state?.registrationNo,
+                modelName: state?.identity.modelName,
+                modelYear: state?.identity.modelYear,
+                registrationNo: state?.identity.registrationNo,
                 fallbackBrand: state?.model.brand
             )
             var parts: [String] = [name]
-            if let battery = state?.batteryPercentage {
+            if let battery = state?.energy.batteryPercentage {
                 var batStr = String(format: "%.0f%%", battery)
                 if state?.isCharging == true {
                     batStr += " ⚡"
                 }
                 parts.append(batStr)
-            } else if let fuel = state?.fuelLevelPercent {
+            } else if let fuel = state?.fuelSystem.levelPercent {
                 parts.append(String(format: "%.0f%% fuel", fuel))
             }
             if let range = state?.primaryRangeKm {
@@ -966,9 +966,9 @@ final class StatusItemController: NSObject {
         }
         let summary = [title.nilIfEmpty, security].compactMap { $0 }.joined(separator: ", ")
         if data.isStale() {
-            return L10n.format("Hisingen, %@, %@, data may be stale", summary, data.chargingState.displayName)
+            return L10n.format("Hisingen, %@, %@, data may be stale", summary, data.energy.chargingState.displayName)
         }
-        return L10n.format("Hisingen, %@, %@", summary, data.chargingState.displayName)
+        return L10n.format("Hisingen, %@, %@", summary, data.energy.chargingState.displayName)
     }
 }
 

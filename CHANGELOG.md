@@ -38,7 +38,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Polestar metadata discovery no longer requests the removed VDMS `packages` field,
   which rejected the whole GraphQL query and triggered a 24-hour backoff.
 - Chronos error-service authorization failures now enter capability backoff instead
-  of being cached as empty results and retried every five minutes.
+  of being cached as empty results and retried after cache expiry or remote commands.
 - Network tests now inject an in-memory API diagnostic store instead of clearing and
   writing fixture traffic to the user's persisted diagnostic archive.
 

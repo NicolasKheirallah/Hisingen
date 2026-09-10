@@ -8,16 +8,16 @@ extension InfoTabView {
         let isInterior = selectedAngleIndex == -1
         let currentImageData: Data? = {
             if isInterior {
-                return state.interiorImageData ?? imageCache.interiorImage(for: state.vin)
+                return state.identity.interiorImageData ?? imageCache.interiorImage(for: state.identity.vin)
             }
-            return imageCache.image(for: state.vin, angle: selectedAngleIndex)
-                 ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.imageData : nil)
+            return imageCache.image(for: state.identity.vin, angle: selectedAngleIndex)
+                 ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.identity.imageData : nil)
         }()
 
         let exteriorAngles = availableExteriorAngles
         let supportsMultipleAngles = exteriorAngles.count > 1
-        let hasInterior = (state.interiorImageData != nil)
-            || (imageCache.interiorImage(for: state.vin) != nil)
+        let hasInterior = (state.identity.interiorImageData != nil)
+            || (imageCache.interiorImage(for: state.identity.vin) != nil)
         let angleTitle = CarRenderAngle(rawValue: selectedAngleIndex)?.title ?? L10n.text("Exterior")
 
         return Card {
@@ -57,7 +57,7 @@ extension InfoTabView {
                         .allowsHitTesting(false)
 
                         VehiclePresentationView(
-                            identity: VehiclePresentationIdentity(vin: state.vin, angle: selectedAngleIndex),
+                            identity: VehiclePresentationIdentity(vin: state.identity.vin, angle: selectedAngleIndex),
                             imageData: currentImageData
                         )
                         .frame(maxWidth: .infinity)
@@ -111,13 +111,13 @@ extension InfoTabView {
                 }
 
                 let primaryTitle = preferences.formattedVehicleTitle(
-                    vin: state.vin,
-                    modelName: state.modelName,
-                    modelYear: state.modelYear,
-                    registrationNo: state.registrationNo
+                    vin: state.identity.vin,
+                    modelName: state.identity.modelName,
+                    modelYear: state.identity.modelYear,
+                    registrationNo: state.identity.registrationNo
                 )
                 let showRegBadge: Bool = {
-                    guard let reg = state.registrationNo, !reg.isEmpty else { return false }
+                    guard let reg = state.identity.registrationNo, !reg.isEmpty else { return false }
                     return preferences.vehicleLabelFormat != .registration
                         && preferences.vehicleLabelFormat != .nicknameAndRegistration
                         && preferences.vehicleLabelFormat != .registrationAndModel
@@ -125,12 +125,12 @@ extension InfoTabView {
                 let subtitleText: String? = {
                     switch preferences.vehicleLabelFormat {
                     case .registration, .nickname, .nicknameAndRegistration:
-                        let model = state.modelName
-                        let year = state.modelYear.map { L10n.format("Model Year %@", $0) }
+                        let model = state.identity.modelName
+                        let year = state.identity.modelYear.map { L10n.format("Model Year %@", $0) }
                         let combined = [model, year].compactMap { $0 }.joined(separator: " · ")
                         return combined.isEmpty ? nil : combined
                     case .modelAndYear, .modelOnly, .registrationAndModel:
-                        if let year = state.modelYear {
+                        if let year = state.identity.modelYear {
                             return L10n.format("Model Year %@", year)
                         }
                         return nil
@@ -143,13 +143,13 @@ extension InfoTabView {
                             Text(primaryTitle)
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(HisingenTheme.ink)
-                            if let color = state.externalColour, !color.isEmpty && !isInterior {
+                            if let color = state.identity.externalColour, !color.isEmpty && !isInterior {
                                 Pill(
                                     text: color,
                                     color: HisingenTheme.accent,
                                     symbol: "paintpalette.fill"
                                 )
-                            } else if isInterior, let upholstery = state.upholstery, !upholstery.isEmpty {
+                            } else if isInterior, let upholstery = state.identity.upholstery, !upholstery.isEmpty {
                                 Pill(
                                     text: upholstery,
                                     color: HisingenTheme.accent,
@@ -164,7 +164,7 @@ extension InfoTabView {
                         }
                     }
                     Spacer()
-                    if showRegBadge, let reg = state.registrationNo, !reg.isEmpty {
+                    if showRegBadge, let reg = state.identity.registrationNo, !reg.isEmpty {
                         Text(reg)
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .padding(.horizontal, 8)

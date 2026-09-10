@@ -39,7 +39,7 @@ struct LiveStreamPolicy: Sendable {
     /// An asleep vehicle answers every stream with the same stale frames, so it never streams.
     func shouldStream(_ state: VehicleState) -> Bool {
         if let customGate { return customGate(state) }
-        guard case .unavailable = state.availability else {
+        guard case .unavailable = state.identity.availability else {
             return state.isCharging
         }
         return false

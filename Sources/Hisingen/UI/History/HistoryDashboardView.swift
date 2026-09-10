@@ -153,7 +153,7 @@ struct HistoryDashboardView: View {
     }
 
     var trips: [TripHistoryEntry] {
-        let hidden = preferences.hiddenTripIDs(for: state.vin)
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin)
         let base = hidden.isEmpty ? snapshot.trips : snapshot.trips.filter { !hidden.contains($0.id) }
         let searched = tripFilterText.isEmpty
             ? base
@@ -331,11 +331,11 @@ struct HistoryDashboardView: View {
         .task(id: "\(selectedSession?.id ?? "")_\(overlayPreviousSession)") { await loadPreviousSessionCurve() }
         .onChange(of: state.dataTimestamp) { _, _ in bumpDataToken() }
         .onChange(of: selectedSessionID) { _, newValue in
-            preferences.setSelectedHistorySession(newValue, for: state.vin)
+            preferences.setSelectedHistorySession(newValue, for: state.identity.vin)
         }
         .onAppear {
             if selectedSessionID == nil {
-                selectedSessionID = preferences.selectedHistorySession(for: state.vin)
+                selectedSessionID = preferences.selectedHistorySession(for: state.identity.vin)
             }
         }
     }
@@ -350,10 +350,10 @@ struct HistoryDashboardView: View {
         let custom = period == .custom
             ? "\(customRangeStart.timeIntervalSince1970)_\(customRangeEnd.timeIntervalSince1970)"
             : ""
-        return "\(state.vin)_\(period.rawValue)_\(custom)_\(refreshToken)_\(dataToken)"
+        return "\(state.identity.vin)_\(period.rawValue)_\(custom)_\(refreshToken)_\(dataToken)"
     }
 
-    var lifetimeLoadKey: String { "\(state.vin)_\(refreshToken)" }
+    var lifetimeLoadKey: String { "\(state.identity.vin)_\(refreshToken)" }
 
     /// Full reload (manual refresh, fuel edits).
     func bumpRefresh() { refreshToken &+= 1 }
@@ -373,7 +373,7 @@ struct HistoryDashboardView: View {
         isLoading = true
         defer { isLoading = false; didInitialLoad = true }
 
-        let vin = state.vin
+        let vin = state.identity.vin
         let db = database
         let range = activeRange
         let cap = rowCap
@@ -396,7 +396,7 @@ struct HistoryDashboardView: View {
     }
 
     func loadLifetimeData() async {
-        let vin = state.vin
+        let vin = state.identity.vin
         let db = database
         let hasCombustion = state.powertrain.hasCombustionEngine
         let loaded = await Task.detached(priority: .userInitiated) { () -> LifetimeSnapshot in

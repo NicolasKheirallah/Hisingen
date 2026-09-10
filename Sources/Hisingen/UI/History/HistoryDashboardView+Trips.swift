@@ -91,7 +91,7 @@ extension HistoryDashboardView {
                         Spacer()
                         Button {
                             exportCSV(
-                                MonthlyMileageReport.csv(reports: mileageReports, vin: state.vin),
+                                MonthlyMileageReport.csv(reports: mileageReports, vin: state.identity.vin),
                                 name: "monthly-mileage"
                             )
                         } label: {
@@ -323,7 +323,7 @@ extension HistoryDashboardView {
                         }
                         Spacer()
                         Button(role: .destructive) {
-                            preferences.setTripHidden(true, id: trip.id, for: state.vin)
+                            preferences.setTripHidden(true, id: trip.id, for: state.identity.vin)
                             expandedTripIDs.remove(trip.id)
                         } label: {
                             Label(L10n.text("Hide"), systemImage: "eye.slash").font(.system(size: 9))

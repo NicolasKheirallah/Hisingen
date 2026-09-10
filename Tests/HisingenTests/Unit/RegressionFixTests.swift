@@ -87,7 +87,7 @@ struct RegressionFixTests {
 
         let merged = failedFetch.mergingLastKnown(from: previous, features: FeatureSelection(enabled: [.vehicleHealth]))
 
-        XCTAssertTrue(merged.serviceWarning, "A failed health fetch must not silently clear a known warning")
+        XCTAssertTrue(merged.maintenance.service.serviceWarning, "A failed health fetch must not silently clear a known warning")
     }
 
     @Test
@@ -97,7 +97,7 @@ struct RegressionFixTests {
 
         let merged = resolvedFetch.mergingLastKnown(from: previous, features: FeatureSelection(enabled: [.vehicleHealth]))
 
-        XCTAssertFalse(merged.serviceWarning, "A successful health fetch reporting no warning must be trusted")
+        XCTAssertFalse(merged.maintenance.service.serviceWarning, "A successful health fetch reporting no warning must be trusted")
     }
 
 
@@ -187,8 +187,8 @@ struct RegressionFixTests {
         let original = makeVehicleState()
         let copy = original.cacheableCopy
 
-        XCTAssertNil(copy.registrationNo)
-        XCTAssertNil(copy.ownerFirstName)
+        XCTAssertNil(copy.identity.registrationNo)
+        XCTAssertNil(copy.identity.ownerFirstName)
         XCTAssertNil(copy.location)
     }
 }

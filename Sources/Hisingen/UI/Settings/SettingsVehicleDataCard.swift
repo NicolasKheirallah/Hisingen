@@ -16,7 +16,7 @@ struct SettingsVehicleDataCard: View {
     @State private var specificationValidationMessage: String?
 
     private var prefs: PreferencesStore { binder.preferences }
-    private var warrantyVIN: String { state?.vin ?? prefs.vin }
+    private var warrantyVIN: String { state?.identity.vin ?? prefs.vin }
 
     private func row(_ feature: AppFeature, symbol: String, title: String, detail: String,
                      isSupported: Bool = true, badgeText: String? = nil) -> SettingsFeatureToggleRow {
@@ -75,7 +75,7 @@ struct SettingsVehicleDataCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
 
-                if !warrantyVIN.isEmpty, state?.warrantyInfo == nil {
+                if !warrantyVIN.isEmpty, state?.maintenance.warranty == nil {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {

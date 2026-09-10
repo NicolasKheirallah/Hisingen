@@ -20,7 +20,7 @@ extension HistoryDashboardView {
                     guard let liters = Double(fuelLitersText.replacingOccurrences(of: ",", with: ".")), liters > 0,
                           let price = Double(fuelPriceText.replacingOccurrences(of: ",", with: ".")) else { return }
                     let odo = Double(fuelOdometerText.replacingOccurrences(of: ",", with: "."))
-                    _ = database.addFuelEntry(vin: state.vin, date: Date(), liters: liters,
+                    _ = database.addFuelEntry(vin: state.identity.vin, date: Date(), liters: liters,
                                               pricePerLiter: price, odometerKm: odo)
                     fuelLitersText = ""; fuelPriceText = ""; fuelOdometerText = ""
                     showFuelSheet = false

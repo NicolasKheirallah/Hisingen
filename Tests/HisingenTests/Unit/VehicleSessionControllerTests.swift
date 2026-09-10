@@ -23,14 +23,14 @@ struct VehicleSessionControllerTests {
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
         var current = try #require(controller.latest)
         let receipt = PendingCommandSummary(commandIdentifier: "honk-horn", issuedAt: Date(), command: .honkHorn)
-        current.pendingCommand = receipt
+        current.commandState.pending = receipt
         controller.applyOptimisticState(current)
         let previousCount = context.receivedStates
         controller.refreshNow()
         for _ in 0..<200 where context.receivedStates == previousCount { try await Task.sleep(for: .milliseconds(10)) }
         #expect(context.receivedStates > previousCount)
-        #expect(controller.latest?.pendingCommand == receipt)
-        #expect(store.database.loadSnapshot(for: "P1")?.pendingCommand == nil)
+        #expect(controller.latest?.commandState.pending == receipt)
+        #expect(store.database.loadSnapshot(for: "P1")?.commandState.pending == nil)
     }
     @Test(arguments: [VehicleBrand.polestar, .volvo])
     func credentialChangeAdoptsPolestarAndReconcilesBeforeRestoring(from originalBrand: VehicleBrand) async throws {
@@ -63,7 +63,7 @@ struct VehicleSessionControllerTests {
         for _ in 0..<200 where controller.latest == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(controller.latest?.vin == "P1")
+        #expect(controller.latest?.identity.vin == "P1")
         #expect(context.reconciliations == 1)
         #expect(await polestar.calls == ["reset", "authenticate:new@example.invalid:new-password"])
         #expect(await volvo.calls.isEmpty)
@@ -89,7 +89,7 @@ struct VehicleSessionControllerTests {
         defer { controller.stop() }
         controller.resume()
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(controller.latest?.vin == "P1")
+        #expect(controller.latest?.identity.vin == "P1")
         fleet.retain(vehicle(vin: "P1"))
         fleet.retain(vehicle(vin: "V1", brand: .volvo))
         preferences.email = "new@example.invalid"
@@ -100,7 +100,7 @@ struct VehicleSessionControllerTests {
         #expect(database.loadSnapshot(for: "P1") == nil)
         #expect(fleet.snapshot(for: "V1") != nil)
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(controller.latest?.vin == "P2")
+        #expect(controller.latest?.identity.vin == "P2")
     }
 }
 

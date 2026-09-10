@@ -627,11 +627,11 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
     func featureStatus(for capability: VehicleCapability, in state: VehicleState) -> VehicleFeatureStatus {
         let support = self.support(for: capability)
         let availability: FeatureAvailability
-        switch state.availability {
+        switch state.identity.availability {
         case .available: availability = .available
         case .unavailable: availability = .vehicleOffline
         case .unknown:
-            availability = state.unavailableFeatures.contains(capability.associatedFeature)
+            availability = state.freshness.unavailableFeatures.contains(capability.associatedFeature)
                 ? .temporarilyUnavailable : .unknown
         }
         return VehicleFeatureStatus(support: support, availability: availability)

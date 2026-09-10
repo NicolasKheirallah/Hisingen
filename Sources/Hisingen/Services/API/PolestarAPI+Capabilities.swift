@@ -128,5 +128,13 @@ extension PolestarAPI {
         }
     }
 
+    func clearTransientCapabilityBackoffAfterCommand(for vin: String) {
+        guard let current = capabilityBackoff[vin] else { return }
+        let retained = current.filter { key, _ in
+            unsupportedCapabilities.contains("\(vin)|\(key)")
+        }
+        capabilityBackoff[vin] = retained.isEmpty ? nil : retained
+    }
+
 
 }

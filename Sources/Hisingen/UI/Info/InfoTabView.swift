@@ -95,8 +95,8 @@ struct InfoTabView: View {
 
     var availableExteriorAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter { angle in
-            imageCache.hasImage(for: state.vin, angle: angle.rawValue)
-                || (angle == preferences.carRenderAngle && state.imageData != nil)
+            imageCache.hasImage(for: state.identity.vin, angle: angle.rawValue)
+                || (angle == preferences.carRenderAngle && state.identity.imageData != nil)
         }
     }
 
@@ -116,7 +116,7 @@ struct InfoTabView: View {
                     ? preferred.rawValue
                     : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
             }
-            .task(id: "\(state.vin)|\(state.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
+            .task(id: "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
             .task(id: coordinateKey) { await resolveAddressIfNeeded() }
             .alert(
                 L10n.text("Something Went Wrong"),
@@ -144,7 +144,7 @@ struct InfoTabView: View {
             add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked,
                                                  isTailgateLocked: ext.isTailgateLocked))
         }
-        if let tyres = state.healthDetails?.tyres, !tyres.isEmpty {
+        if let tyres = state.maintenance.details?.tyres, !tyres.isEmpty {
             add(.tyres, TireStatusCardView(tyres: tyres))
         }
         add(.fluids, fluidsAndLightingCard)
@@ -160,7 +160,7 @@ struct InfoTabView: View {
         if weatherCardHasContent {
             add(.weather, ambientWeatherCard)
         }
-        if state.tripMeterManualKm != nil || state.tripMeterAutomaticKm != nil || state.averageSpeedKmH != nil {
+        if state.tripComputer.manualTripKm != nil || state.tripComputer.automaticTripKm != nil || state.tripComputer.averageSpeedKmH != nil {
             add(.trip, tripComputerCard)
         }
         add(.powertrain, powertrainSpecsCard)
@@ -207,7 +207,7 @@ struct InfoTabView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.7))
                 .accessibilityHidden(true)
-            Text(state.isCachedSnapshot ? L10n.text("Showing an offline copy") : state.freshnessDescription)
+            Text(state.freshness.isCached ? L10n.text("Showing an offline copy") : state.freshnessDescription)
                 .font(.system(size: 10.5, weight: state.isStale() ? .semibold : .regular))
                 .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.8))
                 .lineLimit(1)
@@ -288,7 +288,7 @@ struct InfoTabView: View {
     }
 
     private func loadAsyncData() async {
-        let vin = state.vin
+        let vin = state.identity.vin
         let db = database
         let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
@@ -318,27 +318,27 @@ struct InfoTabView: View {
     }
 
     private var serviceCardHasContent: Bool {
-        state.daysToService != nil
-            || (state.engineHoursToService ?? 0) > 0
-            || (state.preferredWorkshopName?.isEmpty == false)
-            || (state.preferredWorkshopId?.isEmpty == false)
+        state.maintenance.service.daysToService != nil
+            || (state.maintenance.service.engineHoursToService ?? 0) > 0
+            || (state.maintenance.service.preferredWorkshopName?.isEmpty == false)
+            || (state.maintenance.service.preferredWorkshopID?.isEmpty == false)
     }
 
     private var exteriorCardHasContent: Bool {
-        (state.externalColour?.isEmpty == false)
-            || (state.wheels?.isEmpty == false)
+        (state.identity.externalColour?.isEmpty == false)
+            || (state.identity.wheels?.isEmpty == false)
             || ((state.exteriorStatus?.physicalDoorCount ?? 0) > 0)
-            || !state.packages.isEmpty
+            || !state.identity.packages.isEmpty
     }
 
     private var interiorCardHasContent: Bool {
-        (state.upholstery?.isEmpty == false)
+        (state.identity.upholstery?.isEmpty == false)
             || (state.formattedSteeringOrientation?.isEmpty == false)
             || state.climateStatus != nil
     }
 
     var savedChargeLocations: [ChargeLocationSnapshot] {
-        state.chargeLocations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
+        state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
     }
 
     private var softwareCardHasContent: Bool {
@@ -356,7 +356,7 @@ struct InfoTabView: View {
         return BatteryHealthEstimator.estimate(
             state: state,
             chargingSessions: asyncData.chargingSessions,
-            specification: preferences.vehicleSpecificationOverride(for: state.vin),
+            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin),
             previous: previous
         )
     }
@@ -403,46 +403,46 @@ struct InfoTabView: View {
         }
         lines.append("")
 
-        row(L10n.text("Model"), [state.modelName, state.modelYear].compactMap { $0 }.joined(separator: " "))
+        row(L10n.text("Model"), [state.identity.modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " "))
         row(L10n.text("VIN"), redacted
-            ? String(repeating: "•", count: max(0, state.vin.count - 4)) + state.vin.suffix(4)
-            : state.vin)
-        if !redacted { row(L10n.text("Registration"), state.registrationNo) }
-        row(L10n.text("Vehicle ID"), state.internalVehicleIdentifier)
+            ? String(repeating: "•", count: max(0, state.identity.vin.count - 4)) + state.identity.vin.suffix(4)
+            : state.identity.vin)
+        if !redacted { row(L10n.text("Registration"), state.identity.registrationNo) }
+        row(L10n.text("Vehicle ID"), state.identity.internalVehicleIdentifier)
         row(L10n.text("Architecture"), state.powertrain.displayName)
-        if let odo = state.odometerKm {
+        if let odo = state.maintenance.odometerKm {
             row(L10n.text("Odometer"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit))
         }
-        if let battery = state.batteryPercentage {
+        if let battery = state.energy.batteryPercentage {
             row(L10n.text("Battery"), String(format: "%.0f%%", battery))
         }
         if let range = state.primaryRangeKm {
             row(L10n.text("Range"), Format.distance(km: range, unit: preferences.distanceUnit))
         }
         if state.powertrain.hasElectricRange {
-            row(L10n.text("Charging"), state.chargingState.displayName)
-            if let target = state.chargeTargetPercentage {
+            row(L10n.text("Charging"), state.energy.chargingState.displayName)
+            if let target = state.energy.targetPercentage {
                 row(L10n.text("Charge Target"), "\(target)%")
             }
         }
-        row(L10n.text("Exterior Paint"), state.externalColour)
-        row(L10n.text("Wheels"), state.wheels)
-        row(L10n.text("Interior Trim"), state.upholstery)
-        if !state.packages.isEmpty {
-            row(L10n.text("Factory Packages"), state.packages.joined(separator: ", "))
+        row(L10n.text("Exterior Paint"), state.identity.externalColour)
+        row(L10n.text("Wheels"), state.identity.wheels)
+        row(L10n.text("Interior Trim"), state.identity.upholstery)
+        if !state.identity.packages.isEmpty {
+            row(L10n.text("Factory Packages"), state.identity.packages.joined(separator: ", "))
         }
-        row(L10n.text("Factory Build Week"), state.formattedBuildWeek ?? state.structureWeek)
-        row(L10n.text("Factory Spec (PNO34)"), state.pno34)
-        row(L10n.text("Market Delivery"), state.otaCapabilities?.identity?.market ?? state.accountMarket)
+        row(L10n.text("Factory Build Week"), state.formattedBuildWeek ?? state.identity.structureWeek)
+        row(L10n.text("Factory Spec (PNO34)"), state.identity.pno34)
+        row(L10n.text("Market Delivery"), state.otaCapabilities?.identity?.market ?? state.identity.accountMarket)
         row(L10n.text("Backend-Reported Software"), state.softwareInfo?.installedVersion ?? state.softwareInfo?.version)
 
-        if let days = state.daysToService {
+        if let days = state.maintenance.service.daysToService {
             row(L10n.text("Service Due"), L10n.format("in %d days", days))
         }
-        if let inService = preferences.warrantyInServiceDate(for: state.vin) {
+        if let inService = preferences.warrantyInServiceDate(for: state.identity.vin) {
             row(L10n.text("In-Service Date"), Format.dateFormatter.string(from: inService))
         }
-        if let warranty = state.warrantyInfo?.factoryWarrantyValidUntil {
+        if let warranty = state.maintenance.warranty?.factoryWarrantyValidUntil {
             row(L10n.text("Manufacturer Warranty"), Format.dateFormatter.string(from: warranty))
         }
 
@@ -477,7 +477,7 @@ struct InfoTabView: View {
         let report = buildVehicleReport()
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "vehicle_report_\(state.vin.prefix(8)).txt"
+        panel.nameFieldStringValue = "vehicle_report_\(state.identity.vin.prefix(8)).txt"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {

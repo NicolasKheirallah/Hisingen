@@ -6,7 +6,7 @@ struct RemoteCommandTests {
     @Test
     func testStaleVehicleSnapshotDisablesCommandsUntilRefresh() {
         var state = vehicle(vin: "YSMSTALE")
-        state.fetchedAt = Date().addingTimeInterval(-11 * 60)
+        state.freshness.fetchedAt = Date().addingTimeInterval(-11 * 60)
         let availability = CapabilityGate().availability(
             for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false)
@@ -375,7 +375,7 @@ struct RemoteCommandTests {
             dataWarnings: []
         )
 
-        XCTAssertNil(state.warrantyInfo)
+        XCTAssertNil(state.maintenance.warranty)
 
         var polestarState = VehicleState(
             batteryPercentage: 75.0,
@@ -407,9 +407,9 @@ struct RemoteCommandTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        polestarState.structureWeek = "202245"
+        polestarState.identity.structureWeek = "202245"
 
-        XCTAssertNil(polestarState.warrantyInfo)
+        XCTAssertNil(polestarState.maintenance.warranty)
     }
 
     @Test
@@ -558,7 +558,7 @@ struct RemoteCommandTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        previous.optimisticCommandLockUntil = Date().addingTimeInterval(90)
+        previous.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
 
         // Incoming fresh state from stale cloud cache reporting idle climate and old 90% target
         let staleIncoming = VehicleState(
@@ -605,8 +605,8 @@ struct RemoteCommandTests {
 
         // Should preserve optimistic active climate and charge target during the 90s grace window
         XCTAssertEqual(merged.climateStatus?.activity, .heating)
-        XCTAssertEqual(merged.chargeTargetPercentage, 70)
-        XCTAssertEqual(merged.chargingCurrentAmps, 16)
+        XCTAssertEqual(merged.energy.targetPercentage, 70)
+        XCTAssertEqual(merged.energy.currentAmps, 16)
     }
 
     private func invocation(status: Int) -> Data {

@@ -280,7 +280,7 @@ struct MeasurementUnitsAndThemeTests {
 
         // Below the 20% low-SOC cutoff the vehicle's own range readout is considered too noisy.
         var lowBattery = sample
-        lowBattery.batteryPercentage = 15
+        lowBattery.energy.batteryPercentage = 15
         XCTAssertNil(lowBattery.currentRangeVsModelWltpPercent())
 
         var unlockedSample = sample

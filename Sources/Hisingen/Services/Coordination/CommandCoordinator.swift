@@ -105,7 +105,7 @@ final class CommandCoordinator {
             return .refused(reason: RemoteCommandError.busy.localizedDescription)
         }
         guard context.sessionIsValid, let state = context.vehicleState,
-              (preferences.vin.isEmpty || state.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
+              (preferences.vin.isEmpty || state.identity.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
             // Distinguish "still loading" (session fine, first telemetry fetch not back yet
             // right after launch) from "you need to refresh" — the command is hard-gated on a
             // snapshot for capability checks and the optimistic patch.
@@ -149,7 +149,7 @@ final class CommandCoordinator {
         }
         let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
         let providerBrand = context.currentCommandExecutor().brand
-        let vehicle = [state.modelName, state.registrationNo].compactMap { value in
+        let vehicle = [state.identity.modelName, state.identity.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
         }.joined(separator: " - ")
 
@@ -173,17 +173,17 @@ final class CommandCoordinator {
         // Authorization can show a modal sheet or biometric prompt. The active account,
         // provider, or vehicle may change while it is visible; never send the command
         // that was approved for the old snapshot through the newly selected provider.
-        guard isCurrentExecutionContext(vin: state.vin, brand: providerBrand) else {
+        guard isCurrentExecutionContext(vin: state.identity.vin, brand: providerBrand) else {
             return .refused(reason: L10n.text("The selected vehicle changed while authorization was pending."))
         }
-        return await execute(adapted, vin: state.vin)
+        return await execute(adapted, vin: state.identity.vin)
     }
 
     private func isCurrentExecutionContext(vin: String, brand: VehicleBrand) -> Bool {
         guard let context, context.sessionIsValid,
               context.currentCommandExecutor().brand == brand,
               let currentState = context.vehicleState else { return false }
-        return currentState.vin.caseInsensitiveCompare(vin) == .orderedSame
+        return currentState.identity.vin.caseInsensitiveCompare(vin) == .orderedSame
     }
 
     private func execute(_ command: RemoteCommand, vin: String) async -> RemoteCommandDispatchOutcome {
@@ -207,7 +207,7 @@ final class CommandCoordinator {
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000)
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
-            applyOptimisticPatch(for: command, outcome: result.outcome)
+            applyOptimisticPatch(for: command, outcome: result.outcome, issuedAt: startedAt)
             // The banner must say *what* ran, not just that something did — a bare
             // "Command sent" while two cars are in range reads as noise.
             let detail: String
@@ -263,7 +263,7 @@ final class CommandCoordinator {
             guard !Task.isCancelled else { return }
             guard let self, let context = self.context else { return }
             self.followUpRefreshTask = nil
-            guard context.sessionIsValid, context.vehicleState?.vin == vin else { return }
+            guard context.sessionIsValid, context.vehicleState?.identity.vin == vin else { return }
             context.refreshNowAfterCommand()
         }
     }
@@ -275,7 +275,11 @@ final class CommandCoordinator {
     ///
     /// The patch is partly synthesized (an assumed 30-minute climate window), so it is
     /// display-only and must never be persisted.
-    private func applyOptimisticPatch(for command: RemoteCommand, outcome: RemoteCommandOutcome) {
+    private func applyOptimisticPatch(
+        for command: RemoteCommand,
+        outcome: RemoteCommandOutcome,
+        issuedAt: Date
+    ) {
         guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return }
         guard let context, var current = context.vehicleState else { return }
         switch command {
@@ -339,16 +343,16 @@ final class CommandCoordinator {
             }
             current.exteriorStatus = exterior
         case .setChargeTarget(let target):
-            current.chargeTargetPercentage = target
+            current.energy.targetPercentage = target
         case .setAmpLimit(let amps):
-            current.chargingCurrentLimitAmps = amps
+            current.energy.currentLimitAmps = amps
         default:
             break
         }
-        current.fetchedAt = Date()
-        current.optimisticCommandLockUntil = Date().addingTimeInterval(90)
-        current.pendingCommand = PendingCommandSummary(
-            commandIdentifier: command.identifier, issuedAt: Date(), command: command)
+        current.freshness.fetchedAt = Date()
+        current.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
+        current.commandState.pending = PendingCommandSummary(
+            commandIdentifier: command.identifier, issuedAt: issuedAt, command: command)
         context.applyOptimisticState(current)
     }
 }

@@ -240,10 +240,10 @@ struct FormattingTests {
         let previous = vehicle(vin: "VIN-A", battery: 64)
         let current = vehicle(vin: "VIN-A", battery: nil)
         let merged = current.mergingLastKnown(from: previous, features: .default)
-        XCTAssertEqual(merged.batteryPercentage, 64)
+        XCTAssertEqual(merged.energy.batteryPercentage, 64)
         XCTAssertNil(current.mergingLastKnown(
             from: vehicle(vin: "VIN-B", battery: 81), features: .default
-        ).batteryPercentage)
+        ).energy.batteryPercentage)
     }
 
     @Test
@@ -253,8 +253,8 @@ struct FormattingTests {
         let current = vehicle(vin: "VIN-A", battery: 65)
         let merged = current.mergingLastKnown(from: previous, features: .default)
         XCTAssertEqual(merged.exteriorStatus?.isLocked, true)
-        XCTAssertTrue(merged.retainedDataCategories.contains(.exteriorStatus))
-        XCTAssertNotNil(merged.retainedDataAt)
+        XCTAssertTrue(merged.freshness.retainedDataCategories.contains(.exteriorStatus))
+        XCTAssertNotNil(merged.freshness.retainedDataAt)
     }
 
     @Test
@@ -271,21 +271,21 @@ struct FormattingTests {
         let merged = current.mergingLastKnown(from: previous, features: features)
 
         XCTAssertNil(merged.connectivity)
-        XCTAssertFalse(merged.retainedDataCategories.contains(.connectivityDiagnostics))
+        XCTAssertFalse(merged.freshness.retainedDataCategories.contains(.connectivityDiagnostics))
     }
 
     @Test
     func testRetainedDataNoticeIdentityChangesOnlyForANewIncident() throws {
         let sourceAt = Date(timeIntervalSince1970: 1_700_000_000)
         var first = vehicle(vin: "VIN-A")
-        first.retainedDataCategories = [.exteriorStatus, .vehicleLocation]
-        first.retainedDataAt = sourceAt
+        first.freshness.retainedDataCategories = [.exteriorStatus, .vehicleLocation]
+        first.freshness.retainedDataAt = sourceAt
         var sameIncident = first
-        sameIncident.fetchedAt = sourceAt.addingTimeInterval(300)
+        sameIncident.freshness.fetchedAt = sourceAt.addingTimeInterval(300)
         var differentCategory = sameIncident
-        differentCategory.retainedDataCategories = [.exteriorStatus]
+        differentCategory.freshness.retainedDataCategories = [.exteriorStatus]
         var newerIncident = first
-        newerIncident.retainedDataAt = sourceAt.addingTimeInterval(600)
+        newerIncident.freshness.retainedDataAt = sourceAt.addingTimeInterval(600)
 
         let firstID = try XCTUnwrap(RetainedDataNoticeID(state: first))
         XCTAssertEqual(firstID, RetainedDataNoticeID(state: sameIncident))
@@ -293,7 +293,7 @@ struct FormattingTests {
         XCTAssertNotEqual(firstID, RetainedDataNoticeID(state: newerIncident))
 
         var fresh = first
-        fresh.retainedDataCategories = []
+        fresh.freshness.retainedDataCategories = []
         XCTAssertNil(RetainedDataNoticeID(state: fresh))
     }
 
@@ -308,9 +308,9 @@ struct FormattingTests {
         )
         store.save(stale)
         XCTAssertNil(store.snapshot(for: "VIN-A"))
-        XCTAssertNil(stale.cacheableCopy.ownerFirstName)
-        XCTAssertNil(stale.cacheableCopy.registrationNo)
-        XCTAssertNil(stale.cacheableCopy.imageData)
+        XCTAssertNil(stale.cacheableCopy.identity.ownerFirstName)
+        XCTAssertNil(stale.cacheableCopy.identity.registrationNo)
+        XCTAssertNil(stale.cacheableCopy.identity.imageData)
     }
 
     @Test
@@ -511,19 +511,19 @@ struct FormattingTests {
     func testChargingSessionSamplesAndSparklineBuffering() {
         var state1 = vehicle(battery: 50, state: .charging, connection: .connected)
         let sample1 = ChargingSample(timestamp: Date(timeIntervalSince1970: 1000), batteryPercentage: 50, powerWatts: 7200)
-        state1.chargingSamples = [sample1]
+        state1.energy.samples = [sample1]
 
         let state2 = vehicle(battery: 52, state: .charging, connection: .connected, fetchedAt: Date(timeIntervalSince1970: 1060))
         let merged = state2.mergingLastKnown(from: state1, features: .default)
 
-        XCTAssertEqual(merged.chargingSamples.count, 2)
-        XCTAssertEqual(merged.chargingSamples.first?.batteryPercentage, 50)
-        XCTAssertEqual(merged.chargingSamples.last?.batteryPercentage, 52)
+        XCTAssertEqual(merged.energy.samples.count, 2)
+        XCTAssertEqual(merged.energy.samples.first?.batteryPercentage, 50)
+        XCTAssertEqual(merged.energy.samples.last?.batteryPercentage, 52)
 
 
         let idleState = vehicle(battery: 80, state: .idle, connection: .disconnected)
         let cleared = idleState.mergingLastKnown(from: merged, features: .default)
-        XCTAssertTrue(cleared.chargingSamples.isEmpty)
+        XCTAssertTrue(cleared.energy.samples.isEmpty)
     }
 
     @Test
@@ -533,22 +533,22 @@ struct FormattingTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         var state = vehicle(battery: 64, state: .charging, connection: .connected)
-        state.chargingSamples = [
+        state.energy.samples = [
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_000), batteryPercentage: 61, powerWatts: 6_200),
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_060), batteryPercentage: 64, powerWatts: 6_100)
         ]
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         store.save(state)
 
-        let restored = try XCTUnwrap(store.snapshot(for: state.vin))
-        XCTAssertEqual(restored.chargingSamples, state.chargingSamples)
+        let restored = try XCTUnwrap(store.snapshot(for: state.identity.vin))
+        XCTAssertEqual(restored.energy.samples, state.energy.samples)
     }
 
     @Test
     func testCompletedChargingSessionSummary() throws {
         var previous = vehicle(battery: 50, state: .charging, connection: .connected,
                                fetchedAt: Date(timeIntervalSince1970: 1_000))
-        previous.chargingSamples = [
+        previous.energy.samples = [
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_000), batteryPercentage: 50, powerWatts: 7_200),
             ChargingSample(timestamp: Date(timeIntervalSince1970: 1_600), batteryPercentage: 60, powerWatts: 6_800)
         ]

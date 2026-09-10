@@ -87,9 +87,9 @@ extension HistoryDashboardView {
                         .font(.system(size: 9)).foregroundStyle(.secondary)
                 }
                 seasonalRow(seasonal)
-                if state.hasFreshReading(.battery), let battery = state.batteryPercentage,
+                if state.hasFreshReading(.battery), let battery = state.energy.batteryPercentage,
                    let estimate = HistoryInsights.historicalRange(
-                    from: telemetryRecords, vin: state.vin,
+                    from: telemetryRecords, vin: state.identity.vin,
                     usableCapacityKwh: state.configuredUsableBatteryCapacityKwh, batteryPercentage: battery) {
                     Text(L10n.format("Range from recorded consumption: %@",
                                      Format.distance(km: estimate.typicalKm, unit: preferences.distanceUnit)))

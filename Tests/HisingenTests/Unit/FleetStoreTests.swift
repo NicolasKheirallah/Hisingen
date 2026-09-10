@@ -26,12 +26,12 @@ struct FleetStoreTests {
         let stateStore = VehicleStateStore(defaults: defaults, database: database, preferences: preferences)
         database.saveSnapshot(vehicle(vin: "P1", battery: 10))
         let store = FleetStore(stateStore: stateStore, preferences: preferences)
-        #expect(store.snapshot().snapshot(for: "P1")?.batteryPercentage == 10)
+        #expect(store.snapshot().snapshot(for: "P1")?.energy.batteryPercentage == 10)
         store.retain(vehicle(vin: "P1", battery: 20))
         let display = store.snapshot(activeState: vehicle(vin: "P1", battery: 30))
-        #expect(display.snapshot(for: "P1")?.batteryPercentage == 30)
-        #expect(store.snapshot(for: "P1")?.batteryPercentage == 20)
-        #expect(database.loadSnapshot(for: "P1")?.batteryPercentage == 10)
+        #expect(display.snapshot(for: "P1")?.energy.batteryPercentage == 30)
+        #expect(store.snapshot(for: "P1")?.energy.batteryPercentage == 20)
+        #expect(database.loadSnapshot(for: "P1")?.energy.batteryPercentage == 10)
     }
 
     @Test

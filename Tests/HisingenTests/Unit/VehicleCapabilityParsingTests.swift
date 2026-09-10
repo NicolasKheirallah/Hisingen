@@ -374,9 +374,9 @@ struct VehicleCapabilityParsingTests {
         }
         let oldCache = try JSONSerialization.data(withJSONObject: object)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: oldCache)
-        XCTAssertEqual(decoded.vin, original.vin)
-        XCTAssertEqual(decoded.chargingSchedules, [])
-        XCTAssertEqual(decoded.unavailableFeatures, [])
+        XCTAssertEqual(decoded.identity.vin, original.identity.vin)
+        XCTAssertEqual(decoded.energy.schedules, [])
+        XCTAssertEqual(decoded.freshness.unavailableFeatures, [])
     }
 
     @Test
@@ -540,21 +540,21 @@ struct VehicleCapabilityParsingTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        state.structureWeek = "202240"
-        state.internalVehicleIdentifier = "UUID-POL-12345"
-        state.pno34 = "PNO34-SPEC-2023"
-        state.accountMarket = "SE"
+        state.identity.structureWeek = "202240"
+        state.identity.internalVehicleIdentifier = "UUID-POL-12345"
+        state.identity.pno34 = "PNO34-SPEC-2023"
+        state.identity.accountMarket = "SE"
 
         XCTAssertEqual(state.formattedBuildWeek, "2022 · W40")
 
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
 
-        XCTAssertEqual(decoded.structureWeek, "202240")
+        XCTAssertEqual(decoded.identity.structureWeek, "202240")
         XCTAssertEqual(decoded.formattedBuildWeek, "2022 · W40")
-        XCTAssertEqual(decoded.internalVehicleIdentifier, "UUID-POL-12345")
-        XCTAssertEqual(decoded.pno34, "PNO34-SPEC-2023")
-        XCTAssertEqual(decoded.accountMarket, "SE")
+        XCTAssertEqual(decoded.identity.internalVehicleIdentifier, "UUID-POL-12345")
+        XCTAssertEqual(decoded.identity.pno34, "PNO34-SPEC-2023")
+        XCTAssertEqual(decoded.identity.accountMarket, "SE")
     }
 
     @Test
@@ -672,18 +672,18 @@ struct VehicleCapabilityParsingTests {
             vehicleReportedAt: Date(),
             dataWarnings: []
         )
-        state.externalColour = "Thunder"
-        state.upholstery = "WeaveTech Slate"
-        state.wheels = "19\" 5-Double Spoke"
-        state.packages = ["Pilot Pack", "Plus Pack"]
+        state.identity.externalColour = "Thunder"
+        state.identity.upholstery = "WeaveTech Slate"
+        state.identity.wheels = "19\" 5-Double Spoke"
+        state.identity.packages = ["Pilot Pack", "Plus Pack"]
 
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
 
-        XCTAssertEqual(decoded.externalColour, "Thunder")
-        XCTAssertEqual(decoded.upholstery, "WeaveTech Slate")
-        XCTAssertEqual(decoded.wheels, "19\" 5-Double Spoke")
-        XCTAssertEqual(decoded.packages, ["Pilot Pack", "Plus Pack"])
+        XCTAssertEqual(decoded.identity.externalColour, "Thunder")
+        XCTAssertEqual(decoded.identity.upholstery, "WeaveTech Slate")
+        XCTAssertEqual(decoded.identity.wheels, "19\" 5-Double Spoke")
+        XCTAssertEqual(decoded.identity.packages, ["Pilot Pack", "Plus Pack"])
     }
 
     private func dailyTime(hour: Int, minute: Int) -> Data {

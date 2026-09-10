@@ -348,7 +348,7 @@ final class RefreshCoordinator {
             // is the confirmation path for those commands.
             purpose = nil
         }
-        guard let purpose, let vin = latest?.vin,
+        guard let purpose, let vin = latest?.identity.vin,
               preferences.features.contains(.realTimeUpdates) else { return }
         commandStreamPurpose = purpose
         commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
@@ -381,7 +381,7 @@ final class RefreshCoordinator {
         let expiredPurpose = commandStreamPurpose
         commandStreamUntil = nil
         commandStreamPurpose = nil
-        guard latest?.vin == vin else { return }
+        guard latest?.identity.vin == vin else { return }
         guard let expiredPurpose, liveStreamPurpose == expiredPurpose else {
             publishDiagnostics()
             return
@@ -431,14 +431,14 @@ final class RefreshCoordinator {
             isCharging: latest.isCharging,
             isClimateActive: latest.isClimateActive,
             isVehicleAvailable: {
-                switch latest.availability {
+                switch latest.identity.availability {
                 case .available: return true
                 case .unavailable: return false
                 case .unknown: return nil
                 }
             }()
         )
-        if Date().timeIntervalSince(latest.fetchedAt) >= interval { refreshNow() }
+        if Date().timeIntervalSince(latest.freshness.fetchedAt) >= interval { refreshNow() }
     }
 
     /// Switches the active vehicle. Idempotence is decided HERE and nowhere else.
@@ -470,7 +470,7 @@ final class RefreshCoordinator {
         // budget and surfaced transient failures as terminal immediately.
         selectionRetryCount = 0
         // Fully settled on this car: nothing to do.
-        if vin == preferences.vin, requestedSelectionVIN == nil, latest?.vin == vin { return }
+        if vin == preferences.vin, requestedSelectionVIN == nil, latest?.identity.vin == vin { return }
         beginSelection(vin: vin)
     }
 
@@ -705,24 +705,24 @@ final class RefreshCoordinator {
         )
         // Command receipts are reconciled separately by the session controller against
         // timestamped readings, rather than being persisted as vehicle telemetry.
-        state.pendingCommand = nil
+        state.commandState.pending = nil
         // SQLite is the single source of truth for completed charging history. Clear legacy
         // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
-        state.chargingSessions = []
+        state.energy.sessions = []
         latest = state
-        lastFullRefreshAt = state.fetchedAt
+        lastFullRefreshAt = state.freshness.fetchedAt
         lastError = nil
         lastLatency = latency
         failureCount = 0
         refreshSuccesses += 1
         rateLimitedUntil = nil
         stateStore.save(state)
-        SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.vin))
+        SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.identity.vin))
         onEvent?(.state(state))
         if desiredLiveStreamPurpose(for: state) == nil {
             stopLiveStreaming()
         } else {
-            startLiveStreamingIfNeeded(vin: state.vin)
+            startLiveStreamingIfNeeded(vin: state.identity.vin)
         }
         let pollingInterval = liveStreamConnected
             ? liveStreamPolicy.integrityPollInterval
@@ -730,7 +730,7 @@ final class RefreshCoordinator {
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
             isVehicleAvailable: {
-                switch state.availability {
+                switch state.identity.availability {
                 case .available: return true
                 case .unavailable: return false
                 case .unknown: return nil
@@ -861,8 +861,8 @@ final class RefreshCoordinator {
             sessionValid: sessionReady,
             networkAvailable: networkAvailable,
             refreshInProgress: task != nil,
-            unavailableFeatures: latest?.unavailableFeatures ?? [],
-            servingCachedSnapshot: latest?.isCachedSnapshot ?? false,
+            unavailableFeatures: latest?.freshness.unavailableFeatures ?? [],
+            servingCachedSnapshot: latest?.freshness.isCached ?? false,
             liveStreamConnected: liveStreamConnected,
             liveStreamRetryAt: liveStreamRetryAt,
             lastLiveFrameAt: liveStreamMetrics.lastFrameAt,
@@ -895,7 +895,7 @@ final class RefreshCoordinator {
                     self.liveStreamMetrics.connectedAt = nil
                     self.scheduleFallbackPoll(for: self.latest)
                     self.publishDiagnostics()
-                    if let vin = self.latest?.vin {
+                    if let vin = self.latest?.identity.vin {
                         self.startLiveStreamingIfNeeded(vin: vin)
                     }
                 }
@@ -908,7 +908,7 @@ final class RefreshCoordinator {
             var lastPersistAt = Date.distantPast
             while !Task.isCancelled {
                 guard let self, requestGeneration == self.generation,
-                      self.latest?.vin == vin,
+                      self.latest?.identity.vin == vin,
                       self.desiredLiveStreamPurpose(for: self.latest) == purpose else { return }
                 let streamStartedAt = Date()
                 var connectedAt: Date?
@@ -918,7 +918,7 @@ final class RefreshCoordinator {
                     for try await update in stream {
                         try Task.checkCancellation()
                         guard requestGeneration == self.generation,
-                              var current = self.latest, current.vin == vin else { return }
+                              var current = self.latest, current.identity.vin == vin else { return }
                         if case .connected(let activeTransportStreams) = update {
                             let now = Date()
                             connectedAt = now
@@ -1021,8 +1021,8 @@ final class RefreshCoordinator {
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
             isVehicleAvailable: {
-                if case .unavailable = state.availability { return false }
-                if case .available = state.availability { return true }
+                if case .unavailable = state.identity.availability { return false }
+                if case .available = state.identity.availability { return true }
                 return nil
             }()
         ), retrySession: false)

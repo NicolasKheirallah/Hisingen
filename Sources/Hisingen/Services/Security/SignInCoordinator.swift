@@ -172,7 +172,7 @@ final class SignInCoordinator {
         let callbackURL = try await volvoPresenter.signIn(
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
-        try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil, features: preferences.features)
+        try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil)
         preferences.volvoClientID = clientID
         try Keychain.saveVolvoClientSecret(clientSecret)
         try Keychain.saveVolvoApiKey(vccApiKey)

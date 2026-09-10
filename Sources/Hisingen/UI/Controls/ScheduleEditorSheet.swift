@@ -85,7 +85,7 @@ struct ScheduleEditorSheet: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            let allSchedules = state.chargingSchedules
+            let allSchedules = state.energy.schedules
             if allSchedules.isEmpty {
                 Text(L10n.text("No schedules configured."))
                     .font(.system(size: 11))

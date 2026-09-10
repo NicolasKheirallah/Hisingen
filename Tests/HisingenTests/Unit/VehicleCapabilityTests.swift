@@ -127,10 +127,10 @@ struct VehicleCapabilityTests {
         let profile = VehicleCapabilityProfile(modelName: "Polestar 4")
         var offlineState = vehicle(vin: "VIN-P4")
         offlineState = VehicleState(
-            batteryPercentage: offlineState.batteryPercentage, rangeKm: offlineState.rangeKm,
-            chargingState: offlineState.chargingState,
-            estimatedChargingTimeToFullMinutes: offlineState.estimatedChargingTimeToFullMinutes,
-            chargeTargetPercentage: offlineState.chargeTargetPercentage,
+            batteryPercentage: offlineState.energy.batteryPercentage, rangeKm: offlineState.energy.rangeKm,
+            chargingState: offlineState.energy.chargingState,
+            estimatedChargingTimeToFullMinutes: offlineState.energy.estimatedTimeToFullMinutes,
+            chargeTargetPercentage: offlineState.energy.targetPercentage,
             chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
             chargingType: .unknown, chargerConnection: .unknown,
             availability: .unavailable(reason: "Power saving"),

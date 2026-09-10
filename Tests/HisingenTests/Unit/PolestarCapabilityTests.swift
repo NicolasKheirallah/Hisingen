@@ -105,6 +105,30 @@ struct PolestarCapabilityTests {
         #expect(!retry.unavailable)
     }
 
+    @Test func commandRefreshPreservesUnsupportedBackoffAndClearsTransientBackoff() async throws {
+        let api = makeAPI()
+        let _: OptionalCapability<Int> = try await api.optionalCapability(
+            .vehicleErrors, enabled: true, vin: "VIN-A"
+        ) { throw PolestarError.permissionDenied(operation: "errors") }
+        let _: OptionalCapability<Int> = try await api.optionalCapability(
+            .tripMeters, enabled: true, vin: "VIN-A"
+        ) { throw PolestarError.grpcUnavailable(service: "odometer") }
+
+        await api.clearTransientCapabilityBackoffAfterCommand(for: "VIN-A")
+
+        let errors: OptionalCapability<Int> = try await api.optionalCapability(
+            .vehicleErrors, enabled: true, vin: "VIN-A"
+        ) {
+            Issue.record("Command refresh retried a permission-gated capability")
+            return 1
+        }
+        let trips: OptionalCapability<Int> = try await api.optionalCapability(
+            .tripMeters, enabled: true, vin: "VIN-A"
+        ) { 42 }
+        #expect(errors.unsupported)
+        #expect(trips.value == 42)
+    }
+
     @Test func featureAliasesShareTheSameReadingCache() async throws {
         let api = makeAPI()
         let first: OptionalCapability<Int> = try await api.optionalCapability(.exteriorStatus, enabled: true, vin: "VIN-A") { 42 }

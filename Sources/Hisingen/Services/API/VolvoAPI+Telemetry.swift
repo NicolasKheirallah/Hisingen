@@ -307,84 +307,93 @@ extension VolvoAPI {
         }()
 
         var state = VehicleState(
-            batteryPercentage: batteryPct,
-            rangeKm: rangeKm,
-            chargingState: chargingState,
-            estimatedChargingTimeToFullMinutes: energy?.estTimeToFullMinutes.flatMap { $0 > 0 ? $0 : nil },
-            chargeTargetPercentage: targetPct,
-            chargingPowerWatts: chargingWatts,
-            chargingCurrentAmps: currentDrawAmps ?? chargingAmps,
-            chargingVoltageVolts: chargingVolts,
-            chargingType: chargingType,
-            chargerConnection: chargerConn,
-            availability: availability,
-            modelName: modelName,
-            modelYear: modelYear,
-            registrationNo: nil,
-            vin: vin,
-            ownerFirstName: nil,
-            odometerKm: odometerKm,
-            daysToService: daysToService,
-            distanceToServiceKm: distToService,
-            serviceWarning: serviceWarn,
-            fluidWarnings: fluidWarns,
+            energy: EnergyAndChargingSnapshot(
+                batteryPercentage: batteryPct,
+                rangeKm: rangeKm,
+                chargingState: chargingState,
+                estimatedTimeToFullMinutes: energy?.estTimeToFullMinutes.flatMap { $0 > 0 ? $0 : nil },
+                targetPercentage: targetPct,
+                powerWatts: chargingWatts,
+                currentAmps: currentDrawAmps ?? chargingAmps,
+                voltageVolts: chargingVolts,
+                type: chargingType,
+                connection: chargerConn,
+                reportedBatteryCapacityKwh: batteryCap,
+                diagnostics: batteryDiag
+            ),
+            identity: VehicleIdentitySnapshot(
+                availability: availability,
+                modelName: modelName,
+                modelYear: modelYear,
+                vin: vin,
+                imageData: carImg
+            ),
+            maintenance: MaintenanceAndHealthSnapshot(
+                odometerKm: odometerKm,
+                details: health,
+                service: ServiceSnapshot(
+                    daysToService: daysToService,
+                    distanceToServiceKm: distToService,
+                    serviceWarning: serviceWarn,
+                    fluidWarnings: fluidWarns
+                )
+            ),
+            freshness: SnapshotFreshness(
+                fetchedAt: Date(),
+                vehicleReportedAt: reportedAt,
+                dataWarnings: activeBulbWarnings,
+                unavailableFeatures: unavailable
+            ),
             exteriorStatus: exterior,
-            healthDetails: health,
             softwareInfo: software,
             climateStatus: climate,
-            tripMeterManualKm: tripManual,
-            tripMeterAutomaticKm: tripAuto,
-            batteryDiagnostics: batteryDiag,
+            tripComputer: TripComputerSnapshot(
+                manualTripKm: tripManual,
+                automaticTripKm: tripAuto
+            ),
             location: vehicleLocation,
-            unavailableFeatures: unavailable,
             probedCapabilities: probesResult,
             powertrain: powertrain,
-            fuelLevelPercent: fuelPct,
-            fuelRangeKm: fuelRange,
-            reportedBatteryCapacityKwh: batteryCap,
-            imageData: carImg,
-            fetchedAt: Date(),
-            vehicleReportedAt: reportedAt,
-            dataWarnings: activeBulbWarnings
+            fuelSystem: FuelSystemSnapshot(levelPercent: fuelPct, rangeKm: fuelRange)
         )
         // Volvo serialises some absent descriptors as the literal string "null" (seen live on
         // `descriptions.upholstery`), which would otherwise render verbatim in the UI.
-        state.externalColour = details.externalColour.volvoMeaningful
-        state.gearbox = details.gearbox.volvoMeaningful
-        state.engineHoursToService = diagnostics?.engineHoursToService?.value
-        state.averageSpeedKmH = statistics?.averageSpeedKmH
-        state.fuelAmountLiters = fuelLiters
-        state.averageFuelConsumptionLPer100Km = avgFuelConsumption
-        state.isEngineRunning = isEngineRunning
-        state.fuelType = details.fuelType.volvoMeaningful
-        state.upholstery = details.descriptions?.upholstery.volvoMeaningful
-        state.steeringOrientation = details.descriptions?.steering.volvoMeaningful
-        state.serviceTrigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
-        state.tripComputerElectricRangeKm = statistics?.distanceToEmptyBatteryKm
-        state.chargingCurrentLimitAmps = currentLimitAmps
-        state.interiorImageData = interiorImg
-        state.electricDistanceKm = statistics?.electricDistanceKm
-        state.fuelDistanceKm = statistics?.fuelDistanceKm
-        state.regeneratedEnergyKwh = statistics?.regeneratedEnergyKwh
-        state.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
-        state.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
-        state.preferredWorkshopId = diagnostics?.workshopId?.value.volvoMeaningful
-        state.preferredWorkshopName = diagnostics?.workshopName?.value.volvoMeaningful
-        state.estimatedChargingTimeToTargetMinutes = estMinutes
-        state.readingDates[.battery] = energy?.batteryChargeLevel?.updatedAt ?? fuel?.batteryChargeLevel?.updatedAt
-        state.readingDates[.range] = energy?.electricRange?.updatedAt ?? statistics?.distanceToEmptyBattery?.updatedAt
-        state.readingDates[.charging] = energy?.chargingSystemStatus?.updatedAt ?? energy?.chargingStatus?.updatedAt
-        state.readingDates[.locks] = doors?.centralLock?.updatedAt
-        state.readingDates[.openings] = [doors?.frontLeftDoor?.updatedAt, doors?.frontRightDoor?.updatedAt,
+        state.identity.externalColour = details.externalColour.volvoMeaningful
+        state.identity.gearbox = details.gearbox.volvoMeaningful
+        state.maintenance.service.engineHoursToService = diagnostics?.engineHoursToService?.value
+        state.tripComputer.averageSpeedKmH = statistics?.averageSpeedKmH
+        state.fuelSystem.amountLiters = fuelLiters
+        state.fuelSystem.averageConsumptionLPer100Km = avgFuelConsumption
+        state.fuelSystem.isEngineRunning = isEngineRunning
+        state.fuelSystem.type = details.fuelType.volvoMeaningful
+        state.identity.upholstery = details.descriptions?.upholstery.volvoMeaningful
+        state.identity.steeringOrientation = details.descriptions?.steering.volvoMeaningful
+        state.maintenance.service.trigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
+        state.tripComputer.electricRangeKm = statistics?.distanceToEmptyBatteryKm
+        state.energy.currentLimitAmps = currentLimitAmps
+        state.identity.interiorImageData = interiorImg
+        state.tripComputer.electricDistanceKm = statistics?.electricDistanceKm
+        state.tripComputer.fuelDistanceKm = statistics?.fuelDistanceKm
+        state.tripComputer.regeneratedEnergyKwh = statistics?.regeneratedEnergyKwh
+        state.maintenance.frontBrakePadStatus = brakes?.frontBrakePadStatus?.value
+        state.maintenance.rearBrakePadStatus = brakes?.rearBrakePadStatus?.value
+        state.maintenance.service.preferredWorkshopID = diagnostics?.workshopId?.value.volvoMeaningful
+        state.maintenance.service.preferredWorkshopName = diagnostics?.workshopName?.value.volvoMeaningful
+        state.energy.estimatedTimeToTargetMinutes = estMinutes
+        state.freshness.readingDates[.battery] = energy?.batteryChargeLevel?.updatedAt ?? fuel?.batteryChargeLevel?.updatedAt
+        state.freshness.readingDates[.range] = energy?.electricRange?.updatedAt ?? statistics?.distanceToEmptyBattery?.updatedAt
+        state.freshness.readingDates[.charging] = energy?.chargingSystemStatus?.updatedAt ?? energy?.chargingStatus?.updatedAt
+        state.freshness.readingDates[.locks] = doors?.centralLock?.updatedAt
+        state.freshness.readingDates[.openings] = [doors?.frontLeftDoor?.updatedAt, doors?.frontRightDoor?.updatedAt,
                                        doors?.rearLeftDoor?.updatedAt, doors?.rearRightDoor?.updatedAt,
                                        windows?.frontLeftWindow?.updatedAt, windows?.frontRightWindow?.updatedAt,
                                        windows?.rearLeftWindow?.updatedAt, windows?.rearRightWindow?.updatedAt]
             .compactMap { $0 }.min()
-        state.readingDates[.health] = [diagnostics?.serviceWarning?.updatedAt, tyres?.frontLeft?.updatedAt,
+        state.freshness.readingDates[.health] = [diagnostics?.serviceWarning?.updatedAt, tyres?.frontLeft?.updatedAt,
                                      tyres?.frontRight?.updatedAt, tyres?.rearLeft?.updatedAt, tyres?.rearRight?.updatedAt]
             .compactMap { $0 }.min()
-        state.readingDates[.odometer] = odometer?.odometer?.updatedAt
-        state.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
+        state.freshness.readingDates[.odometer] = odometer?.odometer?.updatedAt
+        state.freshness.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
         return state
     }
 

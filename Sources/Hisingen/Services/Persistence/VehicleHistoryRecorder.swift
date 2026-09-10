@@ -33,13 +33,13 @@ final class VehicleHistoryRecorder {
     }
 
     private func recordActivitiesAndSnapshot(_ state: VehicleState) {
-        let previous = database.loadSnapshot(for: state.vin)
+        let previous = database.loadSnapshot(for: state.identity.vin)
         if preferences.storeChargingHistory {
             if let loss = parkedChargeLossDetector.ingest(state) {
                 database.recordActivities([loss])
             }
         } else {
-            parkedChargeLossDetector.reset(vin: state.vin)
+            parkedChargeLossDetector.reset(vin: state.identity.vin)
         }
         database.recordActivities(VehicleActivity.changes(from: previous, to: state))
         database.saveSnapshot(state)
@@ -50,7 +50,7 @@ final class VehicleHistoryRecorder {
         // Volvo snapshots even if a stale or imported payload happens to carry that field.
         guard !state.isVolvo, let airQuality = state.airQuality else { return }
         database.recordAirQuality(
-            vin: state.vin,
+            vin: state.identity.vin,
             airQualityIndex: airQuality.airQualityIndex.map(Double.init),
             particulateMatter25: airQuality.particulateMatter25.map(Double.init),
             particulateMatter10: airQuality.particulateMatter10.map(Double.init),
@@ -59,19 +59,19 @@ final class VehicleHistoryRecorder {
     }
 
     private func recordTelemetry(_ state: VehicleState) {
-        guard state.odometerKm != nil || state.tripMeterManualKm != nil
-                || state.tripMeterAutomaticKm != nil else { return }
+        guard state.maintenance.odometerKm != nil || state.tripComputer.manualTripKm != nil
+                || state.tripComputer.automaticTripKm != nil else { return }
         let persistLocation = preferences.persistLocationHistory
         database.recordTelemetry(
-            vin: state.vin,
-            odometerKm: state.odometerKm.map(Double.init),
-            tripManualKm: state.tripMeterManualKm,
-            tripAutoKm: state.tripMeterAutomaticKm,
-            avgConsumption: state.batteryDiagnostics?.averageConsumption
-                ?? state.averageFuelConsumptionLPer100Km,
-            consumptionUnit: state.batteryDiagnostics?.averageConsumption != nil
+            vin: state.identity.vin,
+            odometerKm: state.maintenance.odometerKm.map(Double.init),
+            tripManualKm: state.tripComputer.manualTripKm,
+            tripAutoKm: state.tripComputer.automaticTripKm,
+            avgConsumption: state.energy.diagnostics?.averageConsumption
+                ?? state.fuelSystem.averageConsumptionLPer100Km,
+            consumptionUnit: state.energy.diagnostics?.averageConsumption != nil
                 ? "kwh"
-                : (state.averageFuelConsumptionLPer100Km != nil ? "l" : nil),
+                : (state.fuelSystem.averageConsumptionLPer100Km != nil ? "l" : nil),
             ambientTempC: state.weather?.temperatureCelsius,
             latitude: persistLocation ? state.location?.latitude : nil,
             longitude: persistLocation ? state.location?.longitude : nil
@@ -79,35 +79,35 @@ final class VehicleHistoryRecorder {
     }
 
     private func recordBatteryHistory(_ state: VehicleState) {
-        guard let batteryPercentage = state.batteryPercentage else { return }
+        guard let batteryPercentage = state.energy.batteryPercentage else { return }
 
         database.recordConnectivity(
-            vin: state.vin,
+            vin: state.identity.vin,
             networkType: state.connectivity?.networkType,
             signalBars: state.connectivity?.signalBars,
             wakeReason: state.connectivity?.wakeReason
         )
         database.recordCabinClimate(
-            vin: state.vin,
+            vin: state.identity.vin,
             interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
             requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
         )
 
-        let specification = preferences.vehicleSpecificationOverride(for: state.vin)
+        let specification = preferences.vehicleSpecificationOverride(for: state.identity.vin)
         let capacity = specification?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
         chargingSessionLedger.ingest(
             ChargingSessionObservation(
-                vin: state.vin,
-                timestamp: state.fetchedAt,
+                vin: state.identity.vin,
+                timestamp: state.freshness.fetchedAt,
                 soc: batteryPercentage,
-                chargingState: state.chargingState,
-                chargerConnection: state.chargerConnection,
-                powerKw: state.chargingPowerWatts.map { Double($0) / 1_000 },
-                voltageVolts: state.chargingVoltageVolts.map(Double.init),
-                currentAmps: state.chargingCurrentAmps.map(Double.init),
-                chargingType: state.chargingType,
-                targetSoc: state.chargeTargetPercentage.map(Double.init)
+                chargingState: state.energy.chargingState,
+                chargerConnection: state.energy.connection,
+                powerKw: state.energy.powerWatts.map { Double($0) / 1_000 },
+                voltageVolts: state.energy.voltageVolts.map(Double.init),
+                currentAmps: state.energy.currentAmps.map(Double.init),
+                chargingType: state.energy.type,
+                targetSoc: state.energy.targetPercentage.map(Double.init)
             ),
             configuration: ChargingSessionLedgerConfiguration(
                 usableCapacityKwh: capacity,
@@ -137,17 +137,17 @@ final class VehicleHistoryRecorder {
         capacity: Double,
         specification: VehicleSpecificationOverride?
     ) {
-        let sessions = database.charging.recentChargingSessions(for: state.vin, limit: 20)
+        let sessions = database.charging.recentChargingSessions(for: state.identity.vin, limit: 20)
             .map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }
             .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-        let previous = database.history.batteryHealthHistory(for: state.vin, limit: 1).first
+        let previous = database.history.batteryHealthHistory(for: state.identity.vin, limit: 1).first
             .map {
                 BatteryHealthPriorEstimate(
                     stateOfHealthPercent: $0.stateOfHealthPct,
                     timestamp: $0.timestamp
                 )
             }
-        guard let odometer = state.odometerKm,
+        guard let odometer = state.maintenance.odometerKm,
               let estimate = BatteryHealthEstimator.estimate(
                 state: state,
                 chargingSessions: sessions,
@@ -155,7 +155,7 @@ final class VehicleHistoryRecorder {
                 previous: previous
               ) else { return }
         database.recordBatteryHealthMilestone(
-            vin: state.vin,
+            vin: state.identity.vin,
             odometerKm: Double(odometer),
             sohPct: estimate.stateOfHealthPercent,
             degPct: estimate.degradationPercent,

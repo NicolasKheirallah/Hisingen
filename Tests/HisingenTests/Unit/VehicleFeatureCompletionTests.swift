@@ -107,7 +107,7 @@ struct VehicleFeatureCompletionTests {
             cleaningState: .off, airQualityIndex: 18, particulateMatter25: 4
         )
         store.save(polestar)
-        #expect(database.history.recentAirQuality(for: polestar.vin).count == 1)
+        #expect(database.history.recentAirQuality(for: polestar.identity.vin).count == 1)
 
         let volvo = VehicleState(
             batteryPercentage: 60, rangeKm: 300, chargingState: .idle,
@@ -124,14 +124,14 @@ struct VehicleFeatureCompletionTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
         store.save(volvo)
-        #expect(database.history.recentAirQuality(for: volvo.vin).isEmpty)
+        #expect(database.history.recentAirQuality(for: volvo.identity.vin).isEmpty)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         let trend = HistoryInsights.airQualityTrend(from: [
-            AirQualityRecord(id: 2, vin: polestar.vin, timestamp: base.addingTimeInterval(60),
+            AirQualityRecord(id: 2, vin: polestar.identity.vin, timestamp: base.addingTimeInterval(60),
                              airQualityIndex: 20, particulateMatter25: 5,
                              particulateMatter10: nil, filterRemainingPercent: nil),
-            AirQualityRecord(id: 1, vin: polestar.vin, timestamp: base,
+            AirQualityRecord(id: 1, vin: polestar.identity.vin, timestamp: base,
                              airQualityIndex: 10, particulateMatter25: 2,
                              particulateMatter10: nil, filterRemainingPercent: nil)
         ])
