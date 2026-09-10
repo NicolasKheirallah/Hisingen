@@ -11,6 +11,14 @@ enum RemoteCommandOrigin: Sendable {
     case automation
 }
 
+/// The vehicle and provider a command was approved for. This value stays fixed while
+/// authorization and provider execution suspend, even if the visible selection changes.
+struct RemoteCommandTarget: Equatable, Sendable {
+    let vin: String
+    let brand: VehicleBrand
+    let displayName: String
+}
+
 /// Context the coordinator needs from the app shell. Kept narrow on purpose: everything else
 /// (gating, authorization, execution, audit, optimistic patching, follow-up refresh) lives
 /// here so command behaviour has exactly one home.
@@ -27,7 +35,7 @@ protocol CommandExecutionContext: AnyObject {
     /// Called when command-busyness changes so the shell can re-render controls.
     func commandInProgressDidChange()
     /// Presents a command outcome to the user.
-    func presentResult(title: String, message: String, success: Bool)
+    func presentResult(title: String, message: String, success: Bool, target: RemoteCommandTarget?)
     /// Hands the accepted command to the refresh module for telemetry confirmation.
     func beginCommandConfirmation(_ pending: PendingCommandSummary)
 }
@@ -93,7 +101,7 @@ final class CommandCoordinator {
         guard !isInProgress else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: RemoteCommandError.busy.localizedDescription, success: false)
+                message: RemoteCommandError.busy.localizedDescription, success: false, target: nil)
             return .refused(reason: RemoteCommandError.busy.localizedDescription)
         }
         guard context.sessionIsValid, let state = context.vehicleState,
@@ -108,13 +116,15 @@ final class CommandCoordinator {
             context.presentResult(
                 title: L10n.text("Command not sent"),
                 message: message,
-                success: false)
+                success: false,
+                target: nil)
             return .refused(reason: message)
         }
+        let executor = context.currentCommandExecutor()
         let availability = gate.availability(
             for: command,
             state: state,
-            commandCatalog: context.currentCommandExecutor().commandCatalog,
+            commandCatalog: executor.commandCatalog,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
@@ -136,14 +146,24 @@ final class CommandCoordinator {
             context.presentResult(
                 title: L10n.text("Command not sent"),
                 message: message,
-                success: false)
+                success: false,
+                target: nil)
             return .refused(reason: message)
         }
         let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
-        let providerBrand = context.currentCommandExecutor().brand
         let vehicle = [state.identity.modelName, state.identity.registrationNo].compactMap { value in
             value?.isEmpty == false ? value : nil
         }.joined(separator: " - ")
+        let target = RemoteCommandTarget(
+            vin: state.identity.vin,
+            brand: executor.brand,
+            displayName: preferences.formattedVehicleTitle(
+                vin: state.identity.vin,
+                modelName: state.identity.modelName,
+                modelYear: state.identity.modelYear,
+                registrationNo: state.identity.registrationNo,
+                fallbackBrand: executor.brand)
+        )
 
         let approved: Bool
         switch origin {
@@ -165,20 +185,24 @@ final class CommandCoordinator {
         // Authorization can show a modal sheet or biometric prompt. The active account,
         // provider, or vehicle may change while it is visible; never send the command
         // that was approved for the old snapshot through the newly selected provider.
-        guard isCurrentExecutionContext(vin: state.identity.vin, brand: providerBrand) else {
+        guard isCurrentExecutionContext(target) else {
             return .refused(reason: L10n.text("The selected vehicle changed while authorization was pending."))
         }
-        return await execute(adapted, vin: state.identity.vin)
+        return await execute(adapted, target: target, executor: executor)
     }
 
-    private func isCurrentExecutionContext(vin: String, brand: VehicleBrand) -> Bool {
+    private func isCurrentExecutionContext(_ target: RemoteCommandTarget) -> Bool {
         guard let context, context.sessionIsValid,
-              context.currentCommandExecutor().brand == brand,
+              context.currentCommandExecutor().brand == target.brand,
               let currentState = context.vehicleState else { return false }
-        return currentState.identity.vin.caseInsensitiveCompare(vin) == .orderedSame
+        return currentState.identity.vin.caseInsensitiveCompare(target.vin) == .orderedSame
     }
 
-    private func execute(_ command: RemoteCommand, vin: String) async -> RemoteCommandDispatchOutcome {
+    private func execute(
+        _ command: RemoteCommand,
+        target: RemoteCommandTarget,
+        executor: any RemoteCommandExecuting
+    ) async -> RemoteCommandDispatchOutcome {
         guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
         isInProgress = true
         inProgressCommandIdentifier = command.identifier
@@ -190,16 +214,23 @@ final class CommandCoordinator {
             context.commandInProgressDidChange()
         }
         do {
-            logger.info("Remote command \(command.identifier, privacy: .public) sent for \(vin, privacy: .private)")
-            let result = try await context.currentCommandExecutor().executeRemoteCommand(command, vin: vin)
+            logger.info("Remote command \(command.identifier, privacy: .public) sent for \(target.vin, privacy: .private)")
+            let result = try await executor.executeRemoteCommand(command, vin: target.vin)
             database.recordCommandAudit(
-                vin: vin,
+                vin: target.vin,
                 command: command.identifier,
                 status: result.outcome.rawValue,
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000)
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
-            applyOptimisticPatch(for: command, outcome: result.outcome, issuedAt: startedAt)
+            let targetIsCurrent = isCurrentExecutionContext(target)
+            if targetIsCurrent {
+                applyOptimisticPatch(
+                    for: command,
+                    outcome: result.outcome,
+                    issuedAt: startedAt,
+                    providerBrand: target.brand)
+            }
             // The banner must say *what* ran, not just that something did — a bare
             // "Command sent" while two cars are in range reads as noise.
             let detail: String
@@ -212,23 +243,29 @@ final class CommandCoordinator {
                 case .completed: detail = L10n.text("The vehicle completed the command.")
                 }
             }
+            let commandTitle = targetIsCurrent
+                ? command.title
+                : L10n.format("%@ (%@)", command.title, target.displayName)
             context.presentResult(
                 title: L10n.text("Command sent"),
-                message: L10n.format("%@ — %@", command.title, detail),
-                success: true
+                message: L10n.format("%@ — %@", commandTitle, detail),
+                success: true,
+                target: target
             )
-            context.beginCommandConfirmation(PendingCommandSummary(
-                commandIdentifier: command.identifier,
-                issuedAt: startedAt,
-                command: command
-            ))
+            if targetIsCurrent {
+                context.beginCommandConfirmation(PendingCommandSummary(
+                    commandIdentifier: command.identifier,
+                    issuedAt: startedAt,
+                    command: command
+                ))
+            }
             return .sent(result.outcome)
         } catch {
             let mapped = error as? LocalizedError
             logger.error("Remote command \(command.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             let message = mapped?.errorDescription ?? error.localizedDescription
             database.recordCommandAudit(
-                vin: vin,
+                vin: target.vin,
                 command: command.identifier,
                 status: "failed",
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000),
@@ -236,8 +273,14 @@ final class CommandCoordinator {
             )
             context.presentResult(
                 title: L10n.text("Command failed"),
-                message: L10n.format("%@ failed. %@", command.title, message),
-                success: false
+                message: L10n.format(
+                    "%@ failed. %@",
+                    isCurrentExecutionContext(target)
+                        ? command.title
+                        : L10n.format("%@ (%@)", command.title, target.displayName),
+                    message),
+                success: false,
+                target: target
             )
             return .refused(reason: message)
         }
@@ -253,7 +296,8 @@ final class CommandCoordinator {
     private func applyOptimisticPatch(
         for command: RemoteCommand,
         outcome: RemoteCommandOutcome,
-        issuedAt: Date
+        issuedAt: Date,
+        providerBrand: VehicleBrand
     ) {
         guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return }
         guard let context, var current = context.vehicleState else { return }
@@ -302,7 +346,7 @@ final class CommandCoordinator {
         case .unlock:
             guard var exterior = current.exteriorStatus else { break }
             // Volvo unlock does not patch exterior; the official app behaves the same way.
-            if context.currentCommandExecutor().brand == .volvo { break }
+            if providerBrand == .volvo { break }
             exterior.isLocked = false
             current.exteriorStatus = exterior
         case .unlockTrunk:

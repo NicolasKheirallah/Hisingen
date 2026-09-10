@@ -13,3 +13,5 @@
 **Snapshot Freshness** — Provenance and timing facts that distinguish live readings, retained readings, and cached state.
 
 **Pending Command state** — A remote command accepted by a provider whose effect has not yet been confirmed by fresh vehicle telemetry.
+
+**Remote Command target** — The vehicle identity and provider captured when a command is approved. It remains fixed until execution completes, even if the visible vehicle selection changes.

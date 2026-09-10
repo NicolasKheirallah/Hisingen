@@ -333,8 +333,13 @@ extension AppDelegate: CommandExecutionContext {
     func commandInProgressDidChange() {
         render()
     }
-    func presentResult(title: String, message: String, success: Bool) {
-        let subtitle = vehicleSession.latest.map { state -> String in
+    func presentResult(
+        title: String,
+        message: String,
+        success: Bool,
+        target: RemoteCommandTarget?
+    ) {
+        let subtitle = target?.displayName ?? vehicleSession.latest.map { state -> String in
             let nick = preferences.vehicleNickname(for: state.identity.vin)
             return nick.isEmpty ? state.model.brand.displayName : nick
         }

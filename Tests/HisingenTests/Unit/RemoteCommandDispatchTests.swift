@@ -196,6 +196,39 @@ struct RemoteCommandDispatchTests {
 
     @Test
     @MainActor
+    func completedCommandDoesNotMutateVehicleSelectedDuringProviderExecution() async {
+        let context = makeContext(features: [.remoteLocks])
+        context.vehicleState?.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: false, alarmTriggered: false)
+        context.provider.suspendNextExecution()
+
+        let task = Task { await context.perform(.lock, origin: .userInitiated) }
+        await context.provider.waitForExecutionStart()
+
+        var secondVehicle = context.vehicleState!
+        secondVehicle.identity.vin = "YSMSECOND02"
+        secondVehicle.identity.modelName = "Polestar 3"
+        secondVehicle.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: false, alarmTriggered: false)
+        context.preferences.vin = secondVehicle.identity.vin
+        context.vehicleState = secondVehicle
+
+        context.provider.resumeExecution()
+        let outcome = await task.value
+
+        guard case .sent(.completed) = outcome else {
+            return XCTFail("Expected the original command to complete")
+        }
+        XCTAssertEqual(context.vehicleState?.identity.vin, "YSMSECOND02")
+        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
+        XCTAssertNil(context.vehicleState?.commandState.pending)
+        XCTAssertEqual(context.confirmationCount, 0)
+        XCTAssertEqual(context.presentations.last?.target?.vin, vin)
+        XCTAssertTrue(context.presentations.last?.message.contains("Polestar 2") == true)
+    }
+
+    @Test
+    @MainActor
     func pendingReceiptStartsBeforeProviderExecution() async throws {
         let context = makeContext(features: [.remoteLocks])
         context.vehicleState?.exteriorStatus = ExteriorSnapshot(
@@ -308,11 +341,36 @@ private final class RecordingProvider: RemoteCommandExecuting {
     private(set) var executedCommands: [RemoteCommand] = []
     private(set) var executionStartedAt: Date?
     var failure: (any Error)?
+    private var shouldSuspendExecution = false
+    private var executionContinuation: CheckedContinuation<Void, Never>?
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
     init(brand: VehicleBrand) { self.brand = brand }
+
+    func suspendNextExecution() {
+        shouldSuspendExecution = true
+    }
+
+    func waitForExecutionStart() async {
+        guard executionStartedAt == nil else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func resumeExecution() {
+        executionContinuation?.resume()
+        executionContinuation = nil
+    }
+
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         if let failure { throw failure }
         executionStartedAt = Date()
         executedCommands.append(command)
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        if shouldSuspendExecution {
+            shouldSuspendExecution = false
+            await withCheckedContinuation { executionContinuation = $0 }
+        }
         return RemoteCommandResult(outcome: .completed, message: nil)
     }
 }
@@ -324,6 +382,10 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     var vehicleState: VehicleState?
     var sessionIsValid = true
     private(set) var selectedVINs: [String] = []
+    private(set) var confirmationCount = 0
+    private(set) var presentations: [(
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+    )] = []
 
     /// Each instance gets its own isolated defaults suite, so parallel tests never share
     /// feature selections or brand state.
@@ -363,8 +425,14 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
     func commandInProgressDidChange() {}
-    func presentResult(title: String, message: String, success: Bool) {}
-    func beginCommandConfirmation(_ pending: PendingCommandSummary) {}
+    func presentResult(
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+    ) {
+        presentations.append((title, message, success, target))
+    }
+    func beginCommandConfirmation(_ pending: PendingCommandSummary) {
+        confirmationCount += 1
+    }
 }
 
 @MainActor

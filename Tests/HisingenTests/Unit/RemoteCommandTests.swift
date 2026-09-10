@@ -665,7 +665,9 @@ private final class CommandContextMock: CommandExecutionContext {
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func applyOptimisticState(_ state: VehicleState) { vehicleState = state }
     func commandInProgressDidChange() {}
-    func presentResult(title: String, message: String, success: Bool) {}
+    func presentResult(
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+    ) {}
     func beginCommandConfirmation(_ pending: PendingCommandSummary) {}
 }
 
