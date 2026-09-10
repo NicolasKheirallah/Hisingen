@@ -51,6 +51,29 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
+    func localDataEraseClearsReceiptsButLocationErasePreservesThem() throws {
+        let vin = "RECEIPT_RETENTION_TEST"
+        let defaults = try makeDefaults()
+        let preferences = PreferencesStore(defaults: defaults)
+        let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let record = StoredCommandReceipt(
+            receipt: CommandReceipt(commandIdentifier: "lock", issuedAt: Date()),
+            confirmationDeadline: Date().addingTimeInterval(60)
+        )
+        stateStore.saveCommandReceipt(record, for: vin)
+
+        preferences.clearLocalVehicleDefaults(
+            for: vin,
+            includeBaselines: false,
+            includeCommandReceipts: false
+        )
+        #expect(stateStore.commandReceipt(for: vin) == record)
+
+        preferences.clearLocalVehicleDefaults(for: vin)
+        #expect(stateStore.commandReceipt(for: vin) == nil)
+    }
+
+    @Test
     func schemaMigrationPreservesExistingRows() throws {
         // A pre-`user_version` install: `charging_sessions` exists but lacks every column
         // the v2 migration adds, and it already holds a row.

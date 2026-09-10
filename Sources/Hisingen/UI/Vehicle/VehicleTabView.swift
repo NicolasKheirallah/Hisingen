@@ -64,8 +64,8 @@ struct VehicleTabView: View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             multiCarChips
             heroCard
-            if state.commandState.pending != nil {
-                pendingCommandChip.transition(cardTransition)
+            if state.commandState.receipt != nil {
+                commandReceiptChip.transition(cardTransition)
             }
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
@@ -129,7 +129,7 @@ struct VehicleTabView: View {
         }
     }
 
-    private var pendingCommandChip: some View {
+    private var commandReceiptChip: some View {
         let appearance = commandConfirmationAppearance
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: appearance.symbol)
@@ -138,14 +138,14 @@ struct VehicleTabView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(commandConfirmationLabel)
                     .font(.system(size: 11, weight: .semibold))
-                Text(state.commandState.pending?.command?.title ?? L10n.text("Values below may update once the car reports in."))
+                Text(state.commandState.receipt?.command?.title ?? L10n.text("Values below may update once the car reports in."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             Spacer()
             Button {
-                if let issuedAt = state.commandState.pending?.issuedAt {
+                if let issuedAt = state.commandState.receipt?.issuedAt {
                     onDismissCommandReceipt(issuedAt)
                 }
             } label: {
@@ -163,7 +163,7 @@ struct VehicleTabView: View {
     }
 
     private var commandConfirmationAppearance: (symbol: String, color: Color) {
-        switch state.commandState.pending?.status {
+        switch state.commandState.receipt?.status {
         case .confirmed: return ("checkmark.circle.fill", HisingenTheme.semanticGood)
         case .timedOut: return ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning)
         case .awaiting, nil: return ("clock.arrow.circlepath", HisingenTheme.accent)
@@ -171,7 +171,7 @@ struct VehicleTabView: View {
     }
 
     private var commandConfirmationLabel: String {
-        switch state.commandState.pending?.status {
+        switch state.commandState.receipt?.status {
         case .confirmed: return L10n.text("Matching vehicle reading observed")
         case .timedOut: return L10n.text("Command outcome not confirmed")
         case .awaiting, nil: return L10n.text("Command sent — waiting for the vehicle")

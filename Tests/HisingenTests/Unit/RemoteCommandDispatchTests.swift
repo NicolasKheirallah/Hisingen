@@ -162,7 +162,7 @@ struct RemoteCommandDispatchTests {
             context.vehicleState?.climateStatus?.requestedTemperatureCelsius,
             Double(executedTemperature > 0 ? executedTemperature : 22))
         XCTAssertNotNil(context.vehicleState?.commandState.optimisticLockUntil)
-        XCTAssertEqual(context.vehicleState?.commandState.pending?.commandIdentifier, "start-climate")
+        XCTAssertEqual(context.vehicleState?.commandState.receipt?.commandIdentifier, "start-climate")
     }
 
     @Test
@@ -221,7 +221,7 @@ struct RemoteCommandDispatchTests {
         }
         XCTAssertEqual(context.vehicleState?.identity.vin, "YSMSECOND02")
         XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
-        XCTAssertNil(context.vehicleState?.commandState.pending)
+        XCTAssertNil(context.vehicleState?.commandState.receipt)
         XCTAssertEqual(context.confirmationCount, 0)
         XCTAssertEqual(context.presentations.last?.target?.vin, vin)
         XCTAssertTrue(context.presentations.last?.message.contains("Polestar 2") == true)
@@ -237,7 +237,7 @@ struct RemoteCommandDispatchTests {
         _ = await context.perform(.lock, origin: .userInitiated)
 
         let executionStartedAt = try XCTUnwrap(context.provider.executionStartedAt)
-        let issuedAt = try XCTUnwrap(context.vehicleState?.commandState.pending?.issuedAt)
+        let issuedAt = try XCTUnwrap(context.vehicleState?.commandState.receipt?.issuedAt)
         XCTAssertLessThanOrEqual(issuedAt, executionStartedAt)
     }
 
@@ -306,7 +306,7 @@ struct RemoteCommandDispatchTests {
         guard case .refused = outcome else { return XCTFail("Expected refusal") }
         XCTAssertEqual(context.vehicleState?.energy.targetPercentage, 70)
         XCTAssertNil(context.vehicleState?.commandState.optimisticLockUntil)
-        XCTAssertNil(context.vehicleState?.commandState.pending)
+        XCTAssertNil(context.vehicleState?.commandState.receipt)
     }
 }
 
@@ -430,12 +430,12 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         presentations.append((title, message, success, target))
     }
     func beginCommandConfirmation(
-        _ pending: PendingCommandSummary,
+        _ receipt: CommandReceipt,
         optimisticState: VehicleState
     ) {
         confirmationCount += 1
         vehicleState = optimisticState
-        vehicleState?.commandState.pending = pending
+        vehicleState?.commandState.receipt = receipt
     }
 }
 

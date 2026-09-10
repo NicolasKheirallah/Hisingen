@@ -443,9 +443,13 @@ struct SettingsDatabaseCard: View {
                 if operation == .clearLocations {
                     preferences.persistLocationHistory = false
                     persistLocationHistory = false
-                    preferences.clearLegacyVehicleCaches(for: selectedVIN, includeBaselines: false)
+                    preferences.clearLocalVehicleDefaults(
+                        for: selectedVIN,
+                        includeBaselines: false,
+                        includeCommandReceipts: false
+                    )
                 } else if operation == .wipe {
-                    preferences.clearLegacyVehicleCaches(for: selectedVIN)
+                    preferences.clearLocalVehicleDefaults(for: selectedVIN)
                 }
                 await loadStats()
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)

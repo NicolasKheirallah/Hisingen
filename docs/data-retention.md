@@ -49,6 +49,7 @@ These files should all be treated as parts of the same local database.
 | Non-secret configuration and preferences | `UserDefaults` | Until changed, reset, or application data is removed |
 | Cached vehicle snapshot | SQLite + `UserDefaults` fallback | Maximum useful age of 7 days; expired snapshot is removed when read |
 | Charging transition baseline | `UserDefaults` | 7 days; expired baseline is removed when read |
+| Command receipt | `UserDefaults` | Until dismissed, replaced, cleared with its vehicle/session, or local vehicle data is erased |
 | Charging-session header | SQLite | Retained until local history is explicitly cleared (kept across sign-out unless "Erase local history on sign out" is enabled) |
 | Charging samples | SQLite | Can be pruned after the selected 30, 90, 180, or 365-day period through maintenance |
 | Historical telemetry | SQLite | Can be pruned after the selected 30, 90, 180, or 365-day period through maintenance |
@@ -350,7 +351,8 @@ provider-specific sign-out. That operation always removes:
 
 - SQLite vehicle snapshots (they hold live-ish fields such as parking location and owner name);
 - cached vehicle snapshots stored in `UserDefaults`; and
-- charging transition baselines stored in `UserDefaults`.
+- charging transition baselines stored in `UserDefaults`; and
+- command receipts stored in `UserDefaults`.
 
 It removes the durable SQLite history tables — charging sessions and samples,
 battery-health milestones, telemetry, air quality, connectivity, cabin climate,

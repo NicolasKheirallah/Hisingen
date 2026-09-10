@@ -11,6 +11,7 @@
 | Non-secret settings (VIN, nicknames, feature flags, theme, notification toggles, etc.) | `Preferences` | `UserDefaults` | Per brand where relevant (VIN, theme), global otherwise |
 | Vehicle telemetry cache | `VehicleStateStore` | SQLite authoritative snapshot; `UserDefaults` migration fallback | Per VIN |
 | Charging state-machine baseline | `VehicleStateStore` (same store as above) | `UserDefaults`, 7-day TTL | Per VIN |
+| Command receipt | `RefreshCoordinator` through `VehicleStateStore` | `UserDefaults`, separate from telemetry | Per VIN; until dismissal, replacement, vehicle/session clear, or local-data erase |
 | Capability observations | `VehicleState.probedCapabilities` — travels with the cached snapshot | `UserDefaults` (embedded in the cached `VehicleState`) | Per VIN, 6-hour staleness window on top of the store's 7-day TTL |
 | UI state (selected tab, settings-mode flag, scroll position) | `StatusItemController` / SwiftUI `@State` | In-memory only | Popover lifetime |
 | Reverse-geocode cache | `ReverseGeocoder` (actor) | In-memory only | Process lifetime |
@@ -27,6 +28,7 @@
 ## Shared mutable state worth calling out
 
 - `VehicleSessionController.latest: VehicleState?` is the source of truth for "what does the UI currently show." It consumes `RefreshCoordinatorEvent.state`, including the coordinator-owned optimistic command projection and receipt. This deliberate instant-feedback state can briefly differ from a backend poll. See [domain/vehicle.md](../domain/vehicle.md#remote-command-optimistic-updates).
+- `VehicleStateStore` persists command receipts in a separate per-VIN record. On relaunch the refresh coordinator restores the receipt without treating it as telemetry or reissuing the command.
 - `FleetStore` is the hot in-memory per-VIN view of the garage. It is populated from `VehicleStateStore` on demand and from typed session events, while SQLite remains the cold authoritative snapshot store.
 - `InMemorySecretCache` (inside `Keychain.swift`) is process-global and shared
   across every `KeychainStore` instance. Its keys combine service and account,
@@ -44,7 +46,10 @@ flowchart TB
     end
     subgraph Disk["UserDefaults, survives restart"]
         PREF["Preferences: VIN, nicknames, features, theme, toggles"]
-        VSS["VehicleStateStore: VehicleState + ChargingBaseline per VIN, 7-day TTL"]
+        VSS["VehicleStateStore: ChargingBaseline + CommandReceipt per VIN"]
+    end
+    subgraph Database["SQLite, survives restart"]
+        DB["Vehicle snapshots and history per VIN"]
     end
     subgraph Keychain["Keychain, survives restart, OS-protected"]
         KC["Refresh tokens, Polestar password, Volvo client secret + API key"]
@@ -55,8 +60,10 @@ flowchart TB
     end
 
     TOK -->|refresh token persisted| KC
-    RC -->|save(state) after every fetch| VSS
-    VSS -->|snapshot(for:) on launch/switch| SC
+    RC -->|save telemetry| DB
+    RC -->|persist receipt lifecycle| VSS
+    DB -->|snapshot on launch/switch| SC
+    VSS -->|restore receipt on launch| RC
     AD -->|render| SC
     SC -->|rootView reassignment| SUI
 ```

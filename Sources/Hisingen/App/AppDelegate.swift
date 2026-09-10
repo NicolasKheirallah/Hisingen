@@ -351,10 +351,10 @@ extension AppDelegate: CommandExecutionContext {
         resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
     }
     func beginCommandConfirmation(
-        _ pending: PendingCommandSummary,
+        _ receipt: CommandReceipt,
         optimisticState: VehicleState
     ) {
-        vehicleSession.beginCommandConfirmation(pending, optimisticState: optimisticState)
+        vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
 }
 

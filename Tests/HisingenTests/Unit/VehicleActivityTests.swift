@@ -73,18 +73,18 @@ struct VehicleActivityTests {
 
     @Test func pendingReceiptDoesNotRequireAnOptimisticSensorLock() {
         var current = state(at: Date())
-        current.commandState.pending = PendingCommandSummary(commandIdentifier: "lock", issuedAt: Date())
+        current.commandState.receipt = CommandReceipt(commandIdentifier: "lock", issuedAt: Date())
         #expect(current.commandState.optimisticLockUntil == nil)
         #expect(current.isAwaitingVehicleConfirmation)
-        current.commandState.pending?.issuedAt = Date().addingTimeInterval(-121)
+        current.commandState.receipt?.issuedAt = Date().addingTimeInterval(-121)
         #expect(current.isAwaitingVehicleConfirmation)
-        current.commandState.pending?.status = .timedOut(at: Date())
+        current.commandState.receipt?.status = .timedOut(at: Date())
         #expect(!current.isAwaitingVehicleConfirmation)
     }
 
     @Test func commandConfirmationRequiresMatchingNewVehicleReading() {
         let now = Date()
-        let pending = PendingCommandSummary(commandIdentifier: "lock", issuedAt: now.addingTimeInterval(-10), command: .lock)
+        let pending = CommandReceipt(commandIdentifier: "lock", issuedAt: now.addingTimeInterval(-10), command: .lock)
         var current = state(at: now)
         current.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: nil,
                                                   reportedAt: now.addingTimeInterval(-20))
@@ -96,7 +96,7 @@ struct VehicleActivityTests {
         current.exteriorStatus?.isLocked = true
         current.freshness.isCached = true
         #expect(pending.updatingConfirmation(from: current).status == .awaiting)
-        let unobservable = PendingCommandSummary(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
+        let unobservable = CommandReceipt(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
         #expect(unobservable.updatingConfirmation(from: current).status == .awaiting)
         #expect(!unobservable.supportsTelemetryConfirmation)
     }
@@ -104,7 +104,7 @@ struct VehicleActivityTests {
     @Test func terminalCommandConfirmationStatusCannotBeRewrittenByTelemetry() {
         let now = Date()
         let timedOutAt = now.addingTimeInterval(-1)
-        let timedOut = PendingCommandSummary(
+        let timedOut = CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: now.addingTimeInterval(-10),
             command: .lock,
@@ -123,7 +123,7 @@ struct VehicleActivityTests {
 
     @Test func reducedGuardLockIsNotTelemetryConfirmable() {
         let now = Date()
-        let pending = PendingCommandSummary(
+        let pending = CommandReceipt(
             commandIdentifier: RemoteCommand.lockReducedGuard.identifier,
             issuedAt: now.addingTimeInterval(-10),
             command: .lockReducedGuard
@@ -136,7 +136,7 @@ struct VehicleActivityTests {
 
         #expect(!pending.supportsTelemetryConfirmation)
         #expect(pending.updatingConfirmation(from: current).status == .awaiting)
-        let ordinaryLock = PendingCommandSummary(
+        let ordinaryLock = CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: pending.issuedAt,
             command: .lock
@@ -158,14 +158,14 @@ struct VehicleActivityTests {
         ]
 
         for (command, expected) in cases {
-            let pending = PendingCommandSummary(
+            let pending = CommandReceipt(
                 commandIdentifier: command.identifier,
                 issuedAt: issuedAt,
                 command: command
             )
             #expect(pending.confirmationFeatures?.enabled == expected)
         }
-        let unobservable = PendingCommandSummary(
+        let unobservable = CommandReceipt(
             commandIdentifier: RemoteCommand.lockReducedGuard.identifier,
             issuedAt: issuedAt,
             command: .lockReducedGuard
@@ -291,11 +291,11 @@ struct VehicleActivityTests {
         current.energy.targetPercentage = 90
         current.energy.currentLimitAmps = 16
 
-        let target = PendingCommandSummary(
+        let target = CommandReceipt(
             commandIdentifier: "set-charge-target", issuedAt: now.addingTimeInterval(-1),
             command: .setChargeTarget(90)
         )
-        let amps = PendingCommandSummary(
+        let amps = CommandReceipt(
             commandIdentifier: "set-amp-limit", issuedAt: now.addingTimeInterval(-1),
             command: .setAmpLimit(16)
         )
@@ -307,7 +307,7 @@ struct VehicleActivityTests {
             openings: [OpeningReading(opening: .tailgate, state: .open)],
             isLocked: true, alarmTriggered: nil, reportedAt: now
         )
-        let tailgate = PendingCommandSummary(
+        let tailgate = CommandReceipt(
             commandIdentifier: "open-tailgate", issuedAt: now.addingTimeInterval(-1),
             command: .openTailgate
         )

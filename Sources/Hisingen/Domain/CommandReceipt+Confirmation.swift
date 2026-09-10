@@ -1,6 +1,6 @@
 import Foundation
 
-extension PendingCommandSummary {
+extension CommandReceipt {
     var confirmationFeatures: FeatureSelection? {
         guard supportsTelemetryConfirmation, let command else { return nil }
         return FeatureSelection(enabled: [command.feature])
@@ -18,7 +18,7 @@ extension PendingCommandSummary {
         }
     }
 
-    func updatingConfirmation(from state: VehicleState) -> PendingCommandSummary {
+    func updatingConfirmation(from state: VehicleState) -> CommandReceipt {
         guard status.isAwaiting, let command else { return self }
         let reading: VehicleReading
         let matches: Bool

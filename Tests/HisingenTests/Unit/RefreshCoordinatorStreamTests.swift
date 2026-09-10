@@ -228,7 +228,7 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected }, "Expected the charging stream to connect")
 
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: Date(),
             command: .lock
@@ -265,7 +265,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: Date().addingTimeInterval(-1),
             command: .lock
@@ -275,7 +275,7 @@ struct RefreshCoordinatorStreamTests {
             recorder.purposes == [.charging, .exteriorConfirmation, .charging]
         }
         _ = try #require(resumed, "Expected fresh lock telemetry to end confirmation immediately")
-        #expect(events.states.contains { $0.commandState.pending?.status.isConfirmed == true })
+        #expect(events.states.contains { $0.commandState.receipt?.status.isConfirmed == true })
         #expect(recorder.maxConcurrent == 1)
         coordinator.stop()
     }
@@ -299,19 +299,20 @@ struct RefreshCoordinatorStreamTests {
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
         var optimisticState = try #require(coordinator.latest)
         optimisticState.energy.targetPercentage = 90
-        let receipt = PendingCommandSummary(
+        let receipt = CommandReceipt(
             commandIdentifier: RemoteCommand.setChargeTarget(90).identifier,
             issuedAt: Date(),
             command: .setChargeTarget(90)
         )
 
         coordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
+        let persistedReceipts = VehicleStateStore(defaults: defaults, database: .inMemory())
 
         let published = try #require(events.states.last)
         #expect(published.energy.targetPercentage == 90)
-        #expect(published.commandState.pending == receipt)
+        #expect(published.commandState.receipt == receipt)
         #expect(coordinator.latest?.energy.targetPercentage == 90)
-        #expect(coordinator.latest?.commandState.pending == nil)
+        #expect(coordinator.latest?.commandState.receipt == nil)
 
         let diagnostics = try #require(events.snapshots.last)
         #expect(diagnostics.commandConfirmationIdentifier == receipt.commandIdentifier)
@@ -319,14 +320,16 @@ struct RefreshCoordinatorStreamTests {
         #expect(diagnostics.commandConfirmationDeadline != nil)
         #expect(diagnostics.commandConfirmationFeatures == [.remoteCharging])
         #expect(diagnostics.commandReceiptVisible)
+        #expect(persistedReceipts.commandReceipt(for: StreamingMockProvider.vinA)?.receipt == receipt)
 
         coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
-        #expect(events.states.last?.commandState.pending == nil)
+        #expect(events.states.last?.commandState.receipt == nil)
         #expect(events.snapshots.last?.commandReceiptVisible == false)
+        #expect(persistedReceipts.commandReceipt(for: StreamingMockProvider.vinA) == nil)
 
         coordinator.refreshNow()
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
-        #expect(events.states.last?.commandState.pending == nil)
+        #expect(events.states.last?.commandState.receipt == nil)
         #expect(events.snapshots.last?.commandConfirmationStatus == .awaiting)
         coordinator.stop()
     }
@@ -356,7 +359,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: Date(),
             command: .lock
@@ -407,7 +410,7 @@ struct RefreshCoordinatorStreamTests {
         // comparison is against a settled state.
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
         let before = recorder.purposes.count
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.stopClimate.identifier,
             issuedAt: Date(),
             command: .stopClimate
@@ -447,7 +450,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: command.identifier,
             issuedAt: Date(),
             command: command
@@ -478,7 +481,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.startChargingOverride.identifier,
             issuedAt: Date(),
             command: .startChargingOverride
@@ -503,7 +506,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
             issuedAt: Date(),
             command: .setChargeTarget(80)
@@ -534,7 +537,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
             issuedAt: Date(),
             command: .setChargeTarget(80)
@@ -564,7 +567,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
             issuedAt: Date(),
             command: .setChargeTarget(80)
@@ -596,7 +599,7 @@ struct RefreshCoordinatorStreamTests {
             $0.refreshFailures == 1 && $0.nextRefresh != nil
         })
 
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: Date(),
             command: .lock
@@ -651,7 +654,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: command.identifier,
             issuedAt: Date(),
             command: command
@@ -659,8 +662,8 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { _ in
             events.states.contains {
-                guard $0.commandState.pending?.command == command,
-                      case .timedOut = $0.commandState.pending?.status else { return false }
+                guard $0.commandState.receipt?.command == command,
+                      case .timedOut = $0.commandState.receipt?.status else { return false }
                 return true
             }
         }, "Expected the watchdog to publish the timed-out receipt")
@@ -686,7 +689,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
-        let receipt = PendingCommandSummary(
+        let receipt = CommandReceipt(
             commandIdentifier: RemoteCommand.stopClimate.identifier,
             issuedAt: Date(),
             command: .stopClimate
@@ -694,8 +697,8 @@ struct RefreshCoordinatorStreamTests {
         coordinator.beginCommandConfirmation(receipt)
         _ = try #require(await waitUntil(events) { _ in
             events.states.contains {
-                guard $0.commandState.pending?.commandIdentifier == receipt.commandIdentifier,
-                      case .timedOut = $0.commandState.pending?.status else { return false }
+                guard $0.commandState.receipt?.commandIdentifier == receipt.commandIdentifier,
+                      case .timedOut = $0.commandState.receipt?.status else { return false }
                 return true
             }
         })
@@ -704,14 +707,115 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
         let refreshed = try #require(events.states.last)
-        #expect(refreshed.commandState.pending?.commandIdentifier == receipt.commandIdentifier)
+        #expect(refreshed.commandState.receipt?.commandIdentifier == receipt.commandIdentifier)
         let retainedTimedOut: Bool
-        if case .timedOut = refreshed.commandState.pending?.status {
+        if case .timedOut = refreshed.commandState.receipt?.status {
             retainedTimedOut = true
         } else {
             retainedTimedOut = false
         }
         #expect(retainedTimedOut, "Expected the coordinator to retain the timed-out receipt")
+        coordinator.stop()
+    }
+
+    @Test
+    func relaunchRestoresAwaitingReceiptWithoutReissuingCommand() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstEvents = DiagnosticsRecorder()
+        let firstProvider = StreamingMockProvider(script: [], recorder: StreamRecorder())
+        let first = makeCoordinator(provider: firstProvider, defaults: defaults)
+        first.onEvent = { firstEvents.record($0) }
+        first.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(firstEvents) { $0.refreshSuccesses == 1 })
+
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.setChargeTarget(90).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(90)
+        )
+        first.beginCommandConfirmation(receipt)
+        let originalDeadline = try #require(firstEvents.snapshots.last?.commandConfirmationDeadline)
+        first.stop()
+
+        let secondEvents = DiagnosticsRecorder()
+        let secondProvider = StreamingMockProvider(script: [], recorder: StreamRecorder())
+        let second = makeCoordinator(provider: secondProvider, defaults: defaults)
+        second.onEvent = { secondEvents.record($0) }
+        second.start(preferredVIN: nil)
+        _ = try #require(await waitUntil(secondEvents) {
+            $0.refreshSuccesses == 1
+                && $0.commandConfirmationIdentifier == receipt.commandIdentifier
+        })
+
+        #expect(secondEvents.states.last?.commandState.receipt?.status == .awaiting)
+        #expect(secondEvents.snapshots.last?.commandConfirmationDeadline == originalDeadline)
+        #expect(await secondProvider.fetchCount >= 1)
+        #expect(await secondProvider.remoteCommandCount == 0)
+        second.stop()
+    }
+
+    @Test
+    func relaunchTurnsAnExpiredAwaitingReceiptIntoATimeout() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let deadline = Date().addingTimeInterval(-1)
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: deadline.addingTimeInterval(-30),
+            command: .lock
+        )
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        store.saveCommandReceipt(
+            StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline),
+            for: StreamingMockProvider.vinA
+        )
+
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) {
+            $0.refreshSuccesses == 1
+                && $0.commandConfirmationIdentifier == receipt.commandIdentifier
+        })
+
+        #expect(events.snapshots.last?.commandConfirmationDeadline == nil)
+        #expect(events.states.last?.commandState.receipt?.status == .timedOut(at: deadline))
+        #expect(store.commandReceipt(for: StreamingMockProvider.vinA)?.receipt.status == .timedOut(at: deadline))
+        coordinator.stop()
+    }
+
+    @Test
+    func dismissedAwaitingReceiptDoesNotReappearInStorageWhenItTimesOut() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults,
+            commandWindow: 0.1,
+            commandInitialPollDelay: 5,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: Date(),
+            command: .stopClimate
+        )
+        coordinator.beginCommandConfirmation(receipt)
+        coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
+        _ = try #require(await waitUntil(events) { $0.commandConfirmationStatus?.isTerminal == true })
+
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        #expect(store.commandReceipt(for: StreamingMockProvider.vinA) == nil)
+        #expect(events.snapshots.last?.commandReceiptVisible == false)
         coordinator.stop()
     }
 
@@ -742,7 +846,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
-        coordinator.beginCommandConfirmation(PendingCommandSummary(
+        coordinator.beginCommandConfirmation(CommandReceipt(
             commandIdentifier: RemoteCommand.lock.identifier,
             issuedAt: Date(),
             command: .lock
@@ -849,6 +953,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     private(set) var fetchCount = 0
     private(set) var fetchSelections: [FeatureSelection] = []
     private(set) var authorizationRefreshCount = 0
+    private(set) var remoteCommandCount = 0
     private var charging = true
     private var nextFetchFailure: VehicleServiceError?
     private var script: [StreamBehavior]
@@ -887,7 +992,8 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
-        RemoteCommandResult(outcome: .completed, message: nil)
+        remoteCommandCount += 1
+        return RemoteCommandResult(outcome: .completed, message: nil)
     }
 
     // VehicleLiveStreaming

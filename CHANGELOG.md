@@ -47,6 +47,9 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Diagnostic exports now include active command-confirmation state and any persistent VDMS
   backoff deadline and rejection category. Confirmation start, suspension, resumption,
   telemetry match, timeout, and dismissal are also recorded in the unified log.
+- Command receipt names now cover awaiting and terminal states accurately. Receipts survive
+  relaunch without resending commands; an unexpired confirmation resumes for its remaining
+  window, while an expired one is restored as timed out.
 
 ## [1.3.4] - 2026-09-09
 

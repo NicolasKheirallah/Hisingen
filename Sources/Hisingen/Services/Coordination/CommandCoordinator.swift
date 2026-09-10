@@ -37,7 +37,7 @@ protocol CommandExecutionContext: AnyObject {
     /// Atomically hands the optimistic display state and accepted command to the refresh
     /// module, which exclusively owns the receipt's confirmation lifecycle.
     func beginCommandConfirmation(
-        _ pending: PendingCommandSummary,
+        _ receipt: CommandReceipt,
         optimisticState: VehicleState
     )
 }
@@ -254,7 +254,7 @@ final class CommandCoordinator {
                 target: target
             )
             if let optimisticState {
-                context.beginCommandConfirmation(PendingCommandSummary(
+                context.beginCommandConfirmation(CommandReceipt(
                     commandIdentifier: command.identifier,
                     issuedAt: startedAt,
                     command: command
@@ -370,7 +370,7 @@ final class CommandCoordinator {
         }
         current.freshness.fetchedAt = Date()
         current.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
-        current.commandState.pending = nil
+        current.commandState.receipt = nil
         return current
     }
 }

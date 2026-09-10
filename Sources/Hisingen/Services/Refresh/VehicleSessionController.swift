@@ -111,10 +111,10 @@ final class VehicleSessionController {
 
     func refreshNow() { refreshCoordinator.refreshNow() }
     func beginCommandConfirmation(
-        _ pending: PendingCommandSummary,
+        _ receipt: CommandReceipt,
         optimisticState: VehicleState
     ) {
-        refreshCoordinator.beginCommandConfirmation(pending, optimisticState: optimisticState)
+        refreshCoordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
     func dismissCommandReceipt(issuedAt: Date) {
         refreshCoordinator.dismissCommandReceipt(issuedAt: issuedAt)

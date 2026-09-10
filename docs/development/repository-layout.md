@@ -42,7 +42,7 @@
 
 **`Services/Refresh/`** — polling/coalescing/backoff logic only. Doesn't know about UI, doesn't know about Keychain directly (talks to `VehicleStateStore` and `Preferences`, not `Keychain` directly).
 
-**`Services/Persistence/`** — the only directory that touches Keychain or `UserDefaults` directly for app state. If you're adding a new piece of state that needs to survive a relaunch, it goes through `Preferences` (non-secret) or `Keychain` (secret) or `VehicleStateStore` (per-VIN telemetry-shaped cache) — not a new ad-hoc `UserDefaults.standard.set` call somewhere else in the codebase.
+**`Services/Persistence/`** — the only directory that touches Keychain or `UserDefaults` directly for app state. If you're adding a new piece of state that needs to survive a relaunch, it goes through `Preferences` (non-secret), `Keychain` (secret), or `VehicleStateStore` (per-VIN snapshots, baselines, and command receipts), not a new ad-hoc `UserDefaults.standard.set` call elsewhere.
 
 **`Services/Notifications/`** — the charging state machine (`ChargingTransitionDetector`, a pure function — keep it that way) and the actual notification-posting logic (`Notifier`, `@MainActor`). Don't add `UNUserNotificationCenter` calls outside this directory.
 

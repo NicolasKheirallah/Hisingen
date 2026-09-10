@@ -223,7 +223,7 @@ enum CommandConfirmationStatus: Codable, Equatable, Sendable {
 /// Display-only receipt for a remote command and its authoritative confirmation lifecycle.
 /// Requested values remain optimistic until fresh vehicle telemetry moves `status` to
 /// `confirmed`; the refresh coordinator owns the only timeout transition.
-struct PendingCommandSummary: Codable, Equatable, Sendable {
+struct CommandReceipt: Codable, Equatable, Sendable {
     static let maximumConfirmationDuration: TimeInterval = 5 * 60
 
     /// Matches `RemoteCommand.identifier` and the command-audit trail.
@@ -449,13 +449,30 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
     }
 }
 
-struct PendingCommandState: Codable, Equatable, Sendable {
+struct CommandPresentationState: Codable, Equatable, Sendable {
     var optimisticLockUntil: Date?
-    var pending: PendingCommandSummary?
+    var receipt: CommandReceipt?
 
-    init(optimisticLockUntil: Date? = nil, pending: PendingCommandSummary? = nil) {
+    init(optimisticLockUntil: Date? = nil, receipt: CommandReceipt? = nil) {
         self.optimisticLockUntil = optimisticLockUntil
-        self.pending = pending
+        self.receipt = receipt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case optimisticLockUntil, receipt, pending
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        optimisticLockUntil = try values.decodeIfPresent(Date.self, forKey: .optimisticLockUntil)
+        receipt = try values.decodeIfPresent(CommandReceipt.self, forKey: .receipt)
+            ?? values.decodeIfPresent(CommandReceipt.self, forKey: .pending)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(optimisticLockUntil, forKey: .optimisticLockUntil)
+        try values.encodeIfPresent(receipt, forKey: .receipt)
     }
 }
 
@@ -464,7 +481,7 @@ struct VehicleState: Codable, Equatable, Sendable {
     var identity: VehicleIdentitySnapshot
     var maintenance: MaintenanceAndHealthSnapshot
     var freshness: SnapshotFreshness
-    var commandState = PendingCommandState()
+    var commandState = CommandPresentationState()
     var exteriorStatus: ExteriorSnapshot? = nil
     var softwareInfo: VehicleSoftwareInfo? = nil
     var climateStatus: VehicleClimateStatus? = nil
@@ -564,10 +581,10 @@ struct VehicleState: Codable, Equatable, Sendable {
     private var retainedDataAt: Date? { get { freshness.retainedDataAt } set { freshness.retainedDataAt = newValue } }
 
     private var optimisticCommandLockUntil: Date? { get { commandState.optimisticLockUntil } set { commandState.optimisticLockUntil = newValue } }
-    private var pendingCommand: PendingCommandSummary? { get { commandState.pending } set { commandState.pending = newValue } }
+    private var commandReceipt: CommandReceipt? { get { commandState.receipt } set { commandState.receipt = newValue } }
 
     var isAwaitingVehicleConfirmation: Bool {
-        pendingCommand?.status.isAwaiting == true
+        commandReceipt?.status.isAwaiting == true
     }
 
     // Private forwarding keeps derived behavior compact without exposing a flat API.
@@ -771,7 +788,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         identity: VehicleIdentitySnapshot,
         maintenance: MaintenanceAndHealthSnapshot = .init(),
         freshness: SnapshotFreshness,
-        commandState: PendingCommandState = .init(),
+        commandState: CommandPresentationState = .init(),
         exteriorStatus: ExteriorSnapshot? = nil,
         softwareInfo: VehicleSoftwareInfo? = nil,
         climateStatus: VehicleClimateStatus? = nil,
@@ -940,8 +957,8 @@ struct VehicleState: Codable, Equatable, Sendable {
                 isEngineRunning: try readFlat("isEngineRunning"),
                 type: try readFlat("fuelType")
             )
-        let commandState = try values.decodeIfPresent(PendingCommandState.self, forKey: .commandState)
-            ?? PendingCommandState(pending: try readFlat("pendingCommand"))
+        let commandState = try values.decodeIfPresent(CommandPresentationState.self, forKey: .commandState)
+            ?? CommandPresentationState(receipt: try readFlat("pendingCommand"))
 
         self.init(
             energy: energy,

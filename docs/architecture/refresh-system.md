@@ -158,6 +158,13 @@ receipt without stopping an active background confirmation. If confirmation ends
 vehicle still qualifies for the same charging stream, the transport remains open and simply
 returns to its normal purpose.
 
+**Relaunch.** Command receipts are stored per VIN outside `VehicleState`, so cached telemetry
+remains provider-only. Relaunch never resends a command. A receipt that was still awaiting
+confirmation resumes targeted reads and any applicable stream only until its original deadline.
+If that deadline passed while Hisingen was not running, the restored receipt is marked timed out.
+Confirmed and timed-out receipts are restored as-is. Dismissing a receipt removes its stored
+record, and switching vehicles, changing credentials, or signing out clears the affected record.
+
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator
 state when it is still the registered owner — an expired confirmation stream can never

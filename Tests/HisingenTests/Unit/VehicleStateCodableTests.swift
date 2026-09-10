@@ -129,7 +129,7 @@ struct VehicleStateCodableTests {
         object["unavailableFeatures"] = freshness["unavailableFeatures"]
         object["retainedDataCategories"] = freshness["retainedDataCategories"]
         object["retainedDataAt"] = freshness["retainedDataAt"]
-        object["pendingCommand"] = command["pending"]
+        object["pendingCommand"] = command["receipt"]
 
         let decoded = try JSONDecoder().decode(
             VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
@@ -149,22 +149,41 @@ struct VehicleStateCodableTests {
         #expect(migrated["pendingCommand"] == nil)
     }
 
-    @Test("Pending-command marker survives persistence but is absent when unset")
-    func testPendingCommandCodable() throws {
+    @Test("Command receipt survives Codable round-trip but is absent when unset")
+    func commandReceiptCodableRoundTrip() throws {
         var state = fullyPopulated()
-        state.commandState.pending = PendingCommandSummary(
+        state.commandState.receipt = CommandReceipt(
             commandIdentifier: "lock", issuedAt: Date(timeIntervalSince1970: 1_750_000_100))
         let decoded = try JSONDecoder().decode(
             VehicleState.self, from: JSONEncoder().encode(state))
-        #expect(decoded.commandState.pending == state.commandState.pending)
+        #expect(decoded.commandState.receipt == state.commandState.receipt)
 
         let bare = try JSONDecoder().decode(
             VehicleState.self, from: JSONEncoder().encode(fullyPopulated()))
-        #expect(bare.commandState.pending == nil)
+        #expect(bare.commandState.receipt == nil)
+    }
+
+    @Test("Legacy commandState.pending decodes as the renamed receipt")
+    func legacyPendingReceiptKeyMigration() throws {
+        let receipt = CommandReceipt(
+            commandIdentifier: "lock",
+            issuedAt: Date(timeIntervalSince1970: 1_750_000_100),
+            status: .timedOut(at: Date(timeIntervalSince1970: 1_750_000_200))
+        )
+        let receiptObject = try JSONSerialization.jsonObject(with: JSONEncoder().encode(receipt))
+        let legacy = try JSONSerialization.data(withJSONObject: ["pending": receiptObject])
+
+        let decoded = try JSONDecoder().decode(CommandPresentationState.self, from: legacy)
+        #expect(decoded.receipt == receipt)
+        let migrated = try #require(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(decoded)
+        ) as? [String: Any])
+        #expect(migrated["receipt"] != nil)
+        #expect(migrated["pending"] == nil)
     }
 
     @Test("Legacy confirmedAt receipts migrate to the unified terminal status")
-    func legacyPendingCommandStatusMigration() throws {
+    func legacyConfirmedAtStatusMigration() throws {
         struct LegacyReceipt: Encodable {
             let commandIdentifier: String
             let issuedAt: Date
@@ -179,7 +198,7 @@ struct VehicleStateCodableTests {
             confirmedAt: confirmedAt
         ))
 
-        let decoded = try JSONDecoder().decode(PendingCommandSummary.self, from: data)
+        let decoded = try JSONDecoder().decode(CommandReceipt.self, from: data)
         #expect(decoded.status == .confirmed(at: confirmedAt))
     }
 

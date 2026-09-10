@@ -1,6 +1,11 @@
 import Foundation
 import OSLog
 
+struct StoredCommandReceipt: Codable, Equatable, Sendable {
+    var receipt: CommandReceipt
+    var confirmationDeadline: Date?
+}
+
 /// Main-actor isolated because it holds no lock of its own: every mutation is a
 /// read-modify-write over a `UserDefaults`-backed dictionary, which two concurrent callers
 /// would interleave and lose writes from. Both real callers (`RefreshCoordinator`, `Notifier`)
@@ -10,6 +15,7 @@ final class VehicleStateStore {
     private let defaults: UserDefaults
     private let snapshotsKey = "cached_vehicle_snapshots_v1"
     private let baselinesKey = "charging_baselines_v1"
+    private let commandReceiptsKey = "command_receipts_v1"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let logger = AppLog.logger("state-store")
@@ -89,6 +95,26 @@ final class VehicleStateStore {
         store(values, key: baselinesKey)
     }
 
+    func commandReceipt(for vin: String) -> StoredCommandReceipt? {
+        load([String: StoredCommandReceipt].self, key: commandReceiptsKey)?[vin]
+    }
+
+    func saveCommandReceipt(_ record: StoredCommandReceipt, for vin: String) {
+        var values = load([String: StoredCommandReceipt].self, key: commandReceiptsKey) ?? [:]
+        values[vin] = record
+        store(values, key: commandReceiptsKey)
+    }
+
+    func clearCommandReceipt(for vin: String? = nil) {
+        guard let vin else {
+            defaults.removeObject(forKey: commandReceiptsKey)
+            return
+        }
+        var values = load([String: StoredCommandReceipt].self, key: commandReceiptsKey) ?? [:]
+        values.removeValue(forKey: vin)
+        store(values, key: commandReceiptsKey)
+    }
+
     /// Forgets a vehicle's cached snapshot and charging baseline. Durable SQLite history
     /// (charging sessions, telemetry, battery health, fuel entries…) is kept unless
     /// `eraseHistory` is set: the sign-out path passes the user's Settings → Privacy & Data
@@ -109,9 +135,11 @@ final class VehicleStateStore {
             baselines.removeValue(forKey: vin)
             store(snapshots, key: snapshotsKey)
             store(baselines, key: baselinesKey)
+            clearCommandReceipt(for: vin)
         } else {
             defaults.removeObject(forKey: snapshotsKey)
             defaults.removeObject(forKey: baselinesKey)
+            clearCommandReceipt()
         }
     }
 

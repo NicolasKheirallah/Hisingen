@@ -668,11 +668,11 @@ private final class CommandContextMock: CommandExecutionContext {
         title: String, message: String, success: Bool, target: RemoteCommandTarget?
     ) {}
     func beginCommandConfirmation(
-        _ pending: PendingCommandSummary,
+        _ receipt: CommandReceipt,
         optimisticState: VehicleState
     ) {
         vehicleState = optimisticState
-        vehicleState?.commandState.pending = pending
+        vehicleState?.commandState.receipt = receipt
     }
 }
 

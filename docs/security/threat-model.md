@@ -11,6 +11,7 @@ A lightweight, practical pass — not a compliance exercise. Scope: the Hisingen
 | Volvo client secret / VCC API key | Keychain | Account/app-level access to the user's Developer Portal application |
 | Vehicle location | In-memory, `UserDefaults` cache (stripped in the cached copy — see below), opt-in third-party calls | Physical safety/privacy implication if disclosed |
 | Vehicle state (battery, locks, warnings) | `UserDefaults` cache | Privacy; also security-relevant (lock state) |
+| Remote-command receipts | Per-VIN `UserDefaults` record, separate from telemetry | Reveals recent command intent and outcome |
 | VIN | Cached state, notification identifiers, logs (never full state) | Identifies a specific physical vehicle |
 | Account information (email, nickname) | Email: Keychain; nickname: `UserDefaults` | Privacy |
 | Future/experimental remote-control credentials or capability | Compile-time flag, in-memory only today | If ever enabled broadly, would allow physical vehicle actuation |

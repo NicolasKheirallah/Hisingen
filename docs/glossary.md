@@ -26,9 +26,10 @@ outcome. Brand policy lives in `CapabilityGate` and the provider command
 catalog, never in an entry point — see
 [ADR-0012](adr/0012-single-remote-command-dispatch-authority.md).
 
-**Command receipt** — the display-only record of an accepted Remote Command.
-`RefreshCoordinator` owns its awaiting, confirmed, timed-out, suspension, and dismissal
-lifecycle. Provider telemetry and persisted vehicle snapshots never own the receipt.
+**Command receipt** — the display-only record of an accepted Remote Command in any lifecycle
+state: awaiting confirmation, confirmed, or timed out. `RefreshCoordinator` owns confirmation,
+suspension, timeout, and dismissal. A separate per-vehicle receipt record survives relaunch;
+provider telemetry and persisted vehicle snapshots never own the receipt.
 
 **Gatekeeper** — macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates

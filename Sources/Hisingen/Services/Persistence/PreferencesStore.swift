@@ -111,11 +111,15 @@ final class PreferencesStore {
         }
     }
 
-    /// Remove the legacy UserDefaults mirrors that predate SQLite. A database erase must
-    /// clear these too or an old snapshot can reappear and be migrated back into SQLite.
+    /// Remove local per-vehicle state kept in UserDefaults. A database erase must clear
+    /// these too or an old snapshot or command receipt can reappear after relaunch.
     /// Corrupt legacy payloads are removed wholesale because retaining an undecodable cache
     /// is less safe than requiring the affected vehicles to refresh again.
-    func clearLegacyVehicleCaches(for vin: String?, includeBaselines: Bool = true) {
+    func clearLocalVehicleDefaults(
+        for vin: String?,
+        includeBaselines: Bool = true,
+        includeCommandReceipts: Bool = true
+    ) {
         func removeEntry<Value: Codable>(_ type: Value.Type, key: String) {
             guard let vin else {
                 d.removeObject(forKey: key)
@@ -137,6 +141,9 @@ final class PreferencesStore {
         }
 
         removeEntry(VehicleState.self, key: "cached_vehicle_snapshots_v1")
+        if includeCommandReceipts {
+            removeEntry(StoredCommandReceipt.self, key: "command_receipts_v1")
+        }
         if includeBaselines {
             removeEntry(ChargingBaseline.self, key: "charging_baselines_v1")
         }
