@@ -630,35 +630,87 @@ struct VehicleState: Codable, Equatable, Sendable {
         case .connected:
             return
         case .battery(let battery):
-            if let reportedAt = battery.reportedAt {
-                if battery.batteryPercentage != nil { readingDates[.battery] = reportedAt }
-                if battery.rangeKm != nil { readingDates[.range] = reportedAt }
-                if battery.chargingState != nil { readingDates[.charging] = reportedAt }
+            let reportedAt = battery.reportedAt
+            var appliedReading = false
+            if shouldApplyLiveReading(.battery, reportedAt: reportedAt) {
+                if let value = battery.batteryPercentage {
+                    batteryPercentage = value
+                    if let reportedAt { readingDates[.battery] = reportedAt }
+                }
+                batteryDiagnostics = battery.diagnostics
+                reportedBatteryCapacityKwh = battery.reportedBatteryCapacityKwh
+                    ?? reportedBatteryCapacityKwh
+                appliedReading = true
             }
-            batteryPercentage = battery.batteryPercentage ?? batteryPercentage
-            rangeKm = battery.rangeKm ?? rangeKm
-            estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
-                ?? estimatedChargingTimeToFullMinutes
-            chargingState = battery.chargingState ?? chargingState
-            if battery.chargerConnection != .unknown { chargerConnection = battery.chargerConnection }
-            if battery.chargingType != .unknown { chargingType = battery.chargingType }
-            chargingPowerWatts = battery.chargingPowerWatts ?? chargingPowerWatts
-            chargingCurrentAmps = battery.chargingCurrentAmps ?? chargingCurrentAmps
-            chargingVoltageVolts = battery.chargingVoltageVolts ?? chargingVoltageVolts
-            batteryDiagnostics = battery.diagnostics
-            vehicleReportedAt = battery.reportedAt ?? vehicleReportedAt
+            if let value = battery.rangeKm,
+               shouldApplyLiveReading(.range, reportedAt: reportedAt) {
+                rangeKm = value
+                if let reportedAt { readingDates[.range] = reportedAt }
+                appliedReading = true
+            }
+            let hasChargingReading = battery.estimatedChargingTimeToFullMinutes != nil
+                || battery.chargingState != nil
+                || battery.chargerConnection != .unknown
+                || battery.chargingType != .unknown
+                || battery.chargingPowerWatts != nil
+                || battery.chargingCurrentAmps != nil
+                || battery.chargingVoltageVolts != nil
+            if hasChargingReading,
+               shouldApplyLiveReading(.charging, reportedAt: reportedAt) {
+                estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
+                    ?? estimatedChargingTimeToFullMinutes
+                chargingState = battery.chargingState ?? chargingState
+                if battery.chargerConnection != .unknown {
+                    chargerConnection = battery.chargerConnection
+                }
+                if battery.chargingType != .unknown {
+                    chargingType = battery.chargingType
+                }
+                chargingPowerWatts = battery.chargingPowerWatts ?? chargingPowerWatts
+                chargingCurrentAmps = battery.chargingCurrentAmps ?? chargingCurrentAmps
+                chargingVoltageVolts = battery.chargingVoltageVolts ?? chargingVoltageVolts
+                if let reportedAt { readingDates[.charging] = reportedAt }
+                appliedReading = true
+            }
+            if appliedReading { advanceVehicleReportedAt(to: reportedAt) }
         case .exterior(let exterior, let reportedAt):
-            if let date = exterior.reportedAt ?? reportedAt {
-                readingDates[.openings] = date
-                if exterior.isLocked != nil { readingDates[.locks] = date }
+            let date = exterior.reportedAt ?? reportedAt
+            let merged = exterior.merging(previous: exteriorStatus)
+            var next = exteriorStatus ?? merged
+            var appliedReading = false
+            if shouldApplyLiveReading(.openings, reportedAt: date) {
+                next.openings = merged.openings
+                next.isTailgateLocked = merged.isTailgateLocked
+                if let date { readingDates[.openings] = date }
+                appliedReading = true
             }
-            exteriorStatus = exterior.merging(previous: exteriorStatus)
-            // Prefer the vehicle's own exterior timestamp; the frame callback's received-at
-            // time is only a fallback when the backend reported none.
-            vehicleReportedAt = (exterior.reportedAt ?? reportedAt) ?? vehicleReportedAt
+            if (exterior.isLocked != nil || exterior.alarmTriggered != nil),
+               shouldApplyLiveReading(.locks, reportedAt: date) {
+                next.isLocked = merged.isLocked
+                next.alarmTriggered = merged.alarmTriggered
+                if let date { readingDates[.locks] = date }
+                appliedReading = true
+            }
+            if appliedReading {
+                if let date {
+                    next.reportedAt = max(next.reportedAt ?? .distantPast, date)
+                }
+                exteriorStatus = next
+                advanceVehicleReportedAt(to: date)
+            }
         }
         fetchedAt = receivedAt
         isCachedSnapshot = false
+    }
+
+    private func shouldApplyLiveReading(_ reading: VehicleReading, reportedAt: Date?) -> Bool {
+        guard let reportedAt, let current = readingDates[reading] else { return true }
+        return reportedAt >= current
+    }
+
+    private mutating func advanceVehicleReportedAt(to reportedAt: Date?) {
+        guard let reportedAt else { return }
+        vehicleReportedAt = max(vehicleReportedAt ?? .distantPast, reportedAt)
     }
 
     init(

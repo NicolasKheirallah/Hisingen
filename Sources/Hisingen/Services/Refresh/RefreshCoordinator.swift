@@ -359,7 +359,7 @@ final class RefreshCoordinator {
             purpose = .charging
         case .setChargeTarget, .setAmpLimit:
             purpose = nil
-        case .lock, .lockReducedGuard, .unlock,
+        case .lock, .unlock,
              .openTailgate, .closeTailgate, .openWindows, .closeWindows:
             purpose = .exteriorConfirmation
         default:
@@ -791,8 +791,10 @@ final class RefreshCoordinator {
         guard !sleeping, networkAvailable else { nextRefresh = nil; return }
         let maxJitter = min(15, max(1, interval * 0.1))
         let jitter = Double.random(in: 0...maxJitter)
-        let delay = interval + jitter
-        nextRefresh = Date().addingTimeInterval(delay)
+        let requestedDeadline = Date().addingTimeInterval(interval + jitter)
+        let deadline = max(requestedDeadline, rateLimitedUntil ?? .distantPast)
+        let delay = max(0, deadline.timeIntervalSinceNow)
+        nextRefresh = deadline
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }

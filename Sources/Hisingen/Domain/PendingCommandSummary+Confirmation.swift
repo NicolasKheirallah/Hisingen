@@ -3,7 +3,7 @@ import Foundation
 extension PendingCommandSummary {
     var supportsTelemetryConfirmation: Bool {
         switch command {
-        case .lock, .lockReducedGuard, .unlock,
+        case .lock, .unlock,
              .openTailgate, .closeTailgate, .openWindows, .closeWindows,
              .startPreCleaning, .stopPreCleaning,
              .setChargeTarget, .setAmpLimit, .startChargingOverride:
@@ -18,7 +18,7 @@ extension PendingCommandSummary {
         let reading: VehicleReading
         let matches: Bool
         switch command {
-        case .lock, .lockReducedGuard, .unlock:
+        case .lock, .unlock:
             reading = .locks
             matches = state.exteriorStatus?.isLocked == (command != .unlock)
         case .openTailgate, .closeTailgate:

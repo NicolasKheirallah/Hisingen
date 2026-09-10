@@ -101,6 +101,110 @@ struct VehicleActivityTests {
         #expect(!unobservable.supportsTelemetryConfirmation)
     }
 
+    @Test func reducedGuardLockIsNotTelemetryConfirmable() {
+        let now = Date()
+        let pending = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lockReducedGuard.identifier,
+            issuedAt: now.addingTimeInterval(-10),
+            command: .lockReducedGuard
+        )
+        var current = state(at: now)
+        current.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: true, alarmTriggered: false, reportedAt: now
+        )
+        current.freshness.readingDates[.locks] = now
+
+        #expect(!pending.supportsTelemetryConfirmation)
+        #expect(pending.updatingConfirmation(from: current).confirmedAt == nil)
+        let ordinaryLock = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: pending.issuedAt,
+            command: .lock
+        )
+        #expect(ordinaryLock.supportsTelemetryConfirmation)
+        #expect(ordinaryLock.updatingConfirmation(from: current).confirmedAt == now)
+    }
+
+    @Test func olderLiveFrameDoesNotRegressVehicleState() {
+        let now = Date()
+        let older = now.addingTimeInterval(-60)
+        func batteryUpdate(reportedAt: Date) -> GrpcBatteryExtras {
+            GrpcBatteryExtras(
+                reportedAt: reportedAt,
+                batteryPercentage: 20,
+                rangeKm: 50,
+                estimatedChargingTimeToFullMinutes: 120,
+                chargingState: .charging,
+                chargerConnection: .connected,
+                chargingType: .dc,
+                chargingPowerWatts: 50_000,
+                chargingCurrentAmps: 100,
+                chargingVoltageVolts: 500,
+                diagnostics: BatteryDiagnostics(
+                    timeToTargetMinutes: nil,
+                    timeToMinimumSOCMinutes: nil,
+                    chargerPowerState: .available,
+                    averageConsumption: nil,
+                    averageConsumptionSinceCharge: nil,
+                    energyUsedSinceChargeWh: nil
+                ),
+                reportedBatteryCapacityKwh: nil,
+                unknownFields: []
+            )
+        }
+        func exteriorUpdate(reportedAt: Date) -> VehicleLiveUpdate {
+            .exterior(
+                ExteriorSnapshot(
+                    openings: [OpeningReading(opening: .tailgate, state: .open)],
+                    isLocked: false,
+                    alarmTriggered: true,
+                    reportedAt: reportedAt
+                ),
+                reportedAt: reportedAt
+            )
+        }
+        var current = state(at: now)
+        current.energy.batteryPercentage = 60
+        current.energy.rangeKm = 250
+        current.energy.chargingState = .idle
+        current.energy.powerWatts = 0
+        current.freshness.readingDates = [
+            .battery: now, .range: now, .charging: now, .locks: now, .openings: now
+        ]
+        current.exteriorStatus = ExteriorSnapshot(
+            openings: [OpeningReading(opening: .tailgate, state: .closed)],
+            isLocked: true,
+            alarmTriggered: false,
+            reportedAt: now
+        )
+
+        current.applyLiveUpdate(.battery(batteryUpdate(reportedAt: older)),
+                                receivedAt: now.addingTimeInterval(1))
+        current.applyLiveUpdate(exteriorUpdate(reportedAt: older),
+                                receivedAt: now.addingTimeInterval(2))
+
+        #expect(current.energy.batteryPercentage == 60)
+        #expect(current.energy.rangeKm == 250)
+        #expect(current.energy.chargingState == .idle)
+        #expect(current.energy.powerWatts == 0)
+        #expect(current.exteriorStatus?.isLocked == true)
+        #expect(current.exteriorStatus?.alarmTriggered == false)
+        #expect(current.exteriorStatus?.isTailgateOpen == false)
+        #expect(current.freshness.vehicleReportedAt == now)
+
+        let newer = now.addingTimeInterval(60)
+        current.applyLiveUpdate(.battery(batteryUpdate(reportedAt: newer)), receivedAt: newer)
+        current.applyLiveUpdate(exteriorUpdate(reportedAt: newer), receivedAt: newer)
+        #expect(current.energy.batteryPercentage == 20)
+        #expect(current.energy.rangeKm == 50)
+        #expect(current.energy.chargingState == .charging)
+        #expect(current.energy.powerWatts == 50_000)
+        #expect(current.exteriorStatus?.isLocked == false)
+        #expect(current.exteriorStatus?.alarmTriggered == true)
+        #expect(current.exteriorStatus?.isTailgateOpen == true)
+        #expect(current.freshness.vehicleReportedAt == newer)
+    }
+
     @Test func chargingAndTailgateCommandsRequireFreshMatchingTelemetry() {
         let now = Date()
         var current = state(at: now)

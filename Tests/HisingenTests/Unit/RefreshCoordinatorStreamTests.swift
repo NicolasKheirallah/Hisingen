@@ -463,6 +463,39 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    @Test
+    func commandConfirmationDoesNotBypassRateLimit() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let rateLimitFloor = Date().addingTimeInterval(29.8)
+        await provider.failNextFetch(.rateLimited(retryAfter: 30))
+        coordinator.refreshNow()
+        _ = try #require(await waitUntil(events) {
+            $0.refreshFailures == 1 && $0.nextRefresh != nil
+        })
+
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date(),
+            command: .lock
+        ))
+
+        let confirmationDeadline = try #require(events.snapshots.last?.nextRefresh)
+        #expect(
+            confirmationDeadline >= rateLimitFloor,
+            "Confirmation polling must respect the provider's retry deadline"
+        )
+        coordinator.stop()
+    }
+
     /// Switching vehicles cancels the old stream and opens at most one stream for the new
     /// VIN — the expired task's cleanup must not resurrect state for a car we left.
     @Test
@@ -549,6 +582,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     private(set) var fetchCount = 0
     private(set) var authorizationRefreshCount = 0
     private var charging = true
+    private var nextFetchFailure: VehicleServiceError?
     private var script: [StreamBehavior]
     private let recorder: StreamRecorder
 
@@ -558,6 +592,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func setCharging(_ enabled: Bool) { charging = enabled }
+    func failNextFetch(_ error: VehicleServiceError) { nextFetchFailure = error }
 
     // VehicleProviding
 
@@ -575,6 +610,10 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         fetchCount += 1
+        if let nextFetchFailure {
+            self.nextFetchFailure = nil
+            throw nextFetchFailure
+        }
         return Self.makeMockState(vin: vin, charging: charging)
     }
 
