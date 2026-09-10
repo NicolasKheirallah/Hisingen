@@ -5,6 +5,24 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [1.3.5] - 2026-09-10
 
+### Added
+
+- 
+
+### Fixed
+
+- run auto release on macOS
+- only apply skip release to HEAD commit
+- pass the tag explicitly to the publish action [skip release]
+- keep the Sparkle private key file in its native base64 format [skip release]
+
+### Changed
+
+- chore: checkpoint current work before vehicle state refactor
+- chore(updates): publish v1.3.4 appcast
+
+## [1.3.5] - 2026-09-10
+
 ### Fixed
 
 - Remote controls re-render again after a successful command: the coordinator
