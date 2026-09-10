@@ -1276,13 +1276,24 @@ struct VehicleState: Codable, Equatable, Sendable {
         )
     }
 
-    func mergingLastKnown(from previous: VehicleState?, features: FeatureSelection,
-                           imageCache: CarImageCache = CarImageCache()) -> VehicleState {
+    func mergingLastKnown(
+        from previous: VehicleState?,
+        features: FeatureSelection,
+        refreshedFeatures: Set<AppFeature>? = nil,
+        imageCache: CarImageCache = CarImageCache()
+    ) -> VehicleState {
         guard let previous, previous.vin == vin else { return self }
         let failed = Set(unavailableFeatures)
-        func keep(_ feature: AppFeature) -> Bool {
-            features.contains(feature) && failed.contains(feature)
+        let refreshed = refreshedFeatures ?? AppFeature.permittedFeatures
+        func wasRefreshed(_ feature: AppFeature) -> Bool {
+            refreshed.contains(feature)
         }
+        func keep(_ feature: AppFeature) -> Bool {
+            features.contains(feature) && (!wasRefreshed(feature) || failed.contains(feature))
+        }
+        let mergedUnavailableFeatures = failed.union(
+            previous.unavailableFeatures.filter { !wasRefreshed($0) }
+        ).sorted { $0.title < $1.title }
         let previousChargingState: ChargingState? = {
             if case .unknown = chargingState { return previous.chargingState }
             return nil
@@ -1400,7 +1411,7 @@ struct VehicleState: Codable, Equatable, Sendable {
                 fetchedAt: fetchedAt,
                 vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
                 dataWarnings: dataWarnings,
-                unavailableFeatures: unavailableFeatures
+                unavailableFeatures: mergedUnavailableFeatures
             ),
             exteriorStatus: exteriorStatus ?? (features.contains(.exteriorStatus) ? previous.exteriorStatus : nil),
             softwareInfo: mergedSoftware,
@@ -1467,9 +1478,9 @@ struct VehicleState: Codable, Equatable, Sendable {
         merged.preferredWorkshopId = preferredWorkshopId ?? previous.preferredWorkshopId
         merged.preferredWorkshopName = preferredWorkshopName ?? previous.preferredWorkshopName
 
-        var retained = Set<AppFeature>()
+        var retained = Set(previous.retainedDataCategories.filter { !wasRefreshed($0) })
         func markRetained(_ feature: AppFeature, currentIsMissing: Bool, previousWasPresent: Bool) {
-            if features.contains(feature), currentIsMissing, previousWasPresent {
+            if features.contains(feature), wasRefreshed(feature), currentIsMissing, previousWasPresent {
                 retained.insert(feature)
             }
         }

@@ -321,7 +321,10 @@ struct RefreshCoordinatorStreamTests {
             recorder.purposes.filter { $0 == .exteriorConfirmation }.count >= 1
                 && recorder.opened >= 2 && diagnostics.liveStreamConnected
         })
-        if let fallbackDeadline = snapshot.nextRefresh, let reconnectedDeadline = reconnected.nextRefresh {
+        let fetchCountAtReconnect = await provider.fetchCount
+        if fetchCountAtReconnect == 1,
+           let fallbackDeadline = snapshot.nextRefresh,
+           let reconnectedDeadline = reconnected.nextRefresh {
             #expect(reconnectedDeadline <= fallbackDeadline.addingTimeInterval(0.05),
                     "Reconnect must not postpone an already scheduled confirmation poll")
         }
@@ -464,6 +467,66 @@ struct RefreshCoordinatorStreamTests {
     }
 
     @Test
+    func confirmationPollFetchesOnlyCommandTelemetry() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandInitialPollDelay: 0.05,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(80)
+        ))
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
+        let selections = await provider.fetchSelections
+        #expect(selections.first == FeatureSelection.default)
+        #expect(selections.last?.enabled == [.remoteCharging])
+        coordinator.stop()
+    }
+
+    @Test
+    func manualRefreshDuringConfirmationStillFetchesFullSelection() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let provider = StreamingMockProvider(script: [], recorder: recorder)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandInitialPollDelay: 5,
+            commandPollInterval: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        coordinator.beginCommandConfirmation(PendingCommandSummary(
+            commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(80)
+        ))
+        coordinator.refreshNow()
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
+        let selections = await provider.fetchSelections
+        #expect(selections.last == FeatureSelection.default)
+        coordinator.stop()
+    }
+
+    @Test
     func commandConfirmationDoesNotBypassRateLimit() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -580,6 +643,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
 
     nonisolated let brand: VehicleBrand = .polestar
     private(set) var fetchCount = 0
+    private(set) var fetchSelections: [FeatureSelection] = []
     private(set) var authorizationRefreshCount = 0
     private var charging = true
     private var nextFetchFailure: VehicleServiceError?
@@ -610,6 +674,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         fetchCount += 1
+        fetchSelections.append(features)
         if let nextFetchFailure {
             self.nextFetchFailure = nil
             throw nextFetchFailure

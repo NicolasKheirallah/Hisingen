@@ -1,6 +1,11 @@
 import Foundation
 
 extension PendingCommandSummary {
+    var confirmationFeatures: FeatureSelection? {
+        guard supportsTelemetryConfirmation, let command else { return nil }
+        return FeatureSelection(enabled: [command.feature])
+    }
+
     var supportsTelemetryConfirmation: Bool {
         switch command {
         case .lock, .unlock,

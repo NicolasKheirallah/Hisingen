@@ -700,6 +700,8 @@ final class RefreshCoordinator {
         if trigger == .manual { onEvent?(.loading) }
         timer?.invalidate()
         nextRefresh = nil
+        let confirmationFeatures = confirmationFeatures(for: trigger)
+        let features = confirmationFeatures ?? preferences.features
         let requestGeneration = generation
         let started = Date()
         refreshAttempts += 1
@@ -708,11 +710,15 @@ final class RefreshCoordinator {
             // latency without any log volume.
             let intervalState = Self.signposter.beginInterval("fetchVehicleState")
             do {
-                let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
+                let state = try await api.fetchVehicleState(vin: vin, features: features)
                 Self.signposter.endInterval("fetchVehicleState", intervalState)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                apply(state, latency: Date().timeIntervalSince(started))
+                apply(
+                    state,
+                    latency: Date().timeIntervalSince(started),
+                    refreshedFeatures: confirmationFeatures?.enabled
+                )
             } catch {
                 Self.signposter.endInterval("fetchVehicleState", intervalState)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
@@ -725,10 +731,25 @@ final class RefreshCoordinator {
         publishDiagnostics()
     }
 
-    private func apply(_ state: VehicleState, latency: TimeInterval) {
+    private func confirmationFeatures(for trigger: Trigger) -> FeatureSelection? {
+        guard case .timer = trigger,
+              let confirmationFeatures = pendingCommandConfirmation?.confirmationFeatures else {
+            return nil
+        }
+        return confirmationFeatures
+    }
+
+    private func apply(
+        _ state: VehicleState,
+        latency: TimeInterval,
+        refreshedFeatures: Set<AppFeature>? = nil
+    ) {
         let previous = latest
         var state = state.mergingLastKnown(
-            from: previous, features: preferences.features, imageCache: imageCache
+            from: previous,
+            features: preferences.features,
+            refreshedFeatures: refreshedFeatures,
+            imageCache: imageCache
         )
         // Command receipts are reconciled separately by the session controller against
         // timestamped readings, rather than being persisted as vehicle telemetry.

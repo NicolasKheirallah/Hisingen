@@ -125,6 +125,65 @@ struct VehicleActivityTests {
         #expect(ordinaryLock.updatingConfirmation(from: current).confirmedAt == now)
     }
 
+    @Test func commandConfirmationSelectsOnlyItsRequiredTelemetry() {
+        let issuedAt = Date()
+        let cases: [(RemoteCommand, Set<AppFeature>)] = [
+            (.lock, [.remoteLocks]),
+            (.openTailgate, [.remoteLocks]),
+            (.openWindows, [.remoteWindows]),
+            (.startPreCleaning, [.remotePreCleaning]),
+            (.setChargeTarget(80), [.remoteCharging]),
+            (.setAmpLimit(16), [.remoteCharging]),
+            (.startChargingOverride, [.remoteCharging])
+        ]
+
+        for (command, expected) in cases {
+            let pending = PendingCommandSummary(
+                commandIdentifier: command.identifier,
+                issuedAt: issuedAt,
+                command: command
+            )
+            #expect(pending.confirmationFeatures?.enabled == expected)
+        }
+        let unobservable = PendingCommandSummary(
+            commandIdentifier: RemoteCommand.lockReducedGuard.identifier,
+            issuedAt: issuedAt,
+            command: .lockReducedGuard
+        )
+        #expect(unobservable.confirmationFeatures == nil)
+    }
+
+    @Test func narrowConfirmationMergePreservesUnrequestedStateWithoutNewStaleLabels() {
+        let now = Date()
+        var previous = state(at: now)
+        previous.exteriorStatus = ExteriorSnapshot(
+            openings: [], isLocked: true, alarmTriggered: false, reportedAt: now
+        )
+        previous.maintenance.service.serviceWarning = true
+        previous.freshness.unavailableFeatures = [.vehicleWeather]
+        previous.freshness.retainedDataCategories = [.vehicleWeather]
+        previous.freshness.retainedDataAt = now
+
+        var chargingRead = state(at: now.addingTimeInterval(10))
+        chargingRead.energy.targetPercentage = 90
+        chargingRead.exteriorStatus = nil
+        chargingRead.maintenance.service.serviceWarning = false
+        var enabledFeatures = FeatureSelection.default
+        enabledFeatures.set(.vehicleHealth, enabled: true)
+        let merged = chargingRead.mergingLastKnown(
+            from: previous,
+            features: enabledFeatures,
+            refreshedFeatures: [.remoteCharging]
+        )
+
+        #expect(merged.energy.targetPercentage == 90)
+        #expect(merged.exteriorStatus == previous.exteriorStatus)
+        #expect(merged.maintenance.service.serviceWarning)
+        #expect(merged.freshness.unavailableFeatures == [.vehicleWeather])
+        #expect(merged.freshness.retainedDataCategories == [.vehicleWeather])
+        #expect(merged.freshness.retainedDataAt == now)
+    }
+
     @Test func olderLiveFrameDoesNotRegressVehicleState() {
         let now = Date()
         let older = now.addingTimeInterval(-60)
