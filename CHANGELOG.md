@@ -41,6 +41,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   of being cached as empty results and retried after cache expiry or remote commands.
 - Network tests now inject an in-memory API diagnostic store instead of clearing and
   writing fixture traffic to the user's persisted diagnostic archive.
+- Command confirmation now has one lifecycle owner. Receipts survive refreshes and temporary
+  suspension, can be dismissed without reappearing when the tab is rebuilt, and show distinct
+  waiting, confirmed, and timed-out status treatments.
+- Diagnostic exports now include active command-confirmation state and any persistent VDMS
+  backoff deadline and rejection category. Confirmation start, suspension, resumption,
+  telemetry match, timeout, and dismissal are also recorded in the unified log.
 
 ## [1.3.4] - 2026-09-09
 

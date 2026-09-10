@@ -94,6 +94,18 @@ A VIN is treated as the stable local identifier for per-vehicle state.
 
 Hisingen also supports conservative handling of vehicles or model variants it does not yet explicitly recognize rather than rejecting them outright.
 
+Primary discovery uses `getConsumerCarsV2` with the regular Polestar web-client token. It
+provides the VIN, model, model year, registration, PNO34, and structure week. Optional VDMS
+enrichment uses the separate mobile command-client token because the app backend rejects the
+web-client token. A user who has not authorized that client still receives primary discovery,
+but VDMS-only trim, wheel, and colour enrichment is unavailable.
+
+The current VDMS schema rejects `content.packages`, so Hisingen deliberately omits that field
+instead of losing the complete discovery response. Package decoding and presentation remain
+available for compatible cached or future responses, but the current production query does not
+claim to retrieve packages. Persistent VDMS client, schema, or authorization rejection enters a
+24-hour backoff whose deadline and category are included in diagnostic exports.
+
 See [Vehicle Domain Model](../domain/vehicle.md).
 
 ---

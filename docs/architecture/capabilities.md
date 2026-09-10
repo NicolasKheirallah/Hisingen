@@ -63,4 +63,4 @@ This table is intentionally conservative — a Polestar 3 or 4 owner will typica
 
 ## Consequence for remote commands
 
-`RemoteCommand.adapted(to:)` uses this same profile to *silently downgrade* a command before sending it — e.g., if `hasSelectableClimateTemperature` is false (Polestar 2, `.vehicleManaged`), a `startClimate` command's requested temperature and seat-heating levels are reset to "unspecified" rather than sent and likely rejected. `VehicleCapabilityProfile.permits(_:)` is also the gate `AppDelegate.performRemoteCommand` checks before dispatching anything at all — an unsupported command never reaches the network layer.
+`RemoteCommand.adapted(to:)` uses this same profile to *silently downgrade* a command before sending it. For example, if `hasSelectableClimateTemperature` is false (Polestar 2, `.vehicleManaged`), a `startClimate` command's requested temperature and seat-heating levels are reset to "unspecified" rather than sent and likely rejected. `CommandCoordinator` consults `CapabilityGate` before dispatching anything, so an unsupported command never reaches the network layer.

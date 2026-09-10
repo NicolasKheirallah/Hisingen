@@ -26,7 +26,7 @@
 
 ## Shared mutable state worth calling out
 
-- `VehicleSessionController.latest: VehicleState?` is the source of truth for "what does the UI currently show." It's updated from `RefreshCoordinatorEvent.state`, cached-snapshot lookups, and optimistic command receipts before the next real refresh confirms them. This deliberate instant-feedback state can briefly differ from a backend poll. See [domain/vehicle.md](../domain/vehicle.md#remote-command-optimistic-updates).
+- `VehicleSessionController.latest: VehicleState?` is the source of truth for "what does the UI currently show." It consumes `RefreshCoordinatorEvent.state`, including the coordinator-owned optimistic command projection and receipt. This deliberate instant-feedback state can briefly differ from a backend poll. See [domain/vehicle.md](../domain/vehicle.md#remote-command-optimistic-updates).
 - `FleetStore` is the hot in-memory per-VIN view of the garage. It is populated from `VehicleStateStore` on demand and from typed session events, while SQLite remains the cold authoritative snapshot store.
 - `InMemorySecretCache` (inside `Keychain.swift`) is process-global and shared
   across every `KeychainStore` instance. Its keys combine service and account,

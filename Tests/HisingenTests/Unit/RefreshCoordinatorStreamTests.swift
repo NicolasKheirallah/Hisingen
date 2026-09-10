@@ -312,6 +312,22 @@ struct RefreshCoordinatorStreamTests {
         #expect(published.commandState.pending == receipt)
         #expect(coordinator.latest?.energy.targetPercentage == 90)
         #expect(coordinator.latest?.commandState.pending == nil)
+
+        let diagnostics = try #require(events.snapshots.last)
+        #expect(diagnostics.commandConfirmationIdentifier == receipt.commandIdentifier)
+        #expect(diagnostics.commandConfirmationStatus == .awaiting)
+        #expect(diagnostics.commandConfirmationDeadline != nil)
+        #expect(diagnostics.commandConfirmationFeatures == [.remoteCharging])
+        #expect(diagnostics.commandReceiptVisible)
+
+        coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
+        #expect(events.states.last?.commandState.pending == nil)
+        #expect(events.snapshots.last?.commandReceiptVisible == false)
+
+        coordinator.refreshNow()
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
+        #expect(events.states.last?.commandState.pending == nil)
+        #expect(events.snapshots.last?.commandConfirmationStatus == .awaiting)
         coordinator.stop()
     }
 

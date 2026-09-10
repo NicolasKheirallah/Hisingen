@@ -38,6 +38,7 @@ struct HisingenContentView: View {
     let onOpenUpdate: () -> Void
     let onRemoteCommand: (RemoteCommand) -> Void
     let onSelectCar: (String) -> Void
+    let onDismissCommandReceipt: (Date) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
     let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String)
@@ -88,6 +89,7 @@ struct HisingenContentView: View {
         onCheckForUpdates: @escaping () -> Void, onOpenUpdate: @escaping () -> Void,
         onRemoteCommand: @escaping (RemoteCommand) -> Void,
         onSelectCar: @escaping (String) -> Void,
+        onDismissCommandReceipt: @escaping (Date) -> Void = { _ in },
         onSettingsChanged: @escaping (SettingsChange) -> Void,
         onSignOut: @escaping () -> Void,
         onTestConnection: @escaping (VehicleBrand) async -> (success: Bool, message: String) = { _ in
@@ -115,6 +117,7 @@ struct HisingenContentView: View {
         self.onOpenUpdate = onOpenUpdate
         self.onRemoteCommand = onRemoteCommand
         self.onSelectCar = onSelectCar
+        self.onDismissCommandReceipt = onDismissCommandReceipt
         self.onSettingsChanged = onSettingsChanged
         self.onSignOut = onSignOut
         self.onTestConnection = onTestConnection
@@ -190,7 +193,9 @@ struct HisingenContentView: View {
                             switch selectedTab {
                             case .vehicle:
                                 VehicleTabView(state: state, cars: cars, activeVin: activeVin,
-                                               onSelectCar: onSelectCar, error: error,
+                                               onSelectCar: onSelectCar,
+                                               onDismissCommandReceipt: onDismissCommandReceipt,
+                                               error: error,
                                                database: database, reverseGeocoder: reverseGeocoder,
                                                imageCache: imageCache)
                                     .id(state.identity.vin)

@@ -66,6 +66,7 @@ final class StatusItemController: NSObject {
     var onCheckForUpdates: () -> Void = {}
     var onOpenUpdate: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
+    var onDismissCommandReceipt: (Date) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
@@ -922,6 +923,9 @@ final class StatusItemController: NSObject {
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
             onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
+            onDismissCommandReceipt: { [weak self] issuedAt in
+                self?.onDismissCommandReceipt(issuedAt)
+            },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
             onTestConnection: { [weak self] brand in

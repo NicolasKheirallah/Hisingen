@@ -6,6 +6,7 @@ struct VehicleTabView: View {
     let cars: [CarSummary]
     let activeVin: String?
     let onSelectCar: (String) -> Void
+    let onDismissCommandReceipt: (Date) -> Void
     let error: String?
     let database: VehicleDatabase
     let reverseGeocoder: ReverseGeocoder
@@ -18,7 +19,6 @@ struct VehicleTabView: View {
     @State private var moreExpanded = true
     @State private var chargingJustStarted = false
     @State private var dismissedSoftwareEventIdentifier: String?
-    @State private var dismissedCommandIssuedAt: Date?
     /// Persistent charging history, prefetched off the main thread. Reading it inside
     /// `chargingCard` ran a SQLite query on every `body` evaluation.
     @State private var persistentChargingSessions: [ChargingSession] = []
@@ -64,7 +64,7 @@ struct VehicleTabView: View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             multiCarChips
             heroCard
-            if let pending = state.commandState.pending, dismissedCommandIssuedAt != pending.issuedAt {
+            if state.commandState.pending != nil {
                 pendingCommandChip.transition(cardTransition)
             }
             if let card = attentionCard { card.transition(cardTransition) }
@@ -99,10 +99,7 @@ struct VehicleTabView: View {
         }
     }
 
-    /// Labels optimistic post-command values as unconfirmed instead of presenting them as
-    /// vehicle-reported truth. Disappears when the follow-up refresh lands.    /// Wide panels can flow two mid-size cards per row instead of stretching
-    /// each card full-width — but only when the user picked Two Columns in
-    /// Settings → General → Card Layout (the default is Full Width).
+    /// Wide panels can flow two mid-size cards per row instead of stretching each card.
     private static let twoColumnThreshold: CGFloat = 500
 
     private var usesTwoColumnCards: Bool {
@@ -133,9 +130,11 @@ struct VehicleTabView: View {
     }
 
     private var pendingCommandChip: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "clock.arrow.circlepath")
-                .foregroundStyle(HisingenTheme.accent)
+        let appearance = commandConfirmationAppearance
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: appearance.symbol)
+                .foregroundStyle(appearance.color)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(commandConfirmationLabel)
                     .font(.system(size: 11, weight: .semibold))
@@ -143,9 +142,12 @@ struct VehicleTabView: View {
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
             Spacer()
             Button {
-                dismissedCommandIssuedAt = state.commandState.pending?.issuedAt
+                if let issuedAt = state.commandState.pending?.issuedAt {
+                    onDismissCommandReceipt(issuedAt)
+                }
             } label: {
                 Image(systemName: "xmark")
             }
@@ -153,12 +155,19 @@ struct VehicleTabView: View {
             .accessibilityLabel(L10n.text("Dismiss command status"))
         }
         .padding(9)
-        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(appearance.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(HisingenTheme.accent.opacity(0.25), lineWidth: 0.5)
+                .stroke(appearance.color.opacity(0.25), lineWidth: 0.5)
         )
-        .accessibilityElement(children: .combine)
+    }
+
+    private var commandConfirmationAppearance: (symbol: String, color: Color) {
+        switch state.commandState.pending?.status {
+        case .confirmed: return ("checkmark.circle.fill", HisingenTheme.semanticGood)
+        case .timedOut: return ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning)
+        case .awaiting, nil: return ("clock.arrow.circlepath", HisingenTheme.accent)
+        }
     }
 
     private var commandConfirmationLabel: String {

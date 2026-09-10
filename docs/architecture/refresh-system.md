@@ -74,9 +74,9 @@ The app calls `VehicleSessionController.credentialsDidChange(for:)` once. That o
 
 ## Sleep / wake and network loss / restoration
 
-- **Sleep** (`NSWorkspace.willSleepNotification`): `cancelCurrentWork()` — bumps generation, cancels task/timer — and sets `sleeping = true`. No refresh attempts happen while asleep.
+- **Sleep** (`NSWorkspace.willSleepNotification`): `cancelCurrentWork(preservingCommandConfirmation: true)` bumps the generation, cancels network work and timers, pauses any active confirmation deadline, and sets `sleeping = true`. No refresh attempts happen while asleep.
 - **Wake** (`NSWorkspace.didWakeNotification`): clears `sleeping`, issues `refresh(trigger: .wake)` (or `beginSession` if the session isn't ready yet).
-- **Network loss**: `NWPathMonitor.pathUpdateHandler` sets `networkAvailable = false`; `networkDidChange(false)` cancels current work (a refresh mid-flight against a dead network isn't worth waiting out).
+- **Network loss**: `NWPathMonitor.pathUpdateHandler` sets `networkAvailable = false`; `networkDidChange(false)` cancels current work while retaining the command receipt and remaining confirmation window.
 - **Network restoration**: `networkDidChange(true)` issues `refresh(trigger: .networkRestored)` (or `beginSession` if not yet authenticated) — but only if the app isn't currently `sleeping`.
 
 ## Stale-on-activation
@@ -85,7 +85,7 @@ Distinct from staleness on the *data* (see [data-flow.md](data-flow.md#freshness
 
 ## Cancellation
 
-`cancelCurrentWork()` — increments `generation`, cancels the `Task`, invalidates the pending `Timer`, clears `nextRefresh`. It does **not** propagate cancellation into the provider actor's in-flight network call; the underlying `URLSession`/gRPC request is allowed to finish, its result is just discarded by the generation check. See [concurrency.md](concurrency.md#cancellation) for why that's a deliberate trade-off.
+`cancelCurrentWork()` increments `generation`, cancels the `Task`, invalidates the pending `Timer`, and clears `nextRefresh`. Sleep and temporary network loss use its preservation mode, which retains the command receipt and pauses the confirmation deadline. Permanent resets, sign-out, and vehicle selection clear the receipt. Cancellation does **not** propagate into the provider actor's in-flight network call; the underlying `URLSession`/gRPC request is allowed to finish and its result is discarded by the generation check. See [concurrency.md](concurrency.md#cancellation) for why that is a deliberate trade-off.
 
 ## Diagnostics
 
@@ -123,9 +123,9 @@ are stale on arrival.
 | Stream state | Polling |
 | --- | --- |
 | Connected | Routine polling disabled; only a 30-min integrity poll runs |
-| Degraded (retrying) | Normal activity cadence returns; pending commands use a 15 s targeted poll |
+| Degraded (retrying) | Normal activity cadence returns; pending commands use a 5 s targeted poll |
 | Disconnected (circuit open) | Fallback polling continues; reconnect waits out the circuit |
-| Observable command pending | Confirmation stream plus a 12 s first fetch and 15 s polls until confirmed |
+| Observable command pending | Confirmation stream when a suitable endpoint exists, plus a 2 s first fetch and 5 s targeted polls until confirmed |
 
 **Reconnect rules.** The stream reconnects only when the server closes it, the network
 changes, the user changes vehicle, or authentication actually expires — never on a timer.
@@ -141,18 +141,22 @@ Unsupported-method, permission-denied, and incompatible-schema failures open a 6
 circuit. Generic transient failures open a circuit after `maximumFailuresBeforeCircuit`
 (6) consecutive failures. While a circuit is open, fallback polling covers the vehicle.
 
-**Command confirmation.** A successful command whose result is observable in timestamped
-telemetry starts a state-driven confirmation period. Charging commands use the battery stream;
-lock, window, and tailgate commands use the exterior stream. A fresh matching reading ends the
-confirmation immediately. If the stream drops, it reconnects while the command remains pending
-and a targeted full-state poll runs every 15 seconds. The first full-state check remains at
-12 seconds. Commands such as honk and flash do not open a stream because no returned reading can
-prove their effect.
+**Command confirmation.** `RefreshCoordinator` exclusively owns the command receipt after
+`CommandCoordinator` atomically hands it the optimistic display state. Charging override uses
+the battery stream; lock, window, and tailgate commands use the exterior stream. Charge target,
+current limit, and air-cleaning commands use targeted polling because the available streams do
+not carry those values. A fresh matching reading ends confirmation immediately. If a stream
+drops, it reconnects while the command remains pending and a targeted poll runs every 5 seconds.
+The first check is scheduled after 2 seconds. Commands such as honk and flash do not open a
+stream because no returned reading can prove their effect.
 
 The five-minute `commandConfirmationWindow` is a safety cap, not the normal close condition. A
-watchdog ends an unconfirmed period even when the stream is quiet, then the normal charging gate
-and polling cadence resume. If confirmation ends while the vehicle still qualifies for the same
-charging stream, the transport remains open and simply returns to its normal purpose.
+watchdog moves the receipt to `timedOut` even when the stream is quiet, then the normal charging
+gate and polling cadence resume. Confirmed and timed-out receipts remain visible across later
+refreshes until dismissed, replaced, or cleared with the vehicle/session. Dismissal hides the
+receipt without stopping an active background confirmation. If confirmation ends while the
+vehicle still qualifies for the same charging stream, the transport remains open and simply
+returns to its normal purpose.
 
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator

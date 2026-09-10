@@ -16,23 +16,18 @@ modifier gating, dead `Preferences` removal) landed in code.
    so future work should deepen a concrete query/export workflow when it changes rather than
    mechanically splitting SQL into shallow repository wrappers.
 
-2. **`VehicleState` is a 60+-property flat struct.** Adding one field touches the property
-   list, the memberwise init, `CodingKeys`, hand-written `init(from:)`, `cacheableCopy`,
-   and `mergingLastKnown`. Nested sub-structs (the pattern `ExteriorSnapshot` already uses)
-   would let whole blocks merge wholesale instead of line-by-line `??`.
-
-3. **Scripted PingFederate sign-in** (`PolestarAPI.obtainAuthorizationCode`) scrapes the
+2. **Scripted PingFederate sign-in** (`PolestarAPI.obtainAuthorizationCode`) scrapes the
    login form's HTML with regexes. Any PingFederate redesign breaks it with a generic error.
    It should move behind a protocol so the browser-based flow used for remote commands can
    replace it without touching the API core.
 
-4. **Volvo telemetry fan-out.** A single Volvo refresh issues up to ~15 parallel GETs plus
+3. **Volvo telemetry fan-out.** A single Volvo refresh issues up to ~15 parallel GETs plus
    capabilities and images. Correct per endpoint, but a refresh coordinator-level budget or
    stagger would protect against future rate-limit tightening.
 
-5. **Test coverage gaps.** Auth/token-refresh and old-schema migration paths now have direct
+4. **Test coverage gaps.** Auth/token-refresh and old-schema migration paths now have direct
    regression coverage. Still missing: Notifier privacy-body branches, Sparkle end-to-end
    signed-feed staging coverage, and AppIntents dialogs.
 
-6. **Localization of Shortcuts dialogs.** All `AppIntents` user-facing strings are English
+5. **Localization of Shortcuts dialogs.** All `AppIntents` user-facing strings are English
    only; every other surface resolves through `L10n`.

@@ -13,6 +13,11 @@ struct CapabilityCacheEntry {
     let expiresAt: Date
 }
 
+struct VDMSDiscoveryDiagnostics: Equatable, Sendable {
+    let blockedUntil: Date
+    let reason: String
+}
+
 actor PolestarAPI {
     nonisolated let brand: VehicleBrand = .polestar
     let logger = AppLog.logger("polestar-api")
@@ -104,9 +109,11 @@ actor PolestarAPI {
     var market: String?
     /// Set when the app-backend VDMS source rejects the request with a client error. VDMS only
     /// enriches the primary discovery with cosmetic metadata, so it is skipped until this date
-    /// rather than retried on every discovery. Cleared on sign-out.
+    /// rather than retried on every discovery. The backoff is process-independent because
+    /// client-version and schema failures are not account-specific.
     var vdmsDiscoveryBlockedUntil: Date?
     private static let vdmsBackoffDefaultsKey = "polestar_vdms_backoff_until_v2"
+    private static let vdmsBackoffReasonDefaultsKey = "polestar_vdms_backoff_reason_v1"
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
     var capabilityBackoff: [String: [String: Date]] = [:]
@@ -681,6 +688,7 @@ actor PolestarAPI {
         // than fire a request that is guaranteed to fail.
         let vdmsToken: String?
         if vdmsDiscoveryBlockedUntil.map({ $0 > Date() }) ?? false {
+            logger.info("Polestar VDMS enrichment remains in its persistent-failure backoff window")
             vdmsToken = nil
         } else if case .authorized(let commandToken) = await commandClientAuthorization() {
             vdmsToken = commandToken
@@ -692,6 +700,7 @@ actor PolestarAPI {
                 let vdmsCars = try await fetchAppBackendCars(token: vdmsToken)
                 vdmsDiscoveryBlockedUntil = nil
                 UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffDefaultsKey)
+                UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffReasonDefaultsKey)
                 accountCars = vdmsCars.map { vdmsCar in
                     if let matching = legacyCars.first(where: { $0.vin == vdmsCar.vin }) {
                         return ConsumerCarDTO(
@@ -725,6 +734,8 @@ actor PolestarAPI {
                         vdmsDiscoveryBlockedUntil = Date().addingTimeInterval(24 * 60 * 60)
                         UserDefaults.standard.set(vdmsDiscoveryBlockedUntil?.timeIntervalSince1970,
                                                   forKey: Self.vdmsBackoffDefaultsKey)
+                        UserDefaults.standard.set(Self.vdmsFailureCategory(error),
+                                                  forKey: Self.vdmsBackoffReasonDefaultsKey)
                     }
                     logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
                 }
@@ -834,6 +845,30 @@ actor PolestarAPI {
             }
         default:
             return false
+        }
+    }
+
+    static func vdmsDiscoveryDiagnostics(
+        defaults: UserDefaults = .standard,
+        now: Date = Date()
+    ) -> VDMSDiscoveryDiagnostics? {
+        let blockedUntil = Date(
+            timeIntervalSince1970: defaults.double(forKey: vdmsBackoffDefaultsKey)
+        )
+        guard blockedUntil > now else { return nil }
+        return VDMSDiscoveryDiagnostics(
+            blockedUntil: blockedUntil,
+            reason: defaults.string(forKey: vdmsBackoffReasonDefaultsKey) ?? "persistentFailure"
+        )
+    }
+
+    private static func vdmsFailureCategory(_ error: Error) -> String {
+        switch error as? PolestarError {
+        case .client(let statusCode): return "client-\(statusCode)"
+        case .incompatibleAPI: return "incompatibleAPI"
+        case .permissionDenied: return "permissionDenied"
+        case .graphQL: return "graphQLAuthentication"
+        default: return "persistentFailure"
         }
     }
 

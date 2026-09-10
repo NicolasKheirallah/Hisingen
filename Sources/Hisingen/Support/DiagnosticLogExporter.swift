@@ -138,6 +138,7 @@ enum DiagnosticLogExporter {
                            apiPayloadBudgetBytes: Int = DiagnosticLogExporter.apiPayloadBudgetBytes,
                            refreshDiagnostics: DiagnosticsSnapshot? = nil,
                            garageScan: GarageScanDiagnostics? = nil,
+                           vdmsDiscovery: VDMSDiscoveryDiagnostics? = nil,
                            commandAudits: [[String: Any]] = [],
                            databaseStats: [String: Any]? = nil) throws -> Data {
         let formatter = ISO8601DateFormatter()
@@ -186,7 +187,7 @@ enum DiagnosticLogExporter {
         }
 
         var report: [String: Any] = [
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "meta": meta,
             "unifiedLog": unifiedLog.map { entry in
                 [
@@ -225,6 +226,12 @@ enum DiagnosticLogExporter {
                 "brands": brandRows,
             ]
         }
+        if let vdmsDiscovery {
+            report["polestarVDMS"] = [
+                "blockedUntil": formatter.string(from: vdmsDiscovery.blockedUntil),
+                "reason": vdmsDiscovery.reason,
+            ]
+        }
         if !commandAudits.isEmpty {
             report["commandAudit"] = commandAudits
         }
@@ -237,7 +244,7 @@ enum DiagnosticLogExporter {
     private static func diagnosticsSection(_ snapshot: DiagnosticsSnapshot,
                                            formatter: ISO8601DateFormatter) -> [String: Any] {
         let metrics = snapshot.liveStreamMetrics
-        return [
+        var section: [String: Any] = [
             "lastSuccess": snapshot.lastSuccess.map(formatter.string(from:)) as Any? ?? NSNull(),
             "lastError": (snapshot.lastError.map { DiagnosticRedaction.redact($0) }) as Any? ?? NSNull(),
             "latencySeconds": snapshot.latency as Any? ?? NSNull(),
@@ -268,6 +275,32 @@ enum DiagnosticLogExporter {
             "refreshFailures": snapshot.refreshFailures,
             "vehicleSwitchPending": snapshot.vehicleSwitchPending,
         ]
+        if let identifier = snapshot.commandConfirmationIdentifier,
+           let status = snapshot.commandConfirmationStatus {
+            let statusValue: String
+            let terminalAt: Date?
+            switch status {
+            case .awaiting:
+                statusValue = "awaiting"
+                terminalAt = nil
+            case .confirmed(let date):
+                statusValue = "confirmed"
+                terminalAt = date
+            case .timedOut(let date):
+                statusValue = "timedOut"
+                terminalAt = date
+            }
+            section["commandConfirmation"] = [
+                "identifier": identifier,
+                "status": statusValue,
+                "terminalAt": terminalAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "deadline": snapshot.commandConfirmationDeadline.map(formatter.string(from:)) as Any? ?? NSNull(),
+                "features": snapshot.commandConfirmationFeatures.map(\.rawValue),
+                "suspended": snapshot.commandConfirmationSuspended,
+                "receiptVisible": snapshot.commandReceiptVisible,
+            ] as [String: Any]
+        }
+        return section
     }
 
     /// Convenience path used by the Settings export button.
@@ -278,6 +311,7 @@ enum DiagnosticLogExporter {
         let apiEntries = await apiEntriesTask
         let refreshDiagnostics = await diagnosticsTask
         let garageScan = await garageScanTask
+        let vdmsDiscovery = PolestarAPI.vdmsDiscoveryDiagnostics(now: now)
 
         var commandAudits: [[String: Any]] = []
         var databaseStats: [String: Any]?
@@ -310,6 +344,7 @@ enum DiagnosticLogExporter {
                               apiEntries: apiEntries,
                               refreshDiagnostics: refreshDiagnostics,
                               garageScan: garageScan,
+                              vdmsDiscovery: vdmsDiscovery,
                               commandAudits: commandAudits,
                               databaseStats: databaseStats)
     }

@@ -28,6 +28,13 @@ struct DiagnosticsSnapshot: Sendable {
     var refreshSuccesses: Int = 0
     var refreshFailures: Int = 0
 
+    var commandConfirmationIdentifier: String? = nil
+    var commandConfirmationStatus: CommandConfirmationStatus? = nil
+    var commandConfirmationDeadline: Date? = nil
+    var commandConfirmationFeatures: [AppFeature] = []
+    var commandConfirmationSuspended: Bool = false
+    var commandReceiptVisible: Bool = false
+
     /// A vehicle selection has been requested but not yet confirmed (in flight, or waiting
     /// for an automatic retry after a raced provider-side flip). During this window
     /// `refreshInProgress` is often false — without this flag a support bundle cannot tell
@@ -208,6 +215,7 @@ final class RefreshCoordinator {
     private var commandStreamPurpose: VehicleLiveStreamPurpose?
     private var commandStreamUntil: Date?
     private var commandReceipt: PendingCommandSummary?
+    private var dismissedCommandReceiptIssuedAt: Date?
     private var commandConfirmationSuspendedAt: Date?
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
@@ -357,8 +365,12 @@ final class RefreshCoordinator {
             latest = optimisticState
         }
         commandReceipt = pending
+        dismissedCommandReceiptIssuedAt = nil
         commandConfirmationSuspendedAt = nil
         commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
+        logger.info(
+            "Command confirmation started for \(pending.commandIdentifier, privacy: .public); telemetry observable: \(pending.supportsTelemetryConfirmation, privacy: .public)"
+        )
         publishCommandReceipt(pending)
         guard pending.supportsTelemetryConfirmation else {
             commandStreamPurpose = nil
@@ -395,6 +407,19 @@ final class RefreshCoordinator {
         }
         schedule(after: min(commandConfirmationInitialPollDelay, commandConfirmationPollInterval),
                  retrySession: false)
+        publishDiagnostics()
+    }
+
+    func dismissCommandReceipt(issuedAt: Date) {
+        guard commandReceipt?.issuedAt == issuedAt else { return }
+        dismissedCommandReceiptIssuedAt = issuedAt
+        logger.info(
+            "Command receipt dismissed for \(self.commandReceipt?.commandIdentifier ?? "unknown", privacy: .public)"
+        )
+        if var displayState = latest {
+            displayState.commandState.pending = nil
+            onEvent?(.state(displayState))
+        }
         publishDiagnostics()
     }
 
@@ -526,6 +551,7 @@ final class RefreshCoordinator {
         commandStreamPurpose = nil
         commandStreamUntil = nil
         commandReceipt = nil
+        dismissedCommandReceiptIssuedAt = nil
         commandConfirmationSuspendedAt = nil
         streamTask?.cancel()
         streamTask = nil
@@ -912,6 +938,9 @@ final class RefreshCoordinator {
         if preserveReceipt, commandReceipt?.status.isAwaiting == true,
            commandConfirmationSuspendedAt == nil {
             commandConfirmationSuspendedAt = Date()
+            logger.info(
+                "Command confirmation suspended for \(self.commandReceipt?.commandIdentifier ?? "unknown", privacy: .public)"
+            )
         }
         generation &+= 1
         task?.cancel()
@@ -922,6 +951,7 @@ final class RefreshCoordinator {
             commandStreamPurpose = nil
             commandStreamUntil = nil
             commandReceipt = nil
+            dismissedCommandReceiptIssuedAt = nil
             commandConfirmationSuspendedAt = nil
         }
         streamTask?.cancel()
@@ -943,6 +973,9 @@ final class RefreshCoordinator {
         guard commandReceipt?.status.isAwaiting == true,
               let until = commandStreamUntil else { return }
         commandStreamUntil = until.addingTimeInterval(max(0, Date().timeIntervalSince(suspendedAt)))
+        logger.info(
+            "Command confirmation resumed for \(self.commandReceipt?.commandIdentifier ?? "unknown", privacy: .public)"
+        )
         if let vin = latest?.identity.vin {
             scheduleConfirmationWatchdog(vin: vin)
         }
@@ -966,6 +999,15 @@ final class RefreshCoordinator {
             refreshAttempts: refreshAttempts,
             refreshSuccesses: refreshSuccesses,
             refreshFailures: refreshFailures,
+            commandConfirmationIdentifier: commandReceipt?.commandIdentifier,
+            commandConfirmationStatus: commandReceipt?.status,
+            commandConfirmationDeadline: commandStreamUntil,
+            commandConfirmationFeatures: commandReceipt?.confirmationFeatures?.enabled
+                .sorted { $0.rawValue < $1.rawValue } ?? [],
+            commandConfirmationSuspended: commandConfirmationSuspendedAt != nil,
+            commandReceiptVisible: commandReceipt.map {
+                $0.issuedAt != dismissedCommandReceiptIssuedAt
+            } ?? false,
             vehicleSwitchPending: requestedSelectionVIN != nil
         )))
     }
@@ -1169,9 +1211,17 @@ final class RefreshCoordinator {
         guard let pending = commandReceipt else { return (state, false) }
         let updated = pending.updatingConfirmation(from: state)
         var displayState = state
-        displayState.commandState.pending = updated
+        displayState.commandState.pending = updated.issuedAt == dismissedCommandReceiptIssuedAt
+            ? nil
+            : updated
         commandReceipt = updated
-        return (displayState, pending.status.isAwaiting && updated.status.isConfirmed)
+        let confirmed = pending.status.isAwaiting && updated.status.isConfirmed
+        if confirmed {
+            logger.info(
+                "Command confirmation matched fresh telemetry for \(updated.commandIdentifier, privacy: .public)"
+            )
+        }
+        return (displayState, confirmed)
     }
 
     private func finishCommandConfirmation(vin: String) {
@@ -1195,10 +1245,12 @@ final class RefreshCoordinator {
         guard var receipt = commandReceipt, receipt.status.isAwaiting else { return }
         receipt.status = .timedOut(at: date)
         commandReceipt = receipt
+        logger.info("Command confirmation timed out for \(receipt.commandIdentifier, privacy: .public)")
         publishCommandReceipt(receipt)
     }
 
     private func publishCommandReceipt(_ receipt: PendingCommandSummary) {
+        guard receipt.issuedAt != dismissedCommandReceiptIssuedAt else { return }
         guard var displayState = latest else { return }
         displayState.commandState.pending = receipt
         onEvent?(.state(displayState))

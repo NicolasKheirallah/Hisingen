@@ -96,11 +96,12 @@ Settings → SQLite Storage & Data → **Export Diagnostic Logs**
 
 | Section | Contents |
 |---|---|
-| `schemaVersion` | `1`; bump when any section's shape changes |
+| `schemaVersion` | `3`; bump when any section's shape changes |
 | `meta` | app version/build, macOS version, hardware model, locale/timezone, redaction note |
 | `unifiedLog` | last 24 h of this process's entries under our subsystem (max 4,000), oldest first |
 | `apiRequests` | full redacted store entries incl. status/duration/payload (8 MB payload budget, oldest payloads dropped first, `apiPayloadsTruncated` flag) |
-| `refreshDiagnostics` | latest snapshot incl. counters |
+| `refreshDiagnostics` | latest snapshot incl. counters and command-confirmation lifecycle |
+| `polestarVDMS` | active VDMS discovery backoff deadline and failure category, when applicable |
 | `commandAudit` | 25 most recent remote-command audits across vehicles |
 | `databaseStats` | table row counts and database size |
 

@@ -12,6 +12,6 @@
 
 **Snapshot Freshness** — Provenance and timing facts that distinguish live readings, retained readings, and cached state.
 
-**Pending Command state** — A remote command accepted by a provider whose effect has not yet been confirmed by fresh vehicle telemetry.
+**Command receipt** — Display state for a provider-accepted remote command. `RefreshCoordinator` owns its lifecycle from awaiting through confirmed or timed out, while persisted vehicle telemetry remains receipt-free.
 
 **Remote Command target** — The vehicle identity and provider captured when a command is approved. It remains fixed until execution completes, even if the visible vehicle selection changes.

@@ -108,7 +108,12 @@ struct DiagnosticLogExporterTests {
             latency: 0.42,
             nextRefresh: Date(timeIntervalSince1970: 1_700_000_300),
             sessionValid: true, networkAvailable: true, refreshInProgress: false,
-            refreshAttempts: 12, refreshSuccesses: 10, refreshFailures: 2)
+            refreshAttempts: 12, refreshSuccesses: 10, refreshFailures: 2,
+            commandConfirmationIdentifier: "set-charge-target-80",
+            commandConfirmationStatus: .awaiting,
+            commandConfirmationDeadline: Date(timeIntervalSince1970: 1_700_000_120),
+            commandConfirmationFeatures: [.remoteCharging],
+            commandReceiptVisible: true)
         let audits: [[String: Any]] = [
             ["timestamp": "2023-11-14T22:00:00Z", "command": "lock",
              "status": "completed", "durationMilliseconds": 1200,
@@ -119,13 +124,22 @@ struct DiagnosticLogExporterTests {
             unifiedLog: [],
             apiEntries: [],
             refreshDiagnostics: diagnostics,
+            vdmsDiscovery: VDMSDiscoveryDiagnostics(
+                blockedUntil: Date(timeIntervalSince1970: 1_700_086_400),
+                reason: "client-426"
+            ),
             commandAudits: audits,
             databaseStats: ["sizeBytes": Int64(4096)])
         let output = String(decoding: data, as: UTF8.self)
 
-        #expect(output.contains("\"schemaVersion\" : 2"))
+        #expect(output.contains("\"schemaVersion\" : 3"))
         #expect(output.contains("\"refreshDiagnostics\""))
         #expect(output.contains("\"refreshAttempts\" : 12"))
+        #expect(output.contains("\"commandConfirmation\""))
+        #expect(output.contains("\"identifier\" : \"set-charge-target-80\""))
+        #expect(output.contains("\"status\" : \"awaiting\""))
+        #expect(output.contains("\"polestarVDMS\""))
+        #expect(output.contains("\"reason\" : \"client-426\""))
         #expect(!output.contains("YV1XZEHR2R2371256"))
         #expect(output.contains("<vehicle>"))
         #expect(output.contains("\"commandAudit\""))
@@ -136,5 +150,26 @@ struct DiagnosticLogExporterTests {
             meta: [:], unifiedLog: [], apiEntries: []), as: UTF8.self)
         #expect(!minimal.contains("refreshDiagnostics"))
         #expect(!minimal.contains("commandAudit"))
+    }
+
+    @Test
+    func activeVDMSBackoffIsAvailableToTheDiagnosticExporter() throws {
+        let suite = "DiagnosticLogExporterTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let blockedUntil = now.addingTimeInterval(3_600)
+        defaults.set(
+            blockedUntil.timeIntervalSince1970,
+            forKey: "polestar_vdms_backoff_until_v2"
+        )
+        defaults.set("client-426", forKey: "polestar_vdms_backoff_reason_v1")
+
+        let diagnostics = try #require(
+            PolestarAPI.vdmsDiscoveryDiagnostics(defaults: defaults, now: now)
+        )
+        #expect(diagnostics.blockedUntil == blockedUntil)
+        #expect(diagnostics.reason == "client-426")
+        #expect(PolestarAPI.vdmsDiscoveryDiagnostics(defaults: defaults, now: blockedUntil) == nil)
     }
 }

@@ -4,7 +4,11 @@
 
 ## `VehicleState` — the central model
 
-`VehicleDomainTypes.swift` / `VehicleState.swift`. One flat struct carrying everything the UI can show: identity (`vin`, `modelName`, `modelYear`, `registrationNo`), charging (`batteryPercentage`, `rangeKm`, `chargingState`, `chargingPowerWatts`, `chargingCurrentAmps`, `chargingVoltageVolts`, `chargeTargetPercentage`, `estimatedChargingTimeToFullMinutes`, `chargingType`, `chargerConnection`), availability (`availability: VehicleAvailability`), exterior (`exteriorStatus: ExteriorSnapshot?`), health (`healthDetails: VehicleHealthDetails?`, `daysToService`, `distanceToServiceKm`, `serviceWarning`, `fluidWarnings`), software (`softwareInfo`), schedules (`chargingSchedules`, `climateTimers`), climate (`climateStatus`), trip meters, connectivity, air quality, battery diagnostics, weather, location, powertrain (BEV/PHEV/ICE/mild-hybrid + `fuelLevelPercent`/`fuelRangeKm`), plus bookkeeping: `unavailableFeatures: [AppFeature]`, `probedCapabilities: VehicleProbedCapabilities?`, `chargingSamples`/`chargingSessions`, `imageData`, `fetchedAt`, `vehicleReportedAt`, `dataWarnings`.
+`VehicleDomainTypes.swift` / `VehicleState.swift`. The top-level snapshot clusters energy and
+charging, identity and factory specification, maintenance and health, and freshness. Separate
+domain snapshots cover exterior state, software, climate, trip computer, connectivity, air
+quality, weather, location, fuel, and runtime-probed capabilities. Legacy flat snapshots still
+decode and re-encode into the clustered format.
 
 Every optional field is genuinely `Optional` — a missing value is `nil`, never a fabricated `0` or empty string. See [architecture/data-flow.md](../architecture/data-flow.md#data-merging).
 
@@ -56,7 +60,12 @@ Remote command dispatch is compiled into every build for both brands ([ADR-0009]
 
 ### Remote command optimistic updates
 
-`AppDelegate.performRemoteCommand` patches `latest` in place for four commands (`startClimate`, `stopClimate`, `lock`, `unlock`) once `executeRemoteCommand` returns *any* result, including a merely-`.accepted` outcome — not waiting for the next real refresh to confirm the change. This is a UX choice (instant feedback rather than a multi-second wait for the lock icon to flip), documented here because it's easy to mistake for a bug when a command's outcome doesn't match what actually happened on the vehicle. See [architecture/technical-debt.md](../architecture/technical-debt.md#optimistic-local-state-patch-on-remote-commands-vs-ack-execution-stance).
+`CommandCoordinator` derives a display-only optimistic snapshot after the provider accepts,
+delivers, or completes a command. It hands that snapshot and its command receipt to
+`RefreshCoordinator` in one call. The refresh coordinator is the only owner of the receipt's
+`awaiting`, `confirmed`, and `timedOut` lifecycle. Fresh matching telemetry replaces assumptions;
+the provider acknowledgement alone is never presented as telemetry confirmation. Optimistic
+values are never written to the snapshot store.
 
 ## Current Range vs Model WLTP
 
