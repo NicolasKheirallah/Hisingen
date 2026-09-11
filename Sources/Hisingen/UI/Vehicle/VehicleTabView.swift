@@ -220,7 +220,7 @@ struct VehicleTabView: View {
         let cards = [
             (id: "identity", view: vehicleIdentityCard), (id: "lighting", view: lightingAndFluidCard),
             (id: "climate", view: climateCard), (id: "software", view: softwareCard),
-            (id: "diagnostics", view: diagnosticsCard), (id: "errors", view: errorsCard)
+            (id: "diagnostics", view: diagnosticsCard)
         ].compactMap { (entry: (id: String, view: AnyView?)) -> (id: String, view: AnyView)? in
             guard let view = entry.view else { return nil }
             return (id: entry.id, view: view)
@@ -1563,41 +1563,6 @@ struct VehicleTabView: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-            }
-        })
-    }
-
-    private var errorsCard: AnyView? {
-        guard features.contains(.vehicleErrors) else { return nil }
-        let errors = state.vehicleErrors
-        guard !errors.isEmpty else {
-            if state.isVolvo { return nil }
-            if state.freshness.unavailableFeatures.contains(.vehicleErrors) {
-                return unavailableCard(.vehicleErrors, symbol: "exclamationmark.triangle",
-                                       title: L10n.text("Vehicle Errors"), color: .red,
-                                       badge: L10n.text("Error reporting"))
-            }
-            return AnyView(Card {
-                VStack(alignment: .leading, spacing: 10) {
-                    CardHeader(symbol: "exclamationmark.triangle", title: L10n.text("Vehicle Errors"), color: .red)
-                    KVRow(L10n.text("Backend error records"), L10n.text("None returned"), symbol: "checkmark.circle", info: L10n.text("The backend returned no error records. This is not a full diagnostic scan of the vehicle."))
-                }
-            })
-        }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Vehicle Errors"), color: .red)
-                VStack(spacing: 6) {
-                    ForEach(errors.indices, id: \.self) { i in
-                        let e = errors[i]
-                        let detail = [e.errorCode.displayName, e.actionDisplayName]
-                            .compactMap { $0 }
-                            .joined(separator: " — ")
-                        KVRow(L10n.text(e.service.displayName), detail,
-                              symbol: "exclamationmark.circle",
-                              valueWarning: e.errorCode != .unspecified)
-                    }
-                }
             }
         })
     }

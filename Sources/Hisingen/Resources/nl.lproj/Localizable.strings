@@ -1291,7 +1291,6 @@
 "Alert below 2 kW for 15 minutes while actively charging" = "Waarschuwing onder 2 kW gedurende 15 minuten tijdens het laden";
 "Alert when provider telemetry remains older than its freshness limit" = "Waarschuwing wanneer providertelemetrie ouder blijft dan de versheidsgrens";
 "Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "Toont altijd de volledige geregistreerde geschiedenis — de periodekiezer hierboven geldt hier niet, omdat de accuconditie zich over maanden in plaats van dagen ontwikkelt.";
-"Amp Limit" = "Ampère-limiet";
 "An older software event is recorded, but no current update failure requires attention." = "Er is een oudere softwaregebeurtenis geregistreerd, maar geen huidige updatestoring vereist aandacht.";
 "Announced Version" = "Aangekondigde versie";
 "Announced: %@" = "Aangekondigd: %@";
@@ -1307,7 +1306,6 @@
 "Average Daily Distance" = "Gemiddelde dagafstand";
 "Average Observed Peak" = "Gemiddeld waargenomen piek";
 "Awake Because" = "Wakker vanwege";
-"Backend error records" = "Foutrapporten van de backend";
 "Backend reports installation completed for version %@." = "De backend meldt dat de installatie van versie %@ is voltooid.";
 "Backend reports that installation completed." = "De backend meldt dat de installatie is voltooid.";
 "Backend-Reported Software" = "Door backend gemelde software";
@@ -1411,7 +1409,6 @@
 "Energy" = "Energie";
 "Energy consumption trend chart" = "Trendgrafiek energieverbruik";
 "Energy level unavailable" = "Energieniveau niet beschikbaar";
-"Error reporting" = "Foutrapportage";
 "Estimated Energy" = "Geschatte energie";
 "Estimated Energy Added" = "Geschatte toegevoegde energie";
 "Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified." = "Geschat op basis van opgeslagen voertuigtelemetrie, tenzij een toekomstige meterbron van een wallbox expliciet wordt geïdentificeerd.";
@@ -1442,7 +1439,6 @@
 "Gallons US (gal)" = "Amerikaanse gallons (gal)";
 "Garage" = "Garage";
 "General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents." = "Alleen algemene referentie. Dekking varieert per voertuig, markt en ingangsdatum; controleer je voertuigdocumenten.";
-"Global Charge Timer" = "Globale laadtimer";
 "Grand (Wide & Tall)" = "Groot (breed en hoog)";
 "High confidence" = "Hoge betrouwbaarheid";
 "Hisingen is no longer running." = "Hisingen draait niet meer.";
@@ -1506,7 +1502,6 @@
 "No warning" = "Geen waarschuwing";
 "No warning reported" = "Geen waarschuwing gemeld";
 "No warnings reported" = "Geen waarschuwingen gemeld";
-"None returned" = "Niets geretourneerd";
 "Not reported" = "Niet gemeld";
 "Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents." = "Wordt niet aangeleverd door de voertuig-API; vul de leverings-/ingangsdatum in zoals vermeld in je garantiedocumenten.";
 "Observed charger power integrated over time and divided by the battery percentage gained across %.0f qualifying session(s) suggests %.1f kWh. A charging-loss allowance based on the reported AC/DC type is applied." = "Het in de tijd geïntegreerde waargenomen laadvermogen, gedeeld door het gewonnen batterijpercentage over %.0f kwalificerende sessie(s), wijst op %.1f kWh. Er is een correctie voor laadverliezen toegepast op basis van het gemelde AC/DC-type.";
@@ -1525,7 +1520,6 @@
 "Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates." = "Optionele VOSS-specifieke waarden uit het voertuigspecificatieblad. Deze vervangen brede modelfamilie-referenties in berekende actieradius- en SoH-schattingen.";
 "Overhead (Top-Down)" = "Bovenaanzicht (top-down)";
 "Panel Size" = "Panelformaat";
-"Parking Climate Timer" = "Parkeerklimaattimer";
 "Past event — no current action required" = "Eerdere gebeurtenis — momenteel geen actie nodig";
 "Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "Het piekvermogen op %@ lag ver onder het gebruikelijke niveau van deze locatie — de kabel of lader kan aan het terugschakelen zijn.";
 "Performance Software Upgrade" = "Prestatie-softwareupgrade";
@@ -1536,7 +1530,6 @@
 "Preconditioning Command Setpoint" = "Streefwaarde voorconditioneringsopdracht";
 "Price per litre" = "Prijs per liter";
 "Price-optimised" = "Prijsgeoptimaliseerd";
-"Privacy settings blocked the request" = "Privacyinstellingen blokkeerden het verzoek";
 "Projected in +10,000 km" = "Verwacht na +10.000 km";
 "Prune Old Samples" = "Oude metingen opschonen";
 "Pruned!" = "Opgeschoond!";
@@ -1565,7 +1558,6 @@
 "Reported by the vehicle cloud backend — exact support per VIN." = "Gemeld door de cloud-backend van het voertuig — exacte ondersteuning per VOSS.";
 "Reported supported" = "Als ondersteund gemeld";
 "Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in." = "Vraag beperkte machtigingen voor vergrendelen, ontgrendelen, motor, lokaliseren en locatie aan bij de volgende aanmelding.";
-"Request timed out" = "Time-out van verzoek";
 "Reset" = "Herstel";
 "Restore software event" = "Softwaregebeurtenis herstellen";
 "Save charge location \"%@\" at the car's position" = "Sla laadlocatie \"%@\" op op de positie van de auto";
@@ -1614,11 +1606,9 @@
 "Switch to %@" = "Wissel naar %@";
 "Tailgate Open/Close" = "Achterklep openen/sluiten";
 "Taller panel, more visible history" = "Hoger paneel, zichtbaardere geschiedenis";
-"Target SOC" = "Doel-SoC";
 "Tariff Cost" = "Tariefkosten";
 "Telemetry" = "Telemetrie";
 "Telemetry Entries" = "Telemetrierecords";
-"The backend returned no error records. This is not a full diagnostic scan of the vehicle." = "De backend retourneerde geen foutrapporten. Dit is geen volledige diagnostische scan van het voertuig.";
 "The charge target must be between %d%% and 100%% on this vehicle." = "Het laaddoel moet tussen %d%% en 100%% liggen bij dit voertuig.";
 "The charging current must be between %d A and %d A on this vehicle." = "De laadstroom moet tussen %d A en %d A liggen bij dit voertuig.";
 "The command failed. Please try again." = "De opdracht is mislukt. Probeer het opnieuw.";
@@ -1659,7 +1649,6 @@
 "Tyre pressure" = "Bandenspanning";
 "Unknown error" = "Onbekende fout";
 "Unnamed location" = "Naamloze locatie";
-"Unspecified error" = "Ongespecificeerde fout";
 "Unusually Slow Charging" = "Ongewoon traag laden";
 "Unusually slow charging" = "Ongewoon traag laden";
 "Unverified value from an undocumented backend field." = "Ongecontroleerde waarde uit een niet-gedocumenteerd backendveld.";
@@ -1676,15 +1665,12 @@
 "Vehicle Activity History" = "Activiteitengeschiedenis voertuig";
 "Vehicle Capabilities" = "Voertuigmogelijkheden";
 "Vehicle data is stale" = "Voertuiggegevens zijn verouderd";
-"Vehicle Errors" = "Voertuigfouten";
-"Vehicle errors" = "Voertuigfouten";
 "Vehicle has no internet connection" = "Voertuig heeft geen internetverbinding";
 "Vehicle is currently in use" = "Voertuig is momenteel in gebruik";
 "Vehicle is in power-saving mode" = "Voertuig is in energiestand";
 "Vehicle is ready to unlock for %d seconds. Open a door or the trunk to complete unlocking." = "Het voertuig is %d seconden gereed om te ontgrendelen. Open een deur of de kofferbak om te voltooien.";
 "Vehicle is ready to unlock. Open a door or the trunk to complete unlocking." = "Het voertuig is gereed om te ontgrendelen. Open een deur of de kofferbak om te voltooien.";
 "Vehicle left open" = "Voertuig open achtergelaten";
-"Vehicle reported an error" = "Voertuig meldde een fout";
 "Vehicle service due soon" = "Voertuigonderhoud binnenkort";
 "Vehicle Snapshots" = "Voertuigmomentopnames";
 "Vehicle software downloading" = "Voertuigsoftware wordt gedownload";
@@ -1712,7 +1698,6 @@
 "Weekly distance chart" = "Wekelijkse afstandsgrafiek";
 "Wide" = "Breed";
 "WLTP reference range" = "WLTP-referentieactieradius";
-"Wrong usage mode" = "Verkeerde gebruiksmodus";
 "Your %@ is parked and unplugged. Connect to a charger to ensure departure range." = "Je %@ staat geparkeerd en losgekoppeld. Sluit aan op een lader om vertrekactieradius te garanderen.";
 "•••••••• (Saved in Keychain)" = "•••••••• (opgeslagen in de Sleutelhangar)";
 "≈ %d days" = "≈ %d dagen";
@@ -1974,7 +1959,6 @@
 "Show controls for moving between vehicles on the same account" = "Show controls for moving between vehicles on the same account";
 "App Update Checks" = "App Update Checks";
 "Allow checks against Hisingen’s signed stable update feed" = "Allow checks against Hisingen’s signed stable update feed";
-"Vehicle Service Errors" = "Vehicle Service Errors";
 "Fetch charging and climate errors reported by the vehicle service" = "Fetch charging and climate errors reported by the vehicle service";
 "Real-Time Updates" = "Real-Time Updates";
 "Use live server streaming when supported, with polling as fallback" = "Use live server streaming when supported, with polling as fallback";
@@ -2122,7 +2106,6 @@
 "AC (climate) turned on" = "AC (climate) turned on";
 "AC turned on at %.0f °C" = "AC turned on at %.0f °C";
 "AC turned on at %.1f °C" = "AC turned on at %.1f °C";
-"Action %d" = "Action %d";
 "Activity History" = "Activity History";
 "Air Cleaning" = "Air Cleaning";
 "All windows closed" = "All windows closed";
@@ -2137,7 +2120,6 @@
 "Cabin cleaning stopped" = "Cabin cleaning stopped";
 "Calculated SoH" = "Calculated SoH";
 "Car" = "Car";
-"Change the setting" = "Change the setting";
 "Charge Port (reference)" = "Charge Port (reference)";
 "Charge location \"%@\" saved" = "Charge location \"%@\" saved";
 "Charge location renamed to \"%@\"" = "Charge location renamed to \"%@\"";
@@ -2191,7 +2173,6 @@
 "Minimum Charge" = "Minimum Charge";
 "Model" = "Model";
 "N" = "N";
-"No action" = "No action";
 "No current charging estimate is available for this departure." = "No current charging estimate is available for this departure.";
 "No reported openings are open." = "No reported openings are open.";
 "No samples" = "No samples";
@@ -2220,7 +2201,6 @@
 "Release notes" = "Release notes";
 "Remote commands are blocked while privacy mode is enabled in the vehicle." = "Remote commands are blocked while privacy mode is enabled in the vehicle.";
 "Requested Temperature" = "Requested Temperature";
-"Retry the request" = "Retry the request";
 "Reverse light any" = "Reverse light any";
 "Reverse light left" = "Reverse light left";
 "Reverse light right" = "Reverse light right";
@@ -2321,11 +2301,8 @@
 // Control validation and observed outcomes (English fallback).
 "%.0f%%" = "%.0f%%";
 "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out." = "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out.";
-"%@ · %d records" = "%@ · %d records";
 "A reported connection does not guarantee that the vehicle can accept a command immediately." = "A reported connection does not guarantee that the vehicle can accept a command immediately.";
-"Backend Action" = "Backend Action";
 "Backend build-identification code. Often empty or redundant with the version string." = "Backend build-identification code. Often empty or redundant with the version string.";
-"Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan." = "Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan.";
 "Battery is low." = "Battery is low.";
 "Build Code" = "Build Code";
 "Cabin climate has turned off." = "Cabin climate has turned off.";

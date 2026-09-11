@@ -88,13 +88,13 @@ struct PolestarCapabilityTests {
         #expect(!retry.unavailable)
     }
 
-    @Test func serviceAuthorizationGapRemainsUnsupportedDuringBackoff() async throws {
+    @Test func permissionDeniedCapabilityRemainsUnsupportedDuringBackoff() async throws {
         let api = makeAPI()
         let first: OptionalCapability<Int> = try await api.optionalCapability(
-            .vehicleErrors, enabled: true, vin: "VIN-A"
-        ) { throw PolestarError.permissionDenied(operation: "errors") }
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
+        ) { throw PolestarError.permissionDenied(operation: "diagnostics") }
         let retry: OptionalCapability<Int> = try await api.optionalCapability(
-            .vehicleErrors, enabled: true, vin: "VIN-A"
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
         ) {
             Issue.record("Permission-gated capability issued another request during backoff")
             return 42
@@ -108,16 +108,16 @@ struct PolestarCapabilityTests {
     @Test func commandRefreshPreservesUnsupportedBackoffAndClearsTransientBackoff() async throws {
         let api = makeAPI()
         let _: OptionalCapability<Int> = try await api.optionalCapability(
-            .vehicleErrors, enabled: true, vin: "VIN-A"
-        ) { throw PolestarError.permissionDenied(operation: "errors") }
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
+        ) { throw PolestarError.permissionDenied(operation: "diagnostics") }
         let _: OptionalCapability<Int> = try await api.optionalCapability(
             .tripMeters, enabled: true, vin: "VIN-A"
         ) { throw PolestarError.grpcUnavailable(service: "odometer") }
 
         await api.clearTransientCapabilityBackoffAfterCommand(for: "VIN-A")
 
-        let errors: OptionalCapability<Int> = try await api.optionalCapability(
-            .vehicleErrors, enabled: true, vin: "VIN-A"
+        let diagnostics: OptionalCapability<Int> = try await api.optionalCapability(
+            .connectivityDiagnostics, enabled: true, vin: "VIN-A"
         ) {
             Issue.record("Command refresh retried a permission-gated capability")
             return 1
@@ -125,7 +125,7 @@ struct PolestarCapabilityTests {
         let trips: OptionalCapability<Int> = try await api.optionalCapability(
             .tripMeters, enabled: true, vin: "VIN-A"
         ) { 42 }
-        #expect(errors.unsupported)
+        #expect(diagnostics.unsupported)
         #expect(trips.value == 42)
     }
 

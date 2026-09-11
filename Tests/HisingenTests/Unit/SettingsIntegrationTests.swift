@@ -25,7 +25,6 @@ struct SettingsIntegrationTests {
     @Test
     func remoteControlsRemainOutsideSafeBulkActions() {
         #expect(Set(AppFeature.safeBulkEnableCases).isDisjoint(with: AppFeature.remoteFeatures))
-        #expect(AppFeature.userSelectableCases.contains(.vehicleErrors))
         #expect(AppFeature.userSelectableCases.contains(.realTimeUpdates))
     }
 }

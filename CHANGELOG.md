@@ -26,6 +26,8 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Removed the third-party Swedish spot-price recommendation and its network integration.
 - Removed unsupported VDMS factory-option fields for exterior, interior, wheels, and packages.
 - Empty VDMS discovery results no longer replace vehicles returned by primary discovery.
+- Removed the nonfunctional Chronos Vehicle Errors integration. Its server-streaming endpoint
+  requires the command client but did not produce a response frame during live verification.
 
 ## [1.3.5] - 2026-09-10
 

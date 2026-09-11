@@ -25,11 +25,7 @@ for (const field of ["supportsSunroofControl", "userIsLinked", "userIsOwner", "r
     `VehicleOTACapabilities.${field} missing`);
 }
 
-// 4. Chronos errors carry record identity + action label.
-require_(domain.includes("let recordID: String?"), "VehicleChronosError.recordID missing");
-require_(domain.includes("var actionDisplayName"), "VehicleChronosError.actionDisplayName missing");
-
-// 5. Provider parsers produce the new values.
+// 4. Provider parsers produce the new values.
 const grpc = read("Sources/Hisingen/Services/API/PolestarGRPC.swift");
 require_(grpc.includes("let reportedBatteryCapacityKwh: Double?"), "GrpcBatteryExtras capacity missing");
 require_(grpc.includes("let unknownFields: [PolestarRawWireField]"), "GrpcBatteryExtras.unknownFields missing");
@@ -49,7 +45,9 @@ require_(caps.includes("supportsSunroofControl: supportsSunroofControl"), "parse
 require_(caps.includes("userIsLinked:"), "parseMyCars userIsLinked missing");
 require_(caps.includes("userIsOwner:"), "parseMyCars userIsOwner missing");
 require_(caps.includes("registrationPlate:"), "parseMyCars registrationPlate missing");
-require_(caps.includes("recordID: recordID"), "parseErrors recordID missing");
+require_(!caps.includes("ErrorService/GetErrors"), "removed Chronos error endpoint is still present");
+require_(!caps.includes("fetchErrors("), "removed Chronos error fetch is still present");
+require_(!caps.includes("parseErrors("), "removed Chronos error parser is still present");
 
 const models = read("Sources/Hisingen/Services/API/GraphQLModels.swift");
 require_(models.includes("let tokenType: String?"), "TokenResponseDTO.tokenType missing");
@@ -58,7 +56,7 @@ require_(models.includes("let idToken: String?"), "TokenResponseDTO.idToken miss
 // it if Polestar ever returns it (pinned by PolestarRawDecodeTests).
 require_(models.includes("let reportedBatteryCapacityKwh: FlexibleDouble?"), "BatteryDTO capacity missing");
 
-// 6. Telemetry query must NOT re-select the capacity field Polestar removed from its schema
+// 5. Telemetry query must NOT re-select the capacity field Polestar removed from its schema
 //    (GraphQL rejects the whole carTelematicsV2 selection otherwise). Capacity instead flows
 //    through the gRPC battery parse and the equipment fallback via resolvedBatteryCapacity.
 const telemetry = read("Sources/Hisingen/Services/API/PolestarAPI+Telemetry.swift");
@@ -72,7 +70,7 @@ require_(telemetry.includes("static func resolvedBatteryCapacity(graphQL: Double
 require_(telemetry.includes("state.energy.reportedBatteryCapacityKwh = capacityKwh"), "capacity not wired into VehicleState");
 require_(telemetry.includes("enriched.unknownWireFields = diag.unknownFields"), "unknown fields not wired into BatteryDiagnostics");
 
-// 7. VDMS query is limited to fields the production schema reliably returns.
+// 6. VDMS query is limited to fields the production schema reliably returns.
 const api = read("Sources/Hisingen/Services/API/PolestarAPI.swift");
 const vdmsStart = api.indexOf('query GetVDMSCars');
 const vdmsEnd = api.indexOf('let body: [String: Any]', vdmsStart);
@@ -82,13 +80,12 @@ for (const field of ["exterior", "interior", "wheels", "packages"]) {
   require_(!vdmsQuery.includes(field), `unsupported VDMS ${field} selection remains`);
 }
 
-// 8. UI surfaces the decodes.
+// 7. UI surfaces the decodes.
 const vehicleTab = read("Sources/Hisingen/UI/Vehicle/VehicleTabView.swift");
 require_(vehicleTab.includes("strippedReleaseNotes"), "release-notes stripping missing");
 require_(vehicleTab.includes("scheduleRelativeMinutes"), "vehicle-tab countdown row missing");
 require_(vehicleTab.includes("Build code"), "vehicle-tab build-code row missing");
 require_(vehicleTab.includes("Schedule originator"), "vehicle-tab originator row missing");
-require_(vehicleTab.includes("actionDisplayName"), "vehicle-tab error action label missing");
 
 const infoDiag = read("Sources/Hisingen/UI/Info/InfoTabView+Diagnostics.swift");
 require_(infoDiag.includes("unknownWireFields"), "info-tab raw field rows missing");
@@ -100,12 +97,12 @@ require_(infoCaps.includes("Backend Registration Plate"), "capabilities plate ro
 require_(infoCaps.includes("Account Linked To Vehicle"), "capabilities linked row missing");
 require_(infoCaps.includes("Account Owns Vehicle"), "capabilities owner row missing");
 
-// 9. Tests exist and cover the positive controls.
+// 8. Tests exist and cover the positive controls.
 const tests = read("Tests/HisingenTests/Unit/PolestarRawDecodeTests.swift");
 for (const marker of [
   "batteryDecodesReportedCapacityAndKnownFields", "batteryCapturesUnknownFieldsRaw",
   "softwareDecodesDescriptionsQbAndOriginator", "schedulerIdleNegativeTwoIsNotSurfacedAsCountdown",
-  "myCarsDecodesSunroofLinkedOwnerPlate", "chronosErrorsCaptureRecordIDAndVin",
+  "myCarsDecodesSunroofLinkedOwnerPlate",
   "tokenResponseDecodesTokenTypeAndIdToken", "graphqlBatteryCapacityDecodesNumberAndString",
   "otaCapabilitiesDecodeWithoutNewFields", "batteryDiagnosticsDecodeWithoutUnknownWireFields"
 ]) {

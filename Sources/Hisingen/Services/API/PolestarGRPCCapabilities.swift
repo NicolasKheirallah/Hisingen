@@ -31,15 +31,6 @@ extension PolestarGRPC {
     private static let climateTimersPath = "/pccs.chronos.services.v1.ParkingClimateTimerService/GetTimers"
     private static let locationPath = "/dtlinternet.DtlInternetService/GetLastKnownLocation"
     private static let weatherPath = "/weather.WeatherService/GetWeatherReport"
-    private static let errorsPath = "/chronos.services.v1.ErrorService/GetErrors"
-
-    /// Returns `true` when a `UNAVAILABLE` (14) response carries a stable authorization
-    /// failure rather than a transient service disruption.
-    static func errorsAuthorizationGap(status: String, message: String?) -> Bool {
-        guard status == "14" else { return false }
-        let detail = (message?.removingPercentEncoding ?? message ?? "").lowercased()
-        return detail.contains("authorization failed")
-    }
     private static let myCarsPath = "/car_information.CarInformation/GetMyCars"
 
     func fetchExterior(vin: String, accessToken: String) async throws -> ExteriorSnapshot? {
@@ -255,109 +246,6 @@ extension PolestarGRPC {
             if hasInfrastructureError { throw errors[0] }
         }
         return schedules
-    }
-
-    /// Fetches vehicle service errors from `chronos.services.v1.ErrorService/GetErrors` (C3).
-    /// The response is a oneof-style message where exactly one per-service error
-    func fetchErrors(vin: String, accessToken: String) async throws -> [VehicleChronosError] {
-        // ErrorService is server-streaming and may take longer than the default 10s request
-        // timeout to return the first frame on PCCS — use a dedicated session with a longer
-        // timeout. The service is not deployed on all backends/regions; if it returns
-        // UNAVAILABLE (14) or UNIMPLEMENTED (12), treat it as "no errors" rather than failing.
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 45
-        let longSession = URLSession(configuration: config)
-        let base = try await resolvedHost(.c3, accessToken: accessToken)
-        var request = URLRequest(url: base.appendingPathComponent(Self.errorsPath))
-        request.httpMethod = "POST"
-        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
-        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(vin, forHTTPHeaderField: "vin")
-        request.httpBody = Protobuf.grpcFrame(Self.chronosEnvelope(vin: vin))
-
-        let startedAt = Date()
-        var httpStatus: Int?
-        var grpcStatus: String?
-        var grpcMessage: String?
-        do {
-            let (bytes, response) = try await longSession.bytes(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                await diagnosticLog.record(
-                    provider: .polestar, request: request, operation: "gRPC errors",
-                    startedAt: startedAt,
-                    error: PolestarError.invalidResponse(operation: "gRPC errors"))
-                return []
-            }
-            httpStatus = http.statusCode
-            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
-            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
-            if let status = grpcStatus, status != "0" {
-                // Unsupported or transient error reporting must not fail the vehicle refresh.
-                if status == "12" || status == "14" {
-                    if Self.errorsAuthorizationGap(status: status, message: grpcMessage) {
-                        throw PolestarError.permissionDenied(operation: Self.errorsPath)
-                    }
-                    await diagnosticLog.record(
-                        provider: .polestar, request: request,
-                        operation: Self.diagnosticOperation("gRPC errors", grpcStatus: status,
-                                                            grpcMessage: grpcMessage),
-                        statusCode: http.statusCode, startedAt: startedAt)
-                    return []
-                }
-                throw PolestarError.invalidResponse(operation: "gRPC errors status \(status)")
-            }
-            guard http.statusCode == 200 else {
-                await diagnosticLog.record(
-                    provider: .polestar, request: request, operation: "gRPC errors",
-                    statusCode: http.statusCode, startedAt: startedAt,
-                    error: PolestarError.server(statusCode: http.statusCode))
-                return []
-            }
-            var header = [UInt8]()
-            var body = Data()
-            var expected: Int?
-            for try await byte in bytes {
-                if expected == nil {
-                    header.append(byte)
-                    guard header.count == 5 else { continue }
-                    expected = Int(header[1]) << 24 | Int(header[2]) << 16
-                        | Int(header[3]) << 8 | Int(header[4])
-                    if expected == 0 { break }
-                    continue
-                }
-                body.append(byte)
-                if let frameSize = expected, body.count == frameSize { break }
-            }
-            guard !body.isEmpty else {
-                await diagnosticLog.record(
-                    provider: .polestar, request: request, operation: "gRPC errors",
-                    statusCode: http.statusCode, responseBytes: 0,
-                    responseData: Data(), startedAt: startedAt)
-                return []
-            }
-            await diagnosticLog.record(
-                provider: .polestar, request: request, operation: "gRPC errors",
-                statusCode: http.statusCode, responseBytes: body.count,
-                responseData: body, startedAt: startedAt)
-            return Self.parseErrors(body)
-        } catch let error as URLError where error.code == .timedOut {
-            // Server-streaming timeout — service didn't respond; treat as no errors.
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
-                                                    grpcMessage: grpcMessage),
-                statusCode: httpStatus, startedAt: startedAt, error: error)
-            return []
-        } catch {
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC errors", grpcStatus: grpcStatus,
-                                                    grpcMessage: grpcMessage),
-                statusCode: httpStatus, startedAt: startedAt, error: error)
-            throw error
-        }
     }
 
     /// Fetches vehicle information from `car_information.CarInformation/GetMyCars` (C3 gRPC).
@@ -941,36 +829,6 @@ extension PolestarGRPC {
         case 13: return .installing   // INSTALLATION_SCHEDULE_TRIGGERED
         default: return .unknown      // 0 UNKNOWN, 14 INSTALLATION_UNKNOWN
         }
-    }
-
-    /// Parses a `pccs.chronos.messages.error.v1.GetErrorsResponse`:
-    /// `1 id`, `2 vin`, oneof serviceError { `3 ampLimitError{1 error}`, `4 chargeLocationError{1 error, 2 action}`,
-    /// `5 chargeNowError{1 error, 2 action}`, `6 globalChargeTimerError{1 error}`, `7 parkingClimateTimerError{1 error, 2 action}`,
-    /// `8 targetSocError{1 error}` }.
-    /// The oneof is identified by which field number is present (3-8). Each sub-error's
-    /// field 1 is an `Error` enum int; field 2 (where present) is an `Action` enum int.
-    static func parseErrors(_ data: Data) -> [VehicleChronosError] {
-        let fields = Protobuf.fields(data)
-        var errors: [VehicleChronosError] = []
-        // Outer identity fields (1 id, 2 vin) captured so backend records stay traceable.
-        let recordID = string(fields, 1).nilIfEmpty
-        let recordVin = string(fields, 2).nilIfEmpty
-
-        let serviceMap: [(field: Int, service: VehicleChronosError.Service)] = [
-            (3, .ampLimit), (4, .chargeLocation), (5, .chargeNow),
-            (6, .globalChargeTimer), (7, .parkingClimateTimer), (8, .targetSoc),
-        ]
-        for (fieldNum, service) in serviceMap {
-            guard let errorData = message(fields, field: fieldNum) else { continue }
-            let subFields = Protobuf.fields(errorData)
-            let errorCodeInt = Int(varint(subFields, 1) ?? 0)
-            let errorCode = VehicleChronosError.Code(rawValue: errorCodeInt) ?? .unknown
-            let actionCode = subFields.first(where: { $0.number == 2 && $0.wire == 0 }).map { Int($0.varint) }
-            errors.append(VehicleChronosError(service: service, errorCode: errorCode,
-                                               actionCode: actionCode,
-                                               recordID: recordID, vin: recordVin))
-        }
-        return errors
     }
 
     /// Parses a `GetMyCarsResponse`: `{1: [MyCar]}` where `MyCar` = `{1: Car, 2: userIsLinked,

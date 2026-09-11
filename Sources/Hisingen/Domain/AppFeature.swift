@@ -29,7 +29,6 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
     case remoteWindows = "remote-windows"
     case remoteHonkFlash = "remote-honk-flash"
     case remoteOTA = "remote-ota"
-    case vehicleErrors = "vehicle-errors"
     case realTimeUpdates = "real-time-updates"
 
     var title: String {
@@ -62,7 +61,6 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .remoteWindows: return L10n.text("Window controls")
         case .remoteHonkFlash: return L10n.text("Honk & flash controls")
         case .remoteOTA: return L10n.text("Vehicle software controls")
-        case .vehicleErrors: return L10n.text("Vehicle errors")
         case .realTimeUpdates: return L10n.text("Real-time updates")
         }
     }

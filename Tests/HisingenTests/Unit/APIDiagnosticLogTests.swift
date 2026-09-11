@@ -122,9 +122,9 @@ struct APIDiagnosticLogTests {
         let store = APIDiagnosticLogStore()
         await store.record(
             provider: .polestar, request: nil,
-            operation: "gRPC errors (grpc-status=14, grpc-message=Authorization failed)",
+            operation: "gRPC capability (grpc-status=14, grpc-message=Authorization failed)",
             statusCode: 200, startedAt: Date(),
-            error: PolestarError.permissionDenied(operation: "errors")
+            error: PolestarError.permissionDenied(operation: "diagnostics")
         )
         let entry = try #require(await store.snapshot().first)
         #expect(entry.errorType != nil)

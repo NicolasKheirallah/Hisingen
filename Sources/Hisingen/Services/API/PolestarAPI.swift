@@ -1248,7 +1248,7 @@ actor PolestarAPI {
         }
         if reading == "climate-timers" || reading == "charge-locations"
             || reading == AppFeature.chargingSchedule.rawValue { return 60 }
-        if [AppFeature.vehicleWeather, .tyreAndWarnings, .vehicleHealth, .vehicleErrors]
+        if [AppFeature.vehicleWeather, .tyreAndWarnings, .vehicleHealth]
             .map(\.rawValue).contains(reading) { return 300 }
         return 60 * 60
     }

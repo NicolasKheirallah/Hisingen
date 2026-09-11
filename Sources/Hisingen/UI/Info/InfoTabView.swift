@@ -54,7 +54,7 @@ struct InfoTabView: View {
     /// Stable identity + ordering for every card, so the "jump to section" menu and the render
     /// loop derive from one list instead of two hand-synced copies.
     enum InfoSection: String, CaseIterable, Hashable {
-        case overview, doors, tyres, fluids, errors, software, location, weather
+        case overview, doors, tyres, fluids, software, location, weather
         case trip, powertrain, batteryHealth, batteryDiagnostics, airQuality
         case connectivity, service, warranty, exterior, interior, chargeLocations
         case factoryBuild, capabilities, activity, freshness
@@ -65,7 +65,6 @@ struct InfoTabView: View {
             case .doors: return L10n.text("Doors & Openings")
             case .tyres: return L10n.text("Tyres")
             case .fluids: return L10n.text("Fluids & Lighting")
-            case .errors: return L10n.text("Vehicle Errors")
             case .software: return L10n.text("Software & Updates")
             case .location: return L10n.text("Parking Location")
             case .weather: return L10n.text("Ambient Conditions")
@@ -148,9 +147,6 @@ struct InfoTabView: View {
             add(.tyres, TireStatusCardView(tyres: tyres))
         }
         add(.fluids, fluidsAndLightingCard)
-        if !state.vehicleErrors.isEmpty {
-            add(.errors, vehicleErrorsCard)
-        }
         if softwareCardHasContent {
             add(.software, softwareUpdateCard)
         }

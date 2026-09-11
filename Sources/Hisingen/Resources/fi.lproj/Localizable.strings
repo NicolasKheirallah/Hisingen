@@ -1283,7 +1283,6 @@
 "Alert below 2 kW for 15 minutes while actively charging" = "Ilmoita alle 2 kW tehosta 15 minuutin ajan latauksen ollessa käynnissä";
 "Alert when provider telemetry remains older than its freshness limit" = "Ilmoita, kun palveluntarjoajan telemetria pysyy tuoreusrajan vanhempana";
 "Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "Näyttää aina kaiken tallennetun historian — yllä olevan kaudenvalitsin ei koske tätä, sillä akun kunto muuttuu kuukausien eikä päivien mittaan.";
-"Amp Limit" = "Ampeeriraja";
 "An older software event is recorded, but no current update failure requires attention." = "Vanhempi ohjelmistotapahtuma on tallennettu, mutta mikään nykyinen päivitysvika ei vaadi toimenpiteitä.";
 "Announced Version" = "Ilmoitettu versio";
 "Announced: %@" = "Ilmoitettu: %@";
@@ -1299,7 +1298,6 @@
 "Average Daily Distance" = "Keskimääräinen päivämatka";
 "Average Observed Peak" = "Keskimääräinen havaittu huippu";
 "Awake Because" = "Heräämisen syy";
-"Backend error records" = "Taustajärjestelmän vikatietueet";
 "Backend reports installation completed for version %@." = "Taustajärjestelmä ilmoittaa, että version %@ asennus on valmis.";
 "Backend reports that installation completed." = "Taustajärjestelmä ilmoittaa, että asennus on valmis.";
 "Backend-Reported Software" = "Taustajärjestelmän ilmoittama ohjelmisto";
@@ -1403,7 +1401,6 @@
 "Energy" = "Energia";
 "Energy consumption trend chart" = "Energiakulutuksen trendikaavio";
 "Energy level unavailable" = "Energian taso ei saatavilla";
-"Error reporting" = "Viatietojen raportointi";
 "Estimated Energy" = "Arvioitu energia";
 "Estimated Energy Added" = "Arvioitu lisätty energia";
 "Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified." = "Arvioitu tallennetusta ajoneuvotelemetriasta, ellei tulevaisuuden mitattua wallbox-lähdettä nimenomaisesti tunnisteta.";
@@ -1434,7 +1431,6 @@
 "Gallons US (gal)" = "Amerikkalaiset gallonat (gal)";
 "Garage" = "Autotalli";
 "General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents." = "Vain yleinen referenssi. Takuukattavuus vaihtelee ajoneuvon, markkinan ja käyttöönottopäivän mukaan; tarkista ajoneuvosi asiakirjat.";
-"Global Charge Timer" = "Yleinen latausajastin";
 "Grand (Wide & Tall)" = "Suuri (levä ja korkea)";
 "High confidence" = "Suuri luotettavuus";
 "Hisingen is no longer running." = "Hisingen ei ole enää käynnissä.";
@@ -1498,7 +1494,6 @@
 "No warning" = "Ei varoitusta";
 "No warning reported" = "Varoitusta ei raportoitu";
 "No warnings reported" = "Varoituksia ei raportoitu";
-"None returned" = "Mitään ei palautettu";
 "Not reported" = "Ei raportoitu";
 "Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents." = "Ajoneuvo-API ei toimita tätä; syötä takuuirjoissasi näkyvä toimitus-/käyttöönottopäivä.";
 "Observed charger power integrated over time and divided by the battery percentage gained across %.0f qualifying session(s) suggests %.1f kWh. A charging-loss allowance based on the reported AC/DC type is applied." = "Ajan yli integroitu havaittu latausteho jaettuna akkuprosentin nousulla %.0f kelvollisen istunnon aikana viittaa %.1f kWh:iin. Raportoidun AC/DC-tyypin mukainen lataushäviökorjaus on huomioitu.";
@@ -1517,7 +1512,6 @@
 "Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates." = "Valinnaiset VIN-kohtaiset arvot ajoneuvon teknisestä tiedosta. Ne korvaavat laajat mallisarjareferenssit lasketuissa toimintamatka- ja SoH-arvioissa.";
 "Overhead (Top-Down)" = "Linnunperspektiivi (ylhäältä)";
 "Panel Size" = "Paneelin koko";
-"Parking Climate Timer" = "Pysäköinti-ilmastointiajastin";
 "Past event — no current action required" = "Mennyt tapahtuma — ei toimenpiteitä nyt";
 "Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "Huipputeho klo %@ oli huomattavasti alle tämän paikan tavanomaisen tason — kaapeli tai lataulaite voi olla tehonsäädössä.";
 "Performance Software Upgrade" = "Suorituskykyohjelmistopäivitys";
@@ -1528,7 +1522,6 @@
 "Preconditioning Command Setpoint" = "Esilämmityskomennon tavoitearvo";
 "Price per litre" = "Hinta per litra";
 "Price-optimised" = "Hinta-optimoitu";
-"Privacy settings blocked the request" = "Yksityisyysasetukset estivät pyynnön";
 "Projected in +10,000 km" = "Ennustettu +10 000 km:n kohdalla";
 "Prune Old Samples" = "Siivoa vanhat mittaukset";
 "Pruned!" = "Siivottu!";
@@ -1557,7 +1550,6 @@
 "Reported by the vehicle cloud backend — exact support per VIN." = "Ajoneuvon pilvitaustajärjestelmän ilmoittama — tarkka tuki per VIN.";
 "Reported supported" = "Ilmoitettu tuetuksi";
 "Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in." = "Pyydä rajoitetut lukituksen, lukituksen avauksen, moottorin, paikannuksen ja sijainnin laajuudet seuraavassa kirjautumisessa.";
-"Request timed out" = "Pyyntö aikakatkaistiin";
 "Reset" = "Nollaa";
 "Restore software event" = "Palauta ohjelmistotapahtuma";
 "Save charge location \"%@\" at the car's position" = "Tallenna latauspaikka \"%@\" auton sijaintiin";
@@ -1606,11 +1598,9 @@
 "Switch to %@" = "Vaihda kohteeseen %@";
 "Tailgate Open/Close" = "Takaluukun avaus/sulkeminen";
 "Taller panel, more visible history" = "Korkeampi paneeli, näkyvämpi historia";
-"Target SOC" = "Tavoite-SOC";
 "Tariff Cost" = "Tariffikustannus";
 "Telemetry" = "Telemetria";
 "Telemetry Entries" = "Telemetriatietueet";
-"The backend returned no error records. This is not a full diagnostic scan of the vehicle." = "Taustajärjestelmä ei palauttanut vikatietueita. Tämä ei ole täydellinen diagnostinen skannaus ajoneuvosta.";
 "The charge target must be between %d%% and 100%% on this vehicle." = "Lataustavoitteen on oltava välillä %d%%–100%% tällä ajoneuvolla.";
 "The charging current must be between %d A and %d A on this vehicle." = "Latausvirran on oltava välillä %d A–%d A tällä ajoneuvolla.";
 "The command failed. Please try again." = "Komento epäonnistui. Yritä uudelleen.";
@@ -1651,7 +1641,6 @@
 "Tyre pressure" = "Rengaspaine";
 "Unknown error" = "Tuntematon virhe";
 "Unnamed location" = "Nimetön paikka";
-"Unspecified error" = "Määrittelemätön virhe";
 "Unusually Slow Charging" = "Epätavallisen hidas lataus";
 "Unusually slow charging" = "Epätavallisen hidas lataus";
 "Unverified value from an undocumented backend field." = "Vahvistamaton arvo dokumentoimattomasta taustajärjestelmän kentästä.";
@@ -1668,15 +1657,12 @@
 "Vehicle Activity History" = "Ajoneuvon aktiviteettihistoria";
 "Vehicle Capabilities" = "Ajoneuvon ominaisuudet";
 "Vehicle data is stale" = "Ajoneuvotiedot ovat vanhentuneet";
-"Vehicle Errors" = "Ajoneuvon viat";
-"Vehicle errors" = "Ajoneuvon viat";
 "Vehicle has no internet connection" = "Ajoneuvolla ei ole internetyhteyttä";
 "Vehicle is currently in use" = "Ajoneuvo on parhaillaan käytössä";
 "Vehicle is in power-saving mode" = "Ajoneuvo on virransäästötilassa";
 "Vehicle is ready to unlock for %d seconds. Open a door or the trunk to complete unlocking." = "Ajoneuvo on valmiina avattavaksi %d sekunnin ajan. Avaa ovi tai tavaratila viimeistelläksesi avaamisen.";
 "Vehicle is ready to unlock. Open a door or the trunk to complete unlocking." = "Ajoneuvo on valmis avattavaksi. Avaa ovi tai tavaratila viimeistelläksesi avaamisen.";
 "Vehicle left open" = "Ajoneuvo jäänyt auki";
-"Vehicle reported an error" = "Ajoneuvo ilmoitti virheen";
 "Vehicle service due soon" = "Ajoneuvon huolto tulossa pian";
 "Vehicle Snapshots" = "Ajoneuvon tilannekuvat";
 "Vehicle software downloading" = "Ajoneuvo-ohjelmistoa ladataan";
@@ -1704,7 +1690,6 @@
 "Weekly distance chart" = "Viikoittainen matkakaavio";
 "Wide" = "Leveä";
 "WLTP reference range" = "WLTP-referenssitoimintamatka";
-"Wrong usage mode" = "Väärä käyttötila";
 "Your %@ is parked and unplugged. Connect to a charger to ensure departure range." = "%@ on pysäköityna ja irti kytkettynä. Kytke lataimeen varmistaaksesi lähtötoimintamatkan.";
 "•••••••• (Saved in Keychain)" = "•••••••• (tallennettu avainnipuuhun)";
 "≈ %d days" = "≈ %d pv";
@@ -1966,7 +1951,6 @@
 "Show controls for moving between vehicles on the same account" = "Show controls for moving between vehicles on the same account";
 "App Update Checks" = "App Update Checks";
 "Allow checks against Hisingen’s signed stable update feed" = "Allow checks against Hisingen’s signed stable update feed";
-"Vehicle Service Errors" = "Vehicle Service Errors";
 "Fetch charging and climate errors reported by the vehicle service" = "Fetch charging and climate errors reported by the vehicle service";
 "Real-Time Updates" = "Real-Time Updates";
 "Use live server streaming when supported, with polling as fallback" = "Use live server streaming when supported, with polling as fallback";
@@ -2114,7 +2098,6 @@
 "AC (climate) turned on" = "AC (climate) turned on";
 "AC turned on at %.0f °C" = "AC turned on at %.0f °C";
 "AC turned on at %.1f °C" = "AC turned on at %.1f °C";
-"Action %d" = "Action %d";
 "Activity History" = "Activity History";
 "Air Cleaning" = "Air Cleaning";
 "All windows closed" = "All windows closed";
@@ -2129,7 +2112,6 @@
 "Cabin cleaning stopped" = "Cabin cleaning stopped";
 "Calculated SoH" = "Calculated SoH";
 "Car" = "Car";
-"Change the setting" = "Change the setting";
 "Charge Port (reference)" = "Charge Port (reference)";
 "Charge location \"%@\" saved" = "Charge location \"%@\" saved";
 "Charge location renamed to \"%@\"" = "Charge location renamed to \"%@\"";
@@ -2183,7 +2165,6 @@
 "Minimum Charge" = "Minimum Charge";
 "Model" = "Model";
 "N" = "N";
-"No action" = "No action";
 "No current charging estimate is available for this departure." = "No current charging estimate is available for this departure.";
 "No reported openings are open." = "No reported openings are open.";
 "No samples" = "No samples";
@@ -2212,7 +2193,6 @@
 "Release notes" = "Release notes";
 "Remote commands are blocked while privacy mode is enabled in the vehicle." = "Remote commands are blocked while privacy mode is enabled in the vehicle.";
 "Requested Temperature" = "Requested Temperature";
-"Retry the request" = "Retry the request";
 "Reverse light any" = "Reverse light any";
 "Reverse light left" = "Reverse light left";
 "Reverse light right" = "Reverse light right";
@@ -2313,11 +2293,8 @@
 // Control validation and observed outcomes (English fallback).
 "%.0f%%" = "%.0f%%";
 "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out." = "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out.";
-"%@ · %d records" = "%@ · %d records";
 "A reported connection does not guarantee that the vehicle can accept a command immediately." = "A reported connection does not guarantee that the vehicle can accept a command immediately.";
-"Backend Action" = "Backend Action";
 "Backend build-identification code. Often empty or redundant with the version string." = "Backend build-identification code. Often empty or redundant with the version string.";
-"Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan." = "Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan.";
 "Battery is low." = "Battery is low.";
 "Build Code" = "Build Code";
 "Cabin climate has turned off." = "Cabin climate has turned off.";

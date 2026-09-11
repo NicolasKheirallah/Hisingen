@@ -84,40 +84,6 @@ extension InfoTabView {
         })
     }
 
-    // MARK: - Vehicle errors (Chronos)
-
-    var vehicleErrorsCard: some View {
-        let errors = VehicleDiagnosticGroup.grouped(state.vehicleErrors, vin: state.identity.vin)
-        guard !errors.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Vehicle Errors"), color: .red)
-                VStack(spacing: 6) {
-                    ForEach(errors) { group in
-                        DisclosureGroup {
-                            if let action = group.records.first?.actionDisplayName {
-                                KVRow(L10n.text("Backend Action"), action, symbol: "info.circle")
-                            }
-                            let identities = group.records.compactMap(\.recordID).sorted()
-                            if !identities.isEmpty {
-                                Text(identities.joined(separator: "\n"))
-                                    .font(.caption2).textSelection(.enabled)
-                            }
-                        } label: {
-                            KVRow(group.service.displayName,
-                                  L10n.format("%@ · %d records", group.code.displayName, group.records.count),
-                                  symbol: "exclamationmark.circle", valueWarning: group.code != .unspecified)
-                        }
-                    }
-                }
-                Text(L10n.text("Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan."))
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        })
-    }
-
     // MARK: - Ambient conditions
 
     var ambientWeatherCard: some View {

@@ -33,7 +33,7 @@ const knownSymbols = [
   "AppBackendCarDTO", "GrpcBatteryExtras", "parseBattery", "parseExterior", "parseHealth",
   "discoverPressureQuadruple", "parseOdometer", "parseDashboardOdometer", "parseClimate",
   "parseAirQuality", "parseLocation", "parseWeather", "parseSoftware", "softwareState",
-  "parseMyCars", "parseErrors", "parseChargeLocations", "parseGlobalChargeTimer",
+  "parseMyCars", "parseChargeLocations", "parseGlobalChargeTimer",
   "parseChargeLocationSchedules", "parseClimateTimers", "chronosEnvelope", "chronosRequest",
   "GrpcHealthReport", "GrpcOdometerReport", "TelematicsPayloadDTO", "TelematicsDTO",
   "ConsumerCarsPayloadDTO", "AppBackendCarsPayloadDTO", "VehicleOTACapabilities",
@@ -50,7 +50,7 @@ const backendRpcNames = [
   "StartOverrideChargeTimer", "StopOverrideChargeTimer", "CreateAtTheCarLocation",
   "UpdateAlias", "UpdateAmpLimit", "UpdateMinimumSoc", "UpdateOptimizedSetting",
   "DeleteLocation", "GetLatestBattery", "GetLatestExterior", "GetLatestAvailability",
-  "GetSoftwareInfo", "GetSchedule", "GetMyCars", "GetErrors", "GetChargeLocations"
+  "GetSoftwareInfo", "GetSchedule", "GetMyCars", "GetChargeLocations"
 ];
 function grepAll(needle) {
   const out = [];

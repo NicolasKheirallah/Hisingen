@@ -140,9 +140,6 @@ extension PolestarAPI {
             .chargingDetails, key: "amp-limit",
             enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
-        async let errorsTask: OptionalCapability<[VehicleChronosError]> = optionalCapability(
-            .vehicleErrors, enabled: features.contains(.vehicleErrors), vin: vin
-        ) { try await self.grpc.fetchErrors(vin: vin, accessToken: serviceToken) }
         async let chargeLocationsTask: OptionalCapability<[ChargeLocationSnapshot]> = optionalCapability(
             .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
         ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
@@ -169,7 +166,6 @@ extension PolestarAPI {
         let weather = try await weatherTask
         let location = try await locationTask
         let ampLimit = try await ampLimitTask
-        let serviceErrors = try await errorsTask
         let chargeLocations = try await chargeLocationsTask
         let otaCapabilities = try await myCarsTask
 
@@ -229,7 +225,6 @@ extension PolestarAPI {
             if features.contains(.remotePreCleaning) { optionalResults.append((.remotePreCleaning, air.unavailable)) }
         }
         if features.contains(.vehicleWeather) { optionalResults.append((.vehicleWeather, weather.unavailable)) }
-        if features.contains(.vehicleErrors) { optionalResults.append((.vehicleErrors, serviceErrors.unavailable)) }
         var seenUnavailable = Set<AppFeature>()
         let unavailable = optionalResults.compactMap { feature, failed in
             failed && seenUnavailable.insert(feature).inserted ? feature : nil
@@ -363,7 +358,6 @@ extension PolestarAPI {
         state.freshness.readingDates[.openings] = exterior.value?.reportedAt
         state.freshness.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date
         state.freshness.readingDates[.odometer] = odometer?.odometerMeters != nil ? odometer?.timestamp?.date : trips.value?.reportedAt
-        state.vehicleErrors = features.contains(.vehicleErrors) ? (serviceErrors.value ?? []) : []
         // Odometer average speeds arrive per trip period, with explicit km/h units; keep
         // them out of the blended `averageSpeedKmH` (Volvo statistics) so sources never
         // overwrite each other.

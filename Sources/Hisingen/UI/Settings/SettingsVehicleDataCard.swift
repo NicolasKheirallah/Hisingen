@@ -220,7 +220,6 @@ struct SettingsVehicleDataCard: View {
                 VStack(spacing: 4) {
                     row(.multipleVehicles, symbol: "car.2.fill", title: "Vehicle Switcher", detail: "Show controls for moving between vehicles on the same account")
                     row(.updateChecks, symbol: "arrow.down.circle", title: "App Update Checks", detail: "Allow checks against Hisingen’s signed stable update feed")
-                    row(.vehicleErrors, symbol: "exclamationmark.bubble", title: "Vehicle Service Errors", detail: "Fetch charging and climate errors reported by the vehicle service")
                     row(.realTimeUpdates, symbol: "dot.radiowaves.left.and.right", title: "Real-Time Updates", detail: "Use live server streaming when supported, with polling as fallback", isSupported: !isVolvo, badgeText: isVolvo ? "Polling Only" : nil)
                 }
             }

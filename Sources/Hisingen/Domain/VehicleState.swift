@@ -547,8 +547,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         otaCapabilities?.userIsOwner
     }
 
-    /// Provider-reported pack specification. This is not a measured battery-health value.
-    var vehicleErrors: [VehicleChronosError] = []
     var otaCapabilities: VehicleOTACapabilities? = nil
 
     private var batteryPercentage: Double? { get { energy.batteryPercentage } set { energy.batteryPercentage = newValue } }
@@ -822,7 +820,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         probedCapabilities: VehicleProbedCapabilities? = nil,
         powertrain: PowertrainType = .bev,
         fuelSystem: FuelSystemSnapshot = .init(),
-        vehicleErrors: [VehicleChronosError] = [],
         otaCapabilities: VehicleOTACapabilities? = nil
     ) {
         self.energy = energy
@@ -842,7 +839,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.probedCapabilities = probedCapabilities
         self.powertrain = powertrain
         self.fuelSystem = fuelSystem
-        self.vehicleErrors = vehicleErrors
         self.otaCapabilities = otaCapabilities
     }
 
@@ -875,7 +871,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case chargeLocations
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
         case preferredWorkshopId, preferredWorkshopName
-        case isCachedSnapshot, retainedDataCategories, retainedDataAt, vehicleErrors, otaCapabilities
+        case isCachedSnapshot, retainedDataCategories, retainedDataAt, otaCapabilities
     }
 
 
@@ -997,7 +993,6 @@ struct VehicleState: Codable, Equatable, Sendable {
             probedCapabilities: try readFlat("probedCapabilities"),
             powertrain: try values.decodeIfPresent(PowertrainType.self, forKey: .powertrain) ?? .bev,
             fuelSystem: fuelSystem,
-            vehicleErrors: try values.decodeIfPresent([VehicleChronosError].self, forKey: .vehicleErrors) ?? [],
             otaCapabilities: try readFlat("otaCapabilities")
         )
     }
@@ -1021,7 +1016,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         try values.encode(powertrain, forKey: .powertrain)
         try values.encode(fuelSystem, forKey: .fuelSystem)
         try values.encode(tripComputer, forKey: .tripComputer)
-        try values.encode(vehicleErrors, forKey: .vehicleErrors)
         try values.encodeIfPresent(otaCapabilities, forKey: .otaCapabilities)
     }
 

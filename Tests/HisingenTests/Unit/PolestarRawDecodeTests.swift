@@ -155,34 +155,6 @@ struct PolestarRawDecodeTests {
         #expect(caps.userIsOwner == nil)
     }
 
-    // MARK: - Chronos errors
-
-    @Test func chronosErrorsCaptureRecordIDAndVin() throws {
-        var ampError = Data()
-        ampError += Protobuf.intField(1, 2)
-        var response = Data()
-        response += Protobuf.stringField(1, "err-77")
-        response += Protobuf.stringField(2, "VIN-DEC")
-        response += Protobuf.messageField(3, ampError)
-        let errors = PolestarGRPC.parseErrors(response)
-        #expect(errors.count == 1)
-        #expect(errors[0].service == .ampLimit)
-        #expect(errors[0].errorCode == .car)
-        #expect(errors[0].recordID == "err-77")
-        #expect(errors[0].vin == "VIN-DEC")
-    }
-
-    @Test func chronosErrorsActionDisplayNameMapsKnownCodes() throws {
-        var chargeNowError = Data()
-        chargeNowError += Protobuf.intField(1, 1)
-        chargeNowError += Protobuf.intField(2, 1)
-        let response = Protobuf.messageField(5, chargeNowError)
-        let errors = PolestarGRPC.parseErrors(response)
-        #expect(errors.count == 1)
-        #expect(errors[0].actionCode == 1)
-        #expect(errors[0].actionDisplayName?.isEmpty == false)
-    }
-
     // MARK: - Availability
 
     @Test func availabilityUnknownReasonSevenHasText() throws {

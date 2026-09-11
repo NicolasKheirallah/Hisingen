@@ -72,18 +72,6 @@ struct PolestarGRPCDiagnosticsTests {
     }
 
     @Test
-    func errorServiceTreatsStableAuthorizationGapAsPermissionDenied() {
-        #expect(PolestarGRPC.errorsAuthorizationGap(
-            status: "14", message: "Authorization%20failed"))
-        #expect(!PolestarGRPC.errorsAuthorizationGap(
-            status: "14", message: "unavailable: vehicle asleep"))
-        #expect(!PolestarGRPC.errorsAuthorizationGap(
-            status: "12", message: "Authorization%20failed"))
-        #expect(!PolestarGRPC.errorsAuthorizationGap(
-            status: "0", message: "Authorization%20failed"))
-    }
-
-    @Test
     func unimplementedReadPathIsRememberedAndSkipped() async {
         let suite = "HisingenPolestarGRPCDiagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

@@ -1283,7 +1283,6 @@
 "Alert below 2 kW for 15 minutes while actively charging" = "主动充电时功率低于 2 kW 持续 15 分钟则提醒";
 "Alert when provider telemetry remains older than its freshness limit" = "当服务商遥测数据超过时效上限时提醒";
 "Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "始终显示全部已记录历史——上方的时段选择器在此不适用，因为电池健康度按月而非按天变化。";
-"Amp Limit" = "电流限制（安培）";
 "An older software event is recorded, but no current update failure requires attention." = "已记录较早的软件事件，但目前没有需要关注的更新失败。";
 "Announced Version" = "已公布的版本";
 "Announced: %@" = "公布时间：%@";
@@ -1299,7 +1298,6 @@
 "Average Daily Distance" = "日均行驶距离";
 "Average Observed Peak" = "观测到的平均峰值";
 "Awake Because" = "唤醒原因";
-"Backend error records" = "后端错误记录";
 "Backend reports installation completed for version %@." = "后端报告版本 %@ 的安装已完成。";
 "Backend reports that installation completed." = "后端报告安装已完成。";
 "Backend-Reported Software" = "后端报告的软件版本";
@@ -1403,7 +1401,6 @@
 "Energy" = "能量";
 "Energy consumption trend chart" = "能耗趋势图表";
 "Energy level unavailable" = "能量水平不可用";
-"Error reporting" = "错误报告";
 "Estimated Energy" = "估算能量";
 "Estimated Energy Added" = "估算充入能量";
 "Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified." = "除非未来明确接入计量壁挂充电桩数据源，否则将基于存储的车辆遥测数据进行估算。";
@@ -1434,7 +1431,6 @@
 "Gallons US (gal)" = "美制加仑（gal）";
 "Garage" = "车库";
 "General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents." = "仅供参考。保修范围因车辆、市场和启用日期而异；请以车辆文件为准。";
-"Global Charge Timer" = "全局充电定时器";
 "Grand (Wide & Tall)" = "特大（宽且高）";
 "High confidence" = "高置信度";
 "Hisingen is no longer running." = "Hisingen 已停止运行。";
@@ -1498,7 +1494,6 @@
 "No warning" = "无警告";
 "No warning reported" = "未报告警告";
 "No warnings reported" = "未报告警告";
-"None returned" = "无返回结果";
 "Not reported" = "未报告";
 "Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents." = "车辆 API 未提供此项；请输入质保文件中显示的交付/启用日期。";
 "Observed charger power integrated over time and divided by the battery percentage gained across %.0f qualifying session(s) suggests %.1f kWh. A charging-loss allowance based on the reported AC/DC type is applied." = "将观测到的充电功率对时间积分，再除以 %.0f 个符合条件会话中的电量百分比增幅，推算出 %.1f kWh。已根据上报的交流/直流类型计入了充电损耗余量。";
@@ -1517,7 +1512,6 @@
 "Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates." = "来自车辆规格表的 VIN 专属可选数值。它们将在续航和 SoH 计算中替代宽泛的车型家族参考值。";
 "Overhead (Top-Down)" = "俯视（自上而下）";
 "Panel Size" = "面板大小";
-"Parking Climate Timer" = "驻车空调定时器";
 "Past event — no current action required" = "过往事件——目前无需处理";
 "Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "%@ 的峰值功率远低于该地点的通常水平——线缆或充电桩可能正在降额运行。";
 "Performance Software Upgrade" = "性能软件升级";
@@ -1528,7 +1522,6 @@
 "Preconditioning Command Setpoint" = "预热/预冷命令设定值";
 "Price per litre" = "每升价格";
 "Price-optimised" = "电价优化";
-"Privacy settings blocked the request" = "隐私设置阻止了该请求";
 "Projected in +10,000 km" = "预计再行驶 +10,000 公里后";
 "Prune Old Samples" = "清理旧采样";
 "Pruned!" = "已清理！";
@@ -1557,7 +1550,6 @@
 "Reported by the vehicle cloud backend — exact support per VIN." = "由车辆云后端报告——按 VIN 精确判定支持情况。";
 "Reported supported" = "报告为支持";
 "Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in." = "在下次登录时请求受限的锁定、解锁、发动机、定位和位置权限范围。";
-"Request timed out" = "请求超时";
 "Reset" = "重置";
 "Restore software event" = "恢复软件事件";
 "Save charge location \"%@\" at the car's position" = "在车辆当前位置保存充电地点“%@”";
@@ -1606,11 +1598,9 @@
 "Switch to %@" = "切换到 %@";
 "Tailgate Open/Close" = "尾门开/关";
 "Taller panel, more visible history" = "更高的面板，更清晰的历史";
-"Target SOC" = "目标 SOC";
 "Tariff Cost" = "电价费用";
 "Telemetry" = "遥测";
 "Telemetry Entries" = "遥测条目";
-"The backend returned no error records. This is not a full diagnostic scan of the vehicle." = "后端未返回错误记录。这不是对车辆的全面诊断扫描。";
 "The charge target must be between %d%% and 100%% on this vehicle." = "此车辆的充电目标必须在 %d%% 到 100%% 之间。";
 "The charging current must be between %d A and %d A on this vehicle." = "此车辆的充电电流必须在 %d A 到 %d A 之间。";
 "The command failed. Please try again." = "命令失败。请重试。";
@@ -1651,7 +1641,6 @@
 "Tyre pressure" = "胎压";
 "Unknown error" = "未知错误";
 "Unnamed location" = "未命名位置";
-"Unspecified error" = "未指定错误";
 "Unusually Slow Charging" = "异常缓慢的充电";
 "Unusually slow charging" = "异常缓慢的充电";
 "Unverified value from an undocumented backend field." = "来自未公开文档后端字段的未验证值。";
@@ -1668,15 +1657,12 @@
 "Vehicle Activity History" = "车辆活动历史";
 "Vehicle Capabilities" = "车辆功能";
 "Vehicle data is stale" = "车辆数据已过期";
-"Vehicle Errors" = "车辆故障";
-"Vehicle errors" = "车辆故障";
 "Vehicle has no internet connection" = "车辆没有互联网连接";
 "Vehicle is currently in use" = "车辆当前正在使用";
 "Vehicle is in power-saving mode" = "车辆处于省电模式";
 "Vehicle is ready to unlock for %d seconds. Open a door or the trunk to complete unlocking." = "车辆已就绪可在 %d 秒内解锁。请打开车门或后备箱完成解锁。";
 "Vehicle is ready to unlock. Open a door or the trunk to complete unlocking." = "车辆已就绪可解锁。请打开车门或后备箱完成解锁。";
 "Vehicle left open" = "车辆未关严";
-"Vehicle reported an error" = "车辆报告了错误";
 "Vehicle service due soon" = "车辆保养即将到期";
 "Vehicle Snapshots" = "车辆快照";
 "Vehicle software downloading" = "车辆软件下载中";
@@ -1704,7 +1690,6 @@
 "Weekly distance chart" = "每周里程图表";
 "Wide" = "宽";
 "WLTP reference range" = "WLTP 参考续航";
-"Wrong usage mode" = "使用模式错误";
 "Your %@ is parked and unplugged. Connect to a charger to ensure departure range." = "你的 %@ 已停放且未连接充电。请连接充电桩以确保出发续航。";
 "•••••••• (Saved in Keychain)" = "••••••••（保存在钥匙串）";
 "≈ %d days" = "约 %d 天";
@@ -1966,7 +1951,6 @@
 "Show controls for moving between vehicles on the same account" = "Show controls for moving between vehicles on the same account";
 "App Update Checks" = "App Update Checks";
 "Allow checks against Hisingen’s signed stable update feed" = "Allow checks against Hisingen’s signed stable update feed";
-"Vehicle Service Errors" = "Vehicle Service Errors";
 "Fetch charging and climate errors reported by the vehicle service" = "Fetch charging and climate errors reported by the vehicle service";
 "Real-Time Updates" = "Real-Time Updates";
 "Use live server streaming when supported, with polling as fallback" = "Use live server streaming when supported, with polling as fallback";
@@ -2114,7 +2098,6 @@
 "AC (climate) turned on" = "AC (climate) turned on";
 "AC turned on at %.0f °C" = "AC turned on at %.0f °C";
 "AC turned on at %.1f °C" = "AC turned on at %.1f °C";
-"Action %d" = "Action %d";
 "Activity History" = "Activity History";
 "Air Cleaning" = "Air Cleaning";
 "All windows closed" = "All windows closed";
@@ -2129,7 +2112,6 @@
 "Cabin cleaning stopped" = "Cabin cleaning stopped";
 "Calculated SoH" = "Calculated SoH";
 "Car" = "Car";
-"Change the setting" = "Change the setting";
 "Charge Port (reference)" = "Charge Port (reference)";
 "Charge location \"%@\" saved" = "Charge location \"%@\" saved";
 "Charge location renamed to \"%@\"" = "Charge location renamed to \"%@\"";
@@ -2183,7 +2165,6 @@
 "Minimum Charge" = "Minimum Charge";
 "Model" = "Model";
 "N" = "N";
-"No action" = "No action";
 "No current charging estimate is available for this departure." = "No current charging estimate is available for this departure.";
 "No reported openings are open." = "No reported openings are open.";
 "No samples" = "No samples";
@@ -2212,7 +2193,6 @@
 "Release notes" = "Release notes";
 "Remote commands are blocked while privacy mode is enabled in the vehicle." = "Remote commands are blocked while privacy mode is enabled in the vehicle.";
 "Requested Temperature" = "Requested Temperature";
-"Retry the request" = "Retry the request";
 "Reverse light any" = "Reverse light any";
 "Reverse light left" = "Reverse light left";
 "Reverse light right" = "Reverse light right";
@@ -2313,11 +2293,8 @@
 // Control validation and observed outcomes (English fallback).
 "%.0f%%" = "%.0f%%";
 "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out." = "%@ to %@ over %@ with unchanged reported odometer. Estimated parked loss; short trips, auxiliary use and battery recalibration cannot be ruled out.";
-"%@ · %d records" = "%@ · %d records";
 "A reported connection does not guarantee that the vehicle can accept a command immediately." = "A reported connection does not guarantee that the vehicle can accept a command immediately.";
-"Backend Action" = "Backend Action";
 "Backend build-identification code. Often empty or redundant with the version string." = "Backend build-identification code. Often empty or redundant with the version string.";
-"Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan." = "Backend error records from the vehicle's charging and climate services. Not a full diagnostic scan.";
 "Battery is low." = "Battery is low.";
 "Build Code" = "Build Code";
 "Cabin climate has turned off." = "Cabin climate has turned off.";

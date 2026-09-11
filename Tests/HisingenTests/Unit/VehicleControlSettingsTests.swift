@@ -12,16 +12,6 @@ struct VehicleControlSettingsTests {
         #expect(caps.controlSettings?.frontSeatSettings == false)
         #expect(caps.controlSettings?.rearSeatSettings == true)
     }
-    @Test func diagnosticGroupsPreserveDistinctActionsAndDiscardOtherVehicles() {
-        let first = VehicleChronosError(service: .chargeLocation, errorCode: .timeout, actionCode: 1, recordID: "one", vin: "VIN")
-        let second = VehicleChronosError(service: .chargeLocation, errorCode: .timeout, actionCode: 1, recordID: "two", vin: "VIN")
-        let differentAction = VehicleChronosError(service: .chargeLocation, errorCode: .timeout, actionCode: 2, recordID: "three", vin: "VIN")
-        let other = VehicleChronosError(service: .chargeLocation, errorCode: .timeout, actionCode: 1, recordID: "four", vin: "OTHER")
-        let groups = VehicleDiagnosticGroup.grouped([first, first, second, differentAction, other], vin: "VIN")
-        #expect(groups.count == 2)
-        #expect(groups.first { $0.action == 1 }?.records.count == 2)
-        #expect(groups.flatMap(\.records).count == 3)
-    }
     @Test func scheduleValidationRejectsInvalidTimesAndAllowsOvernightWindows() throws {
         let overnight = VehicleSchedule(kind: .globalCharging, startHour: 22, startMinute: 0,
                                          endHour: 6, endMinute: 30, isActive: true)
