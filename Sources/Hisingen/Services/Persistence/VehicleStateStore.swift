@@ -6,6 +6,35 @@ struct StoredCommandReceipt: Codable, Equatable, Sendable {
     var confirmationDeadline: Date?
 }
 
+struct StoredCommandReceipts: Codable, Equatable, Sendable {
+    var records: [StoredCommandReceipt]
+
+    init(records: [StoredCommandReceipt]) {
+        self.records = records
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case records, receipt, confirmationDeadline
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        if let records = try values.decodeIfPresent([StoredCommandReceipt].self, forKey: .records) {
+            self.records = records
+        } else {
+            self.records = [StoredCommandReceipt(
+                receipt: try values.decode(CommandReceipt.self, forKey: .receipt),
+                confirmationDeadline: try values.decodeIfPresent(Date.self, forKey: .confirmationDeadline)
+            )]
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(records, forKey: .records)
+    }
+}
+
 /// Main-actor isolated because it holds no lock of its own: every mutation is a
 /// read-modify-write over a `UserDefaults`-backed dictionary, which two concurrent callers
 /// would interleave and lose writes from. Both real callers (`RefreshCoordinator`, `Notifier`)
@@ -95,24 +124,36 @@ final class VehicleStateStore {
         store(values, key: baselinesKey)
     }
 
-    func commandReceipt(for vin: String) -> StoredCommandReceipt? {
-        load([String: StoredCommandReceipt].self, key: commandReceiptsKey)?[vin]
+    func commandReceipts(for vin: String) -> [StoredCommandReceipt] {
+        load([String: StoredCommandReceipts].self, key: commandReceiptsKey)?[vin]?.records ?? []
     }
 
-    func saveCommandReceipt(_ record: StoredCommandReceipt, for vin: String) {
-        var values = load([String: StoredCommandReceipt].self, key: commandReceiptsKey) ?? [:]
-        values[vin] = record
+    func commandReceipt(for vin: String) -> StoredCommandReceipt? {
+        commandReceipts(for: vin).last
+    }
+
+    func saveCommandReceipts(_ records: [StoredCommandReceipt], for vin: String) {
+        var values = load([String: StoredCommandReceipts].self, key: commandReceiptsKey) ?? [:]
+        values[vin] = StoredCommandReceipts(records: records)
         store(values, key: commandReceiptsKey)
     }
 
-    func clearCommandReceipt(for vin: String? = nil) {
+    func saveCommandReceipt(_ record: StoredCommandReceipt, for vin: String) {
+        saveCommandReceipts([record], for: vin)
+    }
+
+    func clearCommandReceipts(for vin: String? = nil) {
         guard let vin else {
             defaults.removeObject(forKey: commandReceiptsKey)
             return
         }
-        var values = load([String: StoredCommandReceipt].self, key: commandReceiptsKey) ?? [:]
+        var values = load([String: StoredCommandReceipts].self, key: commandReceiptsKey) ?? [:]
         values.removeValue(forKey: vin)
         store(values, key: commandReceiptsKey)
+    }
+
+    func clearCommandReceipt(for vin: String? = nil) {
+        clearCommandReceipts(for: vin)
     }
 
     /// Forgets a vehicle's cached snapshot and charging baseline. Durable SQLite history
@@ -135,11 +176,11 @@ final class VehicleStateStore {
             baselines.removeValue(forKey: vin)
             store(snapshots, key: snapshotsKey)
             store(baselines, key: baselinesKey)
-            clearCommandReceipt(for: vin)
+            clearCommandReceipts(for: vin)
         } else {
             defaults.removeObject(forKey: snapshotsKey)
             defaults.removeObject(forKey: baselinesKey)
-            clearCommandReceipt()
+            clearCommandReceipts()
         }
     }
 

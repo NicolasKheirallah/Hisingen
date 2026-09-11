@@ -374,7 +374,7 @@ final class CommandCoordinator {
         }
         current.freshness.fetchedAt = optimisticAt
         current.commandState.optimisticLockUntil = optimisticAt.addingTimeInterval(90)
-        current.commandState.receipt = nil
+        current.commandState.receipts = []
         return current
     }
 }

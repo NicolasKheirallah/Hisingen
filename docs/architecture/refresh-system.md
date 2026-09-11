@@ -141,7 +141,7 @@ Unsupported-method, permission-denied, and incompatible-schema failures open a 6
 circuit. Generic transient failures open a circuit after `maximumFailuresBeforeCircuit`
 (6) consecutive failures. While a circuit is open, fallback polling covers the vehicle.
 
-**Command confirmation.** `RefreshCoordinator` exclusively owns the command receipt after
+**Command confirmation.** `RefreshCoordinator` exclusively owns command receipts after
 `CommandCoordinator` atomically hands it the optimistic display state. Charging override uses
 the battery stream; lock, window, and tailgate commands use the exterior stream. Charge target,
 current limit, and air-cleaning commands use targeted polling because the available streams do
@@ -156,20 +156,23 @@ still rejecting older matching state. The command coordinator and refresh coordi
 injectable time sources, so issue times, optimistic-state expiry, confirmation deadlines,
 suspension accounting, and freshness checks can be verified without relying on wall-clock timing.
 
-The five-minute `commandConfirmationWindow` is a safety cap, not the normal close condition. A
-watchdog moves the receipt to `timedOut` even when the stream is quiet, then the normal charging
-gate and polling cadence resume. Confirmed and timed-out receipts remain visible across later
-refreshes until dismissed, replaced, or cleared with the vehicle/session. Dismissal hides the
-receipt without stopping an active background confirmation. If confirmation ends while the
+The five-minute `commandConfirmationWindow` is an independent safety cap for each receipt, not
+the normal close condition. One watchdog targets the earliest deadline and moves every due
+receipt to `timedOut` even when the stream is quiet. Targeted polling requests the union of the
+features needed by all awaiting receipts. One transport serves the newest stream-compatible
+receipt and switches purpose when that receipt finishes; polling continues to cover the others.
+All awaiting receipts plus up to five recent terminal receipts remain visible across later
+refreshes until individually dismissed or cleared with the vehicle/session. Dismissal hides one
+receipt without stopping its active background confirmation. If confirmation ends while the
 vehicle still qualifies for the same charging stream, the transport remains open and simply
 returns to its normal purpose.
 
-**Relaunch.** Command receipts are stored per VIN outside `VehicleState`, so cached telemetry
+**Relaunch.** Command receipts are stored as a per-VIN collection outside `VehicleState`, so cached telemetry
 remains provider-only. Relaunch never resends a command. A receipt that was still awaiting
 confirmation resumes targeted reads and any applicable stream only until its original deadline.
 If that deadline passed while Hisingen was not running, the restored receipt is marked timed out.
-Confirmed and timed-out receipts are restored as-is. Dismissing a receipt removes its stored
-record, and switching vehicles, changing credentials, or signing out clears the affected record.
+Confirmed and timed-out receipts are restored as-is. Dismissing a receipt removes only its stored
+record, and switching vehicles, changing credentials, or signing out clears the affected collection.
 
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator

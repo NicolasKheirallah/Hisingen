@@ -337,6 +337,126 @@ struct RefreshCoordinatorStreamTests {
     }
 
     @Test
+    func multipleCommandReceiptsPersistAndDismissIndependently() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults,
+            commandInitialPollDelay: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        let first = CommandReceipt(
+            commandIdentifier: RemoteCommand.honkHorn.identifier,
+            issuedAt: Date(),
+            command: .honkHorn
+        )
+        let second = CommandReceipt(
+            commandIdentifier: RemoteCommand.flashLights.identifier,
+            issuedAt: Date().addingTimeInterval(0.01),
+            command: .flashLights
+        )
+        coordinator.beginCommandConfirmation(first)
+        coordinator.beginCommandConfirmation(second)
+
+        #expect(events.states.last?.commandState.receipts == [first, second])
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        #expect(store.commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt) == [first, second])
+
+        coordinator.dismissCommandReceipt(id: first.id)
+
+        #expect(events.states.last?.commandState.receipts == [second])
+        #expect(store.commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt) == [second])
+        #expect(events.snapshots.last?.commandReceiptVisible == true)
+        coordinator.stop()
+    }
+
+    @Test
+    func overlappingConfirmationsPollCombinedTelemetryWithoutReplacingEither() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let provider = StreamingMockProvider(script: [], recorder: StreamRecorder())
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: provider,
+            defaults: defaults,
+            commandInitialPollDelay: 0.05,
+            commandPollInterval: 0.1
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        let charging = CommandReceipt(
+            commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
+            issuedAt: Date(),
+            command: .setChargeTarget(80)
+        )
+        let cleaning = CommandReceipt(
+            commandIdentifier: RemoteCommand.startPreCleaning.identifier,
+            issuedAt: Date().addingTimeInterval(0.01),
+            command: .startPreCleaning
+        )
+        coordinator.beginCommandConfirmation(charging)
+        coordinator.beginCommandConfirmation(cleaning)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 2 })
+        let selections = await provider.fetchSelections
+        #expect(selections.contains { $0.enabled == [.remoteCharging, .remotePreCleaning] })
+        let receipts = try #require(events.states.last?.commandState.receipts)
+        #expect(receipts.first(where: { $0.id == charging.id })?.status == .awaiting)
+        #expect(receipts.first(where: { $0.id == cleaning.id })?.status == .awaiting)
+        coordinator.stop()
+    }
+
+    @Test
+    func matchingTelemetryConfirmsOneReceiptWithoutEndingAnother() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let provider = StreamingMockProvider(
+            script: [.exteriorLocked],
+            recorder: StreamRecorder()
+        )
+        await provider.setCharging(false)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        let horn = CommandReceipt(
+            commandIdentifier: RemoteCommand.honkHorn.identifier,
+            issuedAt: Date(),
+            command: .honkHorn
+        )
+        let lock = CommandReceipt(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: Date().addingTimeInterval(0.01),
+            command: .lock
+        )
+        coordinator.beginCommandConfirmation(horn)
+        coordinator.beginCommandConfirmation(lock)
+        _ = try #require(await waitUntil(events) { diagnostics in
+            diagnostics.commandConfirmationIdentifier == horn.commandIdentifier
+                && diagnostics.awaitingCommandReceiptCount == 1
+                && events.states.contains { state in
+                    state.commandState.receipts.first(where: { $0.id == lock.id })?
+                        .status.isConfirmed == true
+                }
+        })
+
+        let receipts = try #require(events.states.last?.commandState.receipts)
+        #expect(receipts.first(where: { $0.id == lock.id })?.status.isConfirmed == true)
+        #expect(receipts.first(where: { $0.id == horn.id })?.status == .awaiting)
+        coordinator.stop()
+    }
+
+    @Test
     func disconnectedConfirmationStreamUsesFastFallbackPollAndReconnects() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -787,6 +907,46 @@ struct RefreshCoordinatorStreamTests {
         #expect(await secondProvider.fetchCount >= 1)
         #expect(await secondProvider.remoteCommandCount == 0)
         second.stop()
+    }
+
+    @Test
+    func relaunchRestoresMultipleReceiptLifecycles() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let issuedAt = Date()
+        let confirmed = CommandReceipt(
+            commandIdentifier: RemoteCommand.setChargeTarget(80).identifier,
+            issuedAt: issuedAt.addingTimeInterval(-30),
+            command: .setChargeTarget(80),
+            status: .confirmed(at: issuedAt.addingTimeInterval(-20))
+        )
+        let awaiting = CommandReceipt(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: issuedAt,
+            command: .lock
+        )
+        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        store.saveCommandReceipts([
+            StoredCommandReceipt(receipt: confirmed, confirmationDeadline: nil),
+            StoredCommandReceipt(
+                receipt: awaiting,
+                confirmationDeadline: issuedAt.addingTimeInterval(60)
+            )
+        ], for: StreamingMockProvider.vinA)
+
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        #expect(events.states.last?.commandState.receipts == [confirmed, awaiting])
+        #expect(events.snapshots.last?.commandReceiptCount == 2)
+        #expect(events.snapshots.last?.awaitingCommandReceiptCount == 1)
+        coordinator.stop()
     }
 
     @Test

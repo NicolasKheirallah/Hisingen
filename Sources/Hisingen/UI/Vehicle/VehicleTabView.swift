@@ -6,7 +6,7 @@ struct VehicleTabView: View {
     let cars: [CarSummary]
     let activeVin: String?
     let onSelectCar: (String) -> Void
-    let onDismissCommandReceipt: (Date) -> Void
+    let onDismissCommandReceipt: (UUID) -> Void
     let error: String?
     let database: VehicleDatabase
     let reverseGeocoder: ReverseGeocoder
@@ -64,8 +64,8 @@ struct VehicleTabView: View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             multiCarChips
             heroCard
-            if state.commandState.receipt != nil {
-                commandReceiptChip.transition(cardTransition)
+            ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
+                commandReceiptChip(receipt).transition(cardTransition)
             }
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
@@ -129,25 +129,23 @@ struct VehicleTabView: View {
         }
     }
 
-    private var commandReceiptChip: some View {
-        let appearance = commandConfirmationAppearance
+    private func commandReceiptChip(_ receipt: CommandReceipt) -> some View {
+        let appearance = commandConfirmationAppearance(for: receipt)
         return HStack(alignment: .top, spacing: 8) {
             Image(systemName: appearance.symbol)
                 .foregroundStyle(appearance.color)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(commandConfirmationLabel)
+                Text(commandConfirmationLabel(for: receipt))
                     .font(.system(size: 11, weight: .semibold))
-                Text(state.commandState.receipt?.command?.title ?? L10n.text("Values below may update once the car reports in."))
+                Text(receipt.command?.title ?? L10n.text("Values below may update once the car reports in."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             Spacer()
             Button {
-                if let issuedAt = state.commandState.receipt?.issuedAt {
-                    onDismissCommandReceipt(issuedAt)
-                }
+                onDismissCommandReceipt(receipt.id)
             } label: {
                 Image(systemName: "xmark")
             }
@@ -162,19 +160,19 @@ struct VehicleTabView: View {
         )
     }
 
-    private var commandConfirmationAppearance: (symbol: String, color: Color) {
-        switch state.commandState.receipt?.status {
+    private func commandConfirmationAppearance(for receipt: CommandReceipt) -> (symbol: String, color: Color) {
+        switch receipt.status {
         case .confirmed: return ("checkmark.circle.fill", HisingenTheme.semanticGood)
         case .timedOut: return ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning)
-        case .awaiting, nil: return ("clock.arrow.circlepath", HisingenTheme.accent)
+        case .awaiting: return ("clock.arrow.circlepath", HisingenTheme.accent)
         }
     }
 
-    private var commandConfirmationLabel: String {
-        switch state.commandState.receipt?.status {
+    private func commandConfirmationLabel(for receipt: CommandReceipt) -> String {
+        switch receipt.status {
         case .confirmed: return L10n.text("Matching vehicle reading observed")
         case .timedOut: return L10n.text("Command outcome not confirmed")
-        case .awaiting, nil: return L10n.text("Command sent — waiting for the vehicle")
+        case .awaiting: return L10n.text("Command sent — waiting for the vehicle")
         }
     }
 

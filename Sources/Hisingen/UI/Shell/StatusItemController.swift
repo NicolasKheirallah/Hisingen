@@ -66,7 +66,7 @@ final class StatusItemController: NSObject {
     var onCheckForUpdates: () -> Void = {}
     var onOpenUpdate: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
-    var onDismissCommandReceipt: (Date) -> Void = { _ in }
+    var onDismissCommandReceipt: (UUID) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in

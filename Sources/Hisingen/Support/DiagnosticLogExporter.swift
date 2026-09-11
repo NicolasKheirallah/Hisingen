@@ -298,6 +298,8 @@ enum DiagnosticLogExporter {
                 "features": snapshot.commandConfirmationFeatures.map(\.rawValue),
                 "suspended": snapshot.commandConfirmationSuspended,
                 "receiptVisible": snapshot.commandReceiptVisible,
+                "receiptCount": snapshot.commandReceiptCount,
+                "awaitingReceiptCount": snapshot.awaitingCommandReceiptCount,
             ] as [String: Any]
         }
         return section

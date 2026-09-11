@@ -80,6 +80,12 @@ struct VehicleActivityTests {
         #expect(current.isAwaitingVehicleConfirmation)
         current.commandState.receipt?.status = .timedOut(at: Date())
         #expect(!current.isAwaitingVehicleConfirmation)
+
+        current.commandState.receipts = [
+            current.commandState.receipt!,
+            CommandReceipt(commandIdentifier: "unlock", issuedAt: Date())
+        ]
+        #expect(current.isAwaitingVehicleConfirmation)
     }
 
     @Test func commandConfirmationRequiresMatchingNewVehicleReading() {

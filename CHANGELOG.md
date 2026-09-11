@@ -53,6 +53,8 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Command confirmation now tolerates up to two seconds of provider timestamp skew while still
   rejecting older telemetry. Dispatch and refresh lifecycle timestamps use injectable time
   sources for deterministic deadline, freshness, and optimistic-state behavior.
+- Multiple accepted commands now retain independent receipts, confirmation deadlines, dismissal,
+  and relaunch state instead of each new command replacing the previous result.
 
 ## [1.3.4] - 2026-09-09
 

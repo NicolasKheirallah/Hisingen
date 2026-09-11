@@ -116,8 +116,8 @@ final class VehicleSessionController {
     ) {
         refreshCoordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
-    func dismissCommandReceipt(issuedAt: Date) {
-        refreshCoordinator.dismissCommandReceipt(issuedAt: issuedAt)
+    func dismissCommandReceipt(id: UUID) {
+        refreshCoordinator.dismissCommandReceipt(id: id)
     }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }

@@ -61,9 +61,10 @@ Remote command dispatch is compiled into every build for both brands ([ADR-0009]
 ### Remote command optimistic updates
 
 `CommandCoordinator` derives a display-only optimistic snapshot after the provider accepts,
-delivers, or completes a command. It hands that snapshot and its command receipt to
-`RefreshCoordinator` in one call. The refresh coordinator is the only owner of the receipt's
-`awaiting`, `confirmed`, and `timedOut` lifecycle. Fresh matching telemetry replaces assumptions;
+delivers, or completes a command. It hands that snapshot and a new command receipt to
+`RefreshCoordinator` in one call. The refresh coordinator is the only owner of every receipt's
+`awaiting`, `confirmed`, and `timedOut` lifecycle. Receipts have stable IDs, independent
+deadlines, and individual dismissal. Fresh matching telemetry replaces assumptions;
 the provider acknowledgement alone is never presented as telemetry confirmation. Optimistic
 values are never written to the snapshot store.
 

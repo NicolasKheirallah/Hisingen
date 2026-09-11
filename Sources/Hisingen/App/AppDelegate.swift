@@ -59,8 +59,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
              preferences: preferences, fleetStore: fleetStore
         )
         statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
-        statusController.onDismissCommandReceipt = { [weak self] issuedAt in
-            self?.vehicleSession.dismissCommandReceipt(issuedAt: issuedAt)
+        statusController.onDismissCommandReceipt = { [weak self] id in
+            self?.vehicleSession.dismissCommandReceipt(id: id)
         }
         statusController.onOpenUpdate = { [weak self] in self?.updateController.checkNow() }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }

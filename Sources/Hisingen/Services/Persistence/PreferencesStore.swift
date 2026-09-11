@@ -142,7 +142,7 @@ final class PreferencesStore {
 
         removeEntry(VehicleState.self, key: "cached_vehicle_snapshots_v1")
         if includeCommandReceipts {
-            removeEntry(StoredCommandReceipt.self, key: "command_receipts_v1")
+            removeEntry(StoredCommandReceipts.self, key: "command_receipts_v1")
         }
         if includeBaselines {
             removeEntry(ChargingBaseline.self, key: "charging_baselines_v1")

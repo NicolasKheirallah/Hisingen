@@ -74,6 +74,54 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
+    func legacySingleReceiptStorageMigratesToACollection() throws {
+        struct LegacyReceipt: Codable {
+            var receipt: CommandReceipt
+            var confirmationDeadline: Date?
+        }
+
+        let vin = "LEGACY_RECEIPT_TEST"
+        let defaults = try makeDefaults()
+        let deadline = Date(timeIntervalSince1970: 1_750_000_100)
+        let receipt = CommandReceipt(
+            commandIdentifier: "lock",
+            issuedAt: deadline.addingTimeInterval(-60)
+        )
+        defaults.set(
+            try JSONEncoder().encode([
+                vin: LegacyReceipt(receipt: receipt, confirmationDeadline: deadline)
+            ]),
+            forKey: "command_receipts_v1"
+        )
+        let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
+
+        #expect(stateStore.commandReceipts(for: vin) == [
+            StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline)
+        ])
+    }
+
+    @Test
+    func clearingOneVehicleKeepsOtherReceiptCollections() throws {
+        let defaults = try makeDefaults()
+        let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let first = StoredCommandReceipt(
+            receipt: CommandReceipt(commandIdentifier: "lock", issuedAt: Date()),
+            confirmationDeadline: nil
+        )
+        let second = StoredCommandReceipt(
+            receipt: CommandReceipt(commandIdentifier: "climate", issuedAt: Date()),
+            confirmationDeadline: nil
+        )
+        stateStore.saveCommandReceipts([first], for: "VIN_A")
+        stateStore.saveCommandReceipts([second], for: "VIN_B")
+
+        stateStore.clearCommandReceipts(for: "VIN_A")
+
+        #expect(stateStore.commandReceipts(for: "VIN_A").isEmpty)
+        #expect(stateStore.commandReceipts(for: "VIN_B") == [second])
+    }
+
+    @Test
     func schemaMigrationPreservesExistingRows() throws {
         // A pre-`user_version` install: `charging_sessions` exists but lacks every column
         // the v2 migration adds, and it already holds a row.

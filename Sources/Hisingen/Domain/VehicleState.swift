@@ -226,7 +226,9 @@ enum CommandConfirmationStatus: Codable, Equatable, Sendable {
 struct CommandReceipt: Codable, Equatable, Sendable {
     static let maximumConfirmationDuration: TimeInterval = 5 * 60
     static let confirmationTimestampTolerance: TimeInterval = 2
+    static let maximumRetainedTerminalCount = 5
 
+    var id: UUID
     /// Matches `RemoteCommand.identifier` and the command-audit trail.
     var commandIdentifier: String
     var issuedAt: Date
@@ -234,11 +236,13 @@ struct CommandReceipt: Codable, Equatable, Sendable {
     var status: CommandConfirmationStatus = .awaiting
 
     init(
+        id: UUID = UUID(),
         commandIdentifier: String,
         issuedAt: Date,
         command: RemoteCommand? = nil,
         status: CommandConfirmationStatus = .awaiting
     ) {
+        self.id = id
         self.commandIdentifier = commandIdentifier
         self.issuedAt = issuedAt
         self.command = command
@@ -246,11 +250,12 @@ struct CommandReceipt: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case commandIdentifier, issuedAt, command, status, confirmedAt
+        case id, commandIdentifier, issuedAt, command, status, confirmedAt
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         commandIdentifier = try values.decode(String.self, forKey: .commandIdentifier)
         issuedAt = try values.decode(Date.self, forKey: .issuedAt)
         command = try values.decodeIfPresent(RemoteCommand.self, forKey: .command)
@@ -265,6 +270,7 @@ struct CommandReceipt: Codable, Equatable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
         try values.encode(commandIdentifier, forKey: .commandIdentifier)
         try values.encode(issuedAt, forKey: .issuedAt)
         try values.encodeIfPresent(command, forKey: .command)
@@ -452,28 +458,52 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
 
 struct CommandPresentationState: Codable, Equatable, Sendable {
     var optimisticLockUntil: Date?
-    var receipt: CommandReceipt?
+    var receipts: [CommandReceipt]
 
-    init(optimisticLockUntil: Date? = nil, receipt: CommandReceipt? = nil) {
+    /// Compatibility view for call sites that only need the newest status.
+    var receipt: CommandReceipt? {
+        get { receipts.last }
+        set {
+            if let newValue {
+                receipts = [newValue]
+            } else {
+                receipts = []
+            }
+        }
+    }
+
+    init(
+        optimisticLockUntil: Date? = nil,
+        receipts: [CommandReceipt] = [],
+        receipt: CommandReceipt? = nil
+    ) {
         self.optimisticLockUntil = optimisticLockUntil
-        self.receipt = receipt
+        self.receipts = receipts.isEmpty ? receipt.map { [$0] } ?? [] : receipts
     }
 
     private enum CodingKeys: String, CodingKey {
-        case optimisticLockUntil, receipt, pending
+        case optimisticLockUntil, receipts, receipt, pending
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         optimisticLockUntil = try values.decodeIfPresent(Date.self, forKey: .optimisticLockUntil)
-        receipt = try values.decodeIfPresent(CommandReceipt.self, forKey: .receipt)
-            ?? values.decodeIfPresent(CommandReceipt.self, forKey: .pending)
+        if let decoded = try values.decodeIfPresent([CommandReceipt].self, forKey: .receipts) {
+            receipts = decoded
+        } else if let legacy = try values.decodeIfPresent(CommandReceipt.self, forKey: .receipt)
+            ?? values.decodeIfPresent(CommandReceipt.self, forKey: .pending) {
+            receipts = [legacy]
+        } else {
+            receipts = []
+        }
     }
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encodeIfPresent(optimisticLockUntil, forKey: .optimisticLockUntil)
-        try values.encodeIfPresent(receipt, forKey: .receipt)
+        if !receipts.isEmpty {
+            try values.encode(receipts, forKey: .receipts)
+        }
     }
 }
 
@@ -582,10 +612,8 @@ struct VehicleState: Codable, Equatable, Sendable {
     private var retainedDataAt: Date? { get { freshness.retainedDataAt } set { freshness.retainedDataAt = newValue } }
 
     private var optimisticCommandLockUntil: Date? { get { commandState.optimisticLockUntil } set { commandState.optimisticLockUntil = newValue } }
-    private var commandReceipt: CommandReceipt? { get { commandState.receipt } set { commandState.receipt = newValue } }
-
     var isAwaitingVehicleConfirmation: Bool {
-        commandReceipt?.status.isAwaiting == true
+        commandState.receipts.contains { $0.status.isAwaiting }
     }
 
     // Private forwarding keeps derived behavior compact without exposing a flat API.

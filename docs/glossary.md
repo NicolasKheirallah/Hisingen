@@ -28,8 +28,8 @@ catalog, never in an entry point — see
 
 **Command receipt** — the display-only record of an accepted Remote Command in any lifecycle
 state: awaiting confirmation, confirmed, or timed out. `RefreshCoordinator` owns confirmation,
-suspension, timeout, and dismissal. A separate per-vehicle receipt record survives relaunch;
-provider telemetry and persisted vehicle snapshots never own the receipt.
+suspension, timeout, and individual dismissal. A bounded per-vehicle receipt collection survives
+relaunch; provider telemetry and persisted vehicle snapshots never own the receipts.
 
 **Gatekeeper** — macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates

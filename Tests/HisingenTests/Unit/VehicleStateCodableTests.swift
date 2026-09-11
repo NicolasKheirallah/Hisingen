@@ -152,11 +152,21 @@ struct VehicleStateCodableTests {
     @Test("Command receipt survives Codable round-trip but is absent when unset")
     func commandReceiptCodableRoundTrip() throws {
         var state = fullyPopulated()
-        state.commandState.receipt = CommandReceipt(
-            commandIdentifier: "lock", issuedAt: Date(timeIntervalSince1970: 1_750_000_100))
+        state.commandState.receipts = [
+            CommandReceipt(
+                commandIdentifier: "lock",
+                issuedAt: Date(timeIntervalSince1970: 1_750_000_100),
+                status: .confirmed(at: Date(timeIntervalSince1970: 1_750_000_110))
+            ),
+            CommandReceipt(
+                commandIdentifier: "start-climate",
+                issuedAt: Date(timeIntervalSince1970: 1_750_000_120)
+            )
+        ]
         let decoded = try JSONDecoder().decode(
             VehicleState.self, from: JSONEncoder().encode(state))
-        #expect(decoded.commandState.receipt == state.commandState.receipt)
+        #expect(decoded.commandState.receipts == state.commandState.receipts)
+        #expect(decoded.commandState.receipt == state.commandState.receipts.last)
 
         let bare = try JSONDecoder().decode(
             VehicleState.self, from: JSONEncoder().encode(fullyPopulated()))
@@ -178,7 +188,8 @@ struct VehicleStateCodableTests {
         let migrated = try #require(JSONSerialization.jsonObject(
             with: JSONEncoder().encode(decoded)
         ) as? [String: Any])
-        #expect(migrated["receipt"] != nil)
+        #expect(migrated["receipts"] != nil)
+        #expect(migrated["receipt"] == nil)
         #expect(migrated["pending"] == nil)
     }
 
