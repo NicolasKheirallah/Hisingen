@@ -278,7 +278,9 @@ final class VehicleHistoryLedger: Sendable {
     func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
         let query = """
         SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
-        FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC LIMIT ?;
+        FROM battery_health_history
+        WHERE vin = ? AND measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')
+        ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? sql.query(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
@@ -515,8 +517,8 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportBatteryHealthCSV(for vin: String? = nil) -> String {
         let query = vin != nil
-            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE vin = ? AND measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
-            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
+            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE vin = ? AND measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
+            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
 
         let records = (try? sql.query(sql: query) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }

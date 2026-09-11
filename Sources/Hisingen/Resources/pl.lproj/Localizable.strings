@@ -1273,7 +1273,6 @@
 "Add Fuel" = "Dodaj paliwo";
 "Added" = "Dodano";
 "Address" = "Adres";
-"age and mileage prior" = "szacunek bazowy z wieku i przebiegu";
 "Air Quality" = "Jakość powietrza";
 "Air quality index history chart" = "Wykres historii indeksu jakości powietrza";
 "Air quality index trend chart" = "Wykres trendu indeksu jakości powietrza";
@@ -1318,14 +1317,11 @@
 "Calculated" = "Obliczone";
 "Calculated Degradation" = "Obliczona degradacja";
 "Calculated estimate" = "Szacunek obliczony";
-"Calculated estimate using Hisingen's current multi-signal method; not a BMS measurement." = "Szacunek obliczony bieżącą metodą wielosygnałową Hisingen; nie jest to pomiar BMS.";
-"Calculated estimate — not a battery-management-system measurement. Hisingen combines %@ and weights each signal by its reliability. Driving style, weather, charging losses, tyre pressure, vehicle variant and incomplete history can materially affect the result." = "Szacunek obliczony — nie jest to pomiar systemu zarządzania baterią. Hisingen łączy %@ i ważi każdy sygnał według jego niezawodności. Styl jazdy, pogoda, straty ładowania, ciśnienie w oponach, wariant pojazdu i niekompletna historia mogą istotnie wpłynąć na wynik.";
 "Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity." = "Obliczone na podstawie wyświetlanego szacunku SoH i skonfigurowanej pojemności referencyjnej. Nie jest to zmierzona pojemność BMS.";
 "Calculated from the vehicle-reported range and battery percentage against a static model-family WLTP benchmark. It is not battery health and does not directly measure speed, weather or climate use." = "Obliczone na podstawie zgłoszonego przez pojazd zasięgu i procentu naładowania baterii względem statycznego benchmarku WLTP rodziny modeli. Nie jest to kondycja baterii i nie mierzy bezpośrednio prędkości, pogody ani użycia klimatyzacji.";
 "Calculated from the vehicle-reported range and battery percentage against the VIN-specific WLTP reference entered in Settings. It is not battery health and does not directly measure speed, weather or climate use." = "Obliczone na podstawie zgłoszonego przez pojazd zasięgu i procentu naładowania baterii względem referencyjnej wartości WLTP dla konkretnego VIN wprowadzonej w Ustawieniach. Nie jest to kondycja baterii i nie mierzy bezpośrednio prędkości, pogody ani użycia klimatyzacji.";
 "Calculated SoH Milestones" = "Obliczone kamienie milowe SoH";
 "Calculated State of Health (SoH)" = "Obliczony stan zdrowia (SoH)";
-"Calculation Signals" = "Sygnały obliczeniowe";
 "Cancel Edit" = "Anuluj edycję";
 "Capability assessment for %@ (%@)" = "Ocena funkcji dla %@ (%@)";
 "Car display" = "Wyświetlanie samochodu";
@@ -1333,7 +1329,6 @@
 "Charge level" = "Poziom naładowania";
 "Charge Location" = "Miejsce ładowania";
 "Charge Sessions" = "Sesje ładowania";
-"charge-power integration" = "integracja mocy ładowania";
 "charging" = "ładowanie";
 "Charging curve charge-level chart" = "Wykres poziomu naładowania krzywej ładowania";
 "Charging curve power chart" = "Wykres mocy krzywej ładowania";
@@ -1461,7 +1456,6 @@
 "Locks the vehicle with reduced alarm guard sensitivity, when supported." = "Blokuje pojazd z ograniczoną czułością czuwania alarmowego, jeśli jest obsługiwane.";
 "Log a fill-up so fuel spend is included in cost estimates" = "Zapisz tankowanie, aby wydatki na paliwo były ujęte w szacunkach kosztów";
 "Log Fuel Fill-Up" = "Zapisz tankowanie paliwa";
-"long-term consumption" = "zużycie długoterminowe";
 "Long-term vehicle-reported consumption is compared with the model reference. This is a weak signal because speed, climate and terrain dominate consumption." = "Długoterminowe zużycie zgłaszane przez pojazd jest porównywane z wartością referencyjną modelu. To słaby sygnał, ponieważ prędkość, klimatyzacja i teren dominują w zużyciu.";
 "Longest Trip" = "Najdłuższa trasa";
 "Longest Trip Avg Speed" = "Średnia prędkość najdłuższej trasy";
@@ -1530,7 +1524,6 @@
 "Purifier Effect" = "Skuteczność oczyszczacza";
 "Purifier error" = "Błąd oczyszczacza";
 "Purifier Status" = "Status oczyszczacza";
-"range versus model reference" = "zasięg względem wartości referencyjnej modelu";
 "Real-time updates" = "Aktualizacje w czasie rzeczywistym";
 "Recent remote commands" = "Ostatnie polecenia zdalne";
 "Recent Wake Reasons" = "Ostatnie przyczyny wybudzenia";
@@ -1619,7 +1612,6 @@
 "The vehicle reported an error processing this command." = "Pojazd zgłosił błąd podczas przetwarzania tego polecenia.";
 "The vehicle service reported an unknown error." = "Usługa pojazdu zgłosiła nieznany błąd.";
 "This event is hidden from Needs Attention on this Mac." = "To zdarzenie jest ukryte na liście elementów wymagających uwagi na tym Macu.";
-"This is a calculated trend from observed telemetry, not a battery-management-system measurement. Rows are only recorded when the estimate moves meaningfully." = "To trend obliczony na podstawie obserwowanej telemetrii, a nie pomiar systemu zarządzania baterią. Wiersze są zapisywane tylko wtedy, gdy szacunek zmienia się istotnie.";
 "This Month vs Last" = "Ten miesiąc vs poprzedni";
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Ta aktualizacja została ogłoszona, ale nie została jeszcze autoryzowana do pobrania. Pojazd pobiera ją samodzielnie, gdy backend ją autoryzuje, a warunki pozwalają; instalację można rozpocząć dopiero potem.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Ten pojazd nie obsługuje zgody na pobieranie z chmury — aktualizacja może zostać pobrana tylko wtedy, gdy samochód samodzielnie zamelduje się w backendzie. Wizyta serwisowa Polestar może ją wgrać bezpośrednio.";
@@ -2365,3 +2357,16 @@
 "Every 6 Hours" = "Every 6 Hours";
 "Weekly" = "Weekly";
 "Monthly" = "Monthly";
+"Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement." = "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement.";
+"Saved at 100% charge" = "Saved at 100% charge";
+"Updated at 100% charge" = "Updated at 100% charge";
+"Range at 100% charge" = "Range at 100% charge";
+"WLTP range used" = "WLTP range used";
+"Last 100% calculation" = "Last 100% calculation";
+"Saved full-charge range estimate. It updates only after another 100% reading." = "Saved full-charge range estimate. It updates only after another 100% reading.";
+"Previous calculation retained for trend continuity; it is not used as the current SoH." = "Previous calculation retained for trend continuity; it is not used as the current SoH.";
+"Full-charge range estimate" = "Full-charge range estimate";
+"Previous estimate" = "Previous estimate";
+"New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity." = "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity.";
+"Waiting for 100% charge" = "Waiting for 100% charge";
+"Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading." = "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading.";

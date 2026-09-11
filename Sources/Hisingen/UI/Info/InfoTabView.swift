@@ -160,7 +160,7 @@ struct InfoTabView: View {
             add(.trip, tripComputerCard)
         }
         add(.powertrain, powertrainSpecsCard)
-        if batteryHealthEstimate != nil {
+        if state.powertrain.hasElectricRange {
             add(.batteryHealth, batteryHealthCard)
         }
         if !batteryDiagnosticsRows.isEmpty {
@@ -345,13 +345,19 @@ struct InfoTabView: View {
     }
 
     var batteryHealthEstimate: BatteryHealthEstimate? {
-        let previous = asyncData.batteryHealthHistory.first
-            .map { BatteryHealthPriorEstimate(stateOfHealthPercent: $0.stateOfHealthPct, timestamp: $0.timestamp) }
-        return BatteryHealthEstimator.estimate(
+        if let current = BatteryHealthEstimator.estimate(
             state: state,
-            chargingSessions: asyncData.chargingSessions,
-            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin),
-            previous: previous
+            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)
+        ) { return current }
+        guard let saved = asyncData.batteryHealthHistory.first(where: {
+            $0.measurementSource == BatteryHealthRecord.fullChargeRangeSource
+        }) else { return nil }
+        return BatteryHealthEstimator.remembered(
+            stateOfHealthPercent: saved.stateOfHealthPct,
+            degradationPercent: saved.degradationPct,
+            estimatedUsableCapacityKwh: saved.effectiveUsableKwh,
+            recordedAt: saved.timestamp,
+            fallbackReferenceCapacityKwh: state.configuredUsableBatteryCapacityKwh
         )
     }
 
@@ -438,7 +444,9 @@ struct InfoTabView: View {
 
         if let estimate = batteryHealthEstimate {
             lines.append("")
-            row(L10n.text("Calculated SoH"), String(format: "%.1f%% (%@)", estimate.stateOfHealthPercent, estimate.confidence.displayName))
+            row(L10n.text("Calculated SoH"), String(format: "%.1f%%", estimate.stateOfHealthPercent))
+            row(L10n.text("Calculation Method"), L10n.text("Full-charge range estimate"))
+            row(L10n.text("Last 100% calculation"), Format.dateTimeFormatter.string(from: estimate.recordedAt))
             row(L10n.text("Calculated Degradation"), String(format: "%.1f%%", estimate.degradationPercent))
         }
 

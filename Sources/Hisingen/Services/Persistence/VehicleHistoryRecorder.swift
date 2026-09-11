@@ -121,7 +121,7 @@ final class VehicleHistoryRecorder {
             ),
             recordingEnabled: preferences.storeChargingHistory
         )
-        recordBatteryHealth(state, capacity: capacity, specification: specification)
+        recordBatteryHealth(state, specification: specification)
     }
 
     private func chargingLocationName(for state: VehicleState) -> String? {
@@ -134,32 +134,20 @@ final class VehicleHistoryRecorder {
 
     private func recordBatteryHealth(
         _ state: VehicleState,
-        capacity: Double,
         specification: VehicleSpecificationOverride?
     ) {
-        let sessions = database.charging.recentChargingSessions(for: state.identity.vin, limit: 20)
-            .map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }
-            .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-        let previous = database.history.batteryHealthHistory(for: state.identity.vin, limit: 1).first
-            .map {
-                BatteryHealthPriorEstimate(
-                    stateOfHealthPercent: $0.stateOfHealthPct,
-                    timestamp: $0.timestamp
-                )
-            }
         guard let odometer = state.maintenance.odometerKm,
               let estimate = BatteryHealthEstimator.estimate(
                 state: state,
-                chargingSessions: sessions,
-                specification: specification,
-                previous: previous
+                specification: specification
               ) else { return }
         database.recordBatteryHealthMilestone(
             vin: state.identity.vin,
             odometerKm: Double(odometer),
             sohPct: estimate.stateOfHealthPercent,
             degPct: estimate.degradationPercent,
-            usableKwh: estimate.estimatedUsableCapacityKwh
+            usableKwh: estimate.estimatedUsableCapacityKwh,
+            measurementSource: BatteryHealthRecord.fullChargeRangeSource
         )
     }
 }

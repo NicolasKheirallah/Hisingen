@@ -194,17 +194,19 @@ struct SQLiteDatabaseTests {
         let vin = "BATTERY_VIN_002"
 
         vdb.recordBatteryHealthMilestone(
-            vin: vin, odometerKm: 10000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
+            vin: vin, odometerKm: 10000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8,
+            measurementSource: BatteryHealthRecord.fullChargeRangeSource
         )
         vdb.recordBatteryHealthMilestone(
-            vin: vin, odometerKm: 50000, sohPct: 95.0, degPct: 5.0, usableKwh: 74.1
+            vin: vin, odometerKm: 50000, sohPct: 95.0, degPct: 5.0, usableKwh: 74.1,
+            measurementSource: BatteryHealthRecord.fullChargeRangeSource
         )
 
         let history = vdb.history.batteryHealthHistory(for: vin, limit: 10)
         #expect(history.count == 2)
         #expect(history.first?.odometerKm == 50000)
         #expect(history.first?.stateOfHealthPct == 95.0)
-        #expect(history.first?.measurementSource == "calculated-v2")
+        #expect(history.first?.measurementSource == BatteryHealthRecord.fullChargeRangeSource)
         #expect(history.last?.odometerKm == 10000)
     }
 

@@ -1094,12 +1094,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     }
 
     var batteryDegradationPercent: Double? {
-        // Neither provider exposes a validated *measured* capacity or SoH value — this property
-        // specifically represents that absence and must stay `nil` rather than infer one from
-        // age, mileage, or a specification capacity. A separate, clearly-labeled *calculated*
-        // estimate that does combine those signals exists at `BatteryHealthEstimator.estimate` —
-        // it returns a distinct `BatteryHealthEstimate` type precisely so a calculated figure can
-        // never be mistaken for what this property represents.
+        // Neither provider exposes a validated measured capacity or SoH value. This property
+        // represents that absence and stays nil. The separate BatteryHealthEstimate type holds
+        // Hisingen's remembered full-charge range calculation.
         return nil
     }
 

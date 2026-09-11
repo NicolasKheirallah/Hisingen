@@ -3,145 +3,92 @@ import Testing
 @testable import Hisingen
 
 struct BatteryHealthEstimatorTests {
-    @Test("SoH is explicitly calculated from available signals")
-    func calculatedEstimateDisclosesMethod() throws {
-        let state = vehicle(battery: 50)
+    private let specification = VehicleSpecificationOverride(
+        usableBatteryCapacityKwh: 78,
+        wltpRangeKm: 400
+    )
+
+    @Test("SoH is calculated from full-charge range divided by WLTP range")
+    func fullChargeRangeDefinesStateOfHealth() throws {
+        let state = vehicle(battery: 100)
         let estimate = try #require(BatteryHealthEstimator.estimate(
             state: state,
-            chargingSessions: [],
+            specification: specification
+        ))
+
+        #expect(estimate.stateOfHealthPercent == 50)
+        #expect(estimate.degradationPercent == 50)
+        #expect(estimate.estimatedUsableCapacityKwh == 39)
+        #expect(estimate.fullChargeRangeKm == 200)
+        #expect(estimate.wltpReferenceRangeKm == 400)
+        #expect(!estimate.isRemembered)
+        #expect(estimate.methodologySummary.contains("only at 100% charge"))
+    }
+
+    @Test("A partial charge never produces a new SoH value")
+    func partialChargeIsRejected() {
+        #expect(BatteryHealthEstimator.estimate(
+            state: vehicle(battery: 99.4),
+            specification: specification
+        ) == nil)
+        #expect(BatteryHealthEstimator.estimate(
+            state: vehicle(battery: 50),
+            specification: specification
+        ) == nil)
+    }
+
+    @Test("Only an actual 100 percent reading qualifies")
+    func onlyActualFullChargeQualifies() {
+        #expect(BatteryHealthEstimator.estimate(
+            state: vehicle(battery: 99.9),
+            specification: specification
+        ) == nil)
+        #expect(BatteryHealthEstimator.estimate(
+            state: vehicle(battery: BatteryHealthEstimator.fullChargeThreshold),
+            specification: specification
+        ) != nil)
+    }
+
+    @Test("The model WLTP reference is used without a VIN override")
+    func modelReferenceIsTheFallback() throws {
+        let state = vehicle(battery: 100)
+        let estimate = try #require(BatteryHealthEstimator.estimate(state: state))
+        let expected = min(100, (200 / state.model.nominalWltpRangeKm * 1000).rounded() / 10)
+
+        #expect(estimate.stateOfHealthPercent == expected)
+        #expect(estimate.wltpReferenceRangeKm == state.model.nominalWltpRangeKm)
+    }
+
+    @Test("A favorable range estimate cannot raise SoH above 100 percent")
+    func stateOfHealthIsCappedAtOneHundred() throws {
+        let estimate = try #require(BatteryHealthEstimator.estimate(
+            state: vehicle(battery: 100),
             specification: VehicleSpecificationOverride(
                 usableBatteryCapacityKwh: 78,
-                wltpRangeKm: 500
+                wltpRangeKm: 150
             )
         ))
-        #expect(estimate.stateOfHealthPercent >= 55)
-        #expect(estimate.stateOfHealthPercent <= 100)
-        #expect(estimate.signals.contains { $0.id == "range" })
-        #expect(estimate.methodologySummary.contains("not a battery-management-system measurement"))
+
+        #expect(estimate.stateOfHealthPercent == 100)
+        #expect(estimate.degradationPercent == 0)
     }
 
-    /// Builds a synthetic 20%→40% session with constant power, sized so `chargeIntegratedCapacity`
-    /// (with a 0.90 loss factor) lands on `targetCapacityKwh`: capacity = (power_kW / 3) × 4.5.
-    private func chargingSession(vin: String = "SOH_TEST", targetCapacityKwh: Double, chargingType: ChargingType = .unknown) -> ChargingSession {
-        let start = Date(timeIntervalSince1970: 2_000_000_000)
-        let powerWatts = Int((targetCapacityKwh / 1.5) * 1_000)
-        let samples = [
-            ChargingSample(timestamp: start, batteryPercentage: 20, powerWatts: powerWatts, chargingType: chargingType),
-            ChargingSample(timestamp: start.addingTimeInterval(600), batteryPercentage: 30, powerWatts: powerWatts, chargingType: chargingType),
-            ChargingSample(timestamp: start.addingTimeInterval(1_200), batteryPercentage: 40, powerWatts: powerWatts, chargingType: chargingType)
-        ]
-        return ChargingSession(
-            id: UUID(), vin: vin, startDate: start, endDate: start.addingTimeInterval(1_200),
-            startBatteryPercentage: 20, endBatteryPercentage: 40,
-            kwhDelivered: 0, peakPowerWatts: powerWatts, cost: nil, samples: samples
+    @Test("A remembered full-charge result can be displayed without recalculation")
+    func rememberedValuePreservesStoredResult() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let estimate = BatteryHealthEstimator.remembered(
+            stateOfHealthPercent: 92,
+            degradationPercent: 8,
+            estimatedUsableCapacityKwh: 71.76,
+            recordedAt: date,
+            fallbackReferenceCapacityKwh: 75
         )
-    }
 
-    @Test("Charging power integration estimates usable capacity")
-    func powerIntegrationUsesObservedEnergyAndSOCDelta() throws {
-        let session = chargingSession(targetCapacityKwh: 75)
-        let result = try #require(BatteryHealthEstimator.chargeIntegratedCapacity(from: [session]))
-        #expect(abs(result.capacityKwh - 75) < 0.1)
-        #expect(result.sessionCount == 1)
-    }
-
-    @Test("DC sessions assume lower charging loss than AC, for identical raw energy")
-    func chargingTypeAffectsLossFactor() throws {
-        let acCapacity = try #require(BatteryHealthEstimator.chargeIntegratedCapacity(from: [chargingSession(targetCapacityKwh: 75, chargingType: .ac)]))
-        let dcCapacity = try #require(BatteryHealthEstimator.chargeIntegratedCapacity(from: [chargingSession(targetCapacityKwh: 75, chargingType: .dc)]))
-        let unknownCapacity = try #require(BatteryHealthEstimator.chargeIntegratedCapacity(from: [chargingSession(targetCapacityKwh: 75, chargingType: .unknown)]))
-        // Same raw input energy in every case (targetCapacityKwh assumes the 0.90 blended
-        // factor); AC's larger onboard-charger loss should read as *less* usable capacity than
-        // DC's smaller one, with the unverified/unknown case sitting at today's blended default.
-        #expect(acCapacity.capacityKwh < unknownCapacity.capacityKwh)
-        #expect(dcCapacity.capacityKwh > unknownCapacity.capacityKwh)
-        #expect(abs(unknownCapacity.capacityKwh - 75) < 0.1)
-    }
-
-    @Test("A single qualifying session carries less weight than five that agree")
-    func sessionCountAndAgreementScaleConfidence() throws {
-        let state = vehicle(battery: 50)
-        let single = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: [chargingSession(targetCapacityKwh: 75)],
-            specification: VehicleSpecificationOverride(usableBatteryCapacityKwh: 78, wltpRangeKm: nil)
-        ))
-        let singleWeight = try #require(single.signals.first { $0.id == "charge-power" }?.weight)
-        #expect(abs(singleWeight - 0.22) < 0.01)
-
-        let fiveConsistent = (0..<5).map { chargingSession(vin: "V\($0)", targetCapacityKwh: 75) }
-        let consistent = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: fiveConsistent,
-            specification: VehicleSpecificationOverride(usableBatteryCapacityKwh: 78, wltpRangeKm: nil)
-        ))
-        let consistentWeight = try #require(consistent.signals.first { $0.id == "charge-power" }?.weight)
-        #expect(abs(consistentWeight - 0.55) < 0.01)
-
-        let fiveScattered = zip((0..<5), [60.0, 70.0, 75.0, 80.0, 100.0]).map {
-            chargingSession(vin: "S\($0.0)", targetCapacityKwh: $0.1)
-        }
-        let scattered = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: fiveScattered,
-            specification: VehicleSpecificationOverride(usableBatteryCapacityKwh: 78, wltpRangeKm: nil)
-        ))
-        let scatteredWeight = try #require(scattered.signals.first { $0.id == "charge-power" }?.weight)
-        #expect(scatteredWeight < consistentWeight)
-        #expect(scatteredWeight > singleWeight)
-    }
-
-    @Test("Volvo's exact reported pack capacity is preferred over the generic model table")
-    func reportedCapacityTakesPriorityOverFactoryTable() throws {
-        var state = vehicle(battery: 50)
-        state.energy.reportedBatteryCapacityKwh = 70
-        let estimate = try #require(BatteryHealthEstimator.estimate(state: state, chargingSessions: []))
-        // Polestar 2's generic table value is 75 kWh usable; the VIN-specific reported value
-        // should win when no manual Settings override exists.
-        #expect(estimate.referenceUsableCapacityKwh == 70)
-    }
-
-    @Test("An implausible consumption reading is treated as skipped, not trusted")
-    func implausibleConsumptionIsRejected() throws {
-        var plausible = vehicle(battery: 50)
-        plausible.energy.diagnostics = BatteryDiagnostics(
-            timeToTargetMinutes: nil, timeToMinimumSOCMinutes: nil, chargerPowerState: .unknown,
-            averageConsumption: 18, averageConsumptionSinceCharge: nil, energyUsedSinceChargeWh: nil
-        )
-        let plausibleEstimate = try #require(BatteryHealthEstimator.estimate(state: plausible, chargingSessions: []))
-        #expect(plausibleEstimate.signals.contains { $0.id == "consumption" })
-
-        var implausible = vehicle(battery: 50)
-        implausible.energy.diagnostics = BatteryDiagnostics(
-            timeToTargetMinutes: nil, timeToMinimumSOCMinutes: nil, chargerPowerState: .unknown,
-            averageConsumption: 1_800, averageConsumptionSinceCharge: nil, energyUsedSinceChargeWh: nil
-        )
-        let implausibleEstimate = try #require(BatteryHealthEstimator.estimate(state: implausible, chargingSessions: []))
-        #expect(!implausibleEstimate.signals.contains { $0.id == "consumption" })
-    }
-
-    @Test("A recent prior estimate is smoothed toward; a stale one is ignored")
-    func temporalSmoothingRespectsRecencyOfPriorEstimate() throws {
-        let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
-        let state = vehicle(battery: 50)
-        let specification = VehicleSpecificationOverride(usableBatteryCapacityKwh: 78, wltpRangeKm: 500)
-
-        let baseline = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: [], specification: specification, now: fixedNow
-        ))
-
-        let recentPrior = BatteryHealthPriorEstimate(stateOfHealthPercent: 100, timestamp: fixedNow.addingTimeInterval(-2 * 24 * 60 * 60))
-        let smoothed = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: [], specification: specification,
-            previous: recentPrior, now: fixedNow
-        ))
-        #expect(smoothed.stateOfHealthPercent != baseline.stateOfHealthPercent)
-        // Blending toward a prior of 100 should only ever pull the result up, never past it.
-        #expect(smoothed.stateOfHealthPercent > baseline.stateOfHealthPercent)
-        #expect(smoothed.stateOfHealthPercent < 100)
-
-        let stalePrior = BatteryHealthPriorEstimate(stateOfHealthPercent: 100, timestamp: fixedNow.addingTimeInterval(-30 * 24 * 60 * 60))
-        let unsmoothed = try #require(BatteryHealthEstimator.estimate(
-            state: state, chargingSessions: [], specification: specification,
-            previous: stalePrior, now: fixedNow
-        ))
-        #expect(unsmoothed.stateOfHealthPercent == baseline.stateOfHealthPercent)
+        #expect(estimate.stateOfHealthPercent == 92)
+        #expect(estimate.referenceUsableCapacityKwh == 78)
+        #expect(estimate.recordedAt == date)
+        #expect(estimate.fullChargeRangeKm == nil)
+        #expect(estimate.wltpReferenceRangeKm == nil)
+        #expect(estimate.isRemembered)
     }
 }

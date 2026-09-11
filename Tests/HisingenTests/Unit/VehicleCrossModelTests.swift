@@ -261,7 +261,7 @@ struct VehicleCrossModelTests {
 
     @MainActor
     @Test
-    func testUnavailableSoHDoesNotDisableTelemetryPersistence() {
+    func testPartialChargeSoHDoesNotDisableTelemetryPersistence() {
         let defaults = UserDefaults(suiteName: "HisingenTests.VehicleStateStore.SoH")!
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
         let database = VehicleDatabase.inMemory()
@@ -281,7 +281,7 @@ struct VehicleCrossModelTests {
         VehicleStateStore(defaults: defaults, database: database).save(state)
         let counts = database.recordCounts()
         XCTAssertEqual(counts.telemetry, 1)
-        XCTAssertEqual(counts.batteryHealth, 1)
+        XCTAssertEqual(counts.batteryHealth, 0)
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
     }
 

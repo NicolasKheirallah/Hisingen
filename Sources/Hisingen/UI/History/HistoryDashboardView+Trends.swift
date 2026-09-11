@@ -324,9 +324,11 @@ extension HistoryDashboardView {
                                   info: L10n.text("A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear."))
                         }
                     }
-                    KVRow(latest.measurementSource == "calculated-v2" ? L10n.text("Calculated estimate") : L10n.text("Legacy estimate"),
+                    KVRow(latest.measurementSource == BatteryHealthRecord.fullChargeRangeSource
+                              ? L10n.text("Full-charge range estimate")
+                              : L10n.text("Previous estimate"),
                           Format.count(batteryHealthRecords.count), symbol: "questionmark.circle",
-                          info: L10n.text("This is a calculated trend from observed telemetry, not a battery-management-system measurement. Rows are only recorded when the estimate moves meaningfully."))
+                          info: L10n.text("New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity."))
                 }
                 dataConfidenceNote(for: batteryHealthRecords.map(\.timestamp))
             }

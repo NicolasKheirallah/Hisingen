@@ -28,6 +28,8 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Empty VDMS discovery results no longer replace vehicles returned by primary discovery.
 - Removed the nonfunctional Chronos Vehicle Errors integration. Its server-streaming endpoint
   requires the command client but did not produce a response frame during live verification.
+- Battery SoH now uses one auditable calculation: vehicle-reported range at 100% charge divided
+  by the configured WLTP range. Hisingen remembers the result and updates it only at 100% charge.
 
 ## [1.3.5] - 2026-09-10
 

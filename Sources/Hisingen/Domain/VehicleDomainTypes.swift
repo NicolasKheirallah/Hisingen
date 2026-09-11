@@ -1044,12 +1044,8 @@ struct ChargingSample: Codable, Equatable, Sendable {
     let timestamp: Date
     let batteryPercentage: Double
     let powerWatts: Int?
-    /// AC/DC/wireless, when the provider reported it for this reading — both providers expose
-    /// this per-reading, but it wasn't previously threaded into session history. Lets
-    /// `BatteryHealthEstimator.chargeIntegratedCapacity` apply a charging-type-specific loss
-    /// correction instead of one blended constant for every session. Defaults to `.unknown` for
-    /// samples recorded before this field existed (the default makes that transparent to
-    /// `Codable`, so old cached snapshots still decode) or when the provider didn't report a type.
+    /// AC/DC/wireless, when the provider reported it for this reading. Defaults to `.unknown`
+    /// for samples recorded before this field existed or when the provider omitted the type.
     let chargingType: ChargingType
 
     init(timestamp: Date = Date(), batteryPercentage: Double, powerWatts: Int? = nil,

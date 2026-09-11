@@ -617,7 +617,8 @@ final class VehicleDatabase: @unchecked Sendable {
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
                                       sohPct: Double, degPct: Double, usableKwh: Double,
                                       measurementSource: String = "calculated-v2") -> Bool {
-        let previous = history.batteryHealthHistory(for: vin, limit: 1).first
+        let previous = history.batteryHealthHistory(for: vin, limit: 50)
+            .first { $0.measurementSource == measurementSource }
         guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
             return false
         }
@@ -840,7 +841,7 @@ final class VehicleDatabase: @unchecked Sendable {
             snapshots: count(table: "vehicle_snapshots"),
             chargingSessions: count(table: "charging_sessions"),
             chargingSamples: count(table: "charging_samples"),
-            batteryHealth: count(table: "battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate')"),
+            batteryHealth: count(table: "battery_health_history WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')"),
             telemetry: count(table: "telemetry_logs"),
             commands: count(table: "remote_commands_log")
         )
@@ -1273,7 +1274,9 @@ extension VehicleDatabase {
     private func batteryHealthHistoryAllRows() -> [BatteryHealthRecord] {
         let sql = """
         SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
-        FROM battery_health_history WHERE measurement_source IN ('calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;
+        FROM battery_health_history
+        WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')
+        ORDER BY timestamp DESC;
         """
         return (try? db.query(sql: sql) { _ in } process: { stmt -> [BatteryHealthRecord] in
             var list: [BatteryHealthRecord] = []

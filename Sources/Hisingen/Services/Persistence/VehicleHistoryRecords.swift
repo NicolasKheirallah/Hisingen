@@ -144,6 +144,8 @@ struct HistoricalChargingSample: Codable, Equatable, Sendable {
 
 /// Represents a recorded battery state-of-health milestone over time.
 struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
+    static let fullChargeRangeSource = "full-charge-range-v1"
+
     let id: Int64
     let vin: String
     let timestamp: Date
