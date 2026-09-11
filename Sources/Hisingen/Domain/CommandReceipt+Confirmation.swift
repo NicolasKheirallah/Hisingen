@@ -18,7 +18,11 @@ extension CommandReceipt {
         }
     }
 
-    func updatingConfirmation(from state: VehicleState) -> CommandReceipt {
+    func updatingConfirmation(
+        from state: VehicleState,
+        now: Date = Date(),
+        timestampTolerance: TimeInterval = CommandReceipt.confirmationTimestampTolerance
+    ) -> CommandReceipt {
         guard status.isAwaiting, let command else { return self }
         let reading: VehicleReading
         let matches: Bool
@@ -55,8 +59,10 @@ extension CommandReceipt {
         default:
             return self
         }
-        guard matches, state.hasFreshReading(reading),
-              let date = state.reportedDate(for: reading), date > issuedAt else { return self }
+        let earliestConfirmationDate = issuedAt.addingTimeInterval(-max(0, timestampTolerance))
+        guard matches, state.hasFreshReading(reading, now: now),
+              let date = state.reportedDate(for: reading),
+              date >= earliestConfirmationDate else { return self }
         var updated = self
         updated.status = .confirmed(at: date)
         return updated

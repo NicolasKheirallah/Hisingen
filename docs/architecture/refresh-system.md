@@ -60,7 +60,7 @@ All three triggers converge on exactly one network call.
 | `.wake` | `NSWorkspace.didWakeNotification` |
 | `.networkRestored` | `NWPathMonitor` flipping from unavailable to available |
 
-`refreshIfStale()` — called from `applicationDidBecomeActive` — is a sixth, softer path: it only issues a refresh if `Date().timeIntervalSince(latest.fetchedAt) >= RefreshPolicy.regularInterval(isCharging:)`, i.e. bringing the app to the foreground doesn't force a network call if the current data isn't old enough to need one yet.
+`refreshIfStale()` — called from `applicationDidBecomeActive` — is a sixth, softer path: it only issues a refresh when the coordinator's current time is at least the applicable `RefreshPolicy` interval after `latest.fetchedAt`, i.e. bringing the app to the foreground doesn't force a network call if the current data isn't old enough to need one yet.
 
 ## Vehicle switching
 
@@ -149,6 +149,12 @@ not carry those values. A fresh matching reading ends confirmation immediately. 
 drops, it reconnects while the command remains pending and a targeted poll runs every 5 seconds.
 The first check is scheduled after 2 seconds. Commands such as honk and flash do not open a
 stream because no returned reading can prove their effect.
+
+Confirmation accepts a matching provider timestamp up to two seconds before the local command
+start. This bounded allowance covers whole-second provider timestamps and minor clock skew while
+still rejecting older matching state. The command coordinator and refresh coordinator use
+injectable time sources, so issue times, optimistic-state expiry, confirmation deadlines,
+suspension accounting, and freshness checks can be verified without relying on wall-clock timing.
 
 The five-minute `commandConfirmationWindow` is a safety cap, not the normal close condition. A
 watchdog moves the receipt to `timedOut` even when the stream is quiet, then the normal charging

@@ -225,6 +225,7 @@ enum CommandConfirmationStatus: Codable, Equatable, Sendable {
 /// `confirmed`; the refresh coordinator owns the only timeout transition.
 struct CommandReceipt: Codable, Equatable, Sendable {
     static let maximumConfirmationDuration: TimeInterval = 5 * 60
+    static let confirmationTimestampTolerance: TimeInterval = 2
 
     /// Matches `RemoteCommand.identifier` and the command-audit trail.
     var commandIdentifier: String

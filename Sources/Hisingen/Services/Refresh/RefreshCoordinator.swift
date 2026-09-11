@@ -190,6 +190,7 @@ final class RefreshCoordinator {
     private let commandConfirmationPollInterval: TimeInterval
     private let liveStreamPolicy: LiveStreamPolicy
     private let liveStreamJitter: () -> Double
+    private let now: () -> Date
     private let logger = AppLog.logger("refresh")
     /// Interval instrumentation for Instruments' os_signpost tool — free refresh-latency
     /// timelines without touching the unified log.
@@ -253,7 +254,7 @@ final class RefreshCoordinator {
     var isBusy: Bool { task != nil }
     /// True inside a provider rate-limit pause. The garage scan also checks this: hammering
     /// through the window extends the backoff and starves the interactive paths.
-    var isRateLimited: Bool { rateLimitedUntil.map({ $0 > Date() }) ?? false }
+    var isRateLimited: Bool { rateLimitedUntil.map({ $0 > now() }) ?? false }
 
     init(api: any VehicleProviding, stateStore: VehicleStateStore,
          observesEnvironment: Bool = true,
@@ -264,6 +265,7 @@ final class RefreshCoordinator {
          selectionRetryDelay: TimeInterval = 2,
          liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
          liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
+         now: @escaping () -> Date = Date.init,
          commandConfirmationWindow: TimeInterval = CommandReceipt.maximumConfirmationDuration,
          commandConfirmationInitialPollDelay: TimeInterval = 2,
          commandConfirmationPollInterval: TimeInterval = 5) {
@@ -276,6 +278,7 @@ final class RefreshCoordinator {
         self.selectionRetryDelay = selectionRetryDelay
         self.liveStreamPolicy = liveStreamPolicy
         self.liveStreamJitter = liveStreamJitter
+        self.now = now
         self.commandConfirmationWindow = commandConfirmationWindow
         self.commandConfirmationInitialPollDelay = commandConfirmationInitialPollDelay
         self.commandConfirmationPollInterval = commandConfirmationPollInterval
@@ -341,17 +344,17 @@ final class RefreshCoordinator {
     }
 
     func refreshNow() {
-        if let rateLimitedUntil, rateLimitedUntil > Date() {
+        if let rateLimitedUntil, rateLimitedUntil > now() {
             nextRefresh = rateLimitedUntil
             publishDiagnostics()
             return
         }
         // Debounce: skip manual refresh if one started less than 2 seconds ago — rapid
         // clicks on the refresh button (or ⌘R spam) would otherwise stack requests.
-        if let lastManualRefresh, Date().timeIntervalSince(lastManualRefresh) < 2, task != nil {
+        if let lastManualRefresh, now().timeIntervalSince(lastManualRefresh) < 2, task != nil {
             return
         }
-        lastManualRefresh = Date()
+        lastManualRefresh = now()
         guard sessionReady else {
             beginSession(preferredVIN: preferences.vin.nilIfEmpty)
             return
@@ -374,7 +377,7 @@ final class RefreshCoordinator {
         commandReceipt = receipt
         dismissedCommandReceiptIssuedAt = nil
         commandConfirmationSuspendedAt = nil
-        commandStreamUntil = Date().addingTimeInterval(commandConfirmationWindow)
+        commandStreamUntil = now().addingTimeInterval(commandConfirmationWindow)
         logger.info(
             "Command confirmation started for \(receipt.commandIdentifier, privacy: .public); telemetry observable: \(receipt.supportsTelemetryConfirmation, privacy: .public)"
         )
@@ -430,8 +433,9 @@ final class RefreshCoordinator {
         commandWatchdogTask?.cancel()
         guard let until = commandStreamUntil else { return }
         let requestGeneration = generation
+        let delay = max(0.05, until.timeIntervalSince(now()))
         commandWatchdogTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(max(0.05, until.timeIntervalSinceNow))) }
+            do { try await Task.sleep(for: .seconds(delay)) }
             catch { return }
             guard let self, !Task.isCancelled, requestGeneration == self.generation else { return }
             self.enforceCommandWindowExpiry(vin: vin)
@@ -440,7 +444,7 @@ final class RefreshCoordinator {
 
     private func enforceCommandWindowExpiry(vin: String) {
         commandWatchdogTask = nil
-        guard let until = commandStreamUntil, until <= Date() else { return }
+        guard let until = commandStreamUntil, until <= now() else { return }
         let expiredPurpose = commandStreamPurpose
         timeOutCommandConfirmation(at: until)
         commandStreamUntil = nil
@@ -468,7 +472,7 @@ final class RefreshCoordinator {
             liveStreamConnected = false
             liveStreamRetryAt = nil
         }
-        guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else { return }
+        guard rateLimitedUntil.map({ $0 <= now() }) ?? true else { return }
         guard sessionReady, task == nil, !preferences.vin.isEmpty else {
             refreshNow()
             return
@@ -504,7 +508,7 @@ final class RefreshCoordinator {
                 }
             }()
         )
-        if Date().timeIntervalSince(latest.freshness.fetchedAt) >= interval { refreshNow() }
+        if now().timeIntervalSince(latest.freshness.fetchedAt) >= interval { refreshNow() }
     }
 
     /// Switches the active vehicle. Idempotence is decided HERE and nowhere else.
@@ -518,12 +522,12 @@ final class RefreshCoordinator {
     /// re-clicking the new car was vetoed here, and the switcher locked up entirely until
     /// relaunch — invisible with one car, fatal with two on the same account.
     func selectCar(vin: String) {
-        guard rateLimitedUntil.map({ $0 <= Date() }) ?? true else {
+        guard rateLimitedUntil.map({ $0 <= now() }) ?? true else {
             // A silent drop reads as a frozen app; surface why switching is paused instead.
             // Multi-vehicle accounts double the request volume and hit this window far
             // more often than the single-car case.
             onEvent?(.switchPaused(.rateLimited(
-                retryAfter: rateLimitedUntil?.timeIntervalSinceNow
+                retryAfter: rateLimitedUntil.map { $0.timeIntervalSince(now()) }
             )))
             return
         }
@@ -571,7 +575,7 @@ final class RefreshCoordinator {
 
     private func runSelection(vin: String) {
         let requestGeneration = generation
-        let started = Date()
+        let started = now()
         refreshAttempts += 1
         task = Task {
             do {
@@ -585,7 +589,7 @@ final class RefreshCoordinator {
                 cars = providerCars
                 onEvent?(.selectionChanged(vin))
                 // Selection does not establish a session or schedule a garage scan.
-                apply(state, latency: Date().timeIntervalSince(started))
+                apply(state, latency: max(0, now().timeIntervalSince(started)))
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
@@ -694,7 +698,7 @@ final class RefreshCoordinator {
         }
         onEvent?(.loading)
         let requestGeneration = generation
-        let started = Date()
+        let started = now()
         refreshAttempts += 1
         task = Task {
             do {
@@ -733,7 +737,7 @@ final class RefreshCoordinator {
                     Self.signposter.endInterval("fetchVehicleState", intervalState)
                     guard requestGeneration == generation, !Task.isCancelled else { return }
                     task = nil
-                    apply(state, latency: Date().timeIntervalSince(started))
+                    apply(state, latency: max(0, now().timeIntervalSince(started)))
                 } catch {
                     Self.signposter.endInterval("fetchVehicleState", intervalState)
                     throw error
@@ -762,7 +766,7 @@ final class RefreshCoordinator {
         let confirmationFeatures = confirmationFeatures(for: trigger)
         let features = confirmationFeatures ?? preferences.features
         let requestGeneration = generation
-        let started = Date()
+        let started = now()
         refreshAttempts += 1
         task = Task {
             // Signpost spans the network round trip so Instruments shows per-refresh
@@ -775,7 +779,7 @@ final class RefreshCoordinator {
                 task = nil
                 apply(
                     state,
-                    latency: Date().timeIntervalSince(started),
+                    latency: max(0, now().timeIntervalSince(started)),
                     refreshedFeatures: confirmationFeatures?.enabled
                 )
             } catch {
@@ -859,7 +863,7 @@ final class RefreshCoordinator {
         let needsSession = retrySession || error.requiresNewSession
         let delay = retryDelay(failureCount, retryAfter, needsSession)
         if case .rateLimited = error {
-            rateLimitedUntil = Date().addingTimeInterval(delay)
+            rateLimitedUntil = now().addingTimeInterval(delay)
             logger.warning("Rate limited; pausing refreshes until \(self.rateLimitedUntil.map { "\($0)" } ?? "?", privacy: .public)")
         }
         schedule(after: delay, retrySession: needsSession)
@@ -871,9 +875,9 @@ final class RefreshCoordinator {
         guard !sleeping, networkAvailable else { nextRefresh = nil; return }
         let maxJitter = min(15, max(1, interval * 0.1))
         let jitter = Double.random(in: 0...maxJitter)
-        let requestedDeadline = Date().addingTimeInterval(interval + jitter)
+        let requestedDeadline = now().addingTimeInterval(interval + jitter)
         let deadline = max(requestedDeadline, rateLimitedUntil ?? .distantPast)
-        let delay = max(0, deadline.timeIntervalSinceNow)
+        let delay = max(0, deadline.timeIntervalSince(now()))
         nextRefresh = deadline
         timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -953,7 +957,7 @@ final class RefreshCoordinator {
         let preserveReceipt = preservingCommandConfirmation && commandReceipt != nil
         if preserveReceipt, commandReceipt?.status.isAwaiting == true,
            commandConfirmationSuspendedAt == nil {
-            commandConfirmationSuspendedAt = Date()
+            commandConfirmationSuspendedAt = now()
             logger.info(
                 "Command confirmation suspended for \(self.commandReceipt?.commandIdentifier ?? "unknown", privacy: .public)"
             )
@@ -988,7 +992,7 @@ final class RefreshCoordinator {
         commandConfirmationSuspendedAt = nil
         guard commandReceipt?.status.isAwaiting == true,
               let until = commandStreamUntil else { return }
-        commandStreamUntil = until.addingTimeInterval(max(0, Date().timeIntervalSince(suspendedAt)))
+        commandStreamUntil = until.addingTimeInterval(max(0, now().timeIntervalSince(suspendedAt)))
         persistCommandReceipt()
         logger.info(
             "Command confirmation resumed for \(self.commandReceipt?.commandIdentifier ?? "unknown", privacy: .public)"
@@ -1065,7 +1069,7 @@ final class RefreshCoordinator {
                 guard let self, requestGeneration == self.generation,
                       self.latest?.identity.vin == vin,
                       self.desiredLiveStreamPurpose(for: self.latest) == purpose else { return }
-                let streamStartedAt = Date()
+                let streamStartedAt = now()
                 var connectedAt: Date?
                 do {
                     self.liveStreamMetrics.connectionAttempts += 1
@@ -1075,7 +1079,7 @@ final class RefreshCoordinator {
                         guard requestGeneration == self.generation,
                               var current = self.latest, current.identity.vin == vin else { return }
                         if case .connected(let activeTransportStreams) = update {
-                            let now = Date()
+                            let now = self.now()
                             connectedAt = now
                             self.liveStreamConnected = true
                             self.liveStreamRetryAt = nil
@@ -1094,7 +1098,7 @@ final class RefreshCoordinator {
                         }
                         current.applyLiveUpdate(update)
                         self.latest = current
-                        let now = Date()
+                        let now = self.now()
                         self.liveStreamMetrics.messagesReceived += 1
                         self.liveStreamMetrics.lastFrameAt = now
                         self.liveStreamMetrics.lastDisconnectedAt = nil
@@ -1115,7 +1119,7 @@ final class RefreshCoordinator {
                 } catch is CancellationError {
                     return
                 } catch {
-                    let now = Date()
+                    let now = self.now()
                     self.liveStreamConnected = false
                     self.liveStreamMetrics.activeTransportStreams = 0
                     self.liveStreamMetrics.connectedAt = nil
@@ -1172,7 +1176,7 @@ final class RefreshCoordinator {
     private func desiredLiveStreamPurpose(for state: VehicleState?) -> VehicleLiveStreamPurpose? {
         guard let state else { return nil }
         if let until = commandStreamUntil {
-            if until > Date() {
+            if until > now() {
                 if let commandStreamPurpose {
                     return commandStreamPurpose
                 }
@@ -1198,7 +1202,7 @@ final class RefreshCoordinator {
     private var isCommandConfirmationPending: Bool {
         commandReceipt?.status.isAwaiting == true
             && commandReceipt?.supportsTelemetryConfirmation == true
-            && commandStreamUntil.map { $0 > Date() } == true
+            && commandStreamUntil.map { $0 > now() } == true
     }
 
     private func scheduleCommandConfirmationPoll() {
@@ -1226,7 +1230,7 @@ final class RefreshCoordinator {
         in state: VehicleState
     ) -> (state: VehicleState, confirmed: Bool) {
         guard let receipt = commandReceipt else { return (state, false) }
-        let updated = receipt.updatingConfirmation(from: state)
+        let updated = receipt.updatingConfirmation(from: state, now: now())
         var displayState = state
         displayState.commandState.receipt = updated.issuedAt == dismissedCommandReceiptIssuedAt
             ? nil
@@ -1292,14 +1296,15 @@ final class RefreshCoordinator {
         )
     }
 
-    private func restoreCommandReceipt(for vin: String, now: Date = Date()) {
+    private func restoreCommandReceipt(for vin: String) {
         guard var stored = stateStore.commandReceipt(for: vin) else { return }
+        let currentDate = now()
         dismissedCommandReceiptIssuedAt = nil
         commandConfirmationSuspendedAt = nil
         if stored.receipt.status.isAwaiting {
             let deadline = stored.confirmationDeadline
                 ?? stored.receipt.issuedAt.addingTimeInterval(commandConfirmationWindow)
-            if deadline <= now {
+            if deadline <= currentDate {
                 stored.receipt.status = .timedOut(at: deadline)
                 stored.confirmationDeadline = nil
                 stateStore.saveCommandReceipt(stored, for: vin)

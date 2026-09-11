@@ -74,6 +74,7 @@ final class CommandCoordinator {
     private let preferences: PreferencesStore
     private let database: VehicleDatabase
     private let authorizer: any RemoteActionAuthorizing
+    private let now: () -> Date
     private let gate = CapabilityGate()
     private weak var context: (any CommandExecutionContext)?
 
@@ -86,11 +87,13 @@ final class CommandCoordinator {
     init(context: any CommandExecutionContext,
          preferences: PreferencesStore,
          database: VehicleDatabase,
-         authorizer: any RemoteActionAuthorizing) {
+         authorizer: any RemoteActionAuthorizing,
+         now: @escaping () -> Date = Date.init) {
         self.context = context
         self.preferences = preferences
         self.database = database
         self.authorizer = authorizer
+        self.now = now
     }
 
     /// Dispatches one Remote Command end to end: gating, authorization, provider execution,
@@ -209,7 +212,7 @@ final class CommandCoordinator {
         isInProgress = true
         inProgressCommandIdentifier = command.identifier
         context.commandInProgressDidChange()
-        let startedAt = Date()
+        let startedAt = now()
         defer {
             isInProgress = false
             inProgressCommandIdentifier = nil
@@ -222,7 +225,7 @@ final class CommandCoordinator {
                 vin: target.vin,
                 command: command.identifier,
                 status: result.outcome.rawValue,
-                durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000)
+                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000)
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             let targetIsCurrent = isCurrentExecutionContext(target)
@@ -269,7 +272,7 @@ final class CommandCoordinator {
                 vin: target.vin,
                 command: command.identifier,
                 status: "failed",
-                durationMs: Int(Date().timeIntervalSince(startedAt) * 1_000),
+                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
                 error: message
             )
             context.presentResult(
@@ -301,6 +304,7 @@ final class CommandCoordinator {
     ) -> VehicleState? {
         guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return nil }
         guard let context, var current = context.vehicleState else { return nil }
+        let optimisticAt = now()
         switch command {
         case .startClimate(let temperature, _, _, _, _, _):
             current.climateStatus = VehicleClimateStatus(
@@ -332,7 +336,7 @@ final class CommandCoordinator {
                 runtimeRemainingMinutes: air.runtimeRemainingMinutes,
                 hasError: air.hasError,
                 reportedAt: air.reportedAt,
-                startedAt: command == .startPreCleaning ? (air.startedAt ?? Date()) : air.startedAt,
+                startedAt: command == .startPreCleaning ? (air.startedAt ?? optimisticAt) : air.startedAt,
                 endingAt: air.endingAt,
                 startReason: air.startReason,
                 lastCycleValid: air.lastCycleValid,
@@ -368,8 +372,8 @@ final class CommandCoordinator {
         default:
             break
         }
-        current.freshness.fetchedAt = Date()
-        current.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
+        current.freshness.fetchedAt = optimisticAt
+        current.commandState.optimisticLockUntil = optimisticAt.addingTimeInterval(90)
         current.commandState.receipt = nil
         return current
     }

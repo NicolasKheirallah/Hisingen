@@ -131,9 +131,13 @@ struct RemoteCommandDispatchTests {
     // MARK: - Optimistic state patch
 
     @MainActor
-    private func makeContext(features: Set<AppFeature>, brand: VehicleBrand = .polestar) -> DispatchMock {
+    private func makeContext(
+        features: Set<AppFeature>,
+        brand: VehicleBrand = .polestar,
+        now: @escaping () -> Date = Date.init
+    ) -> DispatchMock {
         AutomationHandoff.resetForTesting()
-        let context = DispatchMock(enabledFeatures: features, vin: vin, brand: brand)
+        let context = DispatchMock(enabledFeatures: features, vin: vin, brand: brand, now: now)
         AutomationHandoff.install(context)
         return context
     }
@@ -229,16 +233,21 @@ struct RemoteCommandDispatchTests {
 
     @Test
     @MainActor
-    func pendingReceiptUsesProviderExecutionStartTime() async throws {
-        let context = makeContext(features: [.remoteLocks])
+    func injectedTimeSourceDefinesReceiptAndOptimisticTimestamps() async throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_750_000_000)
+        let context = makeContext(features: [.remoteLocks], now: { fixedNow })
         context.vehicleState?.exteriorStatus = ExteriorSnapshot(
             openings: [], isLocked: false, alarmTriggered: false)
 
         _ = await context.perform(.lock, origin: .userInitiated)
 
-        let executionStartedAt = try XCTUnwrap(context.provider.executionStartedAt)
         let issuedAt = try XCTUnwrap(context.vehicleState?.commandState.receipt?.issuedAt)
-        XCTAssertLessThanOrEqual(issuedAt, executionStartedAt)
+        XCTAssertEqual(issuedAt, fixedNow)
+        XCTAssertEqual(context.vehicleState?.freshness.fetchedAt, fixedNow)
+        XCTAssertEqual(
+            context.vehicleState?.commandState.optimisticLockUntil,
+            fixedNow.addingTimeInterval(90)
+        )
     }
 
     @Test
@@ -386,12 +395,15 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     private(set) var presentations: [(
         title: String, message: String, success: Bool, target: RemoteCommandTarget?
     )] = []
+    private let now: () -> Date
 
     /// Each instance gets its own isolated defaults suite, so parallel tests never share
     /// feature selections or brand state.
     init(enabledFeatures: Set<AppFeature>, vin: String,
-         brand: VehicleBrand = .polestar, restrictedScopesEnabled: Bool = true) {
+         brand: VehicleBrand = .polestar, restrictedScopesEnabled: Bool = true,
+         now: @escaping () -> Date = Date.init) {
         self.provider = RecordingProvider(brand: brand)
+        self.now = now
         self.preferences = PreferencesStore(defaults: UserDefaults(
             suiteName: "RemoteCommandDispatchTests.mock.\(UUID().uuidString)")!)
         preferences.features = {
@@ -418,7 +430,7 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         // gate, authorization, and audit path are exercised.
         let coordinator = CommandCoordinator(
             context: self, preferences: preferences, database: .inMemory(),
-            authorizer: AlwaysAllowAuthorizer())
+            authorizer: AlwaysAllowAuthorizer(), now: now)
         return await coordinator.perform(command, origin: origin)
     }
 

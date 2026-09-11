@@ -101,6 +101,33 @@ struct VehicleActivityTests {
         #expect(!unobservable.supportsTelemetryConfirmation)
     }
 
+    @Test func commandConfirmationAllowsOnlyBoundedProviderTimestampSkew() {
+        let now = Date(timeIntervalSince1970: 1_750_000_010)
+        let issuedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.lock.identifier,
+            issuedAt: issuedAt,
+            command: .lock
+        )
+        var current = state(at: now)
+        current.exteriorStatus = ExteriorSnapshot(
+            openings: [],
+            isLocked: true,
+            alarmTriggered: false,
+            reportedAt: issuedAt.addingTimeInterval(-1.5)
+        )
+
+        #expect(receipt.updatingConfirmation(from: current, now: now).status.isConfirmed)
+        current.exteriorStatus?.reportedAt = issuedAt.addingTimeInterval(-2.1)
+        #expect(receipt.updatingConfirmation(from: current, now: now).status == .awaiting)
+        current.exteriorStatus?.reportedAt = issuedAt
+        #expect(receipt.updatingConfirmation(
+            from: current,
+            now: now,
+            timestampTolerance: 0
+        ).status.isConfirmed)
+    }
+
     @Test func terminalCommandConfirmationStatusCannotBeRewrittenByTelemetry() {
         let now = Date()
         let timedOutAt = now.addingTimeInterval(-1)

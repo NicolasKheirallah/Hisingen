@@ -24,7 +24,8 @@ struct RefreshCoordinatorStreamTests {
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
         commandWindow: TimeInterval = 5 * 60,
         commandInitialPollDelay: TimeInterval = 2,
-        commandPollInterval: TimeInterval = 5
+        commandPollInterval: TimeInterval = 5,
+        now: @escaping () -> Date = Date.init
     ) -> RefreshCoordinator {
         let preferences = PreferencesStore(defaults: defaults)
         var features = FeatureSelection.default
@@ -40,6 +41,7 @@ struct RefreshCoordinatorStreamTests {
             sessionManager: SessionManager(readToken: { _ in "test-session" },
                                            readPassword: { nil }, clearPassword: {}),
             liveStreamPolicy: policy,
+            now: now,
             commandConfirmationWindow: commandWindow,
             commandConfirmationInitialPollDelay: commandInitialPollDelay,
             commandConfirmationPollInterval: commandPollInterval
@@ -517,6 +519,38 @@ struct RefreshCoordinatorStreamTests {
             return delay > 1.5 && delay < 3.1
         })
         #expect(scheduled.nextRefresh != nil)
+        coordinator.stop()
+    }
+
+    @Test
+    func injectedTimeSourceDefinesTheConfirmationDeadline() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var currentTime = Date(timeIntervalSince1970: 1_750_000_000)
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults,
+            commandWindow: 90,
+            now: { currentTime }
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        coordinator.beginCommandConfirmation(CommandReceipt(
+            commandIdentifier: RemoteCommand.setChargeTarget(90).identifier,
+            issuedAt: currentTime,
+            command: .setChargeTarget(90)
+        ))
+
+        let originalDeadline = currentTime.addingTimeInterval(90)
+        #expect(events.snapshots.last?.commandConfirmationDeadline == originalDeadline)
+
+        coordinator.systemWillSleep()
+        currentTime = currentTime.addingTimeInterval(30)
+        coordinator.systemDidWake()
+        #expect(events.snapshots.last?.commandConfirmationDeadline == originalDeadline.addingTimeInterval(30))
         coordinator.stop()
     }
 
