@@ -674,16 +674,12 @@ struct VehicleCapabilityParsingTests {
         )
         state.identity.externalColour = "Thunder"
         state.identity.upholstery = "WeaveTech Slate"
-        state.identity.wheels = "19\" 5-Double Spoke"
-        state.identity.packages = ["Pilot Pack", "Plus Pack"]
 
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
 
         XCTAssertEqual(decoded.identity.externalColour, "Thunder")
         XCTAssertEqual(decoded.identity.upholstery, "WeaveTech Slate")
-        XCTAssertEqual(decoded.identity.wheels, "19\" 5-Double Spoke")
-        XCTAssertEqual(decoded.identity.packages, ["Pilot Pack", "Plus Pack"])
     }
 
     private func dailyTime(hour: Int, minute: Int) -> Data {

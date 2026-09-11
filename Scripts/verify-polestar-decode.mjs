@@ -69,12 +69,18 @@ require_(!telemetry.slice(queryStart, queryEnd).includes("reportedBatteryCapacit
   "telematics query must not re-select the schema-removed capacity field");
 require_(telemetry.includes("static func resolvedBatteryCapacity(graphQL: Double?, batteryService: Double?, equipment: VehicleEquipment?)"),
   "capacity resolution missing gRPC/equipment path");
-require_(telemetry.includes("state.reportedBatteryCapacityKwh = capacityKwh"), "capacity not wired into VehicleState");
+require_(telemetry.includes("state.energy.reportedBatteryCapacityKwh = capacityKwh"), "capacity not wired into VehicleState");
 require_(telemetry.includes("enriched.unknownWireFields = diag.unknownFields"), "unknown fields not wired into BatteryDiagnostics");
 
-// 7. VDMS query selects packages.
+// 7. VDMS query is limited to fields the production schema reliably returns.
 const api = read("Sources/Hisingen/Services/API/PolestarAPI.swift");
-require_(api.includes("packages { name }"), "VDMS packages selection missing");
+const vdmsStart = api.indexOf('query GetVDMSCars');
+const vdmsEnd = api.indexOf('let body: [String: Any]', vdmsStart);
+require_(vdmsStart >= 0 && vdmsEnd > vdmsStart, "VDMS query not found");
+const vdmsQuery = api.slice(vdmsStart, vdmsEnd);
+for (const field of ["exterior", "interior", "wheels", "packages"]) {
+  require_(!vdmsQuery.includes(field), `unsupported VDMS ${field} selection remains`);
+}
 
 // 8. UI surfaces the decodes.
 const vehicleTab = read("Sources/Hisingen/UI/Vehicle/VehicleTabView.swift");

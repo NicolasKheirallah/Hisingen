@@ -142,7 +142,7 @@ struct GraphQLDecodingTests {
     }
 
     @Test
-    func testVDMSDiscoveryDecodesFactoryOptionsAndSpecs() throws {
+    func testVDMSDiscoveryDecodesSupportedIdentityFields() throws {
         let json = #"""
         {"data":{"vdms":{"getVehiclesInformation":[{
             "vin":"YS3ED400000000001",
@@ -150,11 +150,7 @@ struct GraphQLDecodingTests {
             "registrationNo":"ABC 123",
             "modelYear":"2024",
             "content":{
-                "model":{"name":"Polestar 2 Long Range Dual Motor"},
-                "exteriorColor":{"name":"Midnight"},
-                "upholstery":{"name":"Charcoal WeaveTech"},
-                "wheels":{"name":"20\" 4-V Spoke Diamond Cut"},
-                "packages":[{"name":"Pilot Pack"},{"name":"Plus Pack"}]
+                "model":{"name":"Polestar 2 Long Range Dual Motor"}
             }
         }]}}}
         """#.data(using: .utf8)!
@@ -162,11 +158,30 @@ struct GraphQLDecodingTests {
         let vehicle = try XCTUnwrap(response.data?.vdms?.getVehiclesInformation?.first)
         let car = vehicle.consumerCar
         XCTAssertEqual(car.vin, "YS3ED400000000001")
+        XCTAssertEqual(car.internalVehicleIdentifier, "IV-9988")
+        XCTAssertEqual(car.registrationNo, "ABC 123")
+        XCTAssertEqual(car.modelYear?.value, "2024")
         XCTAssertEqual(car.modelName, "Polestar 2 Long Range Dual Motor")
-        XCTAssertEqual(car.exteriorColorName, "Midnight")
-        XCTAssertEqual(car.upholsteryName, "Charcoal WeaveTech")
-        XCTAssertEqual(car.wheelsName, "20\" 4-V Spoke Diamond Cut")
-        XCTAssertEqual(car.packageNames, ["Pilot Pack", "Plus Pack"])
+    }
+
+    @Test
+    func emptyVDMSDiscoveryPreservesPrimaryVehicles() throws {
+        let data = #"""
+        {"data":{"getConsumerCarsV2":[{
+          "vin":"YS3ED400000000001","internalVehicleIdentifier":"IV-9988",
+          "modelName":"Polestar 2","modelYear":"2024","registrationNo":"ABC 123",
+          "pno34":"PNO34-XX","structureWeek":"202326"
+        }]}}
+        """#.data(using: .utf8)!
+        let response = try JSONDecoder().decode(GraphQLResponse<ConsumerCarsPayloadDTO>.self, from: data)
+        let primary = try #require(response.data?.getConsumerCarsV2?.first)
+
+        let merged = PolestarAPI.mergeDiscoveryCars(primary: [primary], vdms: [])
+
+        let vehicle = try #require(merged.first)
+        #expect(merged.count == 1)
+        #expect(vehicle.vin == primary.vin)
+        #expect(vehicle.pno34 == primary.pno34)
     }
 
     @Test
@@ -204,4 +219,3 @@ struct GraphQLDecodingTests {
         XCTAssertEqual(VolvoAPI.optionalTelemetryTTL(for: "commands"), 60 * 60)
     }
 }
-

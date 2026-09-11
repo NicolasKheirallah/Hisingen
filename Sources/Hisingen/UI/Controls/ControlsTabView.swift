@@ -167,10 +167,6 @@ struct ControlsTabView: View {
                 isVisible: hasAnyVisibleChargingControls,
                 view: { AnyView(self.chargingControlCard) }),
             CardEntry(
-                id: "smart-charging",
-                isVisible: state.powertrain.hasElectricRange,
-                view: { AnyView(SmartChargingRecommendationView(state: self.state)) }),
-            CardEntry(
                 id: "access",
                 isVisible: features.contains(.remoteLocks),
                 view: { AnyView(self.accessControlCard) }),

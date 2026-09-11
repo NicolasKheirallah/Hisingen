@@ -8,11 +8,9 @@ import Testing
 struct PolestarFeatureWiringTests {
     private func makeState(
         vin: String = "YSM00000000000228",
-        packages: [String] = ["Pilot Lite"],
         userIsOwner: Bool? = nil,
         externalColour: String? = "Thunder",
         upholstery: String? = "Weave Tech",
-        wheels: String? = "20\" Performance",
         registrationNo: String? = "ABC 123"
     ) -> VehicleState {
         var state = VehicleState(
@@ -26,8 +24,6 @@ struct PolestarFeatureWiringTests {
         )
         state.identity.externalColour = externalColour
         state.identity.upholstery = upholstery
-        state.identity.wheels = wheels
-        state.identity.packages = packages
         state.identity.internalVehicleIdentifier = "iv-1"
         state.identity.pno34 = "PNO34-XX"
         state.identity.structureWeek = "202326"
@@ -54,7 +50,7 @@ struct PolestarFeatureWiringTests {
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         for header in ["VIN", "Nickname", "Model", "Registration No", "Internal Vehicle ID",
                        "Factory Spec (PNO34)", "Factory Build Week", "Market",
-                       "Exterior Paint", "Upholstery", "Wheels", "Factory Packages"] {
+                       "Exterior Paint", "Upholstery"] {
             #expect(csv.contains(header), "missing header: \(header)")
         }
         #expect(csv.contains("YSM00000000000228"))
@@ -66,7 +62,7 @@ struct PolestarFeatureWiringTests {
 
     @Test @MainActor func factoryPassportCSVEscapesCommasAndQuotes() throws {
         let prefs = makePreferences("passport-esc")
-        let state = makeState(packages: [], externalColour: "Space Black, \"Limited\"")
+        let state = makeState(externalColour: "Space Black, \"Limited\"")
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
         let line = try #require(paintLine)
@@ -75,19 +71,11 @@ struct PolestarFeatureWiringTests {
 
     @Test @MainActor func factoryPassportCSVOmitsUnknownFieldsInsteadOfPlaceholders() throws {
         let prefs = makePreferences("passport-sparse")
-        let state = makeState(externalColour: nil, upholstery: nil, wheels: nil, registrationNo: nil)
+        let state = makeState(externalColour: nil, upholstery: nil, registrationNo: nil)
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
         let line = try #require(paintLine)
         #expect(line.hasSuffix("Exterior Paint,"))
-    }
-
-    @Test @MainActor func factoryPassportCSVListsEachPackageAsItsOwnRow() throws {
-        let prefs = makePreferences("passport-pkgs")
-        let state = makeState(packages: ["Pilot Lite", "Climate Pack"])
-        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
-        #expect(csv.contains("Package 1,Pilot Lite"))
-        #expect(csv.contains("Package 2,Climate Pack"))
     }
 
     // MARK: - F5: Owner gate

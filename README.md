@@ -273,17 +273,6 @@ Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage 
 the business/private distance split per month with CSV export. Tags are stored locally per
 vehicle.
 
-### Spot-price charging
-
-If you charge in Sweden, the Controls tab can show the cheapest time to charge tonight. Hisingen
-fetches day-ahead electricity prices for your price area (SE1–SE4) from
-[elprisetjustnu.se](https://www.elprisetjustnu.se/elpris-api), works out how long charging needs
-to run to reach the target from the current state of charge, and highlights the cheapest
-contiguous window with its estimated energy cost.
-
-It is advisory only — Hisingen does not change the vehicle's own charging schedule — and the
-prices exclude VAT, grid fees, taxes and retailer markups.
-
 ### Doors, windows & locks
 
 Hisingen can show the state reported for things such as:
@@ -908,7 +897,6 @@ In practical terms:
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
 | **Calendar events**              | Read locally from calendars you select; never sent anywhere |
-| **Electricity prices**           | Fetched from elprisetjustnu.se while the spot-price card is shown |
 | **Map integration**              | Uses Apple services where applicable                      |
 | **Update checks**                | Uses Hisingen's signed Sparkle update feed                |
 

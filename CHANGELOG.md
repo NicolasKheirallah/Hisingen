@@ -21,6 +21,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 - chore: checkpoint current work before vehicle state refactor
 - chore(updates): publish v1.3.4 appcast
 
+### Removed
+
+- Removed the third-party Swedish spot-price recommendation and its network integration.
+- Removed unsupported VDMS factory-option fields for exterior, interior, wheels, and packages.
+- Empty VDMS discovery results no longer replace vehicles returned by primary discovery.
+
 ## [1.3.5] - 2026-09-10
 
 ### Fixed

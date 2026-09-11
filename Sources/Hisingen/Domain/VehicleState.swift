@@ -353,8 +353,6 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var pno34: String?
     var accountMarket: String?
     var upholstery: String?
-    var wheels: String?
-    var packages: [String]
     var steeringOrientation: String?
     var imageData: Data?
     var interiorImageData: Data?
@@ -373,8 +371,6 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         pno34: String? = nil,
         accountMarket: String? = nil,
         upholstery: String? = nil,
-        wheels: String? = nil,
-        packages: [String] = [],
         steeringOrientation: String? = nil,
         imageData: Data? = nil,
         interiorImageData: Data? = nil
@@ -392,8 +388,6 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         self.pno34 = pno34
         self.accountMarket = accountMarket
         self.upholstery = upholstery
-        self.wheels = wheels
-        self.packages = packages
         self.steeringOrientation = steeringOrientation
         self.imageData = imageData
         self.interiorImageData = interiorImageData
@@ -589,8 +583,6 @@ struct VehicleState: Codable, Equatable, Sendable {
     private var pno34: String? { get { identity.pno34 } set { identity.pno34 = newValue } }
     private var accountMarket: String? { get { identity.accountMarket } set { identity.accountMarket = newValue } }
     private var upholstery: String? { get { identity.upholstery } set { identity.upholstery = newValue } }
-    private var wheels: String? { get { identity.wheels } set { identity.wheels = newValue } }
-    private var packages: [String] { get { identity.packages } set { identity.packages = newValue } }
     private var steeringOrientation: String? { get { identity.steeringOrientation } set { identity.steeringOrientation = newValue } }
     private var imageData: Data? { get { identity.imageData } set { identity.imageData = newValue } }
     private var interiorImageData: Data? { get { identity.interiorImageData } set { identity.interiorImageData = newValue } }
@@ -878,7 +870,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         case fuelLevelPercent, fuelRangeKm, fuelAmountLiters, averageFuelConsumptionLPer100Km
         case isEngineRunning, fuelType
         case structureWeek, internalVehicleIdentifier, pno34, accountMarket
-        case upholstery, wheels, packages, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
+        case upholstery, steeringOrientation, serviceTrigger, tripComputerElectricRangeKm, chargingCurrentLimitAmps
         case interiorImageData, warrantyInfo
         case chargeLocations
         case electricDistanceKm, fuelDistanceKm, regeneratedEnergyKwh, frontBrakePadStatus, rearBrakePadStatus
@@ -930,8 +922,6 @@ struct VehicleState: Codable, Equatable, Sendable {
                 pno34: try readFlat("pno34"),
                 accountMarket: try readFlat("accountMarket"),
                 upholstery: try readFlat("upholstery"),
-                wheels: try readFlat("wheels"),
-                packages: try values.decodeIfPresent([String].self, forKey: .packages) ?? [],
                 steeringOrientation: try readFlat("steeringOrientation"),
                 imageData: try readFlat("imageData"),
                 interiorImageData: try readFlat("interiorImageData")
@@ -1552,8 +1542,6 @@ struct VehicleState: Codable, Equatable, Sendable {
         if healthDetails == nil { merged.readingDates[.health] = previous.reportedDate(for: .health) }
         merged.accountMarket = accountMarket ?? previous.accountMarket
         merged.upholstery = upholstery ?? previous.upholstery
-        merged.wheels = wheels ?? previous.wheels
-        merged.packages = !packages.isEmpty ? packages : previous.packages
         merged.steeringOrientation = steeringOrientation ?? previous.steeringOrientation
         merged.serviceTrigger = serviceTrigger ?? previous.serviceTrigger
         merged.tripComputerElectricRangeKm = tripComputerElectricRangeKm ?? previous.tripComputerElectricRangeKm

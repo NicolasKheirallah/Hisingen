@@ -326,9 +326,7 @@ struct InfoTabView: View {
 
     private var exteriorCardHasContent: Bool {
         (state.identity.externalColour?.isEmpty == false)
-            || (state.identity.wheels?.isEmpty == false)
             || ((state.exteriorStatus?.physicalDoorCount ?? 0) > 0)
-            || !state.identity.packages.isEmpty
     }
 
     private var interiorCardHasContent: Bool {
@@ -426,11 +424,7 @@ struct InfoTabView: View {
             }
         }
         row(L10n.text("Exterior Paint"), state.identity.externalColour)
-        row(L10n.text("Wheels"), state.identity.wheels)
         row(L10n.text("Interior Trim"), state.identity.upholstery)
-        if !state.identity.packages.isEmpty {
-            row(L10n.text("Factory Packages"), state.identity.packages.joined(separator: ", "))
-        }
         row(L10n.text("Factory Build Week"), state.formattedBuildWeek ?? state.identity.structureWeek)
         row(L10n.text("Factory Spec (PNO34)"), state.identity.pno34)
         row(L10n.text("Market Delivery"), state.otaCapabilities?.identity?.market ?? state.identity.accountMarket)

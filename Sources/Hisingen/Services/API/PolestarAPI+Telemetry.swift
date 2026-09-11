@@ -381,10 +381,6 @@ extension PolestarAPI {
         state.identity.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
         state.identity.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
         state.identity.pno34 = features.contains(.vehicleIdentity) ? carIdentity.pno34 : nil
-        state.identity.externalColour = features.contains(.vehicleIdentity) ? carIdentity.exteriorColorName : nil
-        state.identity.upholstery = features.contains(.vehicleIdentity) ? carIdentity.upholsteryName : nil
-        state.identity.wheels = features.contains(.vehicleIdentity) ? carIdentity.wheelsName : nil
-        state.identity.packages = features.contains(.vehicleIdentity) ? carIdentity.packageNames : []
         state.identity.accountMarket = market
         state.energy.currentLimitAmps = ampLimit.value
         state.energy.locations = chargeLocations.value ?? []

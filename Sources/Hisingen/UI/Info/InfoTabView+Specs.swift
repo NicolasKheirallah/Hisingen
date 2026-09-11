@@ -10,14 +10,11 @@ extension InfoTabView {
         if let color = state.identity.externalColour, !color.isEmpty {
             rows.append(KVRow(L10n.text("Exterior Paint"), color, symbol: "paintpalette.fill"))
         }
-        if let wheels = state.identity.wheels, !wheels.isEmpty {
-            rows.append(KVRow(L10n.text("Wheels & Rims"), wheels, symbol: "circle.circle.fill"))
-        }
         if let doorCount = state.exteriorStatus?.physicalDoorCount, doorCount > 0 {
             rows.append(KVRow(L10n.text("Door Sensors Reported"), L10n.format("%d Doors", doorCount), symbol: "car.side.fill", info: L10n.text("Count of physical door records returned by the vehicle API; this is not a decoded body-style specification.")))
         }
 
-        guard !rows.isEmpty || !state.identity.packages.isEmpty else { return AnyView(EmptyView()) }
+        guard !rows.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -26,31 +23,6 @@ extension InfoTabView {
                 VStack(spacing: 6) {
                     ForEach(rows.indices, id: \.self) { rows[$0] }
 
-                    if !state.identity.packages.isEmpty {
-                        HStack(alignment: .top) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "shippingbox.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(HisingenTheme.accent)
-                                    .frame(width: 14)
-                                Text(L10n.text("Factory Packages"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            HStack(spacing: 4) {
-                                ForEach(state.identity.packages, id: \.self) { pkg in
-                                    Text(pkg)
-                                        .font(.system(size: 9.5, weight: .semibold))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
-                                        .foregroundStyle(HisingenTheme.accent)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
                 }
             }
         })
@@ -314,8 +286,6 @@ extension InfoTabView {
         let model = [state.identity.modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " ")
         let paint = state.identity.externalColour
         let interior = state.identity.upholstery
-        let wheels = state.identity.wheels
-        let packages = state.identity.packages.joined(separator: "; ")
         let nickname = preferences.vehicleNickname(for: state.identity.vin)
         let market = state.otaCapabilities?.identity?.market ?? state.identity.accountMarket
         var rows: [[String]] = [
@@ -330,12 +300,7 @@ extension InfoTabView {
             ["Market", market ?? ""],
             ["Exterior Paint", paint ?? ""],
             ["Upholstery", interior ?? ""],
-            ["Wheels", wheels ?? ""],
-            ["Factory Packages", packages],
         ]
-        rows.append(contentsOf: state.identity.packages.enumerated().map { index, name in
-            ["Package \(index + 1)", name]
-        })
         if let equipment = state.otaCapabilities?.equipment {
             rows.append(contentsOf: equipment.details.map { [$0.title, $0.value] })
             rows.append(["Equipment Source", "Polestar MyCars"])

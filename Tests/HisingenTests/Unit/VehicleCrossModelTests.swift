@@ -134,16 +134,12 @@ struct VehicleCrossModelTests {
         var state = makeVehicleState(vin: "YS2P2000000000001", modelName: "Polestar 2", battery: 78.0)
         state.identity.externalColour = "Thunder Grey"
         state.identity.upholstery = "WeaveTech Charcoal"
-        state.identity.wheels = "20\" 4-V Spoke"
-        state.identity.packages = ["Pilot", "Plus", "Performance"]
         state.identity.structureWeek = "202342"
         state.identity.gearbox = "1-speed automatic"
         state.energy.reportedBatteryCapacityKwh = 78.0
 
         XCTAssertEqual(state.identity.externalColour, "Thunder Grey")
         XCTAssertEqual(state.identity.upholstery, "WeaveTech Charcoal")
-        XCTAssertEqual(state.identity.wheels, "20\" 4-V Spoke")
-        XCTAssertEqual(state.identity.packages.count, 3)
         XCTAssertEqual(state.formattedBuildWeek, "2023 · W42")
         XCTAssertEqual(state.energy.reportedBatteryCapacityKwh, 78.0)
     }
@@ -153,8 +149,6 @@ struct VehicleCrossModelTests {
         var state = makeVehicleState(vin: "YS2ED400000000002", modelName: "Polestar 2 Long Range Dual Motor", battery: 72.0)
         state.identity.externalColour = "Thunder"
         state.identity.upholstery = "Charcoal Embossed Textile"
-        state.identity.wheels = "19\" 5-Double Spoke Black Diamond Cut"
-        state.identity.packages = ["Pilot Pack", "Plus Pack"]
         state.identity.structureWeek = "202401"
         state.identity.pno34 = "P20412"
         state.identity.internalVehicleIdentifier = "V-12345"
@@ -190,8 +184,6 @@ struct VehicleCrossModelTests {
 
         XCTAssertEqual(state.identity.externalColour, "Thunder")
         XCTAssertEqual(state.identity.upholstery, "Charcoal Embossed Textile")
-        XCTAssertEqual(state.identity.wheels, "19\" 5-Double Spoke Black Diamond Cut")
-        XCTAssertEqual(state.identity.packages.count, 2)
         XCTAssertEqual(state.formattedBuildWeek, "2024 · W01")
         XCTAssertEqual(state.identity.pno34, "P20412")
         XCTAssertEqual(state.formattedSteeringOrientation, "Left_Hand_Drive")

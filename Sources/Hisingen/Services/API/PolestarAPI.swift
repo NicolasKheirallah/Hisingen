@@ -96,10 +96,6 @@ actor PolestarAPI {
         var registrationNo: String?
         var pno34: String?
         var structureWeek: String?
-        var exteriorColorName: String?
-        var upholsteryName: String?
-        var wheelsName: String?
-        var packageNames: [String] = []
 
         static let empty = CarIdentity()
     }
@@ -701,24 +697,7 @@ actor PolestarAPI {
                 vdmsDiscoveryBlockedUntil = nil
                 UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffDefaultsKey)
                 UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffReasonDefaultsKey)
-                accountCars = vdmsCars.map { vdmsCar in
-                    if let matching = legacyCars.first(where: { $0.vin == vdmsCar.vin }) {
-                        return ConsumerCarDTO(
-                            vin: vdmsCar.vin,
-                            internalVehicleIdentifier: vdmsCar.internalVehicleIdentifier ?? matching.internalVehicleIdentifier,
-                            modelName: vdmsCar.modelName ?? matching.modelName,
-                            modelYear: vdmsCar.modelYear ?? matching.modelYear,
-                            registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
-                            pno34: matching.pno34,
-                            structureWeek: matching.structureWeek,
-                            exteriorColorName: vdmsCar.exteriorColorName,
-                            upholsteryName: vdmsCar.upholsteryName,
-                            wheelsName: vdmsCar.wheelsName,
-                            packageNames: vdmsCar.packageNames
-                        )
-                    }
-                    return vdmsCar
-                }
+                accountCars = Self.mergeDiscoveryCars(primary: legacyCars, vdms: vdmsCars)
             } catch {
                 if Self.isRequestLevelFailure(error) {
                     // The app-backend endpoint is a secondary discovery source. If the primary
@@ -776,8 +755,28 @@ actor PolestarAPI {
         selectedVIN = vin
     }
 
+    static func mergeDiscoveryCars(
+        primary: [ConsumerCarDTO],
+        vdms: [ConsumerCarDTO]
+    ) -> [ConsumerCarDTO] {
+        guard !vdms.isEmpty else { return primary }
+        return vdms.map { vdmsCar in
+            guard let matching = primary.first(where: { $0.vin == vdmsCar.vin }) else {
+                return vdmsCar
+            }
+            return ConsumerCarDTO(
+                vin: vdmsCar.vin,
+                internalVehicleIdentifier: vdmsCar.internalVehicleIdentifier ?? matching.internalVehicleIdentifier,
+                modelName: vdmsCar.modelName ?? matching.modelName,
+                modelYear: vdmsCar.modelYear ?? matching.modelYear,
+                registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
+                pno34: matching.pno34,
+                structureWeek: matching.structureWeek
+            )
+        }
+    }
+
     private func fetchAppBackendCars(token: String) async throws -> [ConsumerCarDTO] {
-        // Polestar removed `packages` from VdmsContent; requesting it rejects the whole query.
         let query = """
         query GetVDMSCars {
           vdms {
@@ -785,9 +784,6 @@ actor PolestarAPI {
               vin internalVehicleIdentifier registrationNo modelYear
               content {
                 model { name }
-                exterior { name }
-                interior { name }
-                wheels { name }
               }
             }
           }
@@ -896,11 +892,7 @@ actor PolestarAPI {
             modelYear: car.modelYear?.value,
             registrationNo: car.registrationNo,
             pno34: car.pno34,
-            structureWeek: car.structureWeek?.value,
-            exteriorColorName: car.exteriorColorName,
-            upholsteryName: car.upholsteryName,
-            wheelsName: car.wheelsName,
-            packageNames: car.packageNames)
+            structureWeek: car.structureWeek?.value)
     }
 
     func fetchOwnerInfo() async {

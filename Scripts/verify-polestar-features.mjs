@@ -14,11 +14,11 @@ require_(specs.includes("static func factoryPassportCSV"), "factoryPassportCSV b
 require_(specs.includes("Export Factory Passport (CSV)"), "factory passport UI entry missing");
 for (const field of ["VIN", "Nickname", "Model", "Registration No", "Internal Vehicle ID",
                      "Factory Spec (PNO34)", "Factory Build Week", "Market",
-                     "Exterior Paint", "Upholstery", "Wheels", "Factory Packages"]) {
+                     "Exterior Paint", "Upholstery"]) {
   require_(specs.includes(`"${field}"`), `passport CSV missing row: ${field}`);
 }
-require_(specs.includes("Package \\(index + 1)\\") || specs.includes("Package ") === false || true, "packages rows");
-require_(specs.includes("state.packages.enumerated()"), "passport CSV per-package rows missing");
+require_(!specs.includes('["Wheels",'), "unsupported wheel row remains in passport CSV");
+require_(!specs.includes('["Factory Packages",'), "unsupported package row remains in passport CSV");
 
 // F2: Charging curve chart (shipped implementation verified wired)
 const historyCharging = read("Sources/Hisingen/UI/History/HistoryDashboardView+Charging.swift");

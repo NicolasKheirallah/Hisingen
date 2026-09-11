@@ -189,32 +189,6 @@ struct VehicleFeatureCompletionTests {
     }
 
     @Test
-    func smartCharging() throws {
-        let json = """
-        [
-          {"SEK_per_kWh":4,"EUR_per_kWh":0.4,"EXR":10,"time_start":"2026-08-30T00:00:00+02:00","time_end":"2026-08-30T00:15:00+02:00"},
-          {"SEK_per_kWh":4,"EUR_per_kWh":0.4,"EXR":10,"time_start":"2026-08-30T00:15:00+02:00","time_end":"2026-08-30T00:30:00+02:00"},
-          {"SEK_per_kWh":1,"EUR_per_kWh":0.1,"EXR":10,"time_start":"2026-08-30T00:30:00+02:00","time_end":"2026-08-30T00:45:00+02:00"},
-          {"SEK_per_kWh":1,"EUR_per_kWh":0.1,"EXR":10,"time_start":"2026-08-30T00:45:00+02:00","time_end":"2026-08-30T01:00:00+02:00"},
-          {"SEK_per_kWh":1,"EUR_per_kWh":0.1,"EXR":10,"time_start":"2026-08-30T01:00:00+02:00","time_end":"2026-08-30T01:15:00+02:00"},
-          {"SEK_per_kWh":1,"EUR_per_kWh":0.1,"EXR":10,"time_start":"2026-08-30T01:15:00+02:00","time_end":"2026-08-30T01:30:00+02:00"},
-          {"SEK_per_kWh":5,"EUR_per_kWh":0.5,"EXR":10,"time_start":"2026-08-30T01:30:00+02:00","time_end":"2026-08-30T01:45:00+02:00"}
-        ]
-        """
-        let prices = try SpotPriceService.decode(Data(json.utf8))
-        #expect(prices.count == 7)
-        let now = try #require(ISO8601DateFormatter().date(from: "2026-08-29T22:00:00Z"))
-        let result = try #require(SmartChargingRecommendation.cheapestWindow(
-            prices: prices, energyKWh: 2, chargingPowerKW: 2, notBefore: now
-        ))
-        #expect(result.start == prices[2].start)
-        #expect(result.end == prices[5].end)
-        #expect(abs(result.estimatedCostSEK - 2) < 0.001)
-        #expect(result.intervalCount == 4)
-        #expect(SpotPriceService.endpoint(date: now, area: .se4)?.absoluteString.contains("SE4.json") == true)
-    }
-
-    @Test
     func calendarPreconditioning() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let due = CalendarPreconditioningEvent(identifier: "meeting", title: "Office",
