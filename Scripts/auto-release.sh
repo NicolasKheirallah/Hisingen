@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
-# Auto-release: bump the patch version, generate a CHANGELOG entry from the
-# commits since the last tag, commit, tag, and dispatch the release workflow.
+# Auto-release: take the release version from Resources/Info.plist (shipping a
+# manual bump as-is, otherwise incrementing the last release's patch number),
+# generate a CHANGELOG entry from the commits since the last tag, commit, tag,
+# and dispatch the release workflow.
 # Called by .github/workflows/auto-release.yml after a green CI run on main,
 # with GH_TOKEN exported and `gh auth setup-git` configured for the push.
 #
@@ -54,16 +56,36 @@ fi
 RELEASABLE=$(printf '%s\n' "$COMMITS" | grep -v '^chore(release):' || true)
 [ -n "$RELEASABLE" ] || skip "only release-bump commits since ${LATEST_TAG:-the first release}"
 
+# Resources/Info.plist is the source of truth for the release version. When the
+# plist has been bumped manually to a version past the latest tag (e.g. a major
+# or minor landing), ship it as-is; otherwise increment the last release's patch
+# number. Deriving the version from the tag alone silently renumbers manual
+# bumps — that is how a 2.0.0 landing was released as 1.3.6.
+PLIST_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist 2>/dev/null || true)
+
 if [ -z "$LATEST_TAG" ]; then
-    NEW_VERSION="1.0.0"
+    NEW_VERSION="${PLIST_VERSION:-1.0.0}"
 else
-    RAW_VER="${LATEST_TAG#v}"
-    MAJOR=${RAW_VER%%.*}
-    REST=${RAW_VER#*.}
-    MINOR=${REST%%.*}
-    PATCH=${REST#*.}
-    PATCH=$((PATCH + 1))
-    NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+    TAG_VERSION="${LATEST_TAG#v}"
+    if [ -n "$PLIST_VERSION" ] && [ "$PLIST_VERSION" != "$TAG_VERSION" ]; then
+        NEW_VERSION="$PLIST_VERSION"
+    else
+        MAJOR=${TAG_VERSION%%.*}
+        REST=${TAG_VERSION#*.}
+        MINOR=${REST%%.*}
+        PATCH=${REST#*.}
+        PATCH=$((PATCH + 1))
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+    fi
+fi
+
+printf '%s' "$NEW_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+    echo "auto-release: refusing to release — Resources/Info.plist has invalid version '${NEW_VERSION}'" >&2
+    exit 1
+}
+
+if git rev-parse -q --verify "refs/tags/v${NEW_VERSION}" >/dev/null 2>&1; then
+    skip "v${NEW_VERSION} is already tagged — bump Resources/Info.plist to release"
 fi
 
 DATE=$(date +%F)
