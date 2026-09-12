@@ -5,6 +5,9 @@ extension InfoTabView {
     // MARK: - Battery health
 
     var batteryHealthCard: some View {
+        let rangeModeGuidance = L10n.text(
+            "For the closest estimate, set the car's range display to Standard, not Dynamic."
+        )
         guard let estimate = batteryHealthEstimate else {
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
@@ -14,6 +17,10 @@ extension InfoTabView {
                           L10n.text("Waiting for 100% charge"), symbol: "clock")
                     Text(L10n.text("Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading."))
                         .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(rangeModeGuidance)
+                        .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -76,6 +83,11 @@ extension InfoTabView {
 
                     Text(estimate.methodologySummary)
                         .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(rangeModeGuidance)
+                        .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 

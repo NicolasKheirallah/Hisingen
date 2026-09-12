@@ -170,7 +170,7 @@ actor ElectricityPriceService {
         guard let fetched = try? await fetchPoints(from: Self.priceURL(zone: zone, date: day)),
               !fetched.isEmpty else { return existing }
         var seen = Set(existing.map(\.startDate))
-        let merged = (existing + fetched.filter { seen.insert($0.startDate).inserted != nil })
+        let merged = (existing + fetched.filter { seen.insert($0.startDate).inserted })
             .sorted { $0.startDate < $1.startDate }
         cache[zone] = CachedPrices(zone: zone, points: merged, fetchedAt: Date())
         store.save(zone: zone, points: merged, fetchedAt: Date())

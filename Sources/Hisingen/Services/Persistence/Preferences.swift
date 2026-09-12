@@ -417,8 +417,8 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     var title: String {
         switch self {
         case .hisingen: return L10n.text("Hisingen Glass")
-        case .polestar: return L10n.text("Polestar Minimal")
-        case .volvo: return L10n.text("Volvo Iron")
+        case .polestar: return L10n.text("Monochrome Precision")
+        case .volvo: return L10n.text("Heritage Blue")
         case .nordicNight: return L10n.text("Nordic Night")
         case .aurora: return L10n.text("Aurora Borealis")
         case .swedishGold: return L10n.text("Swedish Gold")
@@ -432,7 +432,7 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         switch self {
         case .hisingen: return L10n.text("Rounded cards, translucent materials, amber accents")
         case .polestar: return L10n.text("Monochrome panels, sharp corners, Scandinavian minimalism")
-        case .volvo: return L10n.text("Volvo iron blue accent, soft panels, light/bold contrast")
+        case .volvo: return L10n.text("Blue accents, calm surfaces, clear typographic contrast")
         case .nordicNight: return L10n.text("Pitch OLED black, electric cyan glow, modern dark style")
         case .aurora: return L10n.text("Deep midnight slate with radiant northern lights emerald")
         case .swedishGold: return L10n.text("Polestar BST Öhlins Swedish Gold, dark charcoal luxury")

@@ -328,7 +328,7 @@ extension HistoryDashboardView {
             .sessionsMissingSpotCost(vin: vin, limit: 400)
         let covered = Set(prices.map { Self.stockholmCalendar.startOfDay(for: $0.startDate) })
         let days = Set(uncovered.compactMap { session -> Date? in
-            guard let endedAt = session.endedAt else { return nil }
+            guard session.endedAt != nil else { return nil }
             let day = Self.stockholmCalendar.startOfDay(for: session.startedAt)
             return covered.contains(day) ? nil : day
         })

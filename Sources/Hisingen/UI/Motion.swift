@@ -62,7 +62,11 @@ enum Motion {
     /// Hisingen samples the car faster than it does.
     static var telemetry: Animation { .easeInOut(duration: 0.55) }
     /// A progress fraction moving toward a new target (rings, bars, gauges).
-    static var progress: Animation { .easeInOut(duration: 0.70) }
+    /// Kept as a duration too: Core Animation surfaces that must stay in
+    /// lockstep with a SwiftUI progress animation (e.g. the charging bar's
+    /// particle clip) restate it as transaction timing.
+    static let progressDuration: TimeInterval = 0.70
+    static var progress: Animation { .easeInOut(duration: progressDuration) }
 
     // MARK: - Ambient (long-running, subtle, resource-frugal)
 
@@ -78,9 +82,13 @@ enum Motion {
     static var livePulse: Animation {
         .easeInOut(duration: livePulseCycle).repeatForever(autoreverses: true)
     }
-    /// Energy travelling along a charging indicator, in points per second, for a
-    /// `TimelineView`-driven sweep. Slow and continuous, not a race.
-    static let chargeFlowPointsPerSecond: CGFloat = 42
+    /// The charging bar's leading-edge glow breath. A little quicker than
+    /// ``breathCycle`` — it should read as "energy arriving", not idle
+    /// breathing — while staying barely noticeable.
+    static let chargeGlowCycle: TimeInterval = 1.9
+    static var chargeGlow: Animation {
+        .easeInOut(duration: chargeGlowCycle).repeatForever(autoreverses: true)
+    }
     /// Continuous rotation (fan blades, sync spinner): one turn per this long.
     static let spinCycle: TimeInterval = 1.4
     static var spin: Animation {

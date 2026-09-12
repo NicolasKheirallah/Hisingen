@@ -708,7 +708,7 @@
 "Polestar ID (Email)" = "Polestar ID (Email)";
 "Polestar ID Password Required" = "需要 Polestar ID 密码";
 "Polestar ID Required" = "Polestar ID Required";
-"Polestar Minimal" = "Polestar 极简白";
+"Monochrome Precision" = "单色精密";
 "Polestar Remote Commands" = "Polestar Remote Commands";
 "Polestar asked Hisingen to refresh less often. Retrying later." = "Polestar asked Hisingen to refresh less often. Retrying later.";
 "Polestar cloud backend requires official mobile app pairing for remote commands." = "Polestar cloud backend requires official mobile app pairing for remote commands.";
@@ -1173,9 +1173,10 @@
 "Volvo" = "Volvo";
 "Volvo Assistance" = "Volvo Assistance";
 "Volvo Connected Vehicle API" = "Volvo 车联网 API";
-"Volvo Iron" = "Volvo 经典铁标蓝";
+"Heritage Blue" = "传承蓝";
 "Volvo asked Hisingen to refresh less often. Retrying later." = "Volvo 建议 Hisingen 降低刷新频率。稍后将重试。";
-"Volvo iron blue accent, soft panels, light/bold contrast" = "Volvo 标志性铁标蓝点缀，柔和面板，明暗对比质感";
+"Blue accents, calm surfaces, clear typographic contrast" = "蓝色点缀、沉稳表面与清晰的字体对比";
+"Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied." = "单色精密和传承蓝是基于 Polestar 与 Volvo Cars 公开设计原则制作的独立主题，不代表任何关联或认可。";
 "Volvo is temporarily unavailable. Retrying automatically." = "Volvo 服务暂时不可用。正在自动重试。";
 "Volvo is temporarily unreachable. Retrying automatically." = "暂时无法连接到 Volvo 服务。正在自动重试。";
 "Volvo rejected the request. Open Settings if this continues." = "Volvo 拒绝了该请求。如果问题持续，请打开“设置”。";
@@ -2357,6 +2358,7 @@
 "Weekly" = "Weekly";
 "Monthly" = "Monthly";
 "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement." = "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement.";
+"For the closest estimate, set the car's range display to Standard, not Dynamic." = "为获得尽可能准确的估算，请将车辆的续航里程显示设为“标准”，而不是“动态”。";
 "Saved at 100% charge" = "Saved at 100% charge";
 "Updated at 100% charge" = "Updated at 100% charge";
 "Range at 100% charge" = "Range at 100% charge";

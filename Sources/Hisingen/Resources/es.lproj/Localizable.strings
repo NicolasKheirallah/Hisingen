@@ -708,7 +708,7 @@
 "Polestar ID (Email)" = "Polestar ID (Email)";
 "Polestar ID Password Required" = "Contraseña de Polestar ID requerida";
 "Polestar ID Required" = "Polestar ID Required";
-"Polestar Minimal" = "Polestar Minimal";
+"Monochrome Precision" = "Precisión monocromática";
 "Polestar Remote Commands" = "Polestar Remote Commands";
 "Polestar asked Hisingen to refresh less often. Retrying later." = "Polestar asked Hisingen to refresh less often. Retrying later.";
 "Polestar cloud backend requires official mobile app pairing for remote commands." = "Polestar cloud backend requires official mobile app pairing for remote commands.";
@@ -1173,9 +1173,10 @@
 "Volvo" = "Volvo";
 "Volvo Assistance" = "Volvo Assistance";
 "Volvo Connected Vehicle API" = "Volvo Connected Vehicle API";
-"Volvo Iron" = "Volvo Iron";
+"Heritage Blue" = "Azul clásico";
 "Volvo asked Hisingen to refresh less often. Retrying later." = "Volvo solicitó a Hisingen actualizar con menor frecuencia. Reintentando más tarde.";
-"Volvo iron blue accent, soft panels, light/bold contrast" = "Acento azul hierro Volvo, paneles suaves, contraste claro/audaz";
+"Blue accents, calm surfaces, clear typographic contrast" = "Acentos azules, superficies serenas y contraste tipográfico claro";
+"Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied." = "Precisión monocromática y Azul clásico son temas independientes basados en principios de diseño documentados públicamente por Polestar y Volvo Cars. No implican afiliación ni respaldo.";
 "Volvo is temporarily unavailable. Retrying automatically." = "Volvo no está disponible temporalmente. Reintentando automáticamente.";
 "Volvo is temporarily unreachable. Retrying automatically." = "Volvo no está accesible temporalmente. Reintentando automáticamente.";
 "Volvo rejected the request. Open Settings if this continues." = "Volvo rechazó la solicitud. Abre Ajustes si esto continúa.";
@@ -2357,6 +2358,7 @@
 "Weekly" = "Weekly";
 "Monthly" = "Monthly";
 "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement." = "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement.";
+"For the closest estimate, set the car's range display to Standard, not Dynamic." = "Para obtener la estimación más precisa, configura la visualización de autonomía del vehículo en Estándar, no en Dinámica.";
 "Saved at 100% charge" = "Saved at 100% charge";
 "Updated at 100% charge" = "Updated at 100% charge";
 "Range at 100% charge" = "Range at 100% charge";

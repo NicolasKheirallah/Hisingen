@@ -18,8 +18,8 @@ extension HisingenTheme {
 
     static let semanticGood = Color.green
 
-    /// Chart series tokens. Themes with a strong accent identity (Polestar's monochrome
-    /// philosophy, Volvo Iron) collapse charts toward the theme accent; expressive themes
+    /// Chart series tokens. Themes with a strong accent identity (Monochrome Precision and
+    /// Heritage Blue) collapse charts toward the theme accent; expressive themes
     /// keep distinct hues so multi-series cards stay readable.
     static var chartPositive: Color { decorativeTint(.green) == .green ? .green : HisingenTheme.accent }
     static var chartInfo: Color { decorativeTint(.cyan) == .cyan ? .cyan : HisingenTheme.accent.opacity(0.85) }

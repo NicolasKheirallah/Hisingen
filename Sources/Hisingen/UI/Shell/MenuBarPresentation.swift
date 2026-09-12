@@ -131,6 +131,127 @@ extension MenuBarIconState {
     }
 }
 
+// MARK: - Which artwork is shown
+
+/// The concrete menu-bar artwork matching `MenuBarIconState`. The state machine
+/// decides *priority*; this picks the bundled PNG that draws it.
+///
+/// Artwork lives in `Sources/Hisingen/Resources/menubar-hisingen-*.png` — white
+/// car-front glyphs with colored accents on transparency, downscaled from the
+/// `icons/` originals. They are rendered as template images (alpha mask), so
+/// macOS adapts them to light/dark menu bars automatically.
+enum MenuBarGlyph: String, CaseIterable, Sendable {
+    case normal
+    case pluggedIn = "plugged-in"
+    case charging
+    case fullyCharged = "fully-charged"
+    case climateActive = "climate-active"
+    case warning
+    case offline
+
+    var resourceName: String { "menubar-hisingen-\(rawValue)" }
+
+    /// The artwork for a set of signals, mirroring `MenuBarIconState.resolve`'s
+    /// priority (warning → charging → completion → climate → connected → normal).
+    /// Pure so it is testable without an `NSImage` behind it.
+    ///
+    /// `remoteCommandInProgress` is deliberately ignored: an in-flight command
+    /// *animates* the current glyph (shimmer via `MenuBarIconAnimator`) rather
+    /// than replacing what it says.
+    ///
+    /// - Parameters:
+    ///   - inputs: vehicle signals; pass `remoteCommandInProgress = false`.
+    ///   - offline: no data at all, or the freshest snapshot is stale.
+    ///   - connectionGlyphsEnabled: mirrors the legacy `includeConnection` gate —
+    ///     with "Charging details" turned off, charging/plugged/completion glyphs
+    ///     collapse to the resting car, exactly as the SF-Symbol icons did.
+    ///     Warnings always surface.
+    static func resolve(
+        inputs: MenuBarIconInputs,
+        offline: Bool,
+        connectionGlyphsEnabled: Bool = true
+    ) -> MenuBarGlyph {
+        if offline { return .offline }
+        if inputs.isCritical { return .warning }
+        if connectionGlyphsEnabled {
+            if inputs.isCharging { return .charging }
+            if inputs.chargingRecentlyCompleted && !inputs.isCharging { return .fullyCharged }
+        }
+        if inputs.climateActive { return .climateActive }
+        if connectionGlyphsEnabled, inputs.pluggedIn { return .pluggedIn }
+        return .normal
+    }
+}
+
+/// Loads and caches the bundled menu-bar glyphs. Images are cached per
+/// (glyph, tint) so the same `NSImage` instance is handed out across telemetry
+/// renders — `MenuBarIconAnimator` fingerprints image identity to decide when
+/// its pulse frames need rebuilding, so stable instances mean zero rebuilds.
+@MainActor
+final class MenuBarGlyphImageProvider {
+    static let shared = MenuBarGlyphImageProvider()
+
+    /// Menu-bar point size for the artwork; pixel reps stay at 128 px so retina
+    /// screens downsample rather than upscale.
+    private static let pointSize: CGFloat = 18
+
+    private var cache: [String: NSImage] = [:]
+
+    /// Template image for a glyph (adapts to light/dark menu bars), or a
+    /// solid-color composite when `tint` is provided (then `isTemplate = false`,
+    /// matching the legacy SF-Symbol tint behavior).
+    func image(for glyph: MenuBarGlyph, tint: NSColor? = nil) -> NSImage? {
+        let key = "\(glyph.rawValue)|\(tint?.description ?? "template")"
+        if let cached = cache[key] { return cached }
+
+        guard let image = loadedImage(for: glyph) else { return nil }
+        image.size = NSSize(width: Self.pointSize, height: Self.pointSize)
+        image.accessibilityDescription = L10n.text("Hisingen")
+        if let tint {
+            let tinted = Self.tinted(image, with: tint)
+            tinted.accessibilityDescription = image.accessibilityDescription
+            cache[key] = tinted
+            return tinted
+        }
+        image.isTemplate = true
+        cache[key] = image
+        return image
+    }
+
+    private func loadedImage(for glyph: MenuBarGlyph) -> NSImage? {
+        let name = glyph.resourceName
+        // Bundled .app: resources sit both at the bundle root and inside the
+        // nested SwiftPM resource bundle the Makefile copies.
+        if let nested = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
+           let url = Bundle(path: nested)?.url(forResource: name, withExtension: "png") {
+            return NSImage(contentsOf: url)
+        }
+        if let url = Bundle.main.url(forResource: name, withExtension: "png") {
+            return NSImage(contentsOf: url)
+        }
+        // Unbundled `swift run`: fall back to the working copy.
+        for path in [
+            "Sources/Hisingen/Resources/\(name).png",
+            "icons/hisingen-\(glyph.rawValue).png"
+        ] where FileManager.default.fileExists(atPath: path) {
+            return NSImage(contentsOfFile: path)
+        }
+        return nil
+    }
+
+    /// Replaces the glyph's color with a flat tint, keeping its alpha shape.
+    private static func tinted(_ image: NSImage, with color: NSColor) -> NSImage {
+        let size = image.size
+        let result = NSImage(size: size)
+        result.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: size))
+        color.set()
+        NSRect(origin: .zero, size: size).fill(using: .sourceAtop)
+        result.unlockFocus()
+        return result
+    }
+}
+
 // MARK: - The animator
 
 /// Drives the `NSStatusItem` button image for the animated icon states.
@@ -277,6 +398,10 @@ final class MenuBarIconAnimator {
     }
 
     private static func signature(of image: NSImage) -> String {
-        "\(Int(image.size.width))x\(Int(image.size.height))|\(image.isTemplate ? "t" : "c")"
+        // Instance identity is part of the fingerprint: glyph providers cache
+        // images, so a different instance means the artwork actually changed
+        // (glyph swap, tint flip) and the pulse frames must be re-rendered.
+        let identity = Unmanaged.passUnretained(image).toOpaque()
+        return "\(Int(image.size.width))x\(Int(image.size.height))|\(image.isTemplate ? "t" : "c")|\(identity)"
     }
 }

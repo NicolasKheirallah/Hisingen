@@ -82,9 +82,9 @@ struct PolestarRawDecodeTests {
 
     @Test func releaseNotesHTMLStripsTextblockAndTags() {
         let input = "<textblock>A new software update is available containing improved functionality. <b>Please</b> contact Polestar if you have questions.</textblock>"
-        let stripped = VehicleTabView.strippedReleaseNotes(input)
+        let stripped = VehicleSoftwareCard.strippedReleaseNotes(input)
         #expect(stripped == "A new software update is available containing improved functionality. Please contact Polestar if you have questions.")
-        #expect(VehicleTabView.strippedReleaseNotes("plain text").isEmpty == false)
+        #expect(VehicleSoftwareCard.strippedReleaseNotes("plain text").isEmpty == false)
     }
 
     // MARK: - Scheduler relative_time

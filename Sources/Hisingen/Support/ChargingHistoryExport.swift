@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 /// Shared rendering of the charging-history CSV used by both the popover's charging card and
 /// the status-item context menu (previously two verbatim copies that were drifting).
@@ -13,5 +15,35 @@ enum ChargingHistoryExport {
             return "\(dateStr),\(session.startBatteryPercentage),\(session.endBatteryPercentage),\(session.percentageAdded),\(session.kwhDelivered),\(peakKw),\(session.durationMinutes),\(costStr),\(session.currencySymbol ?? currencySymbol),\(session.energySource.rawValue),\(session.confidence.rawValue),\(coverage),\(session.summaryVersion)"
         }.joined(separator: "\n")
         return headers + rows
+    }
+
+    @MainActor
+    static func saveCSV(sessions: [ChargingSession], vin: String, tariffPricePerKwh: Double, currencySymbol: String) {
+        let contents = csv(sessions: sessions, tariffPricePerKwh: tariffPricePerKwh, currencySymbol: currencySymbol)
+        save(Data(contents.utf8), type: .commaSeparatedText, filename: filename(vin: vin, extension: "csv"))
+    }
+
+    @MainActor
+    static func saveJSON(sessions: [ChargingSession], vin: String) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(sessions) else { return }
+        save(data, type: .json, filename: filename(vin: vin, extension: "json"))
+    }
+
+    private static func filename(vin: String, extension fileExtension: String) -> String {
+        "charging_history_\(vin.prefix(8)).\(fileExtension)"
+    }
+
+    @MainActor
+    private static func save(_ data: Data, type: UTType, filename: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [type]
+        panel.nameFieldStringValue = filename
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? data.write(to: url, options: .atomic)
+        }
     }
 }

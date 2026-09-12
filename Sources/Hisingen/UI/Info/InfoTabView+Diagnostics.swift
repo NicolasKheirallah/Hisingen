@@ -51,7 +51,7 @@ extension InfoTabView {
         }
         if let long = sw.longDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !long.isEmpty {
             rows.append(KVRow(L10n.text("Release Notes"),
-                              VehicleTabView.strippedReleaseNotes(long), symbol: "doc.richtext"))
+                              VehicleSoftwareCard.strippedReleaseNotes(long), symbol: "doc.richtext"))
         }
         if let updatedAt = sw.updatedAt {
             rows.append(KVRow(L10n.text("Status Reported"), Format.dateTimeFormatter.string(from: updatedAt), symbol: "clock"))

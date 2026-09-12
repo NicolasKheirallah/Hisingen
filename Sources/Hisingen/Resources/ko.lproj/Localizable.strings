@@ -708,7 +708,7 @@
 "Polestar ID (Email)" = "Polestar ID (Email)";
 "Polestar ID Password Required" = "Polestar ID 비밀번호 필요";
 "Polestar ID Required" = "Polestar ID Required";
-"Polestar Minimal" = "폴스타 미니멀 (Polestar Minimal)";
+"Monochrome Precision" = "모노크롬 정밀";
 "Polestar Remote Commands" = "Polestar Remote Commands";
 "Polestar asked Hisingen to refresh less often. Retrying later." = "Polestar asked Hisingen to refresh less often. Retrying later.";
 "Polestar cloud backend requires official mobile app pairing for remote commands." = "Polestar cloud backend requires official mobile app pairing for remote commands.";
@@ -1173,9 +1173,10 @@
 "Volvo" = "Volvo";
 "Volvo Assistance" = "Volvo Assistance";
 "Volvo Connected Vehicle API" = "볼보 커넥티드 비히클 API (Volvo Connected Vehicle API)";
-"Volvo Iron" = "볼보 아이언 (Volvo Iron)";
+"Heritage Blue" = "헤리티지 블루";
 "Volvo asked Hisingen to refresh less often. Retrying later." = "Volvo에서 요청 빈도를 줄이도록 안내했습니다. 나중에 다시 시도합니다.";
-"Volvo iron blue accent, soft panels, light/bold contrast" = "Volvo 아이언 블루 액센트, 부드러운 패널, 명확한 명암 대비";
+"Blue accents, calm surfaces, clear typographic contrast" = "파란색 강조, 차분한 표면, 선명한 타이포그래피 대비";
+"Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied." = "모노크롬 정밀과 헤리티지 블루는 Polestar와 Volvo Cars가 공개한 디자인 원칙을 바탕으로 만든 독립 테마입니다. 제휴나 보증을 의미하지 않습니다.";
 "Volvo is temporarily unavailable. Retrying automatically." = "Volvo 서비스를 일시적으로 사용할 수 없습니다. 자동으로 다시 시도합니다.";
 "Volvo is temporarily unreachable. Retrying automatically." = "Volvo 서비스에 일시적으로 연결할 수 없습니다. 자동으로 다시 시도합니다.";
 "Volvo rejected the request. Open Settings if this continues." = "Volvo에서 요청을 거부했습니다. 문제가 지속되면 설정을 여세요.";
@@ -2357,6 +2358,7 @@
 "Weekly" = "Weekly";
 "Monthly" = "Monthly";
 "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement." = "Hisingen calculates this value only at 100% charge. It divides the vehicle-reported estimated range by the configured WLTP range and multiplies by 100. The result is saved and updates only after another 100% reading. It is a range-based estimate, not a battery-management-system measurement.";
+"For the closest estimate, set the car's range display to Standard, not Dynamic." = "가장 정확한 추정값을 얻으려면 차량의 주행 가능 거리 표시를 동적이 아닌 표준으로 설정하세요.";
 "Saved at 100% charge" = "Saved at 100% charge";
 "Updated at 100% charge" = "Updated at 100% charge";
 "Range at 100% charge" = "Range at 100% charge";

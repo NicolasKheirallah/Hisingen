@@ -132,10 +132,30 @@ practice are gone.
 - **Battery state of health is one auditable number:** the vehicle-reported range at
   100% charge divided by the configured WLTP range. Hisingen remembers the result and
   updates it only after another 100% reading. The multi-signal weighted estimate and
-  its smoothing are gone.
+  its smoothing are gone. Range estimation needs to be in Standard and not dynamic in car for this to be as close to accurate as possible
 - **The vehicle state snapshot is organized into named clusters** — identity, energy
   and charging, exterior, health, and snapshot freshness — with the vocabulary
   documented in the glossary, replacing flat struct sprawl.
+- **The main SwiftUI screens now compose dedicated card views.** Vehicle status,
+  remote controls, and Settings cards moved out of `VehicleTabView`,
+  `ControlsTabView`, and `SettingsView`. Each extracted Settings card owns its local
+  draft state and validation, while `PreferenceBinder` remains the shared path for
+  persisted preference writes and change notifications. Control drafts and command
+  gating now live beside their cards; command receipts, unavailable-feature states,
+  registration badges, and charging-history export are reusable components. Card
+  order, availability rules, command behavior, and displayed data are unchanged.
+- **The charging bar's motion is now a particle flow, not a loading sweep.** While
+  the vehicle actively charges, the filled section of the battery gauge carries a few
+  small GPU-driven light points (a Core Animation emitter, ~4 visible at a time) that
+  drift left → right toward the charge edge and fade out, over a faint dark-to-bright
+  gradient in the fill, with a slow breathing glow at the edge — replacing the white
+  highlight that swept the whole filled bar like a generic loading indicator.
+  Particles are clipped exactly to the filled portion and can never render into the
+  unfilled remainder; the flow drains and fades within ~0.3 s when charging stops;
+  100 % settles into a static bar with a single brief completion pulse; a connected
+  but paused vehicle stays fully static; and Reduce Motion (and the flat Polestar
+  theme) disables all motion for a plain bar. SoC calculation and bar layout are
+  unchanged.
 - **Tyre presentation on iTPMS vehicles (Polestar 2 and other warning-only cars)
   reflects an owner decision:** an unflagged reading *is* the all-clear the system can
   give, so quiet tyres now render green "OK" instead of a neutral "unknown", while a
@@ -145,6 +165,19 @@ practice are gone.
 - C3 host discovery requests the version-dependent document with the v2 Accept header
   first and falls back to v1 on any version-shape rejection, so a future removal of
   the v1 document cannot take vehicle telemetry discovery down with it.
+- **Custom menu-bar icon set.** The SF-Symbol glyphs are replaced by the bundled
+  Hisingen artwork (`menubar-hisingen-*.png`, downscaled from the `icons/` originals):
+  a car front that picks up a plug cable, charging bolt, completion checkmark,
+  preconditioning airflow, or warning triangle, plus a dedicated glyph for offline or
+  stale data. Glyph choice follows the existing priority machine (warning → charging →
+  completion → climate → plugged-in → normal; a remote command shimmers the current
+  glyph instead of replacing it), warnings now surface even with Charging details
+  turned off, and the artwork renders as template images so it adapts to light and
+  dark menu bars. "Tint menu bar icon" recolors the whole glyph using the same rules
+  as before (green while charging, orange when low or warned, accent otherwise).
+  Combustion-only and engine-running hybrids keep their fuel-pump/engine SF Symbols,
+  the Settings preview shows the new artwork, and a matching SF fallback keeps the
+  menu bar populated if the resources are missing.
 
 ### Fixed
 

@@ -62,6 +62,20 @@ enum Format {
         return "car"
     }
 
+    /// SF-Symbol stand-in for a custom menu-bar glyph. Only used when the bundled
+    /// Hisingen artwork is unavailable (e.g. `swift run` outside the repository).
+    static func symbolFallback(for glyph: MenuBarGlyph) -> String {
+        switch glyph {
+        case .normal: return "car"
+        case .pluggedIn: return "bolt.car"
+        case .charging: return "bolt.car.fill"
+        case .fullyCharged: return "bolt.car.fill"
+        case .climateActive: return "thermometer.sun.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .offline: return "zzz"
+        }
+    }
+
     static func batterySymbol(for percentage: Double?, isCharging: Bool) -> String {
         if isCharging { return "bolt.car.fill" }
         guard let percentage else { return "car" }

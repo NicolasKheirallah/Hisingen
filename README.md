@@ -814,8 +814,8 @@ Hisingen doesn't need to look identical on every Mac.
 Nine themes are currently included:
 
 * Hisingen Glass
-* Polestar Minimal
-* Volvo Iron
+* Monochrome Precision
+* Heritage Blue
 * Nordic Night
 * Aurora Borealis
 * Swedish Gold
@@ -823,7 +823,8 @@ Nine themes are currently included:
 * Gothenburg Forest
 * Sand Dune
 
-Theme names are visual references only and don't imply affiliation or endorsement.
+Monochrome Precision and Heritage Blue are independent themes based on publicly documented
+design principles from Polestar and Volvo Cars. They don't imply affiliation or endorsement.
 
 ### Panel size & content density
 

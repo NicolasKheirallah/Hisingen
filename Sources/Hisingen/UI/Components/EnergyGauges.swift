@@ -1,53 +1,5 @@
 import SwiftUI
 
-private struct ChargingFlowHighlight: View {
-    let width: CGFloat
-    let height: CGFloat
-    let cornerRadius: CGFloat
-
-    private let coreWidth: CGFloat = 38
-    private let haloWidth: CGFloat = 72
-    private let speed: CGFloat = Motion.chargeFlowPointsPerSecond
-
-    private func trail(peakOpacity: Double) -> LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: .white.opacity(0), location: 0.0),
-                .init(color: .white.opacity(peakOpacity * 0.3), location: 0.55),
-                .init(color: .white.opacity(peakOpacity), location: 1.0)
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-    }
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            let travel = width + haloWidth
-            let elapsed = timeline.date.timeIntervalSinceReferenceDate
-            let cycle = Double(travel / speed)
-            let x = cycle > 0
-                ? CGFloat(elapsed.truncatingRemainder(dividingBy: cycle)) * speed - haloWidth
-                : -haloWidth
-
-            ZStack(alignment: .leading) {
-                trail(peakOpacity: 0.4)
-                    .frame(width: haloWidth, height: height)
-                    .blur(radius: 3.5)
-                    .offset(x: x)
-                trail(peakOpacity: 0.95)
-                    .frame(width: coreWidth, height: height)
-                    .offset(x: x + (haloWidth - coreWidth) / 2)
-            }
-        }
-        .frame(width: max(0, width), height: height)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .blendMode(.plusLighter)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
 @MainActor
 struct BatteryGauge: View {
     let fraction: Double
@@ -56,6 +8,7 @@ struct BatteryGauge: View {
     var isCharging: Bool = false
 
     @State private var breathingGlow = false
+    @State private var completionPulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var accessibilityValue: String {
@@ -67,9 +20,52 @@ struct BatteryGauge: View {
         return L10n.format("Battery %d percent", percent)
     }
 
-
     private var isPolestar: Bool { PreferencesStore().appTheme == .polestar }
     private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
+
+    /// Energy is actively moving into the battery. Every charging effect —
+    /// particles, edge glow, breathing — settles once the pack reaches 100 %
+    /// so a full bar goes quiet instead of animating forever.
+    private var isEnergyFlowing: Bool { isCharging && fraction < 0.999 }
+    private var isComplete: Bool { isCharging && fraction >= 0.999 }
+
+    private var fillStyle: AnyShapeStyle {
+        if isPolestar { return AnyShapeStyle(color) }
+        if isEnergyFlowing {
+            // Faint dark → bright ramp so the fill reads as energy pooling
+            // toward the charge edge.
+            return AnyShapeStyle(LinearGradient(
+                colors: [color.hisDarken(0.14), color, color.hisLighten(0.20)],
+                startPoint: .leading,
+                endPoint: .trailing
+            ))
+        }
+        return AnyShapeStyle(LinearGradient(
+            colors: [color.opacity(0.85), color],
+            startPoint: .leading,
+            endPoint: .trailing
+        ))
+    }
+
+    private var edgeGlowOpacity: Double {
+        guard isEnergyFlowing, !isPolestar else { return 0 }
+        // Reduce Motion keeps a whisper of a static glow — presence without
+        // movement.
+        if reduceMotion { return 0.20 }
+        return breathingGlow ? 0.30 : 0.16
+    }
+
+    private var shadowOpacity: Double {
+        if !isCharging { return 0.35 }
+        if !isEnergyFlowing { return 0.30 }
+        return breathingGlow ? 0.42 : 0.25
+    }
+
+    private var shadowRadius: CGFloat {
+        if !isCharging { return 3.5 }
+        if !isEnergyFlowing { return 3 }
+        return breathingGlow ? 4 : 2
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -84,36 +80,53 @@ struct BatteryGauge: View {
 
 
                 RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
-                    .fill(
-                        isPolestar
-                            ? AnyShapeStyle(color)
-                            : AnyShapeStyle(LinearGradient(
-                                colors: [color.opacity(0.85), color],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                    )
+                    .fill(fillStyle)
                     .frame(width: currentWidth, height: 9)
-                    .shadow(color: isPolestar ? .clear : color.opacity(isCharging ? (breathingGlow ? 0.65 : 0.25) : 0.35),
-                            radius: isPolestar ? 0 : (isCharging ? (breathingGlow ? 6 : 2) : 4),
+                    .shadow(color: isPolestar ? .clear : color.opacity(shadowOpacity),
+                            radius: isPolestar ? 0 : shadowRadius,
                             x: 0, y: 1)
                     .animation(Motion.progress, value: fraction)
                     .animation(.easeInOut(duration: Motion.fast), value: color)
 
 
-                if isCharging && !reduceMotion && !isPolestar {
-                    ChargingFlowHighlight(width: currentWidth, height: 9, cornerRadius: gaugeRadius)
+                // One-shot acknowledgement as the pack reaches 100 %: a brief
+                // brightness lift, then the bar settles to static green.
+                RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
+                    .fill(Color.white.opacity(completionPulse ? 0.12 : 0))
+                    .frame(width: currentWidth, height: 9)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
 
 
-                    Circle()
-                        .fill(color)
-                        .frame(width: 9, height: 9)
-                        .blur(radius: breathingGlow ? 5 : 2.5)
-                        .opacity(breathingGlow ? 0.95 : 0.55)
-                        .blendMode(.plusLighter)
-                        .offset(x: currentWidth - 4.5)
-                        .allowsHitTesting(false)
-                }
+                // GPU particle flow, mounted for the gauge's whole life so a
+                // stopped charge drains it gracefully instead of tearing it
+                // out mid-frame.
+                ChargingParticleFlow(
+                    tint: color,
+                    isActive: isEnergyFlowing && !reduceMotion && !isPolestar && currentWidth > 6
+                )
+                .frame(width: currentWidth, height: 9)
+                .animation(Motion.progress, value: fraction)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+
+                // Diffuse glow at the charge edge — a soft halo, not a
+                // visible indicator, breathing slowly while energy flows.
+                Capsule()
+                    .fill(LinearGradient(
+                        colors: [color.opacity(0), color.opacity(0.85)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                    .frame(width: 12, height: 5)
+                    .blur(radius: 3.5)
+                    .opacity(edgeGlowOpacity)
+                    .blendMode(.plusLighter)
+                    .offset(x: currentWidth - 6)
+                    .animation(Motion.progress, value: fraction)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
 
 
                 if let targetFraction {
@@ -130,23 +143,35 @@ struct BatteryGauge: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityValue)
         .onAppear {
-            if isCharging && !reduceMotion && !isPolestar {
-                withAnimation(Motion.breath) {
-                    breathingGlow = true
-                }
-            }
+            startBreathing()
         }
-        .onChange(of: isCharging) { _, charging in
-            guard !reduceMotion else { return }
-            if charging {
-                withAnimation(Motion.breath) {
-                    breathingGlow = true
-                }
+        .onChange(of: isEnergyFlowing) { _, flowing in
+            if flowing {
+                startBreathing()
             } else {
                 withAnimation(Motion.interaction) {
                     breathingGlow = false
                 }
             }
+        }
+        .onChange(of: isComplete) { _, complete in
+            guard complete, !reduceMotion, !isPolestar else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                completionPulse = true
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(0.26))
+                withAnimation(.easeOut(duration: 0.34)) {
+                    completionPulse = false
+                }
+            }
+        }
+    }
+
+    private func startBreathing() {
+        guard isEnergyFlowing, !reduceMotion else { return }
+        withAnimation(Motion.chargeGlow) {
+            breathingGlow = true
         }
     }
 }

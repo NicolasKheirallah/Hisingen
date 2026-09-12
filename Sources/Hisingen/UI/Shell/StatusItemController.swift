@@ -119,7 +119,8 @@ final class StatusItemController: NSObject {
         let layout = PanelLayout.resolve(from: preferences)
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "bolt.car", accessibilityDescription: L10n.text("Hisingen"))
+            button.image = MenuBarGlyphImageProvider.shared.image(for: .offline)
+                ?? NSImage(systemSymbolName: "bolt.car", accessibilityDescription: L10n.text("Hisingen"))
             button.imagePosition = .imageLeft
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
             button.target = self
@@ -738,22 +739,8 @@ final class StatusItemController: NSObject {
         self.authenticated = authenticated
         if let diagnostics { self.diagnostics = diagnostics }
         let title = barTitle(for: data)
-         let iconName = Format.icon(for: data, includeConnection: preferences.features.contains(.chargingDetails))
-        var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
-        if preferences.tintMenuBarIcon, let data {
-            let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.energy.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
-            if let configured = icon?.withSymbolConfiguration(.init(paletteColors: [tintColor])) {
-                icon = configured
-                icon?.isTemplate = false
-            }
-        } else {
-            icon?.isTemplate = true
-        }
-
-
         let isStale = data?.isStale() ?? false
-        icon = dimmed(icon, when: isStale)
-        applyMenuBarIcon(icon, for: data)
+        applyMenuBarIcon(for: data, stale: isStale)
         setStatusBarTitle(title, for: data)
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
         updateFleetToolTip(activeState: data)
@@ -764,12 +751,7 @@ final class StatusItemController: NSObject {
     /// resolving the priority state (critical warning → remote op → charging →
     /// climate → connected → normal) and tracking the charging → complete edge so
     /// the glyph can dwell on a quiet acknowledgement before settling back.
-    private func applyMenuBarIcon(_ image: NSImage?, for data: VehicleState?) {
-        guard let image else {
-            statusItem.button?.image = nil
-            return
-        }
-
+    private func applyMenuBarIcon(for data: VehicleState?, stale: Bool) {
         let charging = data?.isCharging == true
         if charging {
             chargingCompletedAt = nil
@@ -783,16 +765,72 @@ final class StatusItemController: NSObject {
             Date().timeIntervalSince($0) < Motion.menuBarCompletionDwell
         } ?? false
 
-        let inputs = MenuBarIconState.inputs(
+        var inputs = MenuBarIconState.inputs(
             for: data,
             remoteCommandInProgress: remoteCommandInProgress,
             chargingRecentlyCompleted: recentlyCompleted
         )
+        let animState = MenuBarIconState.resolve(inputs)
+        // The glyph mirrors the resolved state minus the remote-op overlay: a
+        // command in flight *shimmers* whatever the car is doing, not replaces it.
+        inputs.remoteCommandInProgress = false
+        let glyph = MenuBarGlyph.resolve(
+            inputs: inputs,
+            offline: data == nil || stale,
+            connectionGlyphsEnabled: preferences.features.contains(.chargingDetails)
+        )
+
+        guard let icon = menuBarImage(for: glyph, data: data, stale: stale) else {
+            statusItem.button?.image = nil
+            return
+        }
         iconAnimator.apply(
-            state: .resolve(inputs),
-            image: image,
+            state: animState,
+            image: icon,
             reduceMotion: VehicleMotionPreference.prefersReducedMotion
         )
+    }
+
+    /// Builds the menu-bar image for the resolved glyph. The bundled Hisingen
+    /// artwork covers the EV states; combustion-only vehicles and hybrids with
+    /// the engine running keep their SF Symbols (fuel pump / engine), since the
+    /// custom set has no combustion glyphs. If the artwork is unavailable
+    /// (unbundled `swift run` from outside the repo), the SF-Symbol rendering
+    /// stands in so the menu bar is never blank.
+    private func menuBarImage(for glyph: MenuBarGlyph, data: VehicleState?, stale: Bool) -> NSImage? {
+        let useSFSymbol = data?.powertrain.isCombustionOnly == true
+            || (data?.powertrain.isHybrid == true && data?.fuelSystem.isEngineRunning == true)
+        if !useSFSymbol, let image = MenuBarGlyphImageProvider.shared.image(
+            for: glyph,
+            tint: data.flatMap { menuBarTintColor(for: $0, glyph: glyph) }
+        ) {
+            return dimmed(image, when: stale)
+        }
+
+        let iconName = useSFSymbol
+            ? Format.icon(for: data, includeConnection: preferences.features.contains(.chargingDetails))
+            : Format.symbolFallback(for: glyph)
+        var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
+        if preferences.tintMenuBarIcon, let data {
+            let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.energy.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
+            if let configured = icon?.withSymbolConfiguration(.init(paletteColors: [tintColor])) {
+                icon = configured
+                icon?.isTemplate = false
+            }
+        } else {
+            icon?.isTemplate = true
+        }
+        return dimmed(icon, when: stale)
+    }
+
+    /// Tint for the custom artwork when "Tint menu bar icon" is on — the same
+    /// color rules the SF-Symbol path uses, plus orange for the warning glyph.
+    private func menuBarTintColor(for data: VehicleState, glyph: MenuBarGlyph) -> NSColor? {
+        guard preferences.tintMenuBarIcon else { return nil }
+        if glyph == .warning { return .systemOrange }
+        if data.isCharging { return .systemGreen }
+        if (data.energy.batteryPercentage ?? 100) <= 20 { return .systemOrange }
+        return .controlAccentColor
     }
 
     /// The completion acknowledgement is a fixed dwell rather than a state the
