@@ -283,14 +283,17 @@ extension HistoryDashboardView {
 
     var chargingSessionsCard: some View {
         let anomalies = snapshot.anomalousSessionIDs
-        let searching = !sessionSearchText.trimmingCharacters(in: .whitespaces).isEmpty
-        let rows = searching ? filteredSessionsForPicker : Array(chargingSessions.prefix(500))
+        let matches = filteredSessionsForPicker
+        let pageSize = 8
+        let pageCount = HistoryPagination.pageCount(itemCount: matches.count, pageSize: pageSize)
+        let page = HistoryPagination.clampedPage(sessionPage, pageCount: pageCount)
+        let rows = HistoryPagination.page(of: matches, index: page, pageSize: pageSize)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: .green)
                     Spacer()
-                    Text(L10n.format("%d shown", rows.count))
+                    Text(L10n.format("%d shown", matches.count))
                         .font(.system(size: 9)).foregroundStyle(.tertiary)
                 }
                 if chargingSessions.count > 8 {
@@ -306,15 +309,17 @@ extension HistoryDashboardView {
                     .buttonStyle(.plain)
                     if session.id != rows.last?.id { Divider().opacity(0.2) }
                 }
-                if !searching, chargingSessions.count > rows.count {
-                    Text(L10n.format("Showing the %d most recent sessions.", rows.count))
-                        .font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                if pageCount > 1 {
+                    HistoryPagerControls(page: page, pageCount: pageCount,
+                                         newerHelp: L10n.text("Show newer entries"),
+                                         olderHelp: L10n.text("Show older entries")) { sessionPage = $0 }
                 }
             }
         }
         .task(id: chargingSessions.count) {
             await backfillSpotCosts()
         }
+        .onChange(of: sessionSearchText) { _, _ in sessionPage = 0 }
     }
 
     /// Prices uncosted sessions once spot-price coverage reaches them. Historical day files

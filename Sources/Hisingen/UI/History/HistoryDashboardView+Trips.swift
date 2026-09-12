@@ -216,29 +216,17 @@ extension HistoryDashboardView {
                     if trip.id != visibleTrips.last?.id { Divider().opacity(0.25) }
                 }
                 if tripPageCount > 1 {
-                    HStack(spacing: 8) {
-                        Button { tripPage = max(0, tripPage - 1) } label: {
-                            Label(L10n.text("Newer"), systemImage: "chevron.left").labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.borderless).disabled(tripPage == 0)
-                        .help(L10n.text("Show newer trips"))
-                        Spacer()
-                        Text(L10n.format("Page %d of %d", tripPage + 1, tripPageCount))
-                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
-                        Spacer()
-                        Button { tripPage = min(tripPageCount - 1, tripPage + 1) } label: {
-                            Label(L10n.text("Older"), systemImage: "chevron.right").labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.borderless).disabled(tripPage >= tripPageCount - 1)
-                        .help(L10n.text("Show older trips"))
-                    }
-                    .padding(.top, 2)
+                    HistoryPagerControls(page: HistoryPagination.clampedPage(tripPage, pageCount: tripPageCount),
+                                         pageCount: tripPageCount,
+                                         newerHelp: L10n.text("Show newer trips"),
+                                         olderHelp: L10n.text("Show older trips")) { tripPage = $0 }
                 }
                 Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .onChange(of: tripFilterText) { _, _ in tripPage = 0 }
     }
 
     @ViewBuilder

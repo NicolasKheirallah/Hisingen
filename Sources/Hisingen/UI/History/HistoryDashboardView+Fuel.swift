@@ -99,9 +99,9 @@ extension HistoryDashboardView {
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
         let pageSize = 8
         let pageCount = HistoryPagination.pageCount(itemCount: fuelEntries.count, pageSize: pageSize)
-        // Clamp locally: a delete can shrink the list under the current page without a state
-        // reset, and `HistoryPagination.page` already tolerates an out-of-range index.
-        let page = min(max(0, fuelPage), max(0, pageCount - 1))
+        // A delete can shrink the list under the current page without a state reset, so the
+        // displayed page is clamped rather than relying on `fuelPage` staying in range.
+        let page = HistoryPagination.clampedPage(fuelPage, pageCount: pageCount)
         let visible = HistoryPagination.page(of: fuelEntries, index: page, pageSize: pageSize)
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -128,21 +128,9 @@ extension HistoryDashboardView {
                     if entry.id != visible.last?.id { Divider().opacity(0.25) }
                 }
                 if pageCount > 1 {
-                    HStack(spacing: 8) {
-                        Button { fuelPage = max(0, page - 1) } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .buttonStyle(.borderless).disabled(page == 0)
-                        Spacer()
-                        Text(L10n.format("Page %d of %d", page + 1, pageCount))
-                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
-                        Spacer()
-                        Button { fuelPage = min(pageCount - 1, page + 1) } label: {
-                            Image(systemName: "chevron.right")
-                        }
-                        .buttonStyle(.borderless).disabled(page >= pageCount - 1)
-                    }
-                    .padding(.top, 2)
+                    HistoryPagerControls(page: page, pageCount: pageCount,
+                                         newerHelp: L10n.text("Show newer entries"),
+                                         olderHelp: L10n.text("Show older entries")) { fuelPage = $0 }
                 }
             }
         })

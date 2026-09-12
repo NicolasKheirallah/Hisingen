@@ -1813,7 +1813,6 @@
 "Search sessions by date, place or energy" = "Search sessions by date, place or energy";
 "Search trips by date" = "Search trips by date";
 "Show all history" = "Show all history";
-"Showing the %d most recent sessions." = "Showing the %d most recent sessions.";
 "Sort" = "Sort";
 "Split Cost" = "Split Cost";
 "Started" = "Started";
@@ -2194,7 +2193,6 @@
 "Schedule originator: %@" = "Schedule originator: %@";
 "Sensor fault" = "Sensor fault";
 "Showing an offline copy" = "Showing an offline copy";
-"Showing the 30 most recent changes in this period." = "Showing the 30 most recent changes in this period.";
 "Side marker light any" = "Side marker light any";
 "Side marker light left" = "Side marker light left";
 "Side marker light right" = "Side marker light right";
@@ -2271,7 +2269,6 @@
 "Fleet Range" = "Fleet Range";
 "Garage & Fleet" = "Garage & Fleet";
 "Incomplete readings" = "Incomplete readings";
-"Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded. Showing up to 10 runs." = "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded. Showing up to 10 runs.";
 "Nickname:" = "Nickname:";
 "No active charging reported" = "No active charging reported";
 "No paired running and stopped readings in this period." = "No paired running and stopped readings in this period.";
@@ -2439,3 +2436,8 @@
 
 // English fallback values pending translation
 "Use" = "Use";
+
+// English fallback values pending translation
+"Show newer entries" = "Show newer entries";
+"Show older entries" = "Show older entries";
+"Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded.";

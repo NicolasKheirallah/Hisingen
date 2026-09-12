@@ -453,6 +453,10 @@ extension HistoryDashboardView {
             .map { (command: $0.key, total: $0.value.count, failed: $0.value.filter { $0.status == "failed" }.count) }
             .sorted { $0.total > $1.total }
         let failures = commands.filter { $0.status == "failed" && ($0.errorMessage?.isEmpty == false) }.prefix(3)
+        let logPageSize = 12
+        let logPageCount = HistoryPagination.pageCount(itemCount: commands.count, pageSize: logPageSize)
+        let logPage = HistoryPagination.clampedPage(commandPage, pageCount: logPageCount)
+        let visibleCommands = HistoryPagination.page(of: commands, index: logPage, pageSize: logPageSize)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -490,7 +494,7 @@ extension HistoryDashboardView {
                     }
                     .padding(.vertical, 2)
                 }
-                ForEach(commands.prefix(12)) { record in
+                ForEach(visibleCommands) { record in
                     HStack {
                         Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
                             .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
@@ -503,6 +507,11 @@ extension HistoryDashboardView {
                         Text(record.executedAt, style: .relative).font(.system(size: 9)).foregroundStyle(.secondary)
                     }
                     .help(record.errorMessage ?? record.status.capitalized)
+                }
+                if logPageCount > 1 {
+                    HistoryPagerControls(page: logPage, pageCount: logPageCount,
+                                         newerHelp: L10n.text("Show newer entries"),
+                                         olderHelp: L10n.text("Show older entries")) { commandPage = $0 }
                 }
                 if !failures.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {

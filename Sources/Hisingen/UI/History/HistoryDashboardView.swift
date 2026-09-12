@@ -15,6 +15,44 @@ enum HistoryPagination {
         let start = safeIndex * pageSize
         return items[start..<min(items.count, start + pageSize)]
     }
+
+    /// Display-safe page index: a delete or a period switch can shrink the list under the
+    /// current page, and every pager must render a page that actually exists.
+    static func clampedPage(_ index: Int, pageCount: Int) -> Int {
+        guard pageCount > 0 else { return 0 }
+        return min(max(0, index), pageCount - 1)
+    }
+}
+
+/// The "Newer · Page X of Y · Older" footer shared by every paginated history list.
+struct HistoryPagerControls: View {
+    let page: Int
+    let pageCount: Int
+    let newerHelp: String
+    let olderHelp: String
+    let goTo: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { goTo(max(0, page - 1)) } label: {
+                Label(L10n.text("Newer"), systemImage: "chevron.left").labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless).disabled(page == 0)
+            .help(newerHelp)
+            .accessibilityLabel(newerHelp)
+            Spacer()
+            Text(L10n.format("Page %d of %d", page + 1, pageCount))
+                .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
+            Spacer()
+            Button { goTo(min(pageCount - 1, page + 1)) } label: {
+                Label(L10n.text("Older"), systemImage: "chevron.right").labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless).disabled(page >= pageCount - 1)
+            .help(olderHelp)
+            .accessibilityLabel(olderHelp)
+        }
+        .padding(.top, 2)
+    }
 }
 
 @MainActor
@@ -123,6 +161,14 @@ struct HistoryDashboardView: View {
 
     @State var fuelPage = 0
 
+    @State var activityPage = 0
+
+    @State var sessionPage = 0
+
+    @State var commandPage = 0
+
+    @State var airCleaningPage = 0
+
     typealias HistoryDataSnapshot = VehicleHistoryLedger.DashboardSnapshot
     typealias LifetimeSnapshot = VehicleHistoryLedger.LifetimeSnapshot
 
@@ -216,7 +262,7 @@ struct HistoryDashboardView: View {
 
     var filteredSessionsForPicker: [HistoricalChargingSession] {
         let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return Array(chargingSessions.prefix(500)) }
+        guard !trimmed.isEmpty else { return chargingSessions }
         return chargingSessions.filter { sessionLabel($0).localizedCaseInsensitiveContains(trimmed) }
     }
 
@@ -242,6 +288,24 @@ struct HistoryDashboardView: View {
         let value: Double
     }
 
+    var observedChangesCard: some View {
+        let pageSize = 15
+        let pageCount = HistoryPagination.pageCount(itemCount: snapshot.activities.count, pageSize: pageSize)
+        let page = HistoryPagination.clampedPage(activityPage, pageCount: pageCount)
+        let visible = HistoryPagination.page(of: snapshot.activities, index: page, pageSize: pageSize)
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: .indigo)
+                VehicleActivityList(events: Array(visible))
+                if pageCount > 1 {
+                    HistoryPagerControls(page: page, pageCount: pageCount,
+                                         newerHelp: L10n.text("Show newer entries"),
+                                         olderHelp: L10n.text("Show older entries")) { activityPage = $0 }
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
             periodPicker
@@ -251,16 +315,7 @@ struct HistoryDashboardView: View {
             } else {
                 overviewCard
                 if !snapshot.activities.isEmpty {
-                    Card {
-                        VStack(alignment: .leading, spacing: 8) {
-                            CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: .indigo)
-                            VehicleActivityList(events: Array(snapshot.activities.prefix(30)))
-                            if snapshot.activities.count > 30 {
-                                Text(L10n.text("Showing the 30 most recent changes in this period."))
-                                    .font(.caption2).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    observedChangesCard
                 }
                 monthComparisonCard
                 if snapshot.activities.contains(where: { $0.kind == .airCleaning }) {
@@ -390,6 +445,10 @@ struct HistoryDashboardView: View {
         snapshot = loaded
         tripPage = 0
         expandedTripIDs = []
+        activityPage = 0
+        sessionPage = 0
+        commandPage = 0
+        airCleaningPage = 0
         // `selectedSession` resolves to nil on its own when the remembered id isn't in the
         // current range, so the curve card just hides; the saved preference is kept so the
         // curve reappears if the range later includes that session again.
