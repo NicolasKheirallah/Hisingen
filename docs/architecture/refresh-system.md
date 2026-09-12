@@ -9,7 +9,7 @@
 - **120 seconds** while charging or climate is active
 - **600 seconds (10 minutes)** otherwise
 
-Plus jitter on every scheduled refresh: `maxJitter = min(15, max(1, interval * 0.1))`, then `Double.random(in: 0...maxJitter)` added on top — so scheduled polls receive up to 15 seconds of jitter, preventing every Hisingen instance from hitting the backend on a perfectly synchronized clock edge.
+Normal scheduled refreshes add jitter: `maxJitter = min(15, max(1, interval * 0.1))`, then `Double.random(in: 0...maxJitter)` is added on top, preventing every Hisingen instance from hitting the backend on a perfectly synchronized clock edge. The short command-confirmation loop is the exception and runs at an exact three-second cadence.
 
 ## Retry / backoff
 
@@ -146,7 +146,8 @@ circuit. Generic transient failures open a circuit after `maximumFailuresBeforeC
 the battery stream; lock, window, and tailgate commands use the exterior stream. Charge target,
 current limit, and air-cleaning commands use targeted polling because the available streams do
 not carry those values. A fresh matching reading ends confirmation immediately. If a stream
-drops, it reconnects while the command remains pending and a targeted poll runs every 5 seconds.
+drops, it reconnects while the command remains pending and a targeted poll runs every 3 seconds,
+without the normal refresh jitter.
 The first check is scheduled after 2 seconds. Commands such as honk and flash do not open a
 stream because no returned reading can prove their effect.
 
@@ -161,18 +162,26 @@ the normal close condition. One watchdog targets the earliest deadline and moves
 receipt to `timedOut` even when the stream is quiet. Targeted polling requests the union of the
 features needed by all awaiting receipts. One transport serves the newest stream-compatible
 receipt and switches purpose when that receipt finishes; polling continues to cover the others.
-All awaiting receipts plus up to five recent terminal receipts remain visible across later
+All awaiting receipts plus up to five recent terminal receipts remain available across later
 refreshes until individually dismissed or cleared with the vehicle/session. Dismissal hides one
 receipt without stopping its active background confirmation. If confirmation ends while the
 vehicle still qualifies for the same charging stream, the transport remains open and simply
 returns to its normal purpose.
 
+Provider telemetry is reconciled and persisted before the optimistic presentation is built.
+Only that raw authoritative state may confirm a receipt, enter history, or drive notifications.
+Providers that do not expose the relevant reading (currently Volvo climate status) finish as
+`acknowledged` and do not open a polling window. Opposing commands share a conflict group, so a
+new stop supersedes a pending start and vice versa. Confirmed climate receipts are hidden because
+the climate activity itself is the durable UI confirmation.
+
 **Relaunch.** Command receipts are stored as a per-VIN collection outside `VehicleState`, so cached telemetry
 remains provider-only. Relaunch never resends a command. A receipt that was still awaiting
 confirmation resumes targeted reads and any applicable stream only until its original deadline.
 If that deadline passed while Hisingen was not running, the restored receipt is marked timed out.
-Confirmed and timed-out receipts are restored as-is. Dismissing a receipt removes only its stored
-record, and switching vehicles, changing credentials, or signing out clears the affected collection.
+Acknowledged, confirmed, and timed-out receipts are restored as-is. Dismissing a receipt removes
+only its stored record. Switching vehicles preserves each VIN's collection; changing credentials
+or signing out clears the affected collection.
 
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator

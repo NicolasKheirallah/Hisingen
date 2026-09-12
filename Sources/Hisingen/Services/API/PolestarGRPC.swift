@@ -3,6 +3,15 @@
 import Foundation
 
 
+/// Availability plus the wire context Hisingen retains but does not yet decode: the frame
+/// timestamp (field 1) and any field outside the decoded set (currently 5). Retained so a
+/// future classification pass can name them from accumulated observations.
+struct GrpcAvailabilityReport: Equatable, Sendable {
+    let availability: VehicleAvailability
+    let reportedAt: Date?
+    let unknownFields: [PolestarRawWireField]
+}
+
 struct GrpcBatteryExtras: Codable, Equatable, Sendable {
     let reportedAt: Date?
     let batteryPercentage: Double?
@@ -332,6 +341,14 @@ actor PolestarGRPC {
     }
 
     func fetchAvailability(vin: String, accessToken: String) async throws -> VehicleAvailability {
+        try await fetchAvailabilityReport(vin: vin, accessToken: accessToken).availability
+    }
+
+    /// Wire fields of the availability payload whose meaning is decoded. Everything else is
+    /// captured raw by `fetchAvailabilityReport`.
+    static let decodedAvailabilityFields: Set<Int> = [1, 3, 4]
+
+    func fetchAvailabilityReport(vin: String, accessToken: String) async throws -> GrpcAvailabilityReport {
         var message = Data()
         message.append(Protobuf.stringField(1, UUID().uuidString))
         message.append(Protobuf.stringField(2, vin))
@@ -339,16 +356,25 @@ actor PolestarGRPC {
                                           vin: vin, accessToken: accessToken)
         guard let availability = Protobuf.fields(body)
             .first(where: { $0.number == 3 && $0.wire == 2 })?.data else {
-            return .unknown
+            return GrpcAvailabilityReport(availability: .unknown, reportedAt: nil, unknownFields: [])
         }
         let fields = Protobuf.fields(availability)
         let status = fields.first(where: { $0.number == 3 })?.varint
         let reason = fields.first(where: { $0.number == 4 })?.varint
+        let value: VehicleAvailability
         switch status {
-        case 1: return .available
-        case 2: return .unavailable(reason: Self.unavailableReason(reason))
-        default: return .unknown
+        case 1: value = .available
+        case 2: value = .unavailable(reason: Self.unavailableReason(reason))
+        default: value = .unknown
         }
+        let reportedAt = fields.first(where: { $0.number == 1 && $0.wire == 2 }).flatMap {
+            Protobuf.fields($0.data).first(where: { $0.number == 1 })?.varint
+        }.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0)) : nil }
+        let unknownFields = fields
+            .filter { !Self.decodedAvailabilityFields.contains($0.number) }
+            .map(Self.rawField)
+        return GrpcAvailabilityReport(availability: value, reportedAt: reportedAt,
+                                      unknownFields: unknownFields)
     }
 
     func fetchTargetSoc(vin: String, accessToken: String) async throws -> Int? {
@@ -391,24 +417,54 @@ actor PolestarGRPC {
         let session = session
         let diagnosticLog = diagnosticLog
         let task = Task<URL, Error> {
-            var request = URLRequest(url: discoveryURL)
-            request.setValue("application/volvo.cloud.cnepmob.v1+json", forHTTPHeaderField: "Accept")
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await HTTPExchange.data(
-                for: request, using: session, limit: 256_000, operation: "C3 discovery",
-                provider: .polestar, diagnosticLog: diagnosticLog
-            )
-            if let failure = PolestarError.httpFailure(
-                statusCode: response.statusCode, operation: "C3 discovery"
-            ) { throw failure }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let c3 = json["c3"] as? [String: Any],
-                  let host = c3["grpcHost"] as? String,
-                  let port = c3["grpcPort"] as? Int,
-                  let url = URL(string: "https://\(host):\(port)") else {
-                throw PolestarError.invalidResponse(operation: "C3 discovery")
+            // The discovery document is version-dependent through the Accept header: v2 also
+            // advertises the undocumented `vca-api-gateway` host, v3 answers 406, and a plain
+            // `application/json` Accept returns a different shape entirely. Request v2 first
+            // and fall back to v1 while Polestar serves both — a version-shape rejection
+            // (4xx or an unexpected body) retries; auth, network, rate-limit, and server
+            // failures fail for every version alike and surface immediately.
+            let versions = ["application/volvo.cloud.cnepmob.v2+json",
+                            "application/volvo.cloud.cnepmob.v1+json"]
+            var lastError: Error = PolestarError.invalidResponse(operation: "C3 discovery")
+            for (index, accept) in versions.enumerated() {
+                let isLast = index == versions.count - 1
+                var request = URLRequest(url: discoveryURL)
+                request.setValue(accept, forHTTPHeaderField: "Accept")
+                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                do {
+                    let (data, response) = try await HTTPExchange.data(
+                        for: request, using: session, limit: 256_000, operation: "C3 discovery",
+                        provider: .polestar, diagnosticLog: diagnosticLog
+                    )
+                    if let failure = PolestarError.httpFailure(
+                        statusCode: response.statusCode, operation: "C3 discovery"
+                    ) { throw failure }
+                    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let c3 = json["c3"] as? [String: Any],
+                          let host = c3["grpcHost"] as? String,
+                          let port = c3["grpcPort"] as? Int,
+                          let url = URL(string: "https://\(host):\(port)") else {
+                        throw PolestarError.incompatibleAPI(operation: "C3 discovery (\(accept))")
+                    }
+                    return url
+                } catch let error as PolestarError {
+                    lastError = error
+                    switch error {
+                    case .client, .incompatibleAPI:
+                        if !isLast { continue }
+                        throw error
+                    default:
+                        throw error
+                    }
+                } catch {
+                    // A body JSONSerialization could not parse is a shape mismatch: the older
+                    // version still gets a try before this becomes the surfaced error.
+                    lastError = error
+                    if !isLast { continue }
+                    throw error
+                }
             }
-            return url
+            throw lastError
         }
         let requestID = UUID()
         c3DiscoveryTask = PolestarInFlightRequest(id: requestID, task: task)

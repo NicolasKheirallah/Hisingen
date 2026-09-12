@@ -3,6 +3,189 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-09-12
+
+Version 2.0 changes what a remote command means: Hisingen no longer takes the
+provider's "accepted" at face value — it waits until fresh vehicle telemetry proves
+the requested outcome before calling a command confirmed. The old spot-price
+recommendation is reworked into an opt-in Smart Charging Planner, the battery-health
+estimate is replaced by one auditable calculation, the vehicle state model is
+reorganized into named clusters, and two provider integrations that never worked in
+practice are gone.
+
+### Added
+
+- **Smart Charging Planner** (opt-in feature, replaces the old spot-price card). It
+  fetches Swedish day-ahead spot prices (elprisetjustnu.se, zones SE1 Luleå – SE4
+  Malmö) and shows the cheapest contiguous whole-hour window that covers the energy
+  still needed between the current battery level and the set charge limit, with the
+  window's average price, the price of charging right now, and the estimated saving.
+  The planner works with both hourly and quarterly price series, always recommends
+  whole hours, and hides itself entirely once the battery is at the limit.
+  - Prices are fetched once a day any time after 14:15 Stockholm time (when tomorrow's
+    file is published), covering today plus tomorrow. The series persists in the SQLite
+    database, so a relaunch mid-day serves from disk without touching the network;
+    concurrent requests share one fetch, and a late publication is retried a bounded
+    number of times during the evening instead of waiting a full day.
+  - New Settings card picks the price zone (defaults to SE3, so a first run is one tap
+    away) and the charger output used to turn missing energy into whole charging hours
+    (1–250 kW, default 7.4 kW). While the car is charging, the live rate is used
+    instead. When the vehicle reports a GPS position, Settings suggests the
+    approximate zone from its latitude — a one-tap "Use" hint, never an automatic
+    assignment.
+  - The card tells "tomorrow's prices arrive after 14:15" apart from "this charge is
+    longer than the whole price outlook" instead of showing a generic failure, and a
+    48-hour price outlook chart shades each interval by cost with the planned window
+    highlighted. A footnote shows when prices were fetched, and a hint appears when
+    the car carries its own charging schedules the planner does not use.
+  - Needed energy includes an estimated AC charging-loss factor, so recommended hours
+    and cost figures reflect grid-side energy — what the meter actually sees.
+  - Optional notifications: one banner per planned window (from 15 minutes before it
+    opens until it ends, respecting quiet hours, with a "plug in" variant when the
+    car is unplugged), and an opt-in daily banner when tomorrow's prices arrive,
+    including the cheapest hour.
+  - **Auto-start (separate explicit consent).** When enabled, Hisingen sends the same
+    start-charging command as the Controls tab while the planned window runs — only
+    when the vehicle is plugged in, not already charging, and below its charge limit,
+    and only while the Charging Controls feature is on. Auto-start is not part of any
+    bulk-enable action and never transfers through a settings archive.
+- **Market-price session costs.** Completed charging sessions are priced against the
+  actual spot price of every interval they covered (charging power integrated across
+  price slots, split at rate boundaries, scaled to the session's authoritative energy),
+  backfilled after each daily price fetch, and shown as "Market Price Cost" on the
+  session row next to the tariff estimate. Sessions outside the price coverage stay
+  uncosted rather than being priced with invented rates; spot prices exclude taxes and
+  grid fees, and the database migrates legacy installs to the new column on first
+  launch.
+- **Climate commands confirm from telemetry.** Start/Stop Climate receipts are
+  confirmed when a fresh climate-status reading shows the requested state, and hidden
+  once confirmed because the climate activity itself is the durable confirmation.
+- **Acknowledged — a new receipt outcome for providers without telemetry proof.** When
+  a provider accepts a command but exposes no reading that could verify it (currently
+  Volvo's climate status), the receipt finishes as *acknowledged by the vehicle
+  service* rather than silently polling until timeout.
+- **Nothing the Polestar backend sends is silently dropped.** Every `GetMyCars` wire
+  field Hisingen has not decoded — top-level or nested (shown as "Field 35.5") — is
+  retained raw and listed under a new "Undecoded Backend Fields" disclosure in the
+  capability inspector, mirroring what the battery parser already did. The same
+  retention now covers the climate-status fields Hisingen reads but has not decoded
+  (surfaced in the same disclosure on the Interior & Cabin card) and the
+  availability frame's timestamp plus its undecoded field, retained on the identity
+  snapshot.
+- Factory content codes (paint, wheels, trim groups) are decoded from the `GetMyCars`
+  content-code string and shown in the equipment details and Factory Passport.
+- Climate sessions now carry their real start and end times (wire fields 14 and 16);
+  a running session shows "Session Started" and "Cycle Ends" rows on the Specs card.
+- Air-quality readings carry when the cabin air was last *measured* (wire field 2,
+  verified live: the sensor also samples on vehicle wakes, not only during
+  purification), shown as an "Observed" row and distinct from the frame report time.
+- **Charging sessions carry their market-price cost.** Every recorded session is
+  priced against the hourly spot-price series for the configured zone: recorded
+  charging power is integrated per interval and priced at that interval's rate, then
+  scaled to the session's own energy figure. Sessions are priced by a backfill pass
+  once price coverage reaches them — historical day files are fetched lazily,
+  bounded to the seven most recent uncovered days — and a session the price series
+  does not fully cover stays uncosted rather than being priced with invented rates.
+  The session detail shows "Spot Cost" as a clearly-labelled estimate next to the
+  flat-tariff "Estimated Cost", and the session summary prefers the spot figure.
+
+### Changed
+
+- **The command-receipt system was rebuilt end to end.**
+  - `RefreshCoordinator` is the single owner of every receipt's lifecycle from
+    awaiting through acknowledged, confirmed, or timed out. Confirmation is
+    state-driven: a 2-second first check, then a 3-second targeted poll or stream —
+    exact cadence, no jitter — for at most five minutes.
+  - Only provider-authored state is persisted, entered into history, indexed for
+    Spotlight, or used as notification evidence. Optimistic command values now live in
+    a separate display projection that is rebuilt on every refresh and cleared on
+    relaunch, instead of being patched into the stored snapshot.
+  - Receipts freeze their target: the VIN and provider captured at approval stay fixed
+    until the command finishes, even if the visible vehicle selection changes, and a
+    dispatch for another vehicle is stored under that VIN rather than leaking into the
+    active one.
+  - Opposing commands share a conflict group, so sending Stop Climate supersedes a
+    pending Start Climate (and likewise for locks, windows, tailgate, pre-cleaning,
+    charge target, and more) instead of leaving two receipts racing each other.
+  - Multiple commands in flight keep independent receipts with their own deadlines,
+    dismissal, and relaunch behavior. Receipts are stored per VIN, survive relaunch
+    without resending, resume their remaining confirmation window, and are restored as
+    timed out when the deadline passed while the app was closed.
+  - Confirmation selections bypass the normal 15–90 second capability caches, which
+    otherwise kept answering confirmation polls with the pre-command value.
+  - Diagnostic exports include every receipt's state, audit correlation IDs are
+    written through to the SQLite command log, and the unified log records each
+    lifecycle step.
+- **Shortcuts, deep links, and menu-bar actions target vehicles directly.** A command
+  from Shortcuts or a `hisingen://` link resolves and prepares its named vehicle
+  through one awaited boundary (up to 30 seconds) instead of a racy select-then-send,
+  and reports "Command accepted; waiting for the vehicle to report the result"
+  instead of claiming the outcome. The menu-bar lock and resume-schedule actions send
+  against their own vehicle without switching the selection.
+- **Calendar preconditioning awaits the dispatch outcome.** A deferred command (for
+  example, no session yet) leaves the occurrence scheduled for retry instead of being
+  consumed, and a refused one is consumed with the reason recorded.
+- **Notifications no longer react to command echoes.** The optimistic display
+  projection cannot advance transition baselines or post alerts, a pending Start
+  Climate cannot trigger a stray "Climate stopped", and a climate stop now requires
+  two consecutive vehicle-timestamped readings before notifying.
+- **Battery state of health is one auditable number:** the vehicle-reported range at
+  100% charge divided by the configured WLTP range. Hisingen remembers the result and
+  updates it only after another 100% reading. The multi-signal weighted estimate and
+  its smoothing are gone.
+- **The vehicle state snapshot is organized into named clusters** — identity, energy
+  and charging, exterior, health, and snapshot freshness — with the vocabulary
+  documented in the glossary, replacing flat struct sprawl.
+- **Tyre presentation on iTPMS vehicles (Polestar 2 and other warning-only cars)
+  reflects an owner decision:** an unflagged reading *is* the all-clear the system can
+  give, so quiet tyres now render green "OK" instead of a neutral "unknown", while a
+  TPMS hardware fault gets its own distinct warning state.
+- Charging-settings confirmations poll faster: the first check lands 2 seconds after
+  the command and the targeted repeat runs every 3 seconds (previously 12 and 15).
+- C3 host discovery requests the version-dependent document with the v2 Accept header
+  first and falls back to v1 on any version-shape rejection, so a future removal of
+  the v1 document cannot take vehicle telemetry discovery down with it.
+
+### Fixed
+
+- Active climatization sessions could render as "Ventilating": the climate parser
+  read wire field 6 — an unresolved activity marker (3 while idle, 2 during a
+  verified live heating session) — as a ventilation flag. A running session now
+  classifies as active, heating, or cooling from the reported and requested
+  temperatures instead of the unknown enum.
+- Confirmation polls could read stale pre-command values from capability caches (for
+  example, the charge target kept reporting the old percentage with a fresh local
+  timestamp). Confirmation selections now bypass those caches entirely.
+- Empty VDMS discovery results no longer replace vehicles returned by primary
+  discovery, and the merged record keeps the primary source's authoritative fields
+  (PNO34, structure week) instead of losing them.
+- Command receipts survived neither refreshes nor suspension reliably; they can now be
+  dismissed without reappearing when the tab is rebuilt, tolerate up to two seconds of
+  provider timestamp skew while still rejecting older telemetry, and use injectable
+  time sources so deadlines behave deterministically in tests.
+- A climate-status reading without its own vehicle timestamp (ParkingClimatization
+  carries none) is now stamped with the fetch time so freshness checks treat it as the
+  fresh observation it is.
+
+### Removed
+
+- The old always-on spot-price recommendation card and its service, replaced by the
+  opt-in Smart Charging Planner described above.
+- The Chronos Vehicle Errors integration. Its server-streaming endpoint requires the
+  command client but did not produce a response frame during live verification, so it
+  only generated authorization failures and backoff noise.
+- The unsupported VDMS factory-option fields for exterior colour, upholstery, wheels,
+  and packages, which the backend no longer returns reliably.
+- Six dead verification and release scripts removed after an audit confirmed nothing
+  references them: `bump-version.sh` (superseded by the version bumping in
+  `release.sh` and `auto-release.sh`), `verify-release-1.2.5.mjs` (pinned to one
+  released version), `verify-settings-overhaul.mjs` (still asserted pre-overhaul
+  behavior), `verify-polestar-features.mjs` (every assertion it made is already
+  covered by `PolestarFeatureWiringTests` in the CI suite), and
+  `verify-polestar-live-data.mjs` plus `verify-updater-package.sh` (one-off checks
+  for work that has since shipped). The coverage audit and live-decode verifiers
+  referenced by the current acceptance gates are untouched.
+
 ## [1.3.5] - 2026-09-10
 
 ### Added
@@ -21,16 +204,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 - chore: checkpoint current work before vehicle state refactor
 - chore(updates): publish v1.3.4 appcast
 
-### Removed
-
-- Removed the third-party Swedish spot-price recommendation and its network integration.
-- Removed unsupported VDMS factory-option fields for exterior, interior, wheels, and packages.
-- Empty VDMS discovery results no longer replace vehicles returned by primary discovery.
-- Removed the nonfunctional Chronos Vehicle Errors integration. Its server-streaming endpoint
-  requires the command client but did not produce a response frame during live verification.
-- Battery SoH now uses one auditable calculation: vehicle-reported range at 100% charge divided
-  by the configured WLTP range. Hisingen remembers the result and updates it only at 100% charge.
-
 ## [1.3.5] - 2026-09-10
 
 ### Fixed
@@ -48,23 +221,9 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Polestar metadata discovery no longer requests the removed VDMS `packages` field,
   which rejected the whole GraphQL query and triggered a 24-hour backoff.
 - Chronos error-service authorization failures now enter capability backoff instead
-  of being cached as empty results and retried after cache expiry or remote commands.
+  of being cached as empty results and retried every five minutes.
 - Network tests now inject an in-memory API diagnostic store instead of clearing and
   writing fixture traffic to the user's persisted diagnostic archive.
-- Command confirmation now has one lifecycle owner. Receipts survive refreshes and temporary
-  suspension, can be dismissed without reappearing when the tab is rebuilt, and show distinct
-  waiting, confirmed, and timed-out status treatments.
-- Diagnostic exports now include active command-confirmation state and any persistent VDMS
-  backoff deadline and rejection category. Confirmation start, suspension, resumption,
-  telemetry match, timeout, and dismissal are also recorded in the unified log.
-- Command receipt names now cover awaiting and terminal states accurately. Receipts survive
-  relaunch without resending commands; an unexpired confirmation resumes for its remaining
-  window, while an expired one is restored as timed out.
-- Command confirmation now tolerates up to two seconds of provider timestamp skew while still
-  rejecting older telemetry. Dispatch and refresh lifecycle timestamps use injectable time
-  sources for deterministic deadline, freshness, and optimistic-state behavior.
-- Multiple accepted commands now retain independent receipts, confirmation deadlines, dismissal,
-  and relaunch state instead of each new command replacing the previous result.
 
 ## [1.3.4] - 2026-09-09
 

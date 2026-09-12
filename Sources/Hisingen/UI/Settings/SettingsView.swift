@@ -180,6 +180,7 @@ struct SettingsView: View {
                     if shows(.features) {
                         featureQuickActions
                         CalendarPreconditioningSettingsCard(binder: binder)
+                        SettingsChargingPlannerCard(binder: binder, state: state)
                         SettingsVehicleDataCard(state: state, binder: binder)
                         SettingsRemoteControlsCard(state: state, binder: binder)
                         SettingsCapabilityMatrixCard(state: state)

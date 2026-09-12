@@ -313,6 +313,10 @@ extension InfoTabView {
                         KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endingAt),
                               symbol: "clock.badge.checkmark")
                     }
+                    if let measuredAt = air.measuredAt {
+                        KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: measuredAt), symbol: "clock",
+                              info: L10n.text("When the cabin air was last measured. The sensor also samples when the vehicle wakes up, not only during purification."))
+                    }
                     if let reason = air.startReason, reason != .unspecified,
                        air.cleaningState == .on || air.cleaningState == .pending {
                         KVRow(L10n.text("Started By"), reason.displayName, symbol: "person.wave.2")

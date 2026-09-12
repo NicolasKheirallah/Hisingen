@@ -58,6 +58,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private var authorized: Bool { permission == .authorized }
     private var authenticationNoticePostedByBrand: [String: Bool] = [:]
     private var previousStateByVIN: [String: VehicleState] = [:]
+    private var pendingClimateStopReadingDateByVIN: [String: Date] = [:]
     private var sustainedConditionStartedAt: [String: Date]
     private var sustainedNotificationsDelivered: Set<String>
     private var serviceDueByVIN: [String: Bool]
@@ -193,6 +194,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func vehicleStateDidUpdate(_ state: VehicleState) {
+        // RefreshCoordinator may publish a display projection while a command is pending.
+        // It deliberately carries the optimistic value and a receipt; it is not telemetry
+        // evidence and must not advance transition baselines or produce notifications.
+        if state.commandState.receipts.contains(where: {
+            $0.status.isAwaiting && $0.supportsTelemetryConfirmation
+        }) {
+            pendingClimateStopReadingDateByVIN[state.identity.vin] = nil
+            return
+        }
         let previousState = previousStateByVIN[state.identity.vin]
         previousStateByVIN[state.identity.vin] = state
         let result = detector.evaluate(
@@ -305,23 +315,57 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func checkClimateChanges(previous: VehicleState?, current: VehicleState) {
+        let vin = current.identity.vin
         guard preferences.notifyClimateChanges,
               !current.freshness.isCached, !current.isStale(),
               !current.freshness.retainedDataCategories.contains(.climateStatus),
+              current.hasFreshReading(.climateStatus),
+              let readingDate = current.reportedDate(for: .climateStatus),
               let previousActivity = previous?.climateStatus?.activity,
-              let currentActivity = current.climateStatus?.activity,
-              currentActivity != previousActivity else { return }
-        guard currentActivity != .unknown, previousActivity != .unknown else { return }
+              let currentActivity = current.climateStatus?.activity else {
+            pendingClimateStopReadingDateByVIN[vin] = nil
+            return
+        }
+        guard currentActivity != .unknown, previousActivity != .unknown else {
+            pendingClimateStopReadingDateByVIN[vin] = nil
+            return
+        }
         let wasActive = previousActivity.isActiveClimate
         let isActive = currentActivity.isActiveClimate
-        guard isActive != wasActive else { return }
+        let startConfirmationPending = current.commandState.receipts.contains { receipt in
+            guard receipt.status.isAwaiting else { return false }
+            if case .startClimate = receipt.command { return true }
+            return false
+        }
+        if startConfirmationPending, !isActive {
+            pendingClimateStopReadingDateByVIN[vin] = nil
+            return
+        }
         if isActive {
+            let cancelledPendingStop = pendingClimateStopReadingDateByVIN.removeValue(forKey: vin) != nil
+            guard !wasActive, !cancelledPendingStop else { return }
             postNotice(identifier: "hisingen.\(current.identity.vin).climate-started",
                        thread: "hisingen.climate.\(current.identity.vin)",
                        title: L10n.text("Climate started"),
                        body: privateBody(L10n.text("Cabin climate is now active.")),
                        subtitle: displayName(for: current), vin: current.identity.vin)
         } else {
+            if wasActive {
+                pendingClimateStopReadingDateByVIN[vin] = readingDate
+                return
+            }
+            guard let firstInactiveReading = pendingClimateStopReadingDateByVIN[vin],
+                  readingDate > firstInactiveReading else { return }
+            let evidenceDuration = readingDate.timeIntervalSince(firstInactiveReading)
+            guard evidenceDuration <= 30 else {
+                pendingClimateStopReadingDateByVIN[vin] = readingDate
+                return
+            }
+            // Three consecutive 3-second observations are required: this prevents two
+            // identical backend responses, each locally stamped at fetch time, from looking
+            // like independent stop evidence.
+            guard evidenceDuration >= 6 else { return }
+            pendingClimateStopReadingDateByVIN[vin] = nil
             postNotice(identifier: "hisingen.\(current.identity.vin).climate-stopped",
                        thread: "hisingen.climate.\(current.identity.vin)",
                        title: L10n.text("Climate stopped"),

@@ -17,7 +17,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 4
+    static let latestSchemaVersion = 5
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -28,6 +28,11 @@ final class VehicleDatabase: @unchecked Sendable {
     /// history tables (battery health, air quality, telemetry, trips, audits, connectivity,
     /// cabin climate, fuel).
     let history: VehicleHistoryLedger
+
+    /// SQLite persistence for the Charging Planner's fetched spot-price series. Market
+    /// data, not user history: excluded from wipes, prunes, and backups because a fresh
+    /// fetch replaces it wholesale.
+    let electricityPrices: ElectricityPriceStore
 
     /// Whether the database file already existed when this process opened it. Gates the
     /// one-shot pre-migration backup and the corruption quarantine — neither is meaningful
@@ -47,6 +52,7 @@ final class VehicleDatabase: @unchecked Sendable {
         let chargingLedger = ChargingSessionLedger(sql: handle)
         self.charging = chargingLedger
         self.history = VehicleHistoryLedger(sql: handle, charging: chargingLedger)
+        self.electricityPrices = ElectricityPriceStore(sql: handle)
         createTables()
     }
 
@@ -276,6 +282,21 @@ final class VehicleDatabase: @unchecked Sendable {
             PRIMARY KEY (vin, angle)
         );
         CREATE INDEX IF NOT EXISTS idx_vehicle_images_vin ON vehicle_images(vin);
+
+        CREATE TABLE IF NOT EXISTS electricity_prices (
+            zone TEXT NOT NULL,
+            start_at REAL NOT NULL,
+            end_at REAL NOT NULL,
+            sek_per_kwh REAL NOT NULL,
+            PRIMARY KEY (zone, start_at)
+        );
+        CREATE INDEX IF NOT EXISTS idx_electricity_prices_zone ON electricity_prices(zone, start_at ASC);
+
+        -- One row per zone: when that zone's series was last fetched from the API.
+        CREATE TABLE IF NOT EXISTS electricity_price_fetches (
+            zone TEXT PRIMARY KEY NOT NULL,
+            fetched_at REAL NOT NULL
+        );
         """
         do {
             try db.execute(sql: sql)
@@ -462,6 +483,18 @@ final class VehicleDatabase: @unchecked Sendable {
                 }
             } catch {
                 logger.error("Vehicle activity migration remains incomplete: \(error, privacy: .public)")
+            }
+        }
+
+        // v5: market-price charging cost per session, backfilled from recorded samples.
+        if currentVersion < 5 {
+            do {
+                try db.execute(sql: """
+                    ALTER TABLE charging_sessions ADD COLUMN spot_estimated_cost REAL;
+                    PRAGMA user_version = 5;
+                    """)
+            } catch {
+                logger.error("Spot-cost schema migration remains incomplete: \(error, privacy: .public)")
             }
         }
     }
@@ -807,6 +840,20 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDate(Date(), at: 5)
             try stmt.bindInt64(durationMs.map(Int64.init), at: 6)
             try stmt.bindText(error, at: 7)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func updateCommandAudit(id: String, status: String, error: String? = nil) {
+        let sql = """
+        UPDATE remote_commands_log
+        SET status = ?, error_message = COALESCE(?, error_message)
+        WHERE id = ?;
+        """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(status, at: 1)
+            try stmt.bindText(error, at: 2)
+            try stmt.bindText(id, at: 3)
             try stmt.executeUpdate()
         } process: { _ in }
     }

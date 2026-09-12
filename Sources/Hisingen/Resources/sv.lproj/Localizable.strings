@@ -1650,7 +1650,6 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Denna uppdatering har annonserats men är ännu inte auktoriserad för nedladdning. Fordonet laddar ned den på egen hand när servern auktoriserar den och villkoren tillåter; installationen kan först därefter påbörjas.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Detta fordon stöder inte molnbaserat nedladdningsmedgivande — uppdateringen kan endast laddas ned när bilen själv rapporterar in till servern. En Polestar-servicetid kan installera den direkt.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Detta fordons indirekta TPMS rapporterar en varningsnivå per däck, inte en exakt tryckavläsning.";
-"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "Statusen kommer från fordonets API och ändras först när ett problem rapporteras, så det är ingen live-mätning. Behandla den som vägledande, inte som ett bekräftat OK.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Endast varningsstatus. Fordonet rapporterar en varningsnivå per däck och markerar ett däck först när det upptäcker ett problem, så detta är ingen live-mätning av trycket.";
 "To" = "Till";
 "to" = "till";
@@ -2387,3 +2386,69 @@
 "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity." = "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity.";
 "Waiting for 100% charge" = "Waiting for 100% charge";
 "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading." = "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading.";
+"Command acknowledged by the vehicle service" = "Command acknowledged by the vehicle service";
+"Command accepted; waiting for the vehicle to report the result." = "Command accepted; waiting for the vehicle to report the result.";
+"The target vehicle could not be loaded." = "The target vehicle could not be loaded.";
+
+// English fallback values pending translation
+"Charging Planner" = "Laddningsplanerare";
+"Smart Charging Planner" = "Smart laddplanering";
+"Show the cheapest charging window to your charge limit, from Swedish spot prices" = "Visar det billigaste laddningsfönstret upp till din laddgräns, baserat på svenska spotpriser";
+"Price Zone" = "Prisområde";
+"Spot-price area you live in" = "Elprisområde där du bor";
+"Charging Power" = "Laddeffekt";
+"Used to estimate how many charging hours are needed" = "Används för att uppskatta hur många laddtimmar som behövs";
+"Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se." = "Priser hämtas en gång per dag efter kl. 14:15 och exkluderar skatter och nätavgifter. Källa: elprisetjustnu.se.";
+"SE1 · Luleå" = "SE1 · Luleå";
+"SE2 · Sundsvall" = "SE2 · Sundsvall";
+"SE3 · Stockholm" = "SE3 · Stockholm";
+"SE4 · Malmö" = "SE4 · Malmö";
+"Today" = "Idag";
+"Tomorrow" = "Imorgon";
+"Loading prices…" = "Hämtar priser …";
+"Tomorrow's prices arrive after 14:15" = "Morgondagens priser kommer efter kl. 14:15";
+"Prices unavailable right now" = "Priser är inte tillgängliga just nu";
+"Spot prices exclude taxes and grid fees" = "Spotpriser exkluderar skatter och nätavgifter";
+"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Ladda %@ under %d h upp till %d %% — snitt %@, just nu %@";
+"Saves %@" = "Sparar %@";
+"Charging now is cheapest" = "Det är billigast att ladda nu";
+
+// English fallback values pending translation
+"Undecoded Backend Fields (%d)" = "Ej avkodade backend-fält (%d)";
+"Factory Content Codes" = "Fabriksutrustningskoder";
+"Field %@" = "Fält %@";
+"Field %@ (raw)" = "Fält %@ (rådata)";
+"The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check." = "Statusen kommer från fordonets API och ändras bara när ett problem rapporteras. Ett däck utan varning betyder att systemet inte upptäckte något problem vid sin senaste kontroll.";
+"When the cabin air was last measured. The sensor also samples when the vehicle wakes up, not only during purification." = "När kupeets luft senast mättes. Sensorn samplar även när fordonet vaknar – inte bara vid rensning.";
+"A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
+
+// English fallback values pending translation
+"Estimated from the recorded charging power and the hourly market price for your price zone." = "Estimated from the recorded charging power and the hourly market price for your price zone.";
+"Session Started" = "Session Started";
+"Spot Cost" = "Spot Cost";
+
+// English fallback values pending translation
+"Electricity price outlook" = "Elprisprognos";
+"Planned window from %@" = "Planerat fönster från %@";
+"Between %@ and %@ kr per kWh. %@" = "Mellan %@ och %@ kr per kWh. %@";
+"The car has its own charging schedules — the planner does not use them" = "Bilen har egna laddningsscheman — planeraren använder inte dem";
+"fetched %@" = "hämtade %@";
+"The vehicle's location suggests %@" = "Fordonets position föreslår %@";
+"Notify When the Cheap Window Opens" = "Meddela när billiga fönstret öppnas";
+"One banner per window, respecting quiet hours" = "En notis per fönster, följer tysta timmar";
+"Notify When Tomorrow's Prices Arrive" = "Meddela när morgondagens priser kommer";
+"One daily banner after 14:15 with the cheapest hour" = "En daglig notis efter kl. 14:15 med billigaste timmen";
+"Auto-Start Charging in the Window" = "Starta laddning automatiskt i fönstret";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "När det planerade fönstret öppnar skickar Hisingen samma startkommando som Kontroll-fliken — bara när fordonet är inkopplat och under sin laddgräns. Kräver funktionen Laddningskontroller.";
+"Sends the start-charging command automatically while the window runs" = "Skickar startkommandot för laddning automatiskt medan fönstret pågår";
+"Market Price Cost" = "Marknadspriskostnad";
+"Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Kostnad enligt faktiskt spotpris per intervall. Spotpriser exkluderar skatter och nätavgifter, så den här är lägre än en hel räkning.";
+"The cheap charging window runs %@." = "Billiga laddfönstret pågår %@.";
+"Plug in the vehicle — the cheap charging window runs %@." = "Koppla in fordonet — billiga laddfönstret pågår %@.";
+"Cheap charging window: %@." = "Billigt laddfönster: %@.";
+"Tomorrow's electricity prices are in" = "Morgondagens elpriser har kommit";
+"Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Billigaste timmen imorgon: %@ – %@ till %@ /kWh.";
+"Tomorrow's spot prices have arrived." = "Morgondagens spotpriser har anlänt.";
+
+// English fallback values pending translation
+"Use" = "Use";

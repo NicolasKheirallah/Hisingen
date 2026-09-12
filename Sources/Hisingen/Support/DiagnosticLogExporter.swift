@@ -286,6 +286,9 @@ enum DiagnosticLogExporter {
             case .confirmed(let date):
                 statusValue = "confirmed"
                 terminalAt = date
+            case .acknowledged(let date):
+                statusValue = "acknowledged"
+                terminalAt = date
             case .timedOut(let date):
                 statusValue = "timedOut"
                 terminalAt = date

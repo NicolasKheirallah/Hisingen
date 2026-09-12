@@ -669,9 +669,9 @@ private final class CommandContextMock: CommandExecutionContext {
     ) {}
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
-        optimisticState: VehicleState
+        optimisticState: VehicleState?
     ) {
-        vehicleState = optimisticState
+        if let optimisticState { vehicleState = optimisticState }
         vehicleState?.commandState.receipt = receipt
     }
 }

@@ -139,6 +139,34 @@ struct PolestarCapabilityTests {
         #expect(first.value == second.value)
     }
 
+    @Test func commandConfirmationCanBypassCapabilityCache() async throws {
+        let api = makeAPI()
+        let counter = CapabilityReadCounter()
+        let first: OptionalCapability<Int> = try await api.optionalCapability(
+            .remoteClimate,
+            key: "climate-status",
+            enabled: true,
+            vin: "VIN-A"
+        ) { await counter.next() }
+        let cached: OptionalCapability<Int> = try await api.optionalCapability(
+            .remoteClimate,
+            key: "climate-status",
+            enabled: true,
+            vin: "VIN-A"
+        ) { await counter.next() }
+        let refreshed: OptionalCapability<Int> = try await api.optionalCapability(
+            .remoteClimate,
+            key: "climate-status",
+            enabled: true,
+            vin: "VIN-A",
+            bypassCache: true
+        ) { await counter.next() }
+
+        #expect(first.value == 1)
+        #expect(cached.value == 1)
+        #expect(refreshed.value == 2)
+    }
+
     @Test func dynamicReadingsNeverInheritMetadataLifetime() {
         for feature: AppFeature in [.tripMeters, .connectivityDiagnostics, .exteriorStatus, .remoteLocks, .remoteWindows] {
             #expect(PolestarAPI.capabilityCacheLifetime(feature, key: feature.rawValue) == 30)
@@ -147,6 +175,15 @@ struct PolestarCapabilityTests {
         #expect(PolestarAPI.capabilityCacheLifetime(.climateStatus, key: "climate-status") == 15)
         #expect(PolestarAPI.capabilityCacheLifetime(.remoteSchedules, key: "climate-timers") == 60)
         #expect(PolestarAPI.capabilityCacheLifetime(.softwareUpdates, key: "my-cars") == 3600)
+    }
+}
+
+private actor CapabilityReadCounter {
+    private var value = 0
+
+    func next() -> Int? {
+        value += 1
+        return value
     }
 }
 

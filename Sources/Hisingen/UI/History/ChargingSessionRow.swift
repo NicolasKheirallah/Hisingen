@@ -37,8 +37,20 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
+                    if let spot = session.spotCost {
+                        KVRow(L10n.text("Spot Cost"), String(format: "%.2f %@", spot, session.currencySymbol ?? preferences.currencySymbol), symbol: "chart.line.uptrend.xyaxis",
+                              info: L10n.text("Estimated from the recorded charging power and the hourly market price for your price zone."))
+                    }
                     if let cost = session.estimatedCost(tariff: preferences.electricityPricePerKwh) {
                         KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
+                    }
+                    if let spotCost = session.spotCost, spotCost > 0 {
+                        KVRow(
+                            L10n.text("Market Price Cost"),
+                            String(format: "%.2f %@", spotCost, session.currencySymbol ?? preferences.currencySymbol),
+                            symbol: "chart.bar.fill",
+                            info: L10n.text("Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.")
+                        )
                     }
                 }
             }
@@ -48,7 +60,8 @@ struct ChargingSessionRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .font(.system(size: 11, weight: .medium))
-                    let costStr = session.estimatedCost(tariff: preferences.electricityPricePerKwh).map { String(format: " · %.2f %@", $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
+                    let preferredCost = session.spotCost ?? session.estimatedCost(tariff: preferences.electricityPricePerKwh)
+                    let costStr = preferredCost.map { String(format: " · %.2f %@", $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
                     Text(String(format: "+%.0f%% · ≈%.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)

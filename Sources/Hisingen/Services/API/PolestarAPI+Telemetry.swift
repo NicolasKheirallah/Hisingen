@@ -80,6 +80,11 @@ extension PolestarAPI {
         let needsClimateTimers = features.contains(.climateStatus) || features.contains(.remoteSchedules)
         let needsAirQuality = features.contains(.airQuality)
             || (features.contains(.remotePreCleaning) && modelProfile.permits(.preCleaning))
+        // Confirmation selections contain only remote-command features. They must hit the
+        // backend on every three-second poll; the normal 15–90 second capability caches
+        // would otherwise keep returning the pre-command value with a fresh local timestamp.
+        let bypassCommandCaches = !features.enabled.isEmpty
+            && features.enabled.isSubset(of: AppFeature.remoteFeatures)
 
         async let batteryExtrasTask = optionalBattery(
             enabled: needsChargingContext || features.contains(.batteryDiagnostics) || battery == nil,
@@ -89,11 +94,12 @@ extension PolestarAPI {
             enabled: features.contains(.vehicleAvailability), vin: vin, token: serviceToken
         )
         async let targetTask = targetSOC(
-            enabled: needsChargingContext, vin: vin, token: serviceToken
+            enabled: needsChargingContext, vin: vin, token: serviceToken,
+            bypassCache: bypassCommandCaches
         )
         async let exteriorTask: OptionalCapability<ExteriorSnapshot> = optionalCapability(
             features.contains(.exteriorStatus) ? .exteriorStatus : .remoteLocks,
-            enabled: needsExterior, vin: vin
+            enabled: needsExterior, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchExterior(vin: vin, accessToken: serviceToken) }
         async let healthTask: OptionalCapability<GrpcHealthReport> = optionalCapability(
             .tyreAndWarnings,
@@ -112,7 +118,8 @@ extension PolestarAPI {
         ) { Optional(try await self.grpc.fetchChargingSchedules(vin: vin, accessToken: serviceToken)) }
         async let climateTask: OptionalCapability<VehicleClimateStatus> = optionalCapability(
             features.contains(.climateStatus) ? .climateStatus : .remoteClimate,
-            key: "climate-status", enabled: needsClimate, vin: vin
+            key: "climate-status", enabled: needsClimate, vin: vin,
+            bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchClimate(vin: vin, accessToken: serviceToken) }
         async let climateTimersTask: OptionalCapability<[VehicleSchedule]> = optionalCapability(
             features.contains(.climateStatus) ? .climateStatus : .remoteSchedules,
@@ -128,7 +135,7 @@ extension PolestarAPI {
         ) { try await self.grpc.fetchConnectivity(vin: vin, accessToken: serviceToken) }
         async let airTask: OptionalCapability<VehicleAirQuality> = optionalCapability(
             features.contains(.airQuality) ? .airQuality : .remotePreCleaning,
-            enabled: needsAirQuality, vin: vin
+            enabled: needsAirQuality, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAirQuality(vin: vin, accessToken: serviceToken) }
         async let weatherTask: OptionalCapability<VehicleWeather> = optionalCapability(
             .vehicleWeather, enabled: features.contains(.vehicleWeather), vin: vin
@@ -138,7 +145,8 @@ extension PolestarAPI {
         ) { try await self.grpc.fetchLocation(vin: vin, accessToken: serviceToken) }
         async let ampLimitTask: OptionalCapability<Int> = optionalCapability(
             .chargingDetails, key: "amp-limit",
-            enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin
+            enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin,
+            bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
         async let chargeLocationsTask: OptionalCapability<[ChargeLocationSnapshot]> = optionalCapability(
             .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
@@ -152,7 +160,7 @@ extension PolestarAPI {
         ) { try await self.grpc.fetchMyCars(vin: vin, accessToken: serviceToken) }
 
         let extras = try await batteryExtrasTask
-        let vehicleAvailability = try await availabilityTask
+        let availabilityReport = try await availabilityTask
         let chargeTarget = try await targetTask
         let exterior = try await exteriorTask
         let c3Health = try await healthTask
@@ -301,7 +309,10 @@ extension PolestarAPI {
                 schedules: schedules.value ?? []
             ),
             identity: VehicleIdentitySnapshot(
-                availability: vehicleAvailability,
+                availability: availabilityReport.availability,
+                availabilityReportedAt: availabilityReport.reportedAt,
+                availabilityUnknownWireFields: availabilityReport.unknownFields.isEmpty
+                    ? nil : availabilityReport.unknownFields,
                 modelName: carIdentity.modelName ?? otaCapabilities.value?.identity?.modelName,
                 modelYear: features.contains(.vehicleIdentity)
                     ? (carIdentity.modelYear ?? otaCapabilities.value?.identity?.modelYear) : nil,
@@ -354,6 +365,11 @@ extension PolestarAPI {
                                                 secondaryPresent: extras?.rangeKm != nil)
         state.freshness.readingDates[.charging] = batteryDate(primaryPresent: primaryChargingState != nil,
                                                    secondaryPresent: extras?.chargingState != nil)
+        // ParkingClimatization has no vehicle timestamp. A successful response is still a
+        // fresh observation from the dedicated status endpoint, so timestamp the read itself.
+        state.freshness.readingDates[.climateStatus] = climate.value == nil
+            ? nil
+            : state.freshness.fetchedAt
         state.freshness.readingDates[.locks] = exterior.value?.isLocked != nil ? exterior.value?.reportedAt : nil
         state.freshness.readingDates[.openings] = exterior.value?.reportedAt
         state.freshness.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date

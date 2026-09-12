@@ -312,7 +312,37 @@ extension HistoryDashboardView {
                 }
             }
         }
+        .task(id: chargingSessions.count) {
+            await backfillSpotCosts()
+        }
     }
+
+    /// Prices uncosted sessions once spot-price coverage reaches them. Historical day files
+    /// are fetched lazily, bounded to the seven most recent uncovered days so a long history
+    /// cannot turn one card appearance into an unbounded fetch storm.
+    private func backfillSpotCosts() async {
+        let zone = preferences.electricityPriceZone
+        let vin = state.identity.vin
+        var prices = await ElectricityPriceService.shared.prices(for: zone)
+        let uncovered = VehicleDatabase.shared.charging
+            .sessionsMissingSpotCost(vin: vin, limit: 400)
+        let covered = Set(prices.map { Self.stockholmCalendar.startOfDay(for: $0.startDate) })
+        let days = Set(uncovered.compactMap { session -> Date? in
+            guard let endedAt = session.endedAt else { return nil }
+            let day = Self.stockholmCalendar.startOfDay(for: session.startedAt)
+            return covered.contains(day) ? nil : day
+        })
+        for day in days.sorted(by: >).prefix(7)
+        where Date().timeIntervalSince(day) < 8 * 86_400 {
+            prices = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
+        }
+        guard !prices.isEmpty else { return }
+        if VehicleDatabase.shared.charging.backfillSpotEstimatedCosts(vin: vin, prices: prices) > 0 {
+            await loadPeriodScopedData()
+        }
+    }
+
+    static let stockholmCalendar = ElectricityPriceService.stockholmCalendar
 
     func chargingSessionRow(_ session: HistoricalChargingSession, flagged: Bool) -> some View {
         let cost = session.estimatedCost

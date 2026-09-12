@@ -29,27 +29,35 @@ extension PolestarAPI {
         }
     }
 
-    func optionalAvailability(enabled: Bool, vin: String, token: String) async throws -> VehicleAvailability {
+    func optionalAvailability(enabled: Bool, vin: String, token: String) async throws -> GrpcAvailabilityReport {
         try Task.checkCancellation()
-        guard enabled else { return .unknown }
+        guard enabled else {
+            return GrpcAvailabilityReport(availability: .unknown, reportedAt: nil, unknownFields: [])
+        }
         let epoch = sessionEpoch
         do {
-            let value = try await grpc.fetchAvailability(vin: vin, accessToken: token)
+            let report = try await grpc.fetchAvailabilityReport(vin: vin, accessToken: token)
             try requireSession(epoch)
-            return value
+            return report
         } catch {
             try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
             logger.debug("Optional availability service unavailable")
-            return .unknown
+            return GrpcAvailabilityReport(availability: .unknown, reportedAt: nil, unknownFields: [])
         }
     }
 
-    func targetSOC(enabled: Bool, vin: String, token: String) async throws -> Int? {
+    func targetSOC(
+        enabled: Bool,
+        vin: String,
+        token: String,
+        bypassCache: Bool = false
+    ) async throws -> Int? {
         try Task.checkCancellation()
         guard enabled else { return nil }
         let epoch = sessionEpoch
-        if let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
+        if !bypassCache,
+           let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
             return cached.value
         }
         let value: Int?
@@ -70,6 +78,7 @@ extension PolestarAPI {
         key: String? = nil,
         enabled: Bool,
         vin: String,
+        bypassCache: Bool = false,
         operation: @Sendable () async throws -> Value?
     ) async throws -> OptionalCapability<Value> {
         try Task.checkCancellation()
@@ -77,7 +86,8 @@ extension PolestarAPI {
         guard enabled else { return OptionalCapability(value: nil, unavailable: false, unsupported: false) }
         let cacheKey = Self.capabilityReadingKey(feature, key: key)
         let scopedCacheKey = "\(vin)|\(cacheKey)"
-        if let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
+        if !bypassCache,
+           let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
             return OptionalCapability(value: cached.value as? Value, unavailable: false, unsupported: false)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {

@@ -112,7 +112,7 @@ final class VehicleSessionController {
     func refreshNow() { refreshCoordinator.refreshNow() }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
-        optimisticState: VehicleState
+        optimisticState: VehicleState?
     ) {
         refreshCoordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
@@ -160,6 +160,24 @@ final class VehicleSessionController {
             switchActiveBrand(to: targetBrand, targetVin: trimmedVIN)
             resumeStoredSession(targetVin: trimmedVIN)
         }
+    }
+
+    /// Resolves selection and first telemetry before a command is gated or sent. This makes
+    /// VIN-targeted intents and deep links one awaited operation instead of a racy
+    /// select-then-send pair.
+    func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
+        let target = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !target.isEmpty else { return sessionValid && latest != nil }
+        if sessionValid, latest?.identity.vin.uppercased() == target { return true }
+        selectVehicle(vin: target)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if sessionValid, latest?.identity.vin.uppercased() == target,
+               !refreshCoordinator.isBusy { return true }
+            try? await Task.sleep(for: .milliseconds(100))
+            if Task.isCancelled { return false }
+        }
+        return false
     }
 
     /// Settings "switch to <brand>": adopt the brand and resume its stored session.

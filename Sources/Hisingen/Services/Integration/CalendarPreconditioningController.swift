@@ -35,6 +35,15 @@ enum CalendarPreconditioningPlanner {
     }
 }
 
+enum CalendarPreconditioningDispatchDecision {
+    static func consumesOccurrence(_ outcome: RemoteCommandDispatchOutcome) -> Bool {
+        switch outcome {
+        case .sent, .refused: return true
+        case .deferred: return false
+        }
+    }
+}
+
 /// Always-running menu-bar scheduler for calendar-driven climate starts. Rather than polling
 /// EventKit on a fixed interval, it looks ahead, arms a single one-shot timer for the next
 /// event's lead-time moment, and re-arms on wake and on `.EKEventStoreChanged`. EventKit stays
@@ -43,10 +52,11 @@ enum CalendarPreconditioningPlanner {
 final class CalendarPreconditioningController {
     private let preferences: PreferencesStore
     private let eventStore: EKEventStore
-    private let sendClimateStart: () -> Void
+    private let sendClimateStart: () async -> RemoteCommandDispatchOutcome
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var evaluationInProgress = false
+    private var retryNotBefore: Date?
 
     /// Never sleep the scheduler longer than this, so a change notification we somehow miss
     /// still gets caught within a few hours.
@@ -54,7 +64,7 @@ final class CalendarPreconditioningController {
     private static let lookaheadInterval: TimeInterval = 48 * 3_600
 
     init(preferences: PreferencesStore, eventStore: EKEventStore = EKEventStore(),
-         sendClimateStart: @escaping () -> Void) {
+         sendClimateStart: @escaping () async -> RemoteCommandDispatchOutcome) {
         self.preferences = preferences
         self.eventStore = eventStore
         self.sendClimateStart = sendClimateStart
@@ -137,13 +147,18 @@ final class CalendarPreconditioningController {
             return
         }
 
-        // One command at a time even when several events share a start. Record every due
-        // occurrence in that cluster so the next arming cannot duplicate it.
-        for dueEvent in due where abs(dueEvent.startDate.timeIntervalSince(event.startDate)) < 60 {
-            fired[dueEvent.occurrenceKey] = now.timeIntervalSince1970
+        let outcome = await sendClimateStart()
+        if CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
+            // A provider acknowledgement or a terminal refusal consumes the occurrence.
+            // Only failures proven to be pre-send are safe to retry automatically.
+            for dueEvent in due where abs(dueEvent.startDate.timeIntervalSince(event.startDate)) < 60 {
+                fired[dueEvent.occurrenceKey] = now.timeIntervalSince1970
+            }
+            persist(fired, ifDifferentFrom: stored)
+            retryNotBefore = nil
+        } else {
+            retryNotBefore = now.addingTimeInterval(30)
         }
-        persist(fired, ifDifferentFrom: stored)
-        sendClimateStart()
         scheduleNext(now: now)
     }
 
@@ -196,7 +211,7 @@ final class CalendarPreconditioningController {
         guard preferences.calendarPreconditioningEnabled else { return }
         let fallback = now.addingTimeInterval(Self.maxIdleInterval)
         let fireAt = nextTrigger(now: now).map { max($0.fireAt, now.addingTimeInterval(1)) }
-        let target = min(fireAt ?? fallback, fallback)
+        let target = min(max(fireAt ?? fallback, retryNotBefore ?? .distantPast), fallback)
         let delay = max(1, target.timeIntervalSince(now))
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in await self?.evaluate() }

@@ -30,6 +30,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
     case remoteHonkFlash = "remote-honk-flash"
     case remoteOTA = "remote-ota"
     case realTimeUpdates = "real-time-updates"
+    case smartChargingPlanner = "smart-charging-planner"
 
     var title: String {
         switch self {
@@ -62,6 +63,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .remoteHonkFlash: return L10n.text("Honk & flash controls")
         case .remoteOTA: return L10n.text("Vehicle software controls")
         case .realTimeUpdates: return L10n.text("Real-time updates")
+        case .smartChargingPlanner: return L10n.text("Smart Charging Planner")
         }
     }
 

@@ -393,7 +393,11 @@ extension PolestarGRPC {
             endingAt: timestamp(message(fields, field: 5)),
             startReason: varint(fields, 7).flatMap { AirCleaningStartReason(rawValue: Int($0)) },
             lastCycleValid: varint(fields, 8).map { $0 != 0 },
-            errorKind: errorKind
+            errorKind: errorKind,
+            // Field 2 verified live: it advances on vehicle wakes and at cycle end, i.e. the
+            // last time the cabin air was actually measured (distinct from field 1, the
+            // frame report time). Field 3 duplicates field 1 and stays ignored.
+            measuredAt: timestamp(message(fields, field: 2))
         )
     }
 
@@ -842,6 +846,48 @@ extension PolestarGRPC {
         vehicleRequest(vin)
     }
 
+    /// Wire fields on the `GetMyCars` Car message whose meaning Hisingen has decoded. Any
+    /// field number outside this set (and the nested sets below) is preserved raw in
+    /// `VehicleOTACapabilities.unknownWireFields` so the richest raw surface the backend
+    /// offers loses nothing silently — mirroring the battery parser's unknown-field capture.
+    static let decodedCarFields: Set<Int> = [
+        1, 2, 5, 6, 7, 9, 10, 16, 27, 32, 33, 34, 35, 36, 37, 39, 40, 42, 43, 46, 47,
+        50, 57, 62, 68, 70, 73, 74, 87
+    ]
+
+    /// Known sub-message field numbers by parent wire field. Parent numbers must all appear
+    /// in `decodedCarFields`.
+    static let decodedNestedCarFields: [Int: Set<Int>] = [
+        34: [1, 2, 3, 7, 8],                         // AirPurification
+        35: [1, 2, 3, 4, 8, 9, 11, 15, 16, 29, 36],  // Charging
+        36: [5, 6, 7, 10],                           // Locks
+        37: [6, 8, 9, 10, 13],                       // ClimateControlSettings
+        39: [1, 3],                                  // DigitalKey
+        40: [1, 5, 6],                               // Propulsion
+        42: [6],                                     // Infotainment
+        74: [6]                                      // RestrictedSoftware
+    ]
+
+    /// Collects every undecoded field on the Car message, top-level and nested, as raw wire
+    /// records. Nested fields carry their parent number so diagnostics can show `35.5`.
+    static func unknownCapabilityFields(_ car: [Protobuf.Field]) -> [PolestarRawWireField] {
+        var unknowns: [PolestarRawWireField] = []
+        func retain(_ fields: [Protobuf.Field], parent: Int?, known: Set<Int>) {
+            for field in fields where !known.contains(field.number) {
+                var raw = PolestarGRPC.rawField(field)
+                raw.subfield = parent
+                unknowns.append(raw)
+            }
+        }
+        retain(car, parent: nil, known: decodedCarFields)
+        for (parent, known) in decodedNestedCarFields.sorted(by: { $0.key < $1.key }) {
+            if let nested = message(car, field: parent) {
+                retain(Protobuf.fields(nested), parent: parent, known: known)
+            }
+        }
+        return unknowns.sorted { ($0.subfield ?? 0, $0.field) < ($1.subfield ?? 0, $1.field) }
+    }
+
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
         let outer = Protobuf.fields(data)
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
@@ -936,6 +982,7 @@ extension PolestarGRPC {
             )
             capabilities.honkFlashMode = honkFlashMode
             capabilities.equipment = parseEquipment(car)
+            capabilities.unknownWireFields = unknownCapabilityFields(car)
             var advertised: [VehicleCapability: Bool] = [:]
             func record(_ capability: VehicleCapability, _ fields: [Protobuf.Field]?, _ number: Int) {
                 if let raw = varint(fields ?? [], number) { advertised[capability] = raw != 0 }
@@ -1030,6 +1077,9 @@ extension PolestarGRPC {
         result.internalAirMeasurement = flag(air, 2)
         result.externalAirMeasurement = flag(air, 3)
         result.restrictedSoftwareVersion = string(nested(car, 74), 6).nilIfEmpty
+        if let contentCodes = string(car, 47).nilIfEmpty {
+            result.contentCodes = contentCodes.split(separator: "-").map(String.init)
+        }
         let lightFields = car.filter { $0.number == 73 }
         if !lightFields.isEmpty {
             result.supportedLightWarnings = lightFields.flatMap { field -> [UInt64] in
@@ -1098,17 +1148,21 @@ extension PolestarGRPC {
         let driverSeat = varint(fields, 10).flatMap { $0 > 0 ? Int($0) : nil }
         let passengerSeat = varint(fields, 11).flatMap { $0 > 0 ? Int($0) : nil }
         let steeringWheel = varint(fields, 12).flatMap { $0 > 0 ? Int($0) : nil }
+        // Session-scoped timestamps: 14 = session start, 16 = session end. Field 16 was
+        // verified live to equal the report time plus the remaining minutes.
+        let sessionStartedAt = digitalTwin ? timestamp(message(fields, field: 14)) : nil
+        let sessionEndsAt = digitalTwin ? timestamp(message(fields, field: 16)) : nil
         let activity: ClimateActivity
         if digitalTwin {
-
-
             let active = running == 1
             let starting = running == 3
             if active || starting {
-                if (varint(fields, 6) ?? 0) != 0 {
-                    activity = .ventilating
-                } else if let current = interiorTemperature, let requested = requestedTemperature,
-                          requested != current {
+                // Wire field 6 correlates with session activity (3 idle, 2 during a verified
+                // live heating session) but its enum is unresolved — it must NOT be read as a
+                // ventilation flag, which mislabelled real heating sessions as ventilating.
+                // Classify by reported vs requested temperature when both exist.
+                if let current = interiorTemperature, let requested = requestedTemperature,
+                   requested != current {
                     activity = requested > current ? .heating : .cooling
                 } else {
                     activity = active ? .active : .starting
@@ -1129,13 +1183,25 @@ extension PolestarGRPC {
             }
         }
         let timerTriggered = digitalTwin ? request == 3 : request == 2
+        // Retain every field this parser does not semantically decode (on the digital-twin
+        // shape: 4, 5, 6, 9, 13 — 6/9/13 are live-observed but unresolved) so their values
+        // accumulate for classification instead of disappearing.
+        let decodedClimateFields: Set<Int> = digitalTwin
+            ? [1, 2, 3, 7, 8, 10, 11, 12, 14, 15, 16]
+            : [1, 2, 3, 4]
+        let unknownWireFields = fields
+            .filter { !decodedClimateFields.contains($0.number) }
+            .map(PolestarGRPC.rawField)
         return VehicleClimateStatus(activity: activity, timeRemainingMinutes: remaining,
                                     timerTriggered: timerTriggered,
                                     interiorTemperatureCelsius: interiorTemperature,
                                     requestedTemperatureCelsius: requestedTemperature,
                                     driverSeatHeatingLevel: driverSeat,
                                     passengerSeatHeatingLevel: passengerSeat,
-                                    steeringWheelHeatingLevel: steeringWheel)
+                                    steeringWheelHeatingLevel: steeringWheel,
+                                    sessionStartedAt: sessionStartedAt,
+                                    sessionEndsAt: sessionEndsAt,
+                                    unknownWireFields: unknownWireFields.isEmpty ? nil : unknownWireFields)
     }
 
     static func parseClimateTimers(_ data: Data) -> [VehicleSchedule] {

@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastRemoteCommandFeedback: RemoteCommandFeedback?
     private var commandCoordinator: CommandCoordinator!
     private var calendarPreconditioning: CalendarPreconditioningController!
+    private var chargingPlannerController: ChargingPlannerController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         mainMenuController = MainMenuController(
@@ -76,15 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let targetBrand = self.vehicleSession.resolvedBrand(for: vin)
             guard self.preferences.hasResumableSession(for: targetBrand) else { return }
-            if self.preferences.activeBrand != targetBrand || self.preferences.vin(for: targetBrand) != vin {
-                self.selectVehicle(vin: vin)
-            }
             switch action {
             case .lockVehicle:
-                self.performRemoteCommand(.lock)
+                self.performRemoteCommand(.lock, targetVIN: vin)
             case .resumeChargeSchedule:
-                if self.preferences.activeBrand == .polestar {
-                    self.performRemoteCommand(.stopChargingOverride)
+                if targetBrand == .polestar {
+                    self.performRemoteCommand(.stopChargingOverride, targetVIN: vin)
                 }
             }
         }
@@ -100,7 +98,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             database: vehicleDatabase, authorizer: remoteAuthorizer)
         calendarPreconditioning = CalendarPreconditioningController(
             preferences: preferences,
-            sendClimateStart: { [weak self] in self?.startCalendarClimate() }
+            sendClimateStart: { [weak self] in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.startCalendarClimate()
+            }
+        )
+        chargingPlannerController = ChargingPlannerController(
+            preferences: preferences,
+            notifier: notifier,
+            priceService: .shared,
+            database: vehicleDatabase,
+            latestState: { [weak self] in self?.vehicleSession.latest },
+            activeVINs: { [preferences] in
+                [preferences.vin, preferences.vin(for: .polestar), preferences.vin(for: .volvo)]
+                    .filter { !$0.isEmpty }
+            },
+            startCharging: { [weak self] in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.startPlannerCharging()
+            }
         )
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
@@ -137,6 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         garageScanner.startLoop()
         urlRouter.startHandlingAppleEvents()
         calendarPreconditioning.start()
+        chargingPlannerController.start()
         if !initiallyAuthenticated {
             statusController.openPopover()
         }
@@ -157,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         calendarPreconditioning.stop()
+        chargingPlannerController.stop()
         garageScanner.stop()
         vehicleSession.stop()
 
@@ -213,6 +235,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { _ = await commandCoordinator.perform(command) }
     }
 
+    func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?) {
+        Task { _ = await perform(command, targetVIN: targetVIN, origin: .userInitiated) }
+    }
+
     private func settingsChanged(_ change: SettingsChange) {
         switch change {
         case .credentials:
@@ -261,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateController.applyConfiguration()
             vehicleSession.reloadVehicleMetadata()
             dockWarningBadge.refresh()
+            chargingPlannerController.reload()
         case .notifications:
             notifier.requestAuthorizationIfAnyAlertEnabled()
             dockWarningBadge.refresh()
@@ -279,12 +306,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         render()
     }
 
-    private func startCalendarClimate() {
+    private func startCalendarClimate() async -> RemoteCommandDispatchOutcome {
         // Don't attempt (and don't spend a "Command not sent" banner) when the user has
         // turned the remote-climate feature off. Capability/session gating still happens
         // inside `CommandCoordinator`.
-        guard preferences.features.contains(.remoteClimate) else { return }
-        Task { _ = await commandCoordinator.perform(
+        guard preferences.features.contains(.remoteClimate) else {
+            return .refused(reason: RemoteCommandError.disabled.localizedDescription)
+        }
+        return await commandCoordinator.perform(
             .startClimate(
                 temperatureCelsius: Float(preferences.remoteClimateTemperature),
                 frontLeftSeat: preferences.remoteDriverSeatHeating,
@@ -294,7 +323,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 steeringWheel: preferences.remoteSteeringWheelHeating
             ),
             origin: .automation)
+    }
+
+    /// The planner's unattended start-charging path. Guarded on the remote-charging
+    /// feature so turning that off also disarms auto-start; `.automation` origin means
+    /// the coordinator runs the routine-risk `startChargingOverride` silently (no sheet,
+    /// no biometrics) — auto-start is its own explicit consent in the planner settings.
+    private func startPlannerCharging() async -> RemoteCommandDispatchOutcome {
+        guard preferences.features.contains(.remoteCharging) else {
+            return .refused(reason: RemoteCommandError.disabled.localizedDescription)
         }
+        return await commandCoordinator.perform(.startChargingOverride, origin: .automation)
     }
 
     @objc private func systemAppearanceDidChange() {
@@ -320,6 +359,19 @@ extension AppDelegate: RemoteCommandDispatching {
     // so entry points select then send through one seam.
     func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome {
         await commandCoordinator.perform(command, origin: origin)
+    }
+
+    func perform(
+        _ command: RemoteCommand,
+        targetVIN: String?,
+        origin: RemoteCommandOrigin
+    ) async -> RemoteCommandDispatchOutcome {
+        if let targetVIN, !targetVIN.isEmpty {
+            guard await vehicleSession.prepareVehicle(vin: targetVIN) else {
+                return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
+            }
+        }
+        return await commandCoordinator.perform(command, origin: origin)
     }
 }
 
@@ -352,8 +404,23 @@ extension AppDelegate: CommandExecutionContext {
     }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
-        optimisticState: VehicleState
+        optimisticState: VehicleState?
     ) {
+        if let targetVIN = receipt.targetVIN,
+           vehicleSession.latest?.identity.vin.caseInsensitiveCompare(targetVIN) != .orderedSame {
+            var records = stateStore.commandReceipts(for: targetVIN)
+            if let key = receipt.confirmationConflictKey {
+                records.removeAll { $0.receipt.confirmationConflictKey == key }
+            }
+            records.append(StoredCommandReceipt(
+                receipt: receipt,
+                confirmationDeadline: receipt.status.isAwaiting
+                    ? receipt.issuedAt.addingTimeInterval(CommandReceipt.maximumConfirmationDuration)
+                    : nil
+            ))
+            stateStore.saveCommandReceipts(records, for: targetVIN)
+            return
+        }
         vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
 }
@@ -470,7 +537,12 @@ extension AppDelegate: VehicleSessionControllerContext {
         miniPanel.update(state: state)
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
-        fleetStore.retain(state)
+        chargingPlannerController.vehicleStateDidUpdate(state)
+        if !state.commandState.receipts.contains(where: {
+            $0.status.isAwaiting && $0.supportsTelemetryConfirmation
+        }) {
+            fleetStore.retain(state)
+        }
     }
 
     func authenticationRequired() {

@@ -70,6 +70,7 @@ struct VehicleTabView: View {
             if let card = attentionCard { card.transition(cardTransition) }
             if let card = exceptionsCard { card.transition(cardTransition) }
             if let card = chargingCard { card.transition(cardTransition) }
+            if let card = chargingPlannerCard { card.transition(cardTransition) }
             adaptiveCardsRow(fuelAndEngineCard, openingsCard)
             adaptiveCardsRow(tireSchematicCard, locationCard)
             if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
@@ -162,7 +163,7 @@ struct VehicleTabView: View {
 
     private func commandConfirmationAppearance(for receipt: CommandReceipt) -> (symbol: String, color: Color) {
         switch receipt.status {
-        case .confirmed: return ("checkmark.circle.fill", HisingenTheme.semanticGood)
+        case .confirmed, .acknowledged: return ("checkmark.circle.fill", HisingenTheme.semanticGood)
         case .timedOut: return ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning)
         case .awaiting: return ("clock.arrow.circlepath", HisingenTheme.accent)
         }
@@ -171,6 +172,7 @@ struct VehicleTabView: View {
     private func commandConfirmationLabel(for receipt: CommandReceipt) -> String {
         switch receipt.status {
         case .confirmed: return L10n.text("Matching vehicle reading observed")
+        case .acknowledged: return L10n.text("Command acknowledged by the vehicle service")
         case .timedOut: return L10n.text("Command outcome not confirmed")
         case .awaiting: return L10n.text("Command sent — waiting for the vehicle")
         }
@@ -912,6 +914,18 @@ struct VehicleTabView: View {
             }
             .animation(cardChangeAnimation, value: "\(headline ?? "")|\(ready ?? "")|\(secondary ?? "")|\(activeSamples.count)|\(state.isComplete)")
         })
+    }
+
+    /// Opt-in spot-price planner: the cheapest whole-hour window to charge from the
+    /// current battery level to the configured charge limit. Hidden unless the user
+    /// enabled the feature, the vehicle reports electric range, and both battery level
+    /// and charge limit are known — without those, there is nothing to plan.
+    private var chargingPlannerCard: AnyView? {
+        guard features.contains(.smartChargingPlanner),
+              state.powertrain.hasElectricRange,
+              state.energy.batteryPercentage != nil,
+              state.energy.targetPercentage != nil else { return nil }
+        return AnyView(ChargingPlannerCard(state: state))
     }
 
     private var fuelAndEngineCard: AnyView? {

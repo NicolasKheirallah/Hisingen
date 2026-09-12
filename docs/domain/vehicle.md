@@ -63,9 +63,11 @@ Remote command dispatch is compiled into every build for both brands ([ADR-0009]
 `CommandCoordinator` derives a display-only optimistic snapshot after the provider accepts,
 delivers, or completes a command. It hands that snapshot and a new command receipt to
 `RefreshCoordinator` in one call. The refresh coordinator is the only owner of every receipt's
-`awaiting`, `confirmed`, and `timedOut` lifecycle. Receipts have stable IDs, independent
+`awaiting`, `acknowledged`, `confirmed`, and `timedOut` lifecycle. Receipts have stable IDs,
+provider/VIN targets, audit correlation IDs, independent
 deadlines, and individual dismissal. Fresh matching telemetry replaces assumptions;
-the provider acknowledgement alone is never presented as telemetry confirmation. Optimistic
+the provider acknowledgement alone is never presented as telemetry confirmation. Providers that
+cannot expose a matching reading terminate as acknowledged instead of polling until timeout. Optimistic
 values are never written to the snapshot store.
 
 ## Current Range vs Model WLTP

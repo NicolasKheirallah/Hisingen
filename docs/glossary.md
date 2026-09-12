@@ -27,7 +27,8 @@ catalog, never in an entry point — see
 [ADR-0012](adr/0012-single-remote-command-dispatch-authority.md).
 
 **Command receipt** — the display-only record of an accepted Remote Command in any lifecycle
-state: awaiting confirmation, confirmed, or timed out. `RefreshCoordinator` owns confirmation,
+state: awaiting confirmation, provider-acknowledged (when no observable reading exists), confirmed,
+or timed out. `RefreshCoordinator` owns confirmation,
 suspension, timeout, and individual dismissal. A bounded per-vehicle receipt collection survives
 relaunch; provider telemetry and persisted vehicle snapshots never own the receipts.
 

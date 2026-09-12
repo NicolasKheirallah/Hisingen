@@ -45,6 +45,15 @@ require_(caps.includes("supportsSunroofControl: supportsSunroofControl"), "parse
 require_(caps.includes("userIsLinked:"), "parseMyCars userIsLinked missing");
 require_(caps.includes("userIsOwner:"), "parseMyCars userIsOwner missing");
 require_(caps.includes("registrationPlate:"), "parseMyCars registrationPlate missing");
+require_(caps.includes("static let decodedCarFields"), "GetMyCars known-field set missing");
+require_(caps.includes("static let decodedNestedCarFields"), "GetMyCars nested known-field set missing");
+require_(caps.includes("static func unknownCapabilityFields"), "GetMyCars unknown-field retention missing");
+require_(caps.includes("capabilities.unknownWireFields = unknownCapabilityFields(car)"), "retained fields not wired into capabilities");
+require_(caps.includes("result.contentCodes = contentCodes.split"), "car field 47 content-code parse missing");
+require_(caps.includes("sessionStartedAt: sessionStartedAt"), "parseClimate session start missing");
+require_(caps.includes("sessionEndsAt: sessionEndsAt"), "parseClimate session end missing");
+require_(caps.includes("measuredAt: timestamp(message(fields, field: 2))"), "parseAirQuality field-2 measurement time missing");
+require_(!/if \(varint\(fields, 6\) \?\? 0\) != 0 \{[\s\S]{0,80}ventilating/.test(caps), "field 6 must not be read as a ventilation flag");
 require_(!caps.includes("ErrorService/GetErrors"), "removed Chronos error endpoint is still present");
 require_(!caps.includes("fetchErrors("), "removed Chronos error fetch is still present");
 require_(!caps.includes("parseErrors("), "removed Chronos error parser is still present");
@@ -96,13 +105,18 @@ require_(infoCaps.includes("Sunroof Remote Control"), "capabilities sunroof row 
 require_(infoCaps.includes("Backend Registration Plate"), "capabilities plate row missing");
 require_(infoCaps.includes("Account Linked To Vehicle"), "capabilities linked row missing");
 require_(infoCaps.includes("Account Owns Vehicle"), "capabilities owner row missing");
+require_(infoCaps.includes("Undecoded Backend Fields"), "capabilities raw-field disclosure missing");
+require_(infoCaps.includes("rawCapabilityFieldRow"), "capabilities raw-field row builder missing");
 
 // 8. Tests exist and cover the positive controls.
 const tests = read("Tests/HisingenTests/Unit/PolestarRawDecodeTests.swift");
 for (const marker of [
   "batteryDecodesReportedCapacityAndKnownFields", "batteryCapturesUnknownFieldsRaw",
   "softwareDecodesDescriptionsQbAndOriginator", "schedulerIdleNegativeTwoIsNotSurfacedAsCountdown",
-  "myCarsDecodesSunroofLinkedOwnerPlate",
+  "myCarsDecodesSunroofLinkedOwnerPlate", "myCarsRetainsUnknownFieldsRawAndDecodesContentCodes",
+  "climateActiveSessionDecodesTimestampsAndStaysActive", "airQualityMeasuresAtDecodesFromFieldTwo",
+  "climateIdleFrameStaysIdle", "climateStatusDecodesWithoutSessionTimestamps",
+  "myCarsWithOnlyKnownFieldsRetainsNothing", "equipmentDecodesWithoutContentCodes",
   "tokenResponseDecodesTokenTypeAndIdToken", "graphqlBatteryCapacityDecodesNumberAndString",
   "otaCapabilitiesDecodeWithoutNewFields", "batteryDiagnosticsDecodeWithoutUnknownWireFields"
 ]) {

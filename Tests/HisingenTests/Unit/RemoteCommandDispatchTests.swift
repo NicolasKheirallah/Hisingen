@@ -43,12 +43,19 @@ struct RemoteCommandDispatchTests {
 
     @Test
     @MainActor
-    func deepLinkVINQuerySelectsBeforeDispatching() {
+    func deepLinkVINQueryDispatchesOneAtomicTargetedCommand() {
         let context = RouterContextMock(activeBrand: .volvo)
         let router = URLCommandRouter(context: context)
         router.route(URL(string: "hisingen://lock?vin=YSMZTEST01")!)
-        XCTAssertEqual(context.selectedVINs, ["YSMZTEST01"])
+        XCTAssertTrue(context.selectedVINs.isEmpty)
+        XCTAssertEqual(context.commandTargets, ["YSMZTEST01"])
         XCTAssertEqual(context.commands, [.lock])
+    }
+
+    @Test func calendarConsumesOnlySentOrTerminalOutcomes() {
+        #expect(CalendarPreconditioningDispatchDecision.consumesOccurrence(.sent(.accepted)))
+        #expect(CalendarPreconditioningDispatchDecision.consumesOccurrence(.refused(reason: "disabled")))
+        #expect(!CalendarPreconditioningDispatchDecision.consumesOccurrence(.deferred(reason: "busy")))
     }
 
     // MARK: - Dispatch hub
@@ -92,7 +99,7 @@ struct RemoteCommandDispatchTests {
         let dialog = await AutomationHandoff.send(.lock, vehicle: "My Volvo", preferences: preferences)
         XCTAssertEqual(context.selectedVINs, [vin])
         XCTAssertEqual(context.provider.executedCommands, [.lock])
-        XCTAssertEqual(dialog, RemoteCommand.lock.outcomeDescription)
+        XCTAssertEqual(dialog, L10n.text("Command accepted; waiting for the vehicle to report the result."))
     }
 
     /// Gate refusals surface as dialog text without a provider round-trip.
@@ -185,6 +192,28 @@ struct RemoteCommandDispatchTests {
 
     @Test
     @MainActor
+    func volvoClimateAcknowledgementDoesNotCreateOptimisticWaitingState() async {
+        let context = makeContext(features: [.remoteClimate], brand: .volvo)
+        let command = RemoteCommand.startClimate(
+            temperatureCelsius: 22,
+            frontLeftSeat: .off,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+
+        guard case .sent = await context.perform(command, origin: .userInitiated) else {
+            return XCTFail("Expected provider acknowledgement")
+        }
+        #expect(context.vehicleState?.climateStatus == nil)
+        guard case .acknowledged = context.vehicleState?.commandState.receipt?.status else {
+            return XCTFail("Expected an acknowledged terminal receipt")
+        }
+    }
+
+    @Test
+    @MainActor
     func successfulLockUnlockFlipOptimisticExterior() async {
         let context = makeContext(features: [.remoteLocks])
         context.vehicleState?.exteriorStatus = ExteriorSnapshot(
@@ -226,7 +255,7 @@ struct RemoteCommandDispatchTests {
         XCTAssertEqual(context.vehicleState?.identity.vin, "YSMSECOND02")
         XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
         XCTAssertNil(context.vehicleState?.commandState.receipt)
-        XCTAssertEqual(context.confirmationCount, 0)
+        XCTAssertEqual(context.confirmationCount, 1)
         XCTAssertEqual(context.presentations.last?.target?.vin, vin)
         XCTAssertTrue(context.presentations.last?.message.contains("Polestar 2") == true)
     }
@@ -328,6 +357,7 @@ private final class RouterContextMock: URLCommandRouterContext {
     var defaultRemoteClimateTemperatureCelsius: Double { 21 }
     private(set) var selectedVINs: [String] = []
     private(set) var commands: [RemoteCommand] = []
+    private(set) var commandTargets: [String?] = []
     private(set) var notices: [(String, String)] = []
 
     init(activeBrand: VehicleBrand) { self.activeBrand = activeBrand }
@@ -339,7 +369,10 @@ private final class RouterContextMock: URLCommandRouterContext {
     func toggleSettings() {}
     func togglePopover() {}
     func refreshNow() {}
-    func performRemoteCommand(_ command: RemoteCommand) { commands.append(command) }
+    func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?) {
+        commands.append(command)
+        commandTargets.append(targetVIN)
+    }
     func notifyCommandNotice(title: String, body: String) { notices.append((title, body)) }
 }
 
@@ -434,6 +467,15 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         return await coordinator.perform(command, origin: origin)
     }
 
+    func perform(
+        _ command: RemoteCommand,
+        targetVIN: String?,
+        origin: RemoteCommandOrigin
+    ) async -> RemoteCommandDispatchOutcome {
+        if let targetVIN { selectVehicle(vin: targetVIN) }
+        return await perform(command, origin: origin)
+    }
+
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func commandInProgressDidChange() {}
     func presentResult(
@@ -443,10 +485,14 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
-        optimisticState: VehicleState
+        optimisticState: VehicleState?
     ) {
         confirmationCount += 1
-        vehicleState = optimisticState
+        if let targetVIN = receipt.targetVIN,
+           vehicleState?.identity.vin.caseInsensitiveCompare(targetVIN) != .orderedSame {
+            return
+        }
+        if let optimisticState { vehicleState = optimisticState }
         vehicleState?.commandState.receipt = receipt
     }
 }

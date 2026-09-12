@@ -102,6 +102,87 @@ struct NotificationTestHarness {
 @MainActor
 struct NotificationPostingTests {
 
+    private func climateState(
+        _ harness: NotificationTestHarness,
+        activity: ClimateActivity,
+        reportedAt: Date
+    ) -> VehicleState {
+        var state = harness.makeState(reportedAt: reportedAt)
+        state.climateStatus = VehicleClimateStatus(
+            activity: activity,
+            timeRemainingMinutes: activity == .idle ? nil : 30,
+            timerTriggered: false,
+            interiorTemperatureCelsius: nil,
+            requestedTemperatureCelsius: 22
+        )
+        state.freshness.readingDates[.climateStatus] = reportedAt
+        return state
+    }
+
+    @Test func transientInactiveClimateReadingDoesNotPostFalseTransitions() throws {
+        let harness = try NotificationTestHarness()
+        harness.preferences.notifyClimateChanges = true
+        let notifier = harness.makeNotifier()
+        let base = Date(timeIntervalSinceNow: -180)
+
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .ventilating, reportedAt: base))
+        harness.dispatcher.added.removeAll()
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .idle,
+                                                     reportedAt: base.addingTimeInterval(3)))
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .ventilating,
+                                                     reportedAt: base.addingTimeInterval(6)))
+
+        #expect(!harness.dispatcher.added.contains { $0.identifier.contains("climate-") })
+    }
+
+    @Test func pendingClimateStartNeverProducesStoppedNotificationWhileBackendCatchesUp() throws {
+        let harness = try NotificationTestHarness()
+        harness.preferences.notifyClimateChanges = true
+        let notifier = harness.makeNotifier()
+        let base = Date(timeIntervalSinceNow: -180)
+        let command = RemoteCommand.startClimate(
+            temperatureCelsius: 0,
+            frontLeftSeat: .off,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .ventilating, reportedAt: base))
+        harness.dispatcher.added.removeAll()
+        for offset in [3.0, 6.0] {
+            var inactive = climateState(harness, activity: .idle,
+                                        reportedAt: base.addingTimeInterval(offset))
+            inactive.commandState.receipt = CommandReceipt(
+                commandIdentifier: command.identifier,
+                issuedAt: base,
+                command: command
+            )
+            notifier.vehicleStateDidUpdate(inactive)
+        }
+
+        #expect(!harness.dispatcher.added.contains { $0.identifier.contains("climate-stopped") })
+    }
+
+    @Test func repeatedInactiveClimateReadingPostsOneStoppedNotification() throws {
+        let harness = try NotificationTestHarness()
+        harness.preferences.notifyClimateChanges = true
+        let notifier = harness.makeNotifier()
+        let base = Date(timeIntervalSinceNow: -180)
+
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .ventilating, reportedAt: base))
+        harness.dispatcher.added.removeAll()
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .idle,
+                                                     reportedAt: base.addingTimeInterval(3)))
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .idle,
+                                                     reportedAt: base.addingTimeInterval(6)))
+        notifier.vehicleStateDidUpdate(climateState(harness, activity: .idle,
+                                                     reportedAt: base.addingTimeInterval(9)))
+
+        #expect(harness.dispatcher.added.filter { $0.identifier.contains("climate-stopped") }.count == 1)
+    }
+
     @Test func freshSnapshotDoesNotMakeOldChargingAndHealthReadingsNotify() throws {
         let harness = try NotificationTestHarness()
         let notifier = harness.makeNotifier()

@@ -67,7 +67,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .accounts: return "account login sign in polestar volvo credentials vehicle vin garage fleet"
         case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image"
         case .general: return "general display menu bar panel size density units language launch charging order"
-        case .features: return "feature capability vehicle data remote control lock climate charge schedule location weather"
+        case .features: return "feature capability vehicle data remote control lock climate charge schedule location weather charging planner spot price elspot zone"
         case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
         case .privacyData: return "privacy data database storage history retention export backup diagnostics location"
         case .updates: return "update automatic frequency interval download version channel release"

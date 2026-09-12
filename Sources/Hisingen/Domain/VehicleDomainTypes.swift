@@ -542,6 +542,16 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     let driverSeatHeatingLevel: Int?
     let passengerSeatHeatingLevel: Int?
     let steeringWheelHeatingLevel: Int?
+    /// When the current or last climate session started (wire field 14). `nil` when the
+    /// backend omits it or in snapshots persisted before this field existed.
+    var sessionStartedAt: Date? = nil
+    /// When the running session ends (wire field 16). Verified live to equal the report
+    /// time plus the remaining minutes.
+    var sessionEndsAt: Date? = nil
+    /// Undecoded climate wire fields (4, 5, 6, 9, 13 on the digital-twin shape), captured
+    /// raw so their accumulated values can be classified later. `nil` in snapshots
+    /// persisted before retention existed.
+    var unknownWireFields: [PolestarRawWireField]? = nil
 
     init(
         activity: ClimateActivity,
@@ -551,7 +561,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         requestedTemperatureCelsius: Double? = nil,
         driverSeatHeatingLevel: Int? = nil,
         passengerSeatHeatingLevel: Int? = nil,
-        steeringWheelHeatingLevel: Int? = nil
+        steeringWheelHeatingLevel: Int? = nil,
+        sessionStartedAt: Date? = nil,
+        sessionEndsAt: Date? = nil,
+        unknownWireFields: [PolestarRawWireField]? = nil
     ) {
         self.activity = activity
         self.timeRemainingMinutes = timeRemainingMinutes
@@ -561,12 +574,16 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         self.driverSeatHeatingLevel = driverSeatHeatingLevel
         self.passengerSeatHeatingLevel = passengerSeatHeatingLevel
         self.steeringWheelHeatingLevel = steeringWheelHeatingLevel
+        self.sessionStartedAt = sessionStartedAt
+        self.sessionEndsAt = sessionEndsAt
+        self.unknownWireFields = unknownWireFields
     }
 
     private enum CodingKeys: String, CodingKey {
         case activity, timeRemainingMinutes, timerTriggered
         case interiorTemperatureCelsius, requestedTemperatureCelsius
         case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
+        case sessionStartedAt, sessionEndsAt, unknownWireFields
     }
 
     init(from decoder: Decoder) throws {
@@ -579,6 +596,9 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         driverSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .driverSeatHeatingLevel)
         passengerSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .passengerSeatHeatingLevel)
         steeringWheelHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .steeringWheelHeatingLevel)
+        sessionStartedAt = try c.decodeIfPresent(Date.self, forKey: .sessionStartedAt)
+        sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
+        unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields)
     }
 }
 
@@ -694,6 +714,9 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     let lastCycleValid: Bool?
     /// Precise backend error classification (field 13). `nil` when the field is absent.
     let errorKind: AirCleaningError?
+    /// When the cabin air was last measured (field 2). Updates on vehicle wakes and at the
+    /// end of a cleaning cycle — distinct from `reportedAt` (field 1, the frame time).
+    var measuredAt: Date? = nil
 
     init(
         cleaningState: AirCleaningState,
@@ -709,7 +732,8 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         endingAt: Date? = nil,
         startReason: AirCleaningStartReason? = nil,
         lastCycleValid: Bool? = nil,
-        errorKind: AirCleaningError? = nil
+        errorKind: AirCleaningError? = nil,
+        measuredAt: Date? = nil
     ) {
         self.cleaningState = cleaningState
         self.airQualityIndex = airQualityIndex
@@ -725,12 +749,14 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         self.startReason = startReason
         self.lastCycleValid = lastCycleValid
         self.errorKind = errorKind
+        self.measuredAt = measuredAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case cleaningState, airQualityIndex, particulateMatter25, particulateMatter10
         case externalParticulateMatter25, filterRemainingPercent, runtimeRemainingMinutes
         case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
+        case measuredAt
     }
 
     /// Whether a one-tap pre-clean toggle may be shown for this reading: the backend reported
@@ -754,6 +780,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         startReason = try c.decodeIfPresent(AirCleaningStartReason.self, forKey: .startReason)
         lastCycleValid = try c.decodeIfPresent(Bool.self, forKey: .lastCycleValid)
         errorKind = try c.decodeIfPresent(AirCleaningError.self, forKey: .errorKind)
+        measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
     }
 }
 
@@ -783,6 +810,9 @@ enum ChargerPowerState: String, Codable, Sendable {
 /// diagnostics surfaces and reclassified as they are identified by live probing.
 struct PolestarRawWireField: Codable, Equatable, Sendable {
     let field: Int
+    /// Parent message number when the field lives inside a known sub-message (e.g. `35` for
+    /// the `GetMyCars` charging settings), `nil` for top-level fields.
+    var subfield: Int? = nil
     let wire: Int
     let value: String
     /// True when `value` is a hex dump of the bytes rather than a decoded scalar.
@@ -929,6 +959,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
     let currencySymbol: String?
     let completionReason: ChargingSessionCompletionReason?
     let summaryVersion: Int
+    /// Market-price cost from recorded samples against hourly spot prices, when coverage
+    /// allows. Distinct from `cost`, which uses the user's flat day/night tariff.
+    var spotCost: Double? = nil
 
     init(
         id: UUID, vin: String, startDate: Date, endDate: Date,
@@ -940,7 +973,7 @@ struct ChargingSession: Codable, Equatable, Sendable {
         sampleCoverage: Double? = nil, tariffPricePerKwh: Double? = nil,
         currencySymbol: String? = nil,
         completionReason: ChargingSessionCompletionReason? = nil,
-        summaryVersion: Int = 1
+        summaryVersion: Int = 1, spotCost: Double? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -960,13 +993,14 @@ struct ChargingSession: Codable, Equatable, Sendable {
         self.currencySymbol = currencySymbol
         self.completionReason = completionReason
         self.summaryVersion = summaryVersion
+        self.spotCost = spotCost
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, vin, startDate, endDate, startBatteryPercentage, endBatteryPercentage
         case kwhDelivered, peakPowerWatts, cost, targetPercentage, samples
         case energySource, confidence, sampleCoverage, tariffPricePerKwh, currencySymbol
-        case completionReason, summaryVersion
+        case completionReason, summaryVersion, spotCost
     }
 
 
@@ -990,7 +1024,8 @@ struct ChargingSession: Codable, Equatable, Sendable {
             tariffPricePerKwh: try c.decodeIfPresent(Double.self, forKey: .tariffPricePerKwh),
             currencySymbol: try c.decodeIfPresent(String.self, forKey: .currencySymbol),
             completionReason: try c.decodeIfPresent(ChargingSessionCompletionReason.self, forKey: .completionReason),
-            summaryVersion: try c.decodeIfPresent(Int.self, forKey: .summaryVersion) ?? 1
+            summaryVersion: try c.decodeIfPresent(Int.self, forKey: .summaryVersion) ?? 1,
+            spotCost: try c.decodeIfPresent(Double.self, forKey: .spotCost)
         )
     }
 
@@ -1167,6 +1202,10 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     /// Registration plate as reported by the backend (`MyCar.registrationPlate`, wire
     /// field 4). Distinct source from the GraphQL `registrationNo`.
     let registrationPlate: String?
+    /// Undecoded wire fields the `GetMyCars` response carried (top-level and inside known
+    /// sub-messages), captured raw like the battery parser does. `nil` in snapshots persisted
+    /// before capture existed.
+    var unknownWireFields: [PolestarRawWireField]?
 
     init(installedSoftwareVersion: String? = nil,
          identity: VehicleBackendIdentity? = nil,
@@ -1189,10 +1228,11 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
          supportsWindowsControl: Bool = false,
          supportsAirPurificationRemoteStart: Bool = false,
          supportsPlugAndCharge: Bool = false,
-         supportsSunroofControl: Bool? = nil,
-         userIsLinked: Bool? = nil,
-         userIsOwner: Bool? = nil,
-         registrationPlate: String? = nil) {
+          supportsSunroofControl: Bool? = nil,
+          userIsLinked: Bool? = nil,
+          userIsOwner: Bool? = nil,
+          registrationPlate: String? = nil,
+          unknownWireFields: [PolestarRawWireField]? = nil) {
         self.installedSoftwareVersion = installedSoftwareVersion
         self.identity = identity
         self.supportsFullOtaUpdates = supportsFullOtaUpdates
@@ -1218,6 +1258,7 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
         self.userIsLinked = userIsLinked
         self.userIsOwner = userIsOwner
         self.registrationPlate = registrationPlate
+        self.unknownWireFields = unknownWireFields
     }
 }
 

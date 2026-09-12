@@ -304,7 +304,9 @@ struct VehicleCapabilityParsingTests {
         climate.append(Protobuf.intField(6, 1))
         climate.append(Protobuf.intField(15, 3))
         let status = PolestarGRPC.parseClimate(climate)
-        XCTAssertEqual(status.activity, .ventilating)
+        // Field 6 is an unresolved activity enum (live-verified 2026-09-11: 2 during a real
+        // heating session), so an active session with no temperature pair reports .active.
+        XCTAssertEqual(status.activity, .active)
         XCTAssertEqual(status.timeRemainingMinutes, 18)
         XCTAssertTrue(status.timerTriggered)
 

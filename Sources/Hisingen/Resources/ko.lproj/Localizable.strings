@@ -1616,7 +1616,6 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "이 업데이트는 공지되었지만 아직 다운로드가 승인되지 않았습니다. 백엔드가 승인하고 조건이 허용되면 차량이 스스로 다운로드하며, 설치는 그 이후에만 시작할 수 있습니다.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "이 차량은 클라우드 기반 다운로드 동의를 지원하지 않습니다. 업데이트는 차량이 백엔드에 자율적으로 접속할 때만 다운로드할 수 있습니다. Polestar 정비 예약을 통해 직접 적용할 수 있습니다.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "이 차량의 간접 TPMS는 정확한 공기압 측정값이 아닌 타이어별 경고 수준을 보고합니다.";
-"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "이 상태는 차량의 API에서 제공되며 문제가 보고될 때만 변경되므로 실시간 측정값이 아닙니다. 확인된 결과가 아닌 참고용으로 취급하세요.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "경고 상태만 제공됩니다. 차량은 타이어별 경고 수준을 보고하며 문제를 감지했을 때만 타이어를 표시하므로 이것은 실시간 공기압 측정이 아닙니다.";
 "To" = "까지";
 "to" = "에서";
@@ -2370,3 +2369,71 @@
 "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity." = "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity.";
 "Waiting for 100% charge" = "Waiting for 100% charge";
 "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading." = "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading.";
+"Command acknowledged by the vehicle service" = "Command acknowledged by the vehicle service";
+"Command accepted; waiting for the vehicle to report the result." = "Command accepted; waiting for the vehicle to report the result.";
+"The target vehicle could not be loaded." = "The target vehicle could not be loaded.";
+
+// English fallback values pending translation
+"Charging Planner" = "Charging Planner";
+"Smart Charging Planner" = "Smart Charging Planner";
+"Show the cheapest charging window to your charge limit, from Swedish spot prices" = "Show the cheapest charging window to your charge limit, from Swedish spot prices";
+"Price Zone" = "Price Zone";
+"Spot-price area you live in" = "Spot-price area you live in";
+"Charging Power" = "Charging Power";
+"Used to estimate how many charging hours are needed" = "Used to estimate how many charging hours are needed";
+"Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se." = "Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se.";
+"SE1 · Luleå" = "SE1 · Luleå";
+"SE2 · Sundsvall" = "SE2 · Sundsvall";
+"SE3 · Stockholm" = "SE3 · Stockholm";
+"SE4 · Malmö" = "SE4 · Malmö";
+"Today" = "Today";
+"Tomorrow" = "Tomorrow";
+"Loading prices…" = "Loading prices…";
+"Tomorrow's prices arrive after 14:15" = "Tomorrow's prices arrive after 14:15";
+"Prices unavailable right now" = "Prices unavailable right now";
+"Spot prices exclude taxes and grid fees" = "Spot prices exclude taxes and grid fees";
+"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Charge %@ over %d h to reach %d%% — average %@, now %@";
+"Saves %@" = "Saves %@";
+"Charging now is cheapest" = "Charging now is cheapest";
+
+// English fallback values pending translation
+"A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
+
+// English fallback values pending translation
+"Undecoded Backend Fields (%d)" = "디코딩되지 않은 백엔드 필드 (%d)";
+"Factory Content Codes" = "공장 장비 코드";
+"Field %@" = "필드 %@";
+"Field %@ (raw)" = "필드 %@ (원본)";
+"The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check." = "상태는 차량의 API에서 제공되며 문제가 보고될 때만 변경됩니다. 표시되지 않은 타이어는 마지막 점검에서 시스템이 문제를 감지하지 못했음을 의미합니다.";
+"When the cabin air was last measured. The sensor also samples when the vehicle wakes up, not only during purification." = "실내 공기를 마지막으로 측정한 시기입니다. 센서는 공기 정화 중뿐만 아니라 차량이 깨어날 때도 측정합니다.";
+
+// English fallback values pending translation
+"Estimated from the recorded charging power and the hourly market price for your price zone." = "Estimated from the recorded charging power and the hourly market price for your price zone.";
+"Session Started" = "Session Started";
+"Spot Cost" = "Spot Cost";
+
+// English fallback values pending translation
+"Electricity price outlook" = "Electricity price outlook";
+"Planned window from %@" = "Planned window from %@";
+"Between %@ and %@ kr per kWh. %@" = "Between %@ and %@ kr per kWh. %@";
+"The car has its own charging schedules — the planner does not use them" = "The car has its own charging schedules — the planner does not use them";
+"fetched %@" = "fetched %@";
+"The vehicle's location suggests %@" = "The vehicle's location suggests %@";
+"Notify When the Cheap Window Opens" = "Notify When the Cheap Window Opens";
+"One banner per window, respecting quiet hours" = "One banner per window, respecting quiet hours";
+"Notify When Tomorrow's Prices Arrive" = "Notify When Tomorrow's Prices Arrive";
+"One daily banner after 14:15 with the cheapest hour" = "One daily banner after 14:15 with the cheapest hour";
+"Auto-Start Charging in the Window" = "Auto-Start Charging in the Window";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
+"Sends the start-charging command automatically while the window runs" = "Sends the start-charging command automatically while the window runs";
+"Market Price Cost" = "Market Price Cost";
+"Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.";
+"The cheap charging window runs %@." = "The cheap charging window runs %@.";
+"Plug in the vehicle — the cheap charging window runs %@." = "Plug in the vehicle — the cheap charging window runs %@.";
+"Cheap charging window: %@." = "Cheap charging window: %@.";
+"Tomorrow's electricity prices are in" = "Tomorrow's electricity prices are in";
+"Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
+"Tomorrow's spot prices have arrived." = "Tomorrow's spot prices have arrived.";
+
+// English fallback values pending translation
+"Use" = "Use";

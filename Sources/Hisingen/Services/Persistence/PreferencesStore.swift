@@ -364,6 +364,54 @@ final class PreferencesStore {
     var nightElectricityPricePerKwh: Double { get { let value = d.double(forKey: "night_electricity_price_per_kwh"); return value > 0 ? value : electricityPricePerKwh } set { d.set(newValue, forKey: "night_electricity_price_per_kwh") } }
     var nightTariffStartHour: Int { get { let value = d.object(forKey: "night_tariff_start_hour") as? Int; return min(max(value ?? 22, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_start_hour") } }
     var nightTariffEndHour: Int { get { let value = d.object(forKey: "night_tariff_end_hour") as? Int; return min(max(value ?? 6, 0), 23) } set { d.set(min(max(newValue, 0), 23), forKey: "night_tariff_end_hour") } }
+    /// Swedish spot-price zone for the Charging Planner. Defaults to SE3, the most
+    /// populous zone, so a first-run pick is one tap away rather than a wrong guess.
+    var electricityPriceZone: ElspotZone {
+        get { ElspotZone(rawValue: d.string(forKey: "electricity_price_zone") ?? "") ?? .se3 }
+        set { d.set(newValue.rawValue, forKey: "electricity_price_zone") }
+    }
+    /// Assumed charger output used to convert the energy still needed into whole
+    /// charging hours when the vehicle is not reporting a live charging rate.
+    var electricityChargerPowerKw: Double {
+        get { let value = d.double(forKey: "electricity_charger_power_kw"); return value > 0 ? value : 7.4 }
+        set { d.set(max(1, min(newValue, 250)), forKey: "electricity_charger_power_kw") }
+    }
+    /// Banner when the planned cheap-charging window opens. Respects quiet hours like
+    /// every other alert, so an overnight window arrives in the morning list.
+    var notifyPlannerWindowStart: Bool { get { boolDefaultTrue("notify_planner_window_start") } set { d.set(newValue, forKey: "notify_planner_window_start") } }
+    /// Banner after the daily fetch once tomorrow's prices have landed. Off by default —
+    /// the information is rarely urgent enough to justify a daily ping.
+    var notifyPlannerPricesPublished: Bool { get { d.bool(forKey: "notify_planner_prices_published") } set { d.set(newValue, forKey: "notify_planner_prices_published") } }
+    /// The consent that lets the planner send `startChargingOverride` on its own when the
+    /// planned window opens and the vehicle is plugged in. Deliberately not transferable
+    /// through settings archives and not part of any bulk-enable action.
+    var plannerAutoStartEnabled: Bool { get { d.bool(forKey: "planner_auto_start_enabled") } set { d.set(newValue, forKey: "planner_auto_start_enabled") } }
+    /// Window-start notification dedupe: per-VIN record of the last plan start a banner
+    /// was posted for, so a relaunch inside the same window never replays it.
+    func plannerNotifiedWindowStart(for vin: String) -> Date? {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "planner_notified_windows_v1") as? [String: Double] else { return nil }
+        return all[key].map(Date.init(timeIntervalSince1970:))
+    }
+    func setPlannerNotifiedWindowStart(_ date: Date?, for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !key.isEmpty else { return }
+        var all = d.dictionary(forKey: "planner_notified_windows_v1") as? [String: Double] ?? [:]
+        if let date { all[key] = date.timeIntervalSince1970 } else { all.removeValue(forKey: key) }
+        d.set(all, forKey: "planner_notified_windows_v1")
+    }
+    /// Prices-published notification dedupe: zone → publication-day epoch day. One banner
+    /// per zone per day, even across relaunches.
+    func plannerPricesNotifiedDay(for zone: ElspotZone) -> Int? {
+        let all = d.dictionary(forKey: "planner_prices_notified_v1") as? [String: Double]
+        return all?[zone.rawValue].map(Int.init)
+    }
+    func setPlannerPricesNotifiedDay(_ day: Int?, for zone: ElspotZone) {
+        var all = d.dictionary(forKey: "planner_prices_notified_v1") as? [String: Double] ?? [:]
+        if let day { all[zone.rawValue] = Double(day) } else { all.removeValue(forKey: zone.rawValue) }
+        d.set(all, forKey: "planner_prices_notified_v1")
+    }
     var storeChargingHistory: Bool { get { d.bool(forKey: "store_charging_history") } set { d.set(newValue, forKey: "store_charging_history") } }
     /// Well-to-wheel grid carbon intensity used only for the History tab's indicative
     /// "emissions avoided vs petrol" figure. Defaults to a middle-of-the-road European blend;

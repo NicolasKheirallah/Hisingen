@@ -59,6 +59,15 @@ extension InfoTabView {
             if let level = climate.steeringWheelHeatingLevel, level > 0 {
                 rows.append(KVRow(L10n.text("Steering Wheel Heating"), L10n.format("Level %d", level), symbol: "steeringwheel.and.heat.waves"))
             }
+            if let startedAt = climate.sessionStartedAt,
+               climate.activity != .idle && climate.activity != .unknown {
+                rows.append(KVRow(L10n.text("Session Started"), Format.timeFormatter.string(from: startedAt),
+                                  symbol: "clock"))
+            }
+            if let endsAt = climate.sessionEndsAt, endsAt.timeIntervalSinceNow > 0 {
+                rows.append(KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endsAt),
+                                  symbol: "clock.badge.checkmark"))
+            }
         }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
@@ -67,6 +76,14 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: .purple)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                if let rawFields = state.climateStatus?.unknownWireFields, !rawFields.isEmpty {
+                    DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
+                        ForEach(rawFields.indices, id: \.self) { index in
+                            rawCapabilityFieldRow(rawFields[index])
+                        }
+                    }
+                    .padding(.top, 4)
+                }
                 if let climate = state.climateStatus {
                     CabinThermalMatrix(
                         driverSeatLevel: climate.driverSeatHeatingLevel,

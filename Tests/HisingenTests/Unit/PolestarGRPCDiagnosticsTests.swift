@@ -148,6 +148,94 @@ struct PolestarGRPCDiagnosticsTests {
         }
     }
 
+    /// Discovery hardening: the v2 Accept header is tried first, and a version-shape
+    /// rejection (406) falls back to the v1 document in the same session.
+    @Test func discoveryFallsBackFromV2ToV1() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DiscoveryV2FallbackTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "io.kheirallah.hisingen.tests.discovery-fallback.\(UUID())"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session)
+        let host = try await grpc.resolvedHost(.c3, accessToken: "token")
+        #expect(host.host == "grpc-v1.example")
+        let seen = DiscoveryV2FallbackTransport.acceptsSeen()
+        #expect(seen == ["v2", "v1"], "expected one v2 request followed by one v1 request, saw \(seen)")
+    }
+
+    @Test func discoveryPrefersV2DocumentWhenServed() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DiscoveryV2PrimaryTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "io.kheirallah.hisingen.tests.discovery-v2.\(UUID())"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session)
+        let host = try await grpc.resolvedHost(.c3, accessToken: "token")
+        #expect(host.host == "grpc-v2.example")
+        #expect(DiscoveryV2PrimaryTransport.v1Requests() == 0, "v1 must not be requested when v2 serves a valid document")
+    }
+
+}
+
+/// 406s the v2 discovery request, serves a valid v1 document, and records each Accept version.
+private final class DiscoveryV2FallbackTransport: URLProtocol, @unchecked Sendable {
+    private static let recorder = DiscoveryAcceptRecorder()
+    static func acceptsSeen() -> [String] { recorder.acceptsByVersion() }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let accept = request.value(forHTTPHeaderField: "Accept") ?? ""
+        Self.recorder.record(accept)
+        let status = accept.contains("v2") ? 406 : 200
+        let data = accept.contains("v2")
+            ? Data()
+            : Data(#"{"c3":{"grpcHost":"grpc-v1.example","grpcPort":443}}"#.utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                                       headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+/// Serves a valid v2 document; any v1 request would mean the fallback fired wrongly.
+private final class DiscoveryV2PrimaryTransport: URLProtocol, @unchecked Sendable {
+    private static let recorder = DiscoveryAcceptRecorder()
+    static func v1Requests() -> Int { recorder.v1Count() }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let accept = request.value(forHTTPHeaderField: "Accept") ?? ""
+        let isV1 = !accept.contains("v2")
+        if isV1 { Self.recorder.record(accept) }
+        let data = Data(#"{"c3":{"grpcHost":"grpc-v2.example","grpcPort":443},"vca-api-gateway":{"grpcHost":"vca.example","grpcPort":443}}"#.utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private final class DiscoveryAcceptRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var accepts: [String] = []
+    func record(_ accept: String) {
+        lock.lock(); defer { lock.unlock() }
+        accepts.append(accept)
+    }
+    func acceptsByVersion() -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return accepts.map { $0.contains("v2") ? "v2" : "v1" }
+    }
+    func v1Count() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return accepts.filter { !$0.contains("v2") }.count
+    }
 }
 
 private final class CapabilityFailureCounts: @unchecked Sendable {

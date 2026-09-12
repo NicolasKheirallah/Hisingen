@@ -103,11 +103,28 @@ extension InfoTabView {
                     }
                 }
 
+                if let rawFields = caps.unknownWireFields, !rawFields.isEmpty {
+                    DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
+                        ForEach(rawFields.indices, id: \.self) { index in
+                            rawCapabilityFieldRow(rawFields[index])
+                        }
+                    }
+                }
+
                 Text(L10n.text("Controls also depend on account permissions, enabled features and available command implementations."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.tertiary)
             }
         })
+    }
+
+    /// One raw `GetMyCars` wire field. The label carries the parent message number when the
+    /// field lives inside a known sub-message, e.g. "Field 35.5".
+    func rawCapabilityFieldRow(_ field: PolestarRawWireField) -> KVRow {
+        let path = field.subfield.map { "\($0).\(field.field)" } ?? String(field.field)
+        let label = field.isBinary ? L10n.format("Field %@ (raw)", path) : L10n.format("Field %@", path)
+        return KVRow(label, field.value, symbol: "curlybraces",
+                     info: L10n.text("Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
     }
 
     // MARK: - Capability profile (brand-agnostic, from VehicleCapabilityProfile)

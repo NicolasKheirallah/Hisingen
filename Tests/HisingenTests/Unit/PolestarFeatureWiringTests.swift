@@ -78,6 +78,41 @@ struct PolestarFeatureWiringTests {
         #expect(line.hasSuffix("Exterior Paint,"))
     }
 
+    // MARK: - Factory content codes + retained raw fields
+
+    @Test func equipmentDetailsExposeContentCodesOnlyWhenPresent() {
+        var equipment = VehicleEquipment()
+        #expect(!equipment.details.contains { $0.title == "Factory Content Codes" })
+        equipment.contentCodes = ["534", "110U", "GR04", "2023"]
+        let row = equipment.details.first { $0.title == "Factory Content Codes" }
+        #expect(row?.value == "534 110U GR04 2023")
+    }
+
+    @Test @MainActor func factoryPassportIncludesFactoryContentCodes() throws {
+        let prefs = makePreferences("passport-content")
+        var state = makeState()
+        state.otaCapabilities = VehicleOTACapabilities(userIsOwner: true)
+        var equipment = VehicleEquipment()
+        equipment.contentCodes = ["534", "110U", "GR04", "2023"]
+        state.otaCapabilities?.equipment = equipment
+        let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
+        let codeLine = try #require(csv.split(separator: "\n").first { $0.contains("Factory Content Codes") })
+        #expect(codeLine.contains("534 110U GR04 2023"))
+    }
+
+    @Test func retainedRawFieldsCarryParentMessageNumbers() throws {
+        var charging = Data()
+        charging += Protobuf.intField(5, 1)
+        var car = Data()
+        car += Protobuf.stringField(1, "VIN-RAW")
+        car += Protobuf.intField(20, 1)
+        car += Protobuf.messageField(35, charging)
+        let caps = try #require(PolestarGRPC.parseMyCars(
+            Protobuf.messageField(1, Protobuf.messageField(1, car)), vin: "VIN-RAW"))
+        let raw = try #require(caps.unknownWireFields)
+        #expect(raw.map { "\($0.subfield ?? 0).\($0.field)" } == ["0.20", "35.5"])
+    }
+
     // MARK: - F5: Owner gate
 
     @Test func ownerGateBlocksWhenExplicitlyFalse() {

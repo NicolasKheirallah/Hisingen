@@ -34,16 +34,20 @@ enum AutomationHandoff {
 #endif
 
     /// The one Remote Command path the Shortcuts surface uses: resolve the target vehicle,
-    /// select it (deep links always have, so the command runs against the car the user
-    /// named), dispatch through the shell, and describe the outcome in the intent dialog.
+    /// resolve it through the shell's awaited target-selection boundary, and describe the
+    /// provider acknowledgement without claiming telemetry confirmation.
     static func send(_ command: RemoteCommand, vehicle: String?,
                      preferences: PreferencesStore = .shared) async -> String {
         let context = await waitForContext()
         let targetVin = resolveVIN(from: vehicle, preferences: preferences)
-        if !targetVin.isEmpty { context.selectVehicle(vin: targetVin) }
-        let outcome = await context.perform(command, origin: .userInitiated)
+        let outcome = await context.perform(
+            command,
+            targetVIN: targetVin.isEmpty ? nil : targetVin,
+            origin: .userInitiated
+        )
         switch outcome {
-        case .sent: return command.outcomeDescription
+        case .sent: return L10n.text("Command accepted; waiting for the vehicle to report the result.")
+        case .deferred(let reason): return reason
         case .refused(let reason): return reason
         }
     }

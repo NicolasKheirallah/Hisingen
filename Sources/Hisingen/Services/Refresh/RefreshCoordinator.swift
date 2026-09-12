@@ -240,6 +240,11 @@ final class RefreshCoordinator {
     private(set) var refreshSuccesses = 0
     private(set) var refreshFailures = 0
 
+    /// Last provider-authored state. This is the only state allowed into persistence,
+    /// history, telemetry confirmation, and notification evidence.
+    private var latestAuthoritative: VehicleState?
+    /// UI projection of `latestAuthoritative`, optionally carrying a short-lived optimistic
+    /// command overlay while an observable command is awaiting confirmation.
     private(set) var latest: VehicleState?
     private(set) var cars: [CarSummary] = []
     private(set) var lastError: VehicleServiceError?
@@ -268,7 +273,7 @@ final class RefreshCoordinator {
          now: @escaping () -> Date = Date.init,
          commandConfirmationWindow: TimeInterval = CommandReceipt.maximumConfirmationDuration,
          commandConfirmationInitialPollDelay: TimeInterval = 2,
-         commandConfirmationPollInterval: TimeInterval = 5) {
+         commandConfirmationPollInterval: TimeInterval = 3) {
         self.api = api
         self.stateStore = stateStore
         self.imageCache = imageCache
@@ -297,6 +302,8 @@ final class RefreshCoordinator {
         if let preferredVIN {
             restoreCommandReceipts(for: preferredVIN)
             if var cached = stateStore.snapshot(for: preferredVIN) {
+                cached.commandState.optimisticLockUntil = nil
+                latestAuthoritative = cached
                 cached.commandState.receipts = visibleCommandReceipts
                 latest = cached
                 onEvent?(.state(cached))
@@ -329,6 +336,7 @@ final class RefreshCoordinator {
                 stateStore.clear(vin: preferences.vin, eraseHistory: eraseHistory)
             }
             latest = nil
+            latestAuthoritative = nil
             cars = []
             lastError = nil
             onEvent?(.vehiclesCleared)
@@ -371,6 +379,9 @@ final class RefreshCoordinator {
             optimisticState.commandState.receipts = []
             latest = optimisticState
         }
+        if let conflictKey = receipt.confirmationConflictKey {
+            commandReceipts.removeAll { $0.receipt.confirmationConflictKey == conflictKey }
+        }
         commandReceipts.append(StoredCommandReceipt(
             receipt: receipt,
             confirmationDeadline: now().addingTimeInterval(commandConfirmationWindow)
@@ -382,11 +393,15 @@ final class RefreshCoordinator {
         )
         persistCommandReceipts()
         publishCommandReceipts()
-        if let vin = latest?.identity.vin {
+        if receipt.status.isAwaiting, let vin = latest?.identity.vin {
             refreshCommandConfirmationInfrastructure(vin: vin)
         }
+        guard receipt.status.isAwaiting else {
+            publishDiagnostics()
+            return
+        }
         schedule(after: min(commandConfirmationInitialPollDelay, commandConfirmationPollInterval),
-                 retrySession: false)
+                 retrySession: false, addsJitter: false)
         publishDiagnostics()
     }
 
@@ -517,9 +532,7 @@ final class RefreshCoordinator {
     }
 
     private func beginSelection(vin: String) {
-        if let previousVIN = latest?.identity.vin ?? preferences.vin.nilIfEmpty {
-            stateStore.clearCommandReceipts(for: previousVIN)
-        }
+        persistCommandReceipts()
         generation &+= 1
         failureCount = 0
         task?.cancel()
@@ -536,7 +549,11 @@ final class RefreshCoordinator {
         timer?.invalidate()
         preferences.vin = vin
         requestedSelectionVIN = vin
-        latest = stateStore.snapshot(for: vin)
+        restoreCommandReceipts(for: vin)
+        latestAuthoritative = stateStore.snapshot(for: vin)
+        latestAuthoritative?.commandState.optimisticLockUntil = nil
+        latest = latestAuthoritative
+        latest?.commandState.receipts = visibleCommandReceipts
         if let latest { onEvent?(.state(latest)) } else { onEvent?(.loading) }
         onEvent?(.selectionChanged(vin))
         publishDiagnostics()
@@ -779,39 +796,82 @@ final class RefreshCoordinator {
         refreshedFeatures: Set<AppFeature>? = nil
     ) {
         let previous = latest
-        var state = state.mergingLastKnown(
-            from: previous,
+        var authoritative = state.mergingLastKnown(
+            from: latestAuthoritative,
             features: preferences.features,
             refreshedFeatures: refreshedFeatures,
             imageCache: imageCache
         )
-        // Command receipts are coordinator-owned display state, never provider telemetry.
-        state.commandState.receipts = []
+        // Command receipts and optimistic locks are coordinator-owned presentation state,
+        // never provider telemetry or durable history.
+        authoritative.commandState.receipts = []
+        authoritative.commandState.optimisticLockUntil = nil
         // SQLite is the single source of truth for completed charging history. Clear legacy
         // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
-        state.energy.sessions = []
-        latest = state
-        lastFullRefreshAt = state.freshness.fetchedAt
+        authoritative.energy.sessions = []
+        latestAuthoritative = authoritative
+        lastFullRefreshAt = authoritative.freshness.fetchedAt
         lastError = nil
         lastLatency = latency
         failureCount = 0
         refreshSuccesses += 1
         rateLimitedUntil = nil
-        stateStore.save(state)
-        SpotlightIndexer.indexVehicle(state, nickname: preferences.vehicleNickname(for: state.identity.vin))
-        let confirmation = reconcileCommandConfirmation(in: state)
-        onEvent?(.state(confirmation.state))
+        stateStore.save(authoritative)
+        SpotlightIndexer.indexVehicle(authoritative, nickname: preferences.vehicleNickname(for: authoritative.identity.vin))
+        let confirmation = reconcileCommandConfirmation(in: authoritative)
+        let displayed = commandPresentation(
+            authoritative: authoritative,
+            previous: previous,
+            refreshedFeatures: refreshedFeatures
+        )
+        latest = displayed
+        onEvent?(.state(displayed))
         if confirmation.confirmed {
-            refreshCommandConfirmationInfrastructure(vin: state.identity.vin)
+            refreshCommandConfirmationInfrastructure(vin: authoritative.identity.vin)
         }
-        if desiredLiveStreamPurpose(for: state) == nil {
+        if desiredLiveStreamPurpose(for: displayed) == nil {
             stopLiveStreaming()
         } else {
-            startLiveStreamingIfNeeded(vin: state.identity.vin)
+            startLiveStreamingIfNeeded(vin: authoritative.identity.vin)
         }
-        let pollingInterval = pollingInterval(for: state)
-        schedule(after: pollingInterval, retrySession: false)
+        let interval = pollingInterval(for: displayed)
+        schedule(after: interval, retrySession: false, addsJitter: !isCommandConfirmationPending)
         publishDiagnostics()
+    }
+
+    private func commandPresentation(
+        authoritative: VehicleState,
+        previous: VehicleState?,
+        refreshedFeatures: Set<AppFeature>? = nil
+    ) -> VehicleState {
+        var displayed = authoritative
+        if isCommandConfirmationPending,
+           var optimistic = previous,
+           optimistic.identity.vin == authoritative.identity.vin {
+            let groups = Set(activeCommandRecords.compactMap { $0.receipt.confirmationConflictKey })
+            if !groups.contains("climate") { optimistic.climateStatus = authoritative.climateStatus }
+            if !groups.contains("precleaning") { optimistic.airQuality = authoritative.airQuality }
+            if groups.isDisjoint(with: ["locks", "tailgate", "windows"]) {
+                optimistic.exteriorStatus = authoritative.exteriorStatus
+            }
+            if !groups.contains("charge-target") {
+                optimistic.energy.targetPercentage = authoritative.energy.targetPercentage
+            }
+            if !groups.contains("amp-limit") {
+                optimistic.energy.currentLimitAmps = authoritative.energy.currentLimitAmps
+            }
+            if !groups.contains("charging-override") {
+                optimistic.energy.chargingState = authoritative.energy.chargingState
+            }
+            displayed = authoritative.mergingLastKnown(
+                from: optimistic,
+                features: preferences.features,
+                refreshedFeatures: refreshedFeatures,
+                imageCache: imageCache
+            )
+        }
+        displayed.commandState.receipts = visibleCommandReceipts
+        return displayed
     }
 
     private func handle(_ error: VehicleServiceError, retrySession: Bool) {
@@ -840,11 +900,11 @@ final class RefreshCoordinator {
         publishDiagnostics()
     }
 
-    private func schedule(after interval: TimeInterval, retrySession: Bool) {
+    private func schedule(after interval: TimeInterval, retrySession: Bool, addsJitter: Bool = true) {
         timer?.invalidate()
         guard !sleeping, networkAvailable else { nextRefresh = nil; return }
         let maxJitter = min(15, max(1, interval * 0.1))
-        let jitter = Double.random(in: 0...maxJitter)
+        let jitter = addsJitter ? Double.random(in: 0...maxJitter) : 0
         let requestedDeadline = now().addingTimeInterval(interval + jitter)
         let deadline = max(requestedDeadline, rateLimitedUntil ?? .distantPast)
         let delay = max(0, deadline.timeIntervalSince(now()))
@@ -1049,7 +1109,8 @@ final class RefreshCoordinator {
                     for try await update in stream {
                         try Task.checkCancellation()
                         guard requestGeneration == self.generation,
-                              var current = self.latest, current.identity.vin == vin else { return }
+                              var current = self.latestAuthoritative,
+                              current.identity.vin == vin else { return }
                         if case .connected(let activeTransportStreams) = update {
                             let now = self.now()
                             connectedAt = now
@@ -1069,7 +1130,9 @@ final class RefreshCoordinator {
                             continue
                         }
                         current.applyLiveUpdate(update)
-                        self.latest = current
+                        current.commandState.receipts = []
+                        current.commandState.optimisticLockUntil = nil
+                        self.latestAuthoritative = current
                         let now = self.now()
                         self.liveStreamMetrics.messagesReceived += 1
                         self.liveStreamMetrics.lastFrameAt = now
@@ -1078,8 +1141,14 @@ final class RefreshCoordinator {
                             lastPersistAt = now
                             self.stateStore.save(current)
                         }
+                        let previous = self.latest
                         let confirmation = self.reconcileCommandConfirmation(in: current)
-                        self.onEvent?(.state(confirmation.state))
+                        let displayed = self.commandPresentation(
+                            authoritative: current,
+                            previous: previous
+                        )
+                        self.latest = displayed
+                        self.onEvent?(.state(displayed))
                         if confirmation.confirmed {
                             self.refreshCommandConfirmationInfrastructure(vin: vin)
                             if self.streamTaskID != taskID { return }
@@ -1170,7 +1239,7 @@ final class RefreshCoordinator {
 
     private func scheduleCommandConfirmationPoll() {
         if timer?.isValid == true, nextRefresh != nil { return }
-        schedule(after: commandConfirmationPollInterval, retrySession: false)
+        schedule(after: commandConfirmationPollInterval, retrySession: false, addsJitter: false)
     }
 
     private func pollingInterval(for state: VehicleState) -> TimeInterval {
@@ -1202,6 +1271,9 @@ final class RefreshCoordinator {
             if previous.status.isAwaiting && updated.status.isConfirmed {
                 commandReceipts[index].confirmationDeadline = nil
                 confirmed = true
+                if let auditID = updated.auditID {
+                    stateStore.database.updateCommandAudit(id: auditID, status: "confirmed")
+                }
                 logger.info(
                     "Command confirmation matched fresh telemetry for \(updated.commandIdentifier, privacy: .public)"
                 )
@@ -1233,6 +1305,9 @@ final class RefreshCoordinator {
                   deadline <= currentDate else { continue }
             commandReceipts[index].receipt.status = .timedOut(at: deadline)
             commandReceipts[index].confirmationDeadline = nil
+            if let auditID = commandReceipts[index].receipt.auditID {
+                stateStore.database.updateCommandAudit(id: auditID, status: "confirmation_timed_out")
+            }
             changed = true
             logger.info(
                 "Command confirmation timed out for \(self.commandReceipts[index].receipt.commandIdentifier, privacy: .public)"
@@ -1251,7 +1326,11 @@ final class RefreshCoordinator {
     }
 
     private var visibleCommandReceipts: [CommandReceipt] {
-        commandReceipts.map(\.receipt).filter { !dismissedCommandReceiptIDs.contains($0.id) }
+        commandReceipts.map(\.receipt).filter {
+            !dismissedCommandReceiptIDs.contains($0.id)
+                && !$0.status.isAcknowledged
+                && !($0.isClimateCommand && $0.status.isConfirmed)
+        }
     }
 
     private var activeCommandRecords: [StoredCommandReceipt] {
@@ -1301,6 +1380,14 @@ final class RefreshCoordinator {
             } else {
                 stored[index].confirmationDeadline = deadline
             }
+        }
+        let newestReceiptByConflict = Dictionary(
+            grouping: stored.filter { $0.receipt.confirmationConflictKey != nil },
+            by: { $0.receipt.confirmationConflictKey! }
+        ).compactMapValues { records in records.max { $0.receipt.issuedAt < $1.receipt.issuedAt }?.receipt.id }
+        stored.removeAll { record in
+            guard let key = record.receipt.confirmationConflictKey else { return false }
+            return newestReceiptByConflict[key] != record.receipt.id
         }
         commandReceipts = stored
         trimCommandReceipts()

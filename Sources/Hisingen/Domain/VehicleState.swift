@@ -204,6 +204,9 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
 
 enum CommandConfirmationStatus: Codable, Equatable, Sendable {
     case awaiting
+    /// The provider acknowledged the command, but this provider does not expose telemetry
+    /// capable of proving the physical outcome.
+    case acknowledged(at: Date)
     case confirmed(at: Date)
     case timedOut(at: Date)
 
@@ -214,6 +217,11 @@ enum CommandConfirmationStatus: Codable, Equatable, Sendable {
 
     var isConfirmed: Bool {
         if case .confirmed = self { return true }
+        return false
+    }
+
+    var isAcknowledged: Bool {
+        if case .acknowledged = self { return true }
         return false
     }
 
@@ -233,6 +241,12 @@ struct CommandReceipt: Codable, Equatable, Sendable {
     var commandIdentifier: String
     var issuedAt: Date
     var command: RemoteCommand? = nil
+    /// Frozen dispatch target and provider. Optional for backward-compatible decoding of
+    /// receipts written by earlier builds.
+    var targetVIN: String? = nil
+    var providerBrand: VehicleBrand? = nil
+    /// Correlates provider acknowledgement with later confirmation/timeout in SQLite.
+    var auditID: String? = nil
     var status: CommandConfirmationStatus = .awaiting
 
     init(
@@ -240,17 +254,24 @@ struct CommandReceipt: Codable, Equatable, Sendable {
         commandIdentifier: String,
         issuedAt: Date,
         command: RemoteCommand? = nil,
+        targetVIN: String? = nil,
+        providerBrand: VehicleBrand? = nil,
+        auditID: String? = nil,
         status: CommandConfirmationStatus = .awaiting
     ) {
         self.id = id
         self.commandIdentifier = commandIdentifier
         self.issuedAt = issuedAt
         self.command = command
+        self.targetVIN = targetVIN
+        self.providerBrand = providerBrand
+        self.auditID = auditID
         self.status = status
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, commandIdentifier, issuedAt, command, status, confirmedAt
+        case id, commandIdentifier, issuedAt, command, targetVIN, providerBrand, auditID,
+             status, confirmedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -259,6 +280,9 @@ struct CommandReceipt: Codable, Equatable, Sendable {
         commandIdentifier = try values.decode(String.self, forKey: .commandIdentifier)
         issuedAt = try values.decode(Date.self, forKey: .issuedAt)
         command = try values.decodeIfPresent(RemoteCommand.self, forKey: .command)
+        targetVIN = try values.decodeIfPresent(String.self, forKey: .targetVIN)
+        providerBrand = try values.decodeIfPresent(VehicleBrand.self, forKey: .providerBrand)
+        auditID = try values.decodeIfPresent(String.self, forKey: .auditID)
         if let decoded = try values.decodeIfPresent(CommandConfirmationStatus.self, forKey: .status) {
             status = decoded
         } else if let confirmedAt = try values.decodeIfPresent(Date.self, forKey: .confirmedAt) {
@@ -274,6 +298,9 @@ struct CommandReceipt: Codable, Equatable, Sendable {
         try values.encode(commandIdentifier, forKey: .commandIdentifier)
         try values.encode(issuedAt, forKey: .issuedAt)
         try values.encodeIfPresent(command, forKey: .command)
+        try values.encodeIfPresent(targetVIN, forKey: .targetVIN)
+        try values.encodeIfPresent(providerBrand, forKey: .providerBrand)
+        try values.encodeIfPresent(auditID, forKey: .auditID)
         try values.encode(status, forKey: .status)
     }
 }
@@ -341,6 +368,11 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
 
 struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var availability: VehicleAvailability
+    /// When the availability frame was reported by the vehicle (wire field 1). `nil` when
+    /// absent or in snapshots persisted before retention existed.
+    var availabilityReportedAt: Date? = nil
+    /// Undecoded availability wire fields, captured raw for future classification.
+    var availabilityUnknownWireFields: [PolestarRawWireField]? = nil
     var modelName: String?
     var modelYear: String?
     var registrationNo: String?
@@ -359,6 +391,8 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
 
     init(
         availability: VehicleAvailability,
+        availabilityReportedAt: Date? = nil,
+        availabilityUnknownWireFields: [PolestarRawWireField]? = nil,
         modelName: String? = nil,
         modelYear: String? = nil,
         registrationNo: String? = nil,
@@ -376,6 +410,8 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         interiorImageData: Data? = nil
     ) {
         self.availability = availability
+        self.availabilityReportedAt = availabilityReportedAt
+        self.availabilityUnknownWireFields = availabilityUnknownWireFields
         self.modelName = modelName
         self.modelYear = modelYear
         self.registrationNo = registrationNo

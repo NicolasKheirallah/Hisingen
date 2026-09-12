@@ -19,7 +19,7 @@ protocol URLCommandRouterContext: AnyObject {
     func toggleSettings()
     func togglePopover()
     func refreshNow()
-    func performRemoteCommand(_ command: RemoteCommand)
+    func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?)
     /// A "not available on this brand" notice for a deep-link command the active brand can't run.
     func notifyCommandNotice(title: String, body: String)
 }
@@ -78,10 +78,8 @@ final class URLCommandRouter: NSObject {
         let command = host.isEmpty ? path : (path.isEmpty ? host : "\(host)/\(path)")
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
 
-        // A `?vin=` query applies to every command, not just the switch verbs.
-        if let targetVin = queryItems?.first(where: { $0.name == "vin" })?.value, !targetVin.isEmpty {
-            context.selectVehicle(vin: targetVin)
-        }
+        let rawTargetVIN = queryItems?.first(where: { $0.name == "vin" })?.value
+        let targetVIN = rawTargetVIN?.isEmpty == false ? rawTargetVIN : nil
 
         switch command {
         case "select-car", "switch-car", "switch-vehicle":
@@ -115,26 +113,26 @@ final class URLCommandRouter: NSObject {
                 .value.flatMap { Float($0) } ?? Float(context.defaultRemoteClimateTemperatureCelsius)
             dispatch(.startClimate(temperatureCelsius: temp, frontLeftSeat: .off,
                                    frontRightSeat: .off, rearLeftSeat: .off,
-                                   rearRightSeat: .off, steeringWheel: .off))
+                                   rearRightSeat: .off, steeringWheel: .off), targetVIN: targetVIN)
 
         case "climate/stop", "climatization/stop":
-            dispatch(.stopClimate)
+            dispatch(.stopClimate, targetVIN: targetVIN)
 
         case "lock":
-            dispatch(.lock)
+            dispatch(.lock, targetVIN: targetVIN)
 
         case "unlock":
-            dispatch(.unlock)
+            dispatch(.unlock, targetVIN: targetVIN)
 
         case "flash", "flash-lights":
-            dispatch(.flashLights)
+            dispatch(.flashLights, targetVIN: targetVIN)
 
         case "honk-flash", "honk":
-            dispatch(.honkAndFlash)
+            dispatch(.honkAndFlash, targetVIN: targetVIN)
 
         case "charge-target":
             // Polestar-only: Volvo's official API exposes no charging writes.
-            guard context.activeBrand == .polestar else {
+            guard targetVIN != nil || context.activeBrand == .polestar else {
                 context.notifyCommandNotice(
                     title: L10n.text("Command Restricted"),
                     body: L10n.text("Volvo's official API does not support changing charge settings.")
@@ -143,7 +141,7 @@ final class URLCommandRouter: NSObject {
             }
             let percent = queryItems?.first(where: { $0.name == "percent" || $0.name == "target" })?
                 .value.flatMap { Int($0) } ?? 80
-            context.performRemoteCommand(.setChargeTarget(percent))
+            context.performRemoteCommand(.setChargeTarget(percent), targetVIN: targetVIN)
 
         default:
             context.handleOAuthCallback(url)
@@ -153,7 +151,7 @@ final class URLCommandRouter: NSObject {
     /// Deep-link command dispatch. Brand policy lives in `CapabilityGate` + the provider
     /// command catalog — the same single answer the Controls tab and Shortcuts intents get —
     /// so a deep link cannot contradict the in-app surface for the same command.
-    private func dispatch(_ command: RemoteCommand) {
-        context?.performRemoteCommand(command)
+    private func dispatch(_ command: RemoteCommand, targetVIN: String?) {
+        context?.performRemoteCommand(command, targetVIN: targetVIN)
     }
 }

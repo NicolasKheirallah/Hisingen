@@ -107,6 +107,82 @@ struct VehicleActivityTests {
         #expect(!unobservable.supportsTelemetryConfirmation)
     }
 
+    @Test func climateCommandConfirmationMatchesFreshClimateState() {
+        let now = Date()
+        var current = state(at: now)
+        current.climateStatus = VehicleClimateStatus(
+            activity: .ventilating,
+            timeRemainingMinutes: 28,
+            timerTriggered: false,
+            interiorTemperatureCelsius: nil,
+            requestedTemperatureCelsius: 22
+        )
+        current.freshness.readingDates[.climateStatus] = now
+        let start = CommandReceipt(
+            commandIdentifier: RemoteCommand.startClimate(
+                temperatureCelsius: 0,
+                frontLeftSeat: .off,
+                frontRightSeat: .off,
+                rearLeftSeat: .off,
+                rearRightSeat: .off,
+                steeringWheel: .off
+            ).identifier,
+            issuedAt: now.addingTimeInterval(-10),
+            command: .startClimate(
+                temperatureCelsius: 0,
+                frontLeftSeat: .off,
+                frontRightSeat: .off,
+                rearLeftSeat: .off,
+                rearRightSeat: .off,
+                steeringWheel: .off
+            )
+        )
+
+        #expect(start.updatingConfirmation(from: current, now: now).status.isConfirmed)
+
+        current.climateStatus = VehicleClimateStatus(
+            activity: .idle,
+            timeRemainingMinutes: nil,
+            timerTriggered: false,
+            interiorTemperatureCelsius: nil,
+            requestedTemperatureCelsius: 22
+        )
+        current.freshness.readingDates[.climateStatus] = now
+        let stop = CommandReceipt(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: now.addingTimeInterval(-10),
+            command: .stopClimate
+        )
+        #expect(stop.updatingConfirmation(from: current, now: now).status.isConfirmed)
+    }
+
+    @Test func climateConfirmationIsProviderAware() {
+        let command = RemoteCommand.startClimate(
+            temperatureCelsius: 22,
+            frontLeftSeat: .off,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+        let polestar = CommandReceipt(
+            commandIdentifier: command.identifier,
+            issuedAt: Date(),
+            command: command,
+            providerBrand: .polestar
+        )
+        let volvo = CommandReceipt(
+            commandIdentifier: command.identifier,
+            issuedAt: Date(),
+            command: command,
+            providerBrand: .volvo
+        )
+        #expect(polestar.supportsTelemetryConfirmation)
+        #expect(!volvo.supportsTelemetryConfirmation)
+        #expect(polestar.confirmationConflictKey == volvo.confirmationConflictKey)
+        #expect(command.confirmationConflictKey == RemoteCommand.stopClimate.confirmationConflictKey)
+    }
+
     @Test func commandConfirmationAllowsOnlyBoundedProviderTimestampSkew() {
         let now = Date(timeIntervalSince1970: 1_750_000_010)
         let issuedAt = Date(timeIntervalSince1970: 1_750_000_000)

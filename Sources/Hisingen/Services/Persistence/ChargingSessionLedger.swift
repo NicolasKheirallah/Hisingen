@@ -172,6 +172,55 @@ extension ChargingSessionLedger {
                           cost: dayKwh * dayRatePerKwh + nightKwh * nightRatePerKwh)
     }
 
+    /// Prices a session against hourly (or quarterly) spot prices, splitting every sample
+    /// interval at price-slot boundaries so a rate change inside one polling interval
+    /// prices each piece at its own rate (trapezoidal power within the pieces). Requires
+    /// the whole charged window to sit inside the price series' coverage — a session that
+    /// predates or overruns the available data stays uncosted (`nil`) rather than being
+    /// priced with invented rates. The result is scaled to the authoritative session
+    /// energy so sparse sampling cannot bias the figure.
+    static func spotAwareCost(from samples: [HistoricalChargingSample],
+                              prices: [ElectricityPricePoint],
+                              sessionStart: Date, sessionEnd: Date,
+                              scaleToEnergyKwh authoritativeKwh: Double) -> Double? {
+        guard authoritativeKwh > 0, !prices.isEmpty else { return nil }
+        let chronological = samples.sorted { $0.timestamp < $1.timestamp }
+        guard chronological.count >= 2 else { return nil }
+        let orderedPrices = prices.sorted { $0.startDate < $1.startDate }
+        guard let firstPriceStart = orderedPrices.first?.startDate,
+              let lastPriceEnd = orderedPrices.last?.endDate,
+              sessionStart >= firstPriceStart, sessionEnd <= lastPriceEnd else { return nil }
+        var integratedKwh = 0.0
+        var cost = 0.0
+        for (a, b) in zip(chronological, chronological.dropFirst()) {
+            guard let p0 = a.powerKw, let p1 = b.powerKw else { continue }
+            let intervalStart = a.timestamp
+            let interval = b.timestamp.timeIntervalSince(intervalStart)
+            guard interval > 0, interval <= maximumEstimateSampleGap else { continue }
+            let intervalEnd = b.timestamp
+            var cursor = intervalStart
+            while cursor < intervalEnd {
+                guard let slot = orderedPrices.first(where: {
+                    $0.startDate <= cursor && cursor < $0.endDate
+                }) else { return nil }
+                let sliceEnd = min(slot.endDate, intervalEnd)
+                let seconds = sliceEnd.timeIntervalSince(cursor)
+                if seconds > 0 {
+                    let fraction = seconds / interval
+                    let offsetAtCursor = cursor.timeIntervalSince(intervalStart) / interval
+                    let powerAtCursor = p0 + (p1 - p0) * offsetAtCursor
+                    let powerAtSliceEnd = p0 + (p1 - p0) * (offsetAtCursor + fraction)
+                    let energy = (powerAtCursor + powerAtSliceEnd) / 2 * (seconds / 3_600)
+                    integratedKwh += energy
+                    cost += energy * slot.sekPerKwh
+                }
+                cursor = sliceEnd
+            }
+        }
+        guard integratedKwh > 0 else { return nil }
+        return cost * authoritativeKwh / integratedKwh
+    }
+
     /// Estimated round-trip loss between what the charger delivered and what actually landed
     /// as usable state of charge: integrated sample power (trapezoidal, skipping any interval
     /// that spans a polling gap) compared against SoC-gain × pack capacity. Returns `nil`
@@ -452,6 +501,64 @@ final class ChargingSessionLedger: Sendable {
         }) ?? []
     }
 
+    /// Completed sessions that have no spot-price cost yet, newest first. Bounded so a
+    /// backfill pass over a long history stays a bounded read.
+    func sessionsMissingSpotCost(vin: String, limit: Int = 400) -> [HistoricalChargingSession] {
+        let query = """
+        SELECT \(Self.chargingSessionColumns)
+        FROM charging_sessions
+        WHERE vin = ? AND ended_at IS NOT NULL
+          AND spot_estimated_cost IS NULL AND energy_delivered_kwh > 0
+        ORDER BY started_at DESC LIMIT ?;
+        """
+        return (try? sql.query(sql: query) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindInt64(Int64(limit), at: 2)
+        } process: { stmt -> [HistoricalChargingSession] in
+            var list: [HistoricalChargingSession] = []
+            while stmt.step() {
+                guard let session = Self.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
+                                                    endSoc: stmt.columnDouble(at: 5),
+                                                    energy: stmt.columnDouble(at: 6),
+                                                    peak: stmt.columnDouble(at: 7),
+                                                    average: stmt.columnDouble(at: 8),
+                                                    location: stmt.columnText(at: 9)) else { continue }
+                list.append(session)
+            }
+            return list
+        }) ?? []
+    }
+
+    func updateSpotEstimatedCost(id: String, cost: Double) {
+        try? sql.query(sql: "UPDATE charging_sessions SET spot_estimated_cost = ? WHERE id = ?;") { stmt in
+            try stmt.bindDouble(cost, at: 1)
+            try stmt.bindText(id, at: 2)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    /// Computes spot costs for every uncosted completed session the price series fully
+    /// covers, writing each result once. Sessions outside the price coverage stay untouched
+    /// so a later pass with a wider series can still price them. Returns the update count.
+    @discardableResult
+    func backfillSpotEstimatedCosts(vin: String, prices: [ElectricityPricePoint]) -> Int {
+        guard !prices.isEmpty else { return 0 }
+        var updated = 0
+        for session in sessionsMissingSpotCost(vin: vin) {
+            guard let endedAt = session.endedAt else { continue }
+            let samples = chargingSamples(for: session.id)
+            guard samples.count >= 2 else { continue }
+            guard let cost = Self.spotAwareCost(
+                from: samples, prices: prices,
+                sessionStart: session.startedAt, sessionEnd: endedAt,
+                scaleToEnergyKwh: session.energyDeliveredKwh
+            ) else { continue }
+            updateSpotEstimatedCost(id: session.id, cost: cost)
+            updated += 1
+        }
+        return updated
+    }
+
     func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {
         let query = """
         SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type
@@ -554,7 +661,7 @@ final class ChargingSessionLedger: Sendable {
             energySource: record.energySource, confidence: record.confidence,
             sampleCoverage: record.sampleCoverage, tariffPricePerKwh: record.tariffPricePerKwh,
             currencySymbol: record.currencySymbol, completionReason: record.completionReason,
-            summaryVersion: record.summaryVersion
+            summaryVersion: record.summaryVersion, spotCost: record.spotEstimatedCost
         )
     }
 
@@ -959,7 +1066,8 @@ final class ChargingSessionLedger: Sendable {
             lastObservedAt: stmt.columnDate(at: 24),
             summaryVersion: Int(stmt.columnInt64(at: 25) ?? 1),
             pendingStopCount: Int(stmt.columnInt64(at: 26) ?? 0),
-            estimatedCost: stmt.columnDouble(at: 27)
+            estimatedCost: stmt.columnDouble(at: 27),
+            spotEstimatedCost: stmt.columnDouble(at: 28)
         )
     }
 
@@ -970,6 +1078,6 @@ final class ChargingSessionLedger: Sendable {
         usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
         night_tariff_price_per_kwh, night_tariff_start_hour, night_tariff_end_hour,
         currency_symbol, target_soc, last_observed_at, summary_version,
-        pending_stop_count, estimated_cost
+        pending_stop_count, estimated_cost, spot_estimated_cost
         """
 }

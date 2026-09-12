@@ -80,6 +80,9 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     let summaryVersion: Int
     let pendingStopCount: Int
     let estimatedCost: Double?
+    /// Market-price cost of the session, computed from recorded samples against hourly
+    /// spot prices. `nil` until a covered backfill pass prices it.
+    var spotEstimatedCost: Double? = nil
 
     init(
         id: String, vin: String, startedAt: Date, endedAt: Date?, startSoc: Double,
@@ -95,7 +98,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         nightTariffStartHour: Int? = nil, nightTariffEndHour: Int? = nil,
         currencySymbol: String? = nil, targetSoc: Double? = nil,
         lastObservedAt: Date? = nil, summaryVersion: Int = 1,
-        pendingStopCount: Int = 0, estimatedCost: Double? = nil
+        pendingStopCount: Int = 0, estimatedCost: Double? = nil,
+        spotEstimatedCost: Double? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -125,6 +129,7 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         self.summaryVersion = summaryVersion
         self.pendingStopCount = pendingStopCount
         self.estimatedCost = estimatedCost
+        self.spotEstimatedCost = spotEstimatedCost
     }
 }
 

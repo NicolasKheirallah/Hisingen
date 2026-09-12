@@ -1,13 +1,14 @@
 import Foundation
 
 enum VehicleReading: String, Codable, CaseIterable, Sendable {
-    case battery, range, charging, locks, openings, health, odometer, software, airQuality, connectivity, location, fuel
+    case battery, range, charging, climateStatus, locks, openings, health, odometer, software, airQuality, connectivity, location, fuel
 
     var title: String {
         switch self {
         case .battery: return L10n.text("Battery")
         case .range: return L10n.text("Range")
         case .charging: return L10n.text("Charging")
+        case .climateStatus: return L10n.text("Climate Status")
         case .locks: return L10n.text("Locks")
         case .openings: return L10n.text("Doors & Openings")
         case .health: return L10n.text("Vehicle Health")

@@ -22,6 +22,9 @@ struct VehicleEquipment: Codable, Equatable, Sendable {
     var externalAirMeasurement: Bool?
     var supportedLightWarnings: [String]?
     var restrictedSoftwareVersion: String?
+    /// Factory option groups from the `GetMyCars` content-code string (wire field 47, e.g.
+    /// paint, wheels, trim groups). Shown as-is until each group's label is verified.
+    var contentCodes: [String]?
 
     struct Detail: Identifiable, Equatable, Sendable {
         let title: String
@@ -56,6 +59,7 @@ struct VehicleEquipment: Codable, Equatable, Sendable {
         text("Pre-clean Runtime", airCleaningRuntimeMinutes.map { L10n.format("%d min", $0) })
         flag("Internal Air Measurement", internalAirMeasurement)
         flag("External Air Measurement", externalAirMeasurement)
+        text("Factory Content Codes", contentCodes?.joined(separator: " "))
         return rows
     }
 

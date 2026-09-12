@@ -38,7 +38,7 @@ protocol CommandExecutionContext: AnyObject {
     /// module, which exclusively owns the receipt's confirmation lifecycle.
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
-        optimisticState: VehicleState
+        optimisticState: VehicleState?
     )
 }
 
@@ -48,6 +48,8 @@ protocol CommandExecutionContext: AnyObject {
 /// polling the command audit table.
 enum RemoteCommandDispatchOutcome: Sendable {
     case sent(RemoteCommandOutcome)
+    /// The command definitely did not reach the provider and may be retried safely.
+    case deferred(reason: String)
     /// Not sent: busy, missing context, gate refusal, declined authorization, or a
     /// provider failure. `reason` is the same copy `presentResult` showed.
     case refused(reason: String)
@@ -60,6 +62,7 @@ enum RemoteCommandDispatchOutcome: Sendable {
 protocol RemoteCommandDispatching: AnyObject, Sendable {
     func selectVehicle(vin: String)
     func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome
+    func perform(_ command: RemoteCommand, targetVIN: String?, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome
 }
 
 /// Owns the full remote-command pipeline: capability gating, biometric authorization,
@@ -107,7 +110,7 @@ final class CommandCoordinator {
             context.presentResult(
                 title: L10n.text("Command not sent"),
                 message: RemoteCommandError.busy.localizedDescription, success: false, target: nil)
-            return .refused(reason: RemoteCommandError.busy.localizedDescription)
+            return .deferred(reason: RemoteCommandError.busy.localizedDescription)
         }
         guard context.sessionIsValid, let state = context.vehicleState,
               (preferences.vin.isEmpty || state.identity.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
@@ -123,7 +126,7 @@ final class CommandCoordinator {
                 message: message,
                 success: false,
                 target: nil)
-            return .refused(reason: message)
+            return stillLoading ? .deferred(reason: message) : .refused(reason: message)
         }
         let executor = context.currentCommandExecutor()
         let availability = gate.availability(
@@ -185,13 +188,13 @@ final class CommandCoordinator {
         }
         guard approved else { return .refused(reason: L10n.text("Authorization was not granted.")) }
         guard !isInProgress else {
-            return .refused(reason: RemoteCommandError.busy.localizedDescription)
+            return .deferred(reason: RemoteCommandError.busy.localizedDescription)
         }
         // Authorization can show a modal sheet or biometric prompt. The active account,
         // provider, or vehicle may change while it is visible; never send the command
         // that was approved for the old snapshot through the newly selected provider.
         guard isCurrentExecutionContext(target) else {
-            return .refused(reason: L10n.text("The selected vehicle changed while authorization was pending."))
+            return .deferred(reason: L10n.text("The selected vehicle changed while authorization was pending."))
         }
         return await execute(adapted, target: target, executor: executor)
     }
@@ -221,7 +224,9 @@ final class CommandCoordinator {
         do {
             logger.info("Remote command \(command.identifier, privacy: .public) sent for \(target.vin, privacy: .private)")
             let result = try await executor.executeRemoteCommand(command, vin: target.vin)
+            let receiptID = UUID()
             database.recordCommandAudit(
+                id: receiptID.uuidString,
                 vin: target.vin,
                 command: command.identifier,
                 status: result.outcome.rawValue,
@@ -256,13 +261,23 @@ final class CommandCoordinator {
                 success: true,
                 target: target
             )
-            if let optimisticState {
-                context.beginCommandConfirmation(CommandReceipt(
-                    commandIdentifier: command.identifier,
-                    issuedAt: startedAt,
-                    command: command
-                ), optimisticState: optimisticState)
+            var receipt = CommandReceipt(
+                id: receiptID,
+                commandIdentifier: command.identifier,
+                issuedAt: startedAt,
+                command: command,
+                targetVIN: target.vin,
+                providerBrand: target.brand,
+                auditID: receiptID.uuidString
+            )
+            if !receipt.supportsTelemetryConfirmation {
+                receipt.status = .acknowledged(at: now())
+                database.updateCommandAudit(id: receiptID.uuidString, status: "acknowledged")
             }
+            context.beginCommandConfirmation(
+                receipt,
+                optimisticState: receipt.supportsTelemetryConfirmation ? optimisticState : nil
+            )
             return .sent(result.outcome)
         } catch {
             let mapped = error as? LocalizedError

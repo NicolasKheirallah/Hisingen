@@ -1625,7 +1625,6 @@
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Dieses Update wurde angekündigt, aber noch nicht zum Download freigegeben. Das Fahrzeug lädt es selbst herunter, sobald das Backend es freigibt und die Bedingungen es zulassen; die Installation kann erst danach gestartet werden.";
 "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Dieses Fahrzeug unterstützt keine cloudbasierte Download-Zustimmung — das Update kann nur geladen werden, wenn sich das Auto eigenständig beim Backend meldet. Ein Polestar-Servicetermin kann es direkt einspielen.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "Das indirekte TPMS dieses Fahrzeugs meldet eine Warnstufe pro Reifen, keinen exakten Druckwert.";
-"The status comes from the vehicle's API and only changes when an issue is reported, so it is not a live measurement. Treat it as indicative, not a verified all-clear." = "Der Status stammt aus der API des Fahrzeugs und ändert sich erst, wenn ein Problem gemeldet wird, daher ist er keine Live-Messung. Behandeln Sie ihn als Hinweis, nicht als geprüfte Freigabe.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Nur Warnstatus. Das Fahrzeug meldet eine Warnstufe pro Reifen und markiert einen Reifen erst, wenn es ein Problem erkennt, daher ist dies keine Live-Druckmessung.";
 "To" = "Bis";
 "to" = "bis";
@@ -2380,3 +2379,69 @@
 "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity." = "New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity.";
 "Waiting for 100% charge" = "Waiting for 100% charge";
 "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading." = "Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading.";
+"Command acknowledged by the vehicle service" = "Command acknowledged by the vehicle service";
+"Command accepted; waiting for the vehicle to report the result." = "Command accepted; waiting for the vehicle to report the result.";
+"The target vehicle could not be loaded." = "The target vehicle could not be loaded.";
+
+// English fallback values pending translation
+"Charging Planner" = "Ladeplaner";
+"Smart Charging Planner" = "Intelligenter Ladeplaner";
+"Show the cheapest charging window to your charge limit, from Swedish spot prices" = "Zeigt das günstigste Ladefenster bis zu deinem Ladegrenzwert, basierend auf schwedischen Spottpreisen";
+"Price Zone" = "Preiszone";
+"Spot-price area you live in" = "Börsenpreiszone deines Wohnorts";
+"Charging Power" = "Ladeleistung";
+"Used to estimate how many charging hours are needed" = "Dient zur Schätzung der benötigten Ladezeit in Stunden";
+"Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se." = "Preise werden einmal täglich nach 14:15 Uhr abgerufen und enthalten keine Steuern und Netzentgelte. Quelle: elprisetjustnu.se.";
+"SE1 · Luleå" = "SE1 · Luleå";
+"SE2 · Sundsvall" = "SE2 · Sundsvall";
+"SE3 · Stockholm" = "SE3 · Stockholm";
+"SE4 · Malmö" = "SE4 · Malmö";
+"Today" = "Heute";
+"Tomorrow" = "Morgen";
+"Loading prices…" = "Preise werden geladen …";
+"Tomorrow's prices arrive after 14:15" = "Die Preise für morgen kommen nach 14:15 Uhr";
+"Prices unavailable right now" = "Preise sind derzeit nicht verfügbar";
+"Spot prices exclude taxes and grid fees" = "Spottpreise ohne Steuern und Netzentgelte";
+"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Lade %@ über %d h bis %d %% — Durchschnitt %@, aktuell %@";
+"Saves %@" = "Spart %@";
+"Charging now is cheapest" = "Sofortiges Laden ist am günstigsten";
+
+// English fallback values pending translation
+"Undecoded Backend Fields (%d)" = "Nicht dekodierte Backend-Felder (%d)";
+"Factory Content Codes" = "Werkseitige Ausstattungscodes";
+"Field %@" = "Feld %@";
+"Field %@ (raw)" = "Feld %@ (roh)";
+"The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check." = "Der Status kommt aus der Fahrzeug-API und ändert sich nur, wenn ein Problem gemeldet wird. Ein nicht markierter Reifen bedeutet, dass das System bei seiner letzten Prüfung kein Problem festgestellt hat.";
+"When the cabin air was last measured. The sensor also samples when the vehicle wakes up, not only during purification." = "Wann die Innenraumluft zuletzt gemessen wurde. Der Sensor misst auch beim Aufwachen des Fahrzeugs, nicht nur während der Reinigung.";
+"A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
+
+// English fallback values pending translation
+"Estimated from the recorded charging power and the hourly market price for your price zone." = "Estimated from the recorded charging power and the hourly market price for your price zone.";
+"Session Started" = "Session Started";
+"Spot Cost" = "Spot Cost";
+
+// English fallback values pending translation
+"Electricity price outlook" = "Strompreisprognose";
+"Planned window from %@" = "Geplantes Fenster ab %@";
+"Between %@ and %@ kr per kWh. %@" = "Zwischen %@ und %@ kr pro kWh. %@";
+"The car has its own charging schedules — the planner does not use them" = "Das Auto hat eigene Ladepläne — der Planer verwendet sie nicht";
+"fetched %@" = "abgerufen %@";
+"The vehicle's location suggests %@" = "Der Fahrzeugstandort schlägt %@ vor";
+"Notify When the Cheap Window Opens" = "Benachrichtigen, wenn sich das günstige Fenster öffnet";
+"One banner per window, respecting quiet hours" = "Ein Hinweis pro Fenster, respektiert Ruhezeiten";
+"Notify When Tomorrow's Prices Arrive" = "Benachrichtigen, wenn die Preise für morgen da sind";
+"One daily banner after 14:15 with the cheapest hour" = "Ein täglicher Hinweis nach 14:15 Uhr mit der günstigsten Stunde";
+"Auto-Start Charging in the Window" = "Laden im Fenster automatisch starten";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "Öffnet sich das geplante Fenster, sendet Hisingen denselben Startbefehl wie der Steuerungen-Tab — nur bei eingestecktem Fahrzeug unterhalb der Ladegrenze. Erfordert die Funktion Ladesteuerungen.";
+"Sends the start-charging command automatically while the window runs" = "Sendet den Lade-Startbefehl automatisch, solange das Fenster läuft";
+"Market Price Cost" = "Marktpreiskosten";
+"Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Abgerechnet zum tatsächlichen Spottpreis jedes Intervalls. Spottpreise ohne Steuern und Netzentgelte — daher niedriger als eine vollständige Rechnung.";
+"The cheap charging window runs %@." = "Das günstige Ladefenster läuft %@.";
+"Plug in the vehicle — the cheap charging window runs %@." = "Fahrzeug anschließen — das günstige Ladefenster läuft %@.";
+"Cheap charging window: %@." = "Günstiges Ladefenster: %@.";
+"Tomorrow's electricity prices are in" = "Die Strompreise für morgen sind da";
+"Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Günstigste Stunde morgen: %@ – %@ um %@ /kWh.";
+"Tomorrow's spot prices have arrived." = "Die Spottpreise für morgen sind da.";
+
+// English fallback values pending translation
+"Use" = "Use";

@@ -24,7 +24,7 @@ struct RefreshCoordinatorStreamTests {
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
         commandWindow: TimeInterval = 5 * 60,
         commandInitialPollDelay: TimeInterval = 2,
-        commandPollInterval: TimeInterval = 5,
+        commandPollInterval: TimeInterval = 3,
         now: @escaping () -> Date = Date.init
     ) -> RefreshCoordinator {
         let preferences = PreferencesStore(defaults: defaults)
@@ -545,6 +545,138 @@ struct RefreshCoordinatorStreamTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(await provider.fetchCount == 2, "Climate commands retain one authoritative follow-up poll")
+        coordinator.stop()
+    }
+
+    @Test
+    func repeatedClimateReceiptSupersedesOlderBannerAndConfirmedReceiptIsHidden() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults,
+            commandInitialPollDelay: 5
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        let command = RemoteCommand.startClimate(
+            temperatureCelsius: 0,
+            frontLeftSeat: .off,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+        let first = CommandReceipt(
+            commandIdentifier: command.identifier,
+            issuedAt: Date().addingTimeInterval(-1),
+            command: command
+        )
+        let second = CommandReceipt(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: Date(),
+            command: .stopClimate
+        )
+        coordinator.beginCommandConfirmation(first)
+        coordinator.beginCommandConfirmation(second)
+        #expect(events.states.last?.commandState.receipts.map(\.id) == [second.id])
+
+        let confirmed = CommandReceipt(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: second.issuedAt,
+            command: .stopClimate,
+            status: .confirmed(at: Date())
+        )
+        coordinator.beginCommandConfirmation(confirmed)
+        #expect(events.states.last?.commandState.receipts.isEmpty == true)
+        coordinator.stop()
+    }
+
+    @Test
+    func acknowledgedUnobservableClimateCommandCreatesNoStickyBanner() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.stopClimate.identifier,
+            issuedAt: Date(),
+            command: .stopClimate,
+            providerBrand: .volvo,
+            status: .acknowledged(at: Date())
+        )
+        coordinator.beginCommandConfirmation(receipt)
+
+        #expect(events.states.last?.commandState.receipts.isEmpty == true)
+        #expect(events.snapshots.last?.awaitingCommandReceiptCount == 0)
+        #expect(VehicleStateStore(defaults: defaults, database: .inMemory())
+            .commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt.id) == [receipt.id])
+        coordinator.stop()
+    }
+
+    @Test
+    func climateConfirmationUsesRawTelemetryInsteadOfOptimisticPresentation() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = VehicleDatabase.inMemory()
+        let provider = StreamingMockProvider(script: [], recorder: StreamRecorder())
+        await provider.setCharging(false)
+        await provider.setClimate(.idle)
+        let preferences = PreferencesStore(defaults: defaults)
+        let coordinator = RefreshCoordinator(
+            api: provider,
+            stateStore: VehicleStateStore(defaults: defaults, database: database),
+            observesEnvironment: false,
+            preferences: preferences,
+            sessionManager: SessionManager(readToken: { _ in "token" }, readPassword: { nil }),
+            commandConfirmationWindow: 2,
+            commandConfirmationInitialPollDelay: 0.05,
+            commandConfirmationPollInterval: 0.1
+        )
+        let events = DiagnosticsRecorder()
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+
+        var optimistic = try #require(coordinator.latest)
+        optimistic.climateStatus = VehicleClimateStatus(
+            activity: .heating, timeRemainingMinutes: 30, timerTriggered: false)
+        optimistic.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
+        let command = RemoteCommand.startClimate(
+            temperatureCelsius: 0,
+            frontLeftSeat: .off,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+        coordinator.beginCommandConfirmation(CommandReceipt(
+            commandIdentifier: command.identifier,
+            issuedAt: Date(),
+            command: command
+        ), optimisticState: optimistic)
+
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 2 })
+        #expect(events.snapshots.last?.commandConfirmationStatus == .awaiting)
+        #expect(database.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .idle)
+        #expect(events.states.last?.climateStatus?.activity == .heating)
+
+        await provider.setClimate(.ventilating)
+        _ = try #require(await waitUntil(events) { diagnostics in
+            diagnostics.commandConfirmationStatus?.isConfirmed == true
+        })
+        #expect(database.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .ventilating)
+        #expect(events.states.last?.climateStatus?.activity == .ventilating)
+        #expect(events.states.last?.commandState.receipts.isEmpty == true)
         coordinator.stop()
     }
 
@@ -1085,6 +1217,42 @@ struct RefreshCoordinatorStreamTests {
         #expect(recorder.maxConcurrent == 1, "The old stream must be closed before the new one opens")
         coordinator.stop()
     }
+
+    @Test
+    func vehicleSwitchPreservesReceiptsPerVIN() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(
+            provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
+            defaults: defaults
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let receipt = CommandReceipt(
+            commandIdentifier: RemoteCommand.honkHorn.identifier,
+            issuedAt: Date(),
+            command: .honkHorn,
+            targetVIN: StreamingMockProvider.vinA,
+            providerBrand: .polestar,
+            status: .acknowledged(at: Date())
+        )
+        coordinator.beginCommandConfirmation(receipt)
+
+        coordinator.selectCar(vin: StreamingMockProvider.vinB)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 2 })
+        #expect(events.states.last?.identity.vin == StreamingMockProvider.vinB)
+        #expect(events.states.last?.commandState.receipts.isEmpty == true)
+
+        coordinator.selectCar(vin: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 3 })
+        #expect(events.states.last?.identity.vin == StreamingMockProvider.vinA)
+        #expect(events.states.last?.commandState.receipts.isEmpty == true)
+        #expect(VehicleStateStore(defaults: defaults, database: .inMemory())
+            .commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt.id) == [receipt.id])
+        coordinator.stop()
+    }
 }
 
 // MARK: - Recorders
@@ -1149,6 +1317,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     private(set) var authorizationRefreshCount = 0
     private(set) var remoteCommandCount = 0
     private var charging = true
+    private var climateActivity: ClimateActivity?
     private var nextFetchFailure: VehicleServiceError?
     private var script: [StreamBehavior]
     private let recorder: StreamRecorder
@@ -1159,6 +1328,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func setCharging(_ enabled: Bool) { charging = enabled }
+    func setClimate(_ activity: ClimateActivity?) { climateActivity = activity }
     func failNextFetch(_ error: VehicleServiceError) { nextFetchFailure = error }
 
     // VehicleProviding
@@ -1182,7 +1352,16 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
             self.nextFetchFailure = nil
             throw nextFetchFailure
         }
-        return Self.makeMockState(vin: vin, charging: charging)
+        var state = Self.makeMockState(vin: vin, charging: charging)
+        if let climateActivity {
+            state.climateStatus = VehicleClimateStatus(
+                activity: climateActivity,
+                timeRemainingMinutes: climateActivity == .idle ? nil : 30,
+                timerTriggered: false
+            )
+            state.freshness.readingDates[.climateStatus] = state.freshness.fetchedAt
+        }
+        return state
     }
 
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
