@@ -3,6 +3,39 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-09-12
+
+### Added
+
+- confirm remote commands from live telemetry
+
+### Fixed
+
+- preserve command confirmation across suspension
+- narrow command confirmation reads
+- enforce command confirmation invariants
+- poll charging settings on a faster cadence
+- retain poll-only command confirmation
+- bind remote commands to their target vehicle
+
+### Changed
+
+- added sillhouettes, this has not been wired up
+- land 2.0.0 UI: card-based screens, particle charging bar, custom menu-bar icons
+- land 2.0.0: telemetry-confirmed commands, smart charging, raw-field retention
+- calculate SoH from remembered full-charge range
+- remove unsupported Chronos error service
+- remove unsupported vehicle metadata and spot prices
+- support multiple command receipts
+- harden command confirmation timing
+- persist command receipts across relaunch
+- improve command confirmation diagnostics and dismissal
+- refactor: centralize pending command ownership
+- refactor: unify command confirmation status
+- refactor: cluster vehicle state snapshot
+- chore(updates): publish v1.3.5 appcast
+- chore(updates): publish v1.3.5 appcast
+
 ## [2.0.0] - 2026-09-12
 
 Version 2.0 changes what a remote command means: Hisingen no longer takes the
