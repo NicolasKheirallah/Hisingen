@@ -63,10 +63,16 @@ final class ChargingMiniPanelController {
             context.duration = Motion.fast
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().alphaValue = 0
-        }, completionHandler: {
-            panel.orderOut(nil)
-            panel.alphaValue = 1
+        }, completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.finishClosingPanel()
+            }
         })
+    }
+
+    private func finishClosingPanel() {
+        panel?.orderOut(nil)
+        panel?.alphaValue = 1
     }
 
     private func makePanel() {

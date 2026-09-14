@@ -3,7 +3,7 @@ import OSLog
 
 /// Automatic, time-boxed history pruning.
 ///
-/// `VehicleDatabase.pruneAgedHistory()` is the only thing that bounds growth of
+/// `LocalDataEraser.erase(.aged)` is the only thing that bounds growth of
 /// `charging_sessions` / `battery_health_history` / `remote_commands_log` (the manual
 /// "Prune Old Samples" Settings action does not touch those tables). Running it at most once
 /// per week on launch keeps them bounded without user involvement; the pass deletes across

@@ -37,9 +37,7 @@ enum BatteryHealthEstimator {
 
         let wltpRange = specification?.wltpRangeKm
             ?? positive(state.model.nominalWltpRangeKm)
-        let referenceCapacity = specification?.usableBatteryCapacityKwh
-            ?? state.energy.reportedBatteryCapacityKwh.flatMap(positive)
-            ?? positive(state.factoryUsableBatteryCapacityKwh)
+        let referenceCapacity = state.measuredCapacityReference(specification: specification)?.kwh
         guard let wltpRange, wltpRange > 0,
               let referenceCapacity, referenceCapacity >= 5 else { return nil }
 

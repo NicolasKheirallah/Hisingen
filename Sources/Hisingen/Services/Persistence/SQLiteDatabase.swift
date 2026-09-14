@@ -26,8 +26,10 @@ enum SQLiteError: Error, LocalizedError, Sendable {
 /// A lightweight, memory-safe, thread-safe Swift wrapper around Apple's native `libsqlite3`.
 final class SQLiteDatabase: @unchecked Sendable {
     private var db: OpaquePointer?
+    private var readDB: OpaquePointer?
     // Hold the lock across transaction bodies while allowing nested query calls.
     private let lock = NSRecursiveLock()
+    private let readLock = NSLock()
     let path: String
     private let logger = AppLog.logger("sqlite")
 
@@ -35,6 +37,12 @@ final class SQLiteDatabase: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return db != nil
+    }
+
+    var usesIndependentReadConnection: Bool {
+        readLock.lock()
+        defer { readLock.unlock() }
+        return readDB != nil
     }
 
     init(path: String) throws {
@@ -56,6 +64,22 @@ final class SQLiteDatabase: @unchecked Sendable {
         try execute(sql: "PRAGMA synchronous = NORMAL;")
         try execute(sql: "PRAGMA busy_timeout = 5000;")
         try execute(sql: "PRAGMA foreign_keys = ON;")
+
+        // A second handle lets dashboard SELECTs proceed without holding the writer lock.
+        // WAL provides the snapshot isolation; in-memory databases cannot share a second
+        // handle, so they deliberately retain the single-connection test behavior.
+        if path != ":memory:" {
+            var readHandle: OpaquePointer?
+            let readStatus = sqlite3_open_v2(
+                path, &readHandle, SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, nil
+            )
+            if readStatus == SQLITE_OK {
+                readDB = readHandle
+                sqlite3_busy_timeout(readHandle, 5_000)
+            } else if let readHandle {
+                sqlite3_close(readHandle)
+            }
+        }
     }
 
     /// Creates a closed handle for callers that must remain operational when persistent
@@ -77,6 +101,12 @@ final class SQLiteDatabase: @unchecked Sendable {
     func close() {
         lock.lock()
         defer { lock.unlock() }
+        readLock.lock()
+        defer { readLock.unlock() }
+        if let readDB {
+            sqlite3_close(readDB)
+            self.readDB = nil
+        }
         if let db {
             sqlite3_close(db)
             self.db = nil
@@ -148,6 +178,28 @@ final class SQLiteDatabase: @unchecked Sendable {
             logger.error("SQLite query failed: \(error, privacy: .public)")
             throw error
         }
+    }
+
+    /// Executes a read on the WAL snapshot handle. Disk-backed databases therefore keep
+    /// history scans independent from the writer connection; in-memory databases fall back
+    /// to `query` because separate `:memory:` handles would name separate databases.
+    func readQuery<T>(sql: String, bindings: (SQLiteStatement) throws -> Void = { _ in },
+                      process: (SQLiteStatement) throws -> T) throws -> T {
+        readLock.lock()
+        guard let readDB else {
+            readLock.unlock()
+            return try query(sql: sql, bindings: bindings, process: process)
+        }
+        defer { readLock.unlock() }
+        var stmtHandle: OpaquePointer?
+        let status = sqlite3_prepare_v2(readDB, sql, -1, &stmtHandle, nil)
+        guard status == SQLITE_OK, let stmt = stmtHandle else {
+            throw SQLiteError.prepareStatement(String(cString: sqlite3_errmsg(readDB)))
+        }
+        let statement = SQLiteStatement(stmt: stmt, db: readDB)
+        defer { sqlite3_finalize(stmt) }
+        try bindings(statement)
+        return try process(statement)
     }
 
     /// Runs multiple statements inside an ACID transaction.

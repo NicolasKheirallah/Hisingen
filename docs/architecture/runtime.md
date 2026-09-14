@@ -54,16 +54,16 @@ Notes on that sequence:
 
 ## UI bridging
 
-`StatusItemController` (AppKit) and the SwiftUI view tree are connected with the simplest possible pattern: no `ObservableObject`, no Combine:
+`StatusItemController` (AppKit) and the SwiftUI view tree are connected through one stable observable root:
 
 ```
 StatusItemController.render(data:error:authenticated:diagnostics:)
   → stores the new state on `self`
   → refreshPopoverIfNeeded()
-      → if popover.isShown: rebuild a fresh `HisingenContentView` struct from current state
-      → reassign hosting.rootView = view
+      → if popover.isShown: update PopoverViewModel.Snapshot
+      → SwiftUI invalidates only the dependent view hierarchy
 ```
 
-The `NSPopover`'s `contentViewController` is an `NSHostingController<HisingenContentView>` built once when the popover is first shown; every subsequent state change just replaces its `rootView`. The Settings "window" is not a separate `NSWindow`; it's the same popover with a `settingsMode` flag flipped, so `HisingenContentView`'s body swaps to `SettingsView`.
+The `NSPopover`'s `contentViewController` is an `NSHostingController<PopoverRootView>` built once per panel session. Telemetry refreshes mutate its `PopoverViewModel` instead of replacing `rootView`. The Settings "window" is not a separate `NSWindow`; it is the same popover with a `settingsMode` value in the snapshot, so `HisingenContentView` swaps to `SettingsView` without reconstructing the hosting controller.
 
 See [architecture/components.md](components.md#ui-uiswift) and [architecture/state-management.md](state-management.md) for what state lives where in this chain.

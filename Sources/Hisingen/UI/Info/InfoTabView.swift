@@ -292,8 +292,8 @@ struct InfoTabView: View {
     private func loadAsyncData() async {
         let vin = state.identity.vin
         let db = database
-        let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
-            ?? state.configuredUsableBatteryCapacityKwh
+        let capacity = state.configuredCapacityReference(
+            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
         let loaded = await Task.detached(priority: .userInitiated) { () -> InfoAsyncData in
             return db.history.recent(vin: vin, chargingCapacityKwh: capacity)
         }.value
@@ -363,7 +363,8 @@ struct InfoTabView: View {
             degradationPercent: saved.degradationPct,
             estimatedUsableCapacityKwh: saved.effectiveUsableKwh,
             recordedAt: saved.timestamp,
-            fallbackReferenceCapacityKwh: state.configuredUsableBatteryCapacityKwh
+            fallbackReferenceCapacityKwh: state.configuredCapacityReference(
+                specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
         )
     }
 

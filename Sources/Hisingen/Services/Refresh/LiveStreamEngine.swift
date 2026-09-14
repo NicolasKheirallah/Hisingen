@@ -18,7 +18,7 @@ final class LiveStreamEngine {
         let onConnected: @MainActor () -> Void
         /// One telemetry frame. Returns false when the stream must stop (stale vehicle or
         /// generation). `.connected` frames never reach here.
-        let onFrame: @MainActor (VehicleLiveUpdate) -> Bool
+        let onFrame: @MainActor (VehicleLiveUpdate) async -> Bool
         /// Disconnected transition — the coordinator schedules its fallback poll.
         let onDisconnected: @MainActor () -> Void
         /// The task ended and the engine reset itself; the coordinator may restart it.
@@ -39,6 +39,7 @@ final class LiveStreamEngine {
     private(set) var isConnected = false
     private(set) var retryAt: Date?
     private(set) var metrics = LiveStreamMetrics()
+    private var lastAppliedFrame: VehicleLiveUpdate?
 
     init(streaming: any VehicleLiveStreaming,
          providerBrand: VehicleBrand,
@@ -83,6 +84,7 @@ final class LiveStreamEngine {
                 do {
                     metrics.connectionAttempts += 1
                     let stream = try await streaming.liveVehicleUpdates(vin: vin, purpose: newPurpose)
+                    lastAppliedFrame = nil
                     for try await update in stream {
                         try Task.checkCancellation()
                         if case .connected(let activeTransportStreams) = update {
@@ -96,10 +98,12 @@ final class LiveStreamEngine {
                             context.onConnected()
                             continue
                         }
-                        guard context.onFrame(update) else { return }
                         metrics.messagesReceived += 1
                         metrics.lastFrameAt = now()
                         metrics.lastDisconnectedAt = nil
+                        guard update != lastAppliedFrame else { continue }
+                        lastAppliedFrame = update
+                        guard await context.onFrame(update) else { return }
                     }
                     throw VehicleServiceError.temporarilyUnavailable(
                         provider: providerBrand, service: "live vehicle stream"
@@ -187,6 +191,7 @@ final class LiveStreamEngine {
         task = nil
         taskID = nil
         purpose = nil
+        lastAppliedFrame = nil
         resetConnectionState()
     }
 }

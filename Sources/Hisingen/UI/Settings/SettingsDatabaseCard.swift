@@ -7,6 +7,10 @@ import UniformTypeIdentifiers
 struct SettingsDatabaseCard: View {
     let state: VehicleState?
     let database: VehicleDatabase
+    /// The tier the maintenance actions must drop alongside the rows. This is the app's cache,
+    /// not `CarImageCache.shared` — the two are different instances and dropping the wrong one
+    /// leaves erased artwork resident in memory.
+    let imageCache: CarImageCache
     @Binding var persistLocationHistory: Bool
 
     @Environment(\.preferencesStore) private var preferences
@@ -441,29 +445,21 @@ struct SettingsDatabaseCard: View {
         guard !isMaintaining else { return }
         isMaintaining = true
         setFeedback(nil)
-        let db = database
-        let selectedRetentionDays = retentionDays
+        let eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: imageCache)
+        let scope: LocalDataEraser.Scope = switch operation {
+        case .vacuum: .compact
+        case .prune: .samples(olderThanDays: retentionDays)
+        case .clearLocations: .locations
+        case .wipe: .everything
+        }
         let selectedVIN = state?.identity.vin
         Task { @MainActor in
             do {
-                try await Task.detached(priority: .utility) {
-                    switch operation {
-                    case .vacuum: try db.vacuumOrThrow()
-                    case .prune: try db.pruneHistoricalSamplesOrThrow(olderThanDays: selectedRetentionDays)
-                    case .clearLocations: try db.clearStoredLocationsOrThrow(for: selectedVIN)
-                    case .wipe: try db.wipeAllOrThrow(for: selectedVIN)
-                    }
-                }.value
+                try await eraser.performInBackground(scope, vin: selectedVIN)
                 if operation == .clearLocations {
-                    preferences.persistLocationHistory = false
+                    // The eraser turned the preference off; mirror that into the toggle above.
                     persistLocationHistory = false
-                    preferences.clearLocalVehicleDefaults(
-                        for: selectedVIN,
-                        includeBaselines: false,
-                        includeCommandReceipts: false
-                    )
-                } else if operation == .wipe {
-                    preferences.clearLocalVehicleDefaults(for: selectedVIN)
                 }
                 await loadStats()
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)

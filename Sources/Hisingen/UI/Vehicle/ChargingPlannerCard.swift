@@ -59,8 +59,8 @@ struct ChargingPlannerCard: View {
         ChargingPlannerSupport.neededEnergyKwh(
             batteryPercentage: state.energy.batteryPercentage,
             targetPercentage: state.energy.targetPercentage,
-            usableCapacityKwh: preferences.vehicleSpecificationOverride(for: state.identity.vin)?.usableBatteryCapacityKwh
-                ?? state.configuredUsableBatteryCapacityKwh
+            usableCapacityKwh: state.configuredCapacityReference(
+                specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
         )
     }
 

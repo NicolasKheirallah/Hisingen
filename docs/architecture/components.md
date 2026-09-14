@@ -137,7 +137,7 @@ See [api/authentication.md](../api/authentication.md).
 
 **Main types:** `StatusItemController` (AppKit: `NSStatusItem`, `NSPopover`, global hotkeys, context menu), `HisingenContentView` (SwiftUI root), `VehicleTabView`, `ControlsTabView`, `SettingsView`, `AccountCredentialsForm`, `WelcomeSignInView`, `HisingenTheme` (design system).
 
-**Isolation:** everything is declared `@MainActor`; there is no cross-actor hop between AppKit and SwiftUI in this app; `StatusItemController` pushes state into SwiftUI by rebuilding the view struct and reassigning `NSHostingController.rootView`, not via `ObservableObject`.
+**Isolation:** everything is declared `@MainActor`; there is no cross-actor hop between AppKit and SwiftUI in this app. `StatusItemController` constructs one `PopoverRootView` per panel session and pushes later state through `PopoverViewModel`, avoiding `NSHostingController.rootView` replacement on telemetry refreshes.
 
 See [runtime.md](runtime.md#ui-bridging) for the exact bridging mechanism.
 

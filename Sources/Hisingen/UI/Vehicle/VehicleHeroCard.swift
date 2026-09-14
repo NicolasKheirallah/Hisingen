@@ -381,9 +381,9 @@ struct VehicleHeroCard: View {
             DualEnergyGauge(
                 batteryFraction: state.energy.batteryPercentage.map { $0 / 100 },
                 fuelFraction: state.fuelSystem.levelPercent.map { $0 / 100 },
-                batteryColor: state.energy.batteryPercentage.map {
-                    HisingenTheme.batteryColor(percentage: $0, charging: state.isCharging)
-                } ?? .secondary,
+                batteryColor: state.batteryPercentage == nil
+                    ? .secondary
+                    : HisingenTheme.batteryColor(level: state.batteryLevel),
                 fuelColor: state.fuelSystem.levelPercent.map {
                     HisingenTheme.fuelColor(percentage: $0)
                 } ?? .secondary,
@@ -405,14 +405,11 @@ struct VehicleHeroCard: View {
                 )
             }
 
-            if let batteryLevel = state.energy.batteryPercentage {
+            if let percentage = state.energy.batteryPercentage {
                 BatteryGauge(
-                    fraction: batteryLevel / 100,
+                    fraction: percentage / 100,
                     targetFraction: state.energy.targetPercentage.map { Double($0) / 100 },
-                    color: HisingenTheme.batteryColor(
-                        percentage: batteryLevel,
-                        charging: state.isCharging
-                    ),
+                    color: HisingenTheme.batteryColor(level: state.batteryLevel),
                     isCharging: state.isCharging
                 )
             } else {

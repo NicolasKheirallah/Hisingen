@@ -102,8 +102,8 @@ final class ChargingPlannerController {
         backfillSpotCosts(prices: prices)
 
         guard let state = latestState() else { return }
-        let capacity = preferences.vehicleSpecificationOverride(for: state.identity.vin)?.usableBatteryCapacityKwh
-            ?? state.configuredUsableBatteryCapacityKwh
+        let capacity = state.configuredCapacityReference(
+            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
         let energyKwh = ChargingPlannerSupport.neededEnergyKwh(
             batteryPercentage: state.energy.batteryPercentage,
             targetPercentage: state.energy.targetPercentage,

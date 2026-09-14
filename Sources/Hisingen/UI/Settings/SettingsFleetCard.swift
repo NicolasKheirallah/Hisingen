@@ -289,7 +289,7 @@ struct FleetVehicleCardRow: View {
                         HStack(spacing: 4) {
                             Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
                                 .font(.system(size: 9.5))
-                                .foregroundStyle(vehicleState.isCharging ? Color.green : (battery <= 20 ? Color.orange : Color.secondary))
+                                .foregroundStyle(HisingenTheme.fleetBatteryTint(level: vehicleState.batteryLevel))
                             Text(String(format: "%.0f%%", battery))
                                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                             if vehicleState.isCharging, let power = vehicleState.energy.powerWatts, power > 0 {

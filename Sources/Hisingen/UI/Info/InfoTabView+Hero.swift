@@ -1,5 +1,7 @@
 import AppKit
+import ImageIO
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension InfoTabView {
     // MARK: - Hero visual
@@ -212,55 +214,78 @@ extension InfoTabView {
     // MARK: - Hero image actions
 
     func copyImage(_ data: Data?) {
-        guard let data, let image = NSImage(data: data) else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([image])
+        guard let data else { return }
+        Task {
+            guard let png = await Task.detached(priority: .userInitiated, operation: {
+                Self.pngData(from: data)
+            }).value, let image = NSImage(data: png) else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([image])
+        }
     }
 
     /// Opens the render at full resolution in the system image viewer — reliable from inside a
     /// menu-bar popover, where an in-app sheet/overlay cannot size itself to the viewport.
     func openImageInPreview(_ data: Data?) {
-        guard let data, let image = NSImage(data: data) else { return }
-        let ext: String
-        let payload: Data
-        if let tiff = image.tiffRepresentation,
-           let rep = NSBitmapImageRep(data: tiff),
-           let png = rep.representation(using: .png, properties: [:]) {
-            payload = png
-            ext = "png"
-        } else {
-            payload = data
-            ext = "img"
-        }
-        let name = "\(state.model.displayName.replacingOccurrences(of: " ", with: "_"))_render.\(ext)"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        do {
-            try payload.write(to: url, options: .atomic)
-            NSWorkspace.shared.open(url)
-        } catch {
-            reportError = error.localizedDescription
-        }
-    }
-
-    func saveImage(_ data: Data?) {
-        guard let data, let image = NSImage(data: data),
-              let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            reportError = L10n.text("The image could not be prepared for saving.")
-            return
-        }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "\(state.model.displayName.replacingOccurrences(of: " ", with: "_"))_render.png"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
+        guard let data else { return }
+        let displayName = state.model.displayName
+        Task {
+            guard let payload = await Task.detached(priority: .userInitiated, operation: {
+                Self.pngData(from: data)
+            }).value else {
+                reportError = L10n.text("The image could not be prepared for opening.")
+                return
+            }
+            let name = "\(displayName.replacingOccurrences(of: " ", with: "_"))_render.png"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
             do {
-                try png.write(to: url)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                try await Task.detached(priority: .utility) {
+                    try payload.write(to: url, options: .atomic)
+                }.value
+                NSWorkspace.shared.open(url)
             } catch {
                 reportError = error.localizedDescription
             }
         }
+    }
+
+    func saveImage(_ data: Data?) {
+        guard let data else { return }
+        let displayName = state.model.displayName
+        Task {
+            guard let png = await Task.detached(priority: .userInitiated, operation: {
+                Self.pngData(from: data)
+            }).value else {
+                reportError = L10n.text("The image could not be prepared for saving.")
+                return
+            }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            panel.nameFieldStringValue = "\(displayName.replacingOccurrences(of: " ", with: "_"))_render.png"
+            panel.begin { response in
+                guard response == .OK, let url = panel.url else { return }
+                Task { @MainActor in
+                    do {
+                        try await Task.detached(priority: .utility) { try png.write(to: url) }.value
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                    } catch {
+                        reportError = error.localizedDescription
+                    }
+                }
+            }
+        }
+    }
+
+    private nonisolated static func pngData(from data: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        if CGImageSourceGetType(source) as String? == UTType.png.identifier { return data }
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output, UTType.png.identifier as CFString, 1, nil
+        ) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 }

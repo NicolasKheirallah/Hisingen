@@ -367,8 +367,9 @@ struct VehiclePresentationAnimationTests {
         // aspect and the content height without waiting for layout: a 16:9 render
         // is height-limited at 205 pt, so 272.65 pt tall and 484.5 pt wide.
         let drawn = VehicleRenderLayout.drawnSize(sourcePixelSize: CGSize(width: 4898, height: 2756))
+        let expectedWidth = 205 * 1.33 * (4898.0 / 2756.0)
         #expect(isClose(drawn.height, 205 * 1.33, tolerance: 0.01))
-        #expect(isClose(drawn.width, 205 * 1.33 * (4898.0 / 2756.0), tolerance: 0.01))
+        #expect(isClose(drawn.width, expectedWidth, tolerance: 0.01))
 
         // A picture with no dimensions has nothing to size a decode from.
         #expect(VehicleRenderLayout.drawnSize(sourcePixelSize: .zero) == .zero)

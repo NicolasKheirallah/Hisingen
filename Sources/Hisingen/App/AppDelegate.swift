@@ -26,9 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var launchAtLoginController = LaunchAtLoginController(preferences: preferences)
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
-    /// Receipts recorded for non-selected Remote Command targets. Lazy so the state store
-    /// only materializes when a cross-vehicle command actually runs.
-    private lazy var offTargetReceiptLedger = CommandConfirmationLedger(store: stateStore)
     private var vehicleSession: VehicleSessionController!
     private var signInCoordinator: SignInCoordinator!
     private var garageScanner: GarageScanner!
@@ -465,7 +462,8 @@ extension AppDelegate: CommandExecutionContext {
             // The Remote Command target isn't the visible vehicle: record it under the
             // target's VIN so it survives relaunch and supersedes correctly there. The
             // selected vehicle's receipt goes through the refresh coordinator instead.
-            offTargetReceiptLedger.recordOffTarget(receipt, targetVIN: targetVIN)
+            // Both go through the coordinator's ledger so they share one clock.
+            vehicleSession.recordOffTargetReceipt(receipt, targetVIN: targetVIN)
             return
         }
         vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)

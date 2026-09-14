@@ -431,7 +431,7 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     private let now: () -> Date
     // `removePersistentDomain` is thread-safe; nonisolated(unsafe) exists only so `deinit`
     // can perform the guaranteed cleanup.
-    nonisolated(unsafe) private let scopedSuite: String
+    private let scopedSuite: String
     nonisolated(unsafe) private let scopedDefaults: UserDefaults
 
     /// Each instance gets its own isolated defaults suite (removed on deinit), so parallel

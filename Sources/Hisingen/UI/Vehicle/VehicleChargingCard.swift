@@ -146,7 +146,8 @@ struct VehicleChargingCard: View {
         guard eligible else { persistentSessions = []; return }
         let database = database
         let vin = state.identity.vin
-        let capacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh ?? state.configuredUsableBatteryCapacityKwh
+        let capacity = state.configuredCapacityReference(
+            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
         let sessions = await Task.detached(priority: .userInitiated) {
             database.charging.recentChargingSessions(for: vin).map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }.filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
         }.value

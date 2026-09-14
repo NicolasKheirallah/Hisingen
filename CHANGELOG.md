@@ -58,6 +58,28 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Vehicle weather now comes from a dedicated Open-Meteo client instead of an HTTP
   call buried in gRPC capability plumbing; Polestar's own weather reports share its
   WMO code table.
+- **History loading does less work for the period on screen.** Dashboard queries now
+  apply their comparison horizon in SQLite, trip derivation has a 12,000-row input
+  ceiling, and presentation aggregates are prepared away from the main actor. Filter
+  edits reuse the loaded dashboard instead of querying the database again.
+- **Snapshot persistence is bounded and no longer occupies the main actor.** One
+  serial writer keeps only the newest pending observation per VIN while preserving
+  vehicle order. SQLite dashboard reads use a separate WAL read connection, so a
+  history write does not make the History tab wait for the writer handle.
+- **Live updates keep the popover's SwiftUI root in place.** Telemetry now updates one
+  observable snapshot instead of replacing the hosting controller's root view.
+  Identical stream frames are discarded, and presentation comparisons use image
+  identity and byte counts instead of comparing the image data itself.
+- Background garage scans request only the fields used by fleet cards and warning
+  badges. Vehicle images, location, weather, trip meters, software, and command
+  capabilities remain part of the selected vehicle's interactive refresh.
+- Vehicle images now use SQLite as their single durable cache. Legacy cache files
+  migrate after a successful database write, while image persistence, PNG conversion,
+  and exports run on utility tasks.
+- Refresh admission, trip segmentation, command confirmation, and local-data erasure
+  each have one owner with focused tests. Settings database maintenance now performs
+  long-running SQL work away from the main actor and keeps SQLite, preference mirrors,
+  and the in-memory image cache in a defined order.
 
 ### Fixed
 
@@ -76,6 +98,16 @@ All notable changes to Hisingen are documented in this file. The project follows
   enabled and then be refused, or vice versa, in the window while a brand switch
   rebuilt the session. Both now answer through one gate fed by the live session's
   brand: a dimmed control always means dispatch would refuse it too.
+- Battery level colors now share the same critical, low, charging, and nearly-full
+  thresholds across the menu bar, hero gauge, charging panel, and status cards. A
+  critically low battery stays critical while plugged in instead of turning green.
+- Capacity calculations now identify the source they actually use. State-of-health
+  prefers a VIN-specific override, then a provider-reported reference, then the model
+  table; charging-energy and cost estimates use the override or stable model reference
+  and are no longer shifted by partial provider capacity values.
+- Remote-command audit rows now use the time dispatch began, and receipts for a
+  non-selected vehicle pass through the same confirmation clock and ledger as receipts
+  for the vehicle on screen.
 
 ## [2.0.0] - 2026-09-12
 

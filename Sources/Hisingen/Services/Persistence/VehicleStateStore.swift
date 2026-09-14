@@ -51,13 +51,18 @@ final class VehicleStateStore {
 
     let database: VehicleDatabase
     private let historyRecorder: VehicleHistoryRecorder
+    /// Owns the cross-mechanism maintenance sequences. This store supplies the pieces; the
+    /// ordering lives in one place instead of once per caller.
+    private let eraser: LocalDataEraser
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
-         preferences: PreferencesStore? = nil) {
+         preferences: PreferencesStore? = nil, imageCache: CarImageCache = .shared) {
         self.defaults = defaults
         self.database = database
         let preferences = preferences ?? PreferencesStore(defaults: defaults)
         self.historyRecorder = VehicleHistoryRecorder(database: database, preferences: preferences)
+        self.eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: imageCache)
 
         // Legacy-summary reconciliation runs once per launch, not per snapshot: the repair
         // is idempotent, so re-filtering every stored session on every refresh only burned
@@ -165,31 +170,12 @@ final class VehicleStateStore {
     /// (charging sessions, telemetry, battery health, fuel entries…) is kept unless
     /// `eraseHistory` is set: the sign-out path passes the user's Settings → Privacy & Data
     /// choice, while the deliberate "Erase local vehicle data" action wipes directly.
+    ///
+    /// The image tier, the `UserDefaults` mirrors and the ordering between them belong to
+    /// `LocalDataEraser`; this only chooses the scope.
     func clear(vin: String? = nil, eraseHistory: Bool = false) {
         historyRecorder.resetTransientState(vin: vin)
-        // Part of the sign-out/clear path: the vehicle's rendered images leave the bounded
-        // in-memory tier with the session (nil VIN clears every cached entry).
-        CarImageCache.shared.dropMemoryCache(for: vin)
-        if eraseHistory {
-            database.wipeAll(for: vin)
-        } else if let vin {
-            database.deleteSnapshot(for: vin)
-        } else {
-            database.deleteAllSnapshots()
-        }
-        if let vin {
-            var snapshots = load([String: VehicleState].self, key: snapshotsKey) ?? [:]
-            var baselines = load([String: ChargingBaseline].self, key: baselinesKey) ?? [:]
-            snapshots.removeValue(forKey: vin)
-            baselines.removeValue(forKey: vin)
-            store(snapshots, key: snapshotsKey)
-            store(baselines, key: baselinesKey)
-            clearCommandReceipts(for: vin)
-        } else {
-            defaults.removeObject(forKey: snapshotsKey)
-            defaults.removeObject(forKey: baselinesKey)
-            clearCommandReceipts()
-        }
+        try? eraser.perform(eraseHistory ? .everything : .session, vin: vin)
     }
 
     private func load<T: Decodable>(_ type: T.Type, key: String) -> T? {

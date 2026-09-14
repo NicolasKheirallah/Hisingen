@@ -21,7 +21,7 @@
 
 - **Tokens** are only ever written by the owning provider actor (`PolestarAPI`/`VolvoAPI`); no other type calls the Keychain token-save methods directly except `AppDelegate.resumeStoredSession()` (read-only) and the sign-out path.
 - **`Preferences`** is a `@MainActor enum` with static computed properties: anything on the main actor can read or write any preference. There's no per-feature access control; this is a deliberate simplicity choice appropriate for a single-user local app, not an oversight.
-- **`VehicleStateStore`** is written to by exactly two callers: `RefreshCoordinator.apply(_:latency:)` (after every successful fetch) and `Notifier.vehicleStateDidUpdate(_:)` (after every charging-baseline evaluation, even when the resulting notification is suppressed). The `@MainActor` store delegates fresh-snapshot persistence to `VehicleHistoryRecorder.record(_:)`, preserving one ordering for comparison, snapshot, telemetry, charging, and derived history writes.
+- **`VehicleStateStore`** is written to by exactly two callers: `RefreshCoordinator.apply(_:latency:)` (after every successful fetch) and `Notifier.vehicleStateDidUpdate(_:)` (after every charging-baseline evaluation, even when the resulting notification is suppressed). The `@MainActor` store delegates fresh-snapshot persistence to `VehicleHistoryRecorder.record(_:)`. Its bounded serial writer keeps one pending snapshot per VIN, coalescing bursts while preserving each VIN's comparison-before-save workflow off the main actor.
 - **`RefreshCoordinator`'s own state** (timer, generation, failure count) is private and mutated only from within its own `@MainActor` methods.
 - **UI state** is owned by whichever SwiftUI view declares it (`@State`) or by `StatusItemController` (plain `var` properties); it's never shared outside the popover/menu-bar chain.
 
@@ -65,5 +65,5 @@ flowchart TB
     DB -->|snapshot on launch/switch| SC
     VSS -->|restore receipts on launch| RC
     AD -->|render| SC
-    SC -->|rootView reassignment| SUI
+    SC -->|PopoverViewModel snapshot| SUI
 ```

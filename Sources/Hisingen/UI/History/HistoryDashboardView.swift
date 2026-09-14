@@ -82,12 +82,7 @@ struct HistoryDashboardView: View {
         }
     }
 
-    enum TripSort: String, CaseIterable, Identifiable {
-        case newest = "Newest"
-        case distance = "Distance"
-        case duration = "Duration"
-        var id: String { rawValue }
-    }
+    typealias TripSort = HistoryTripSort
 
     enum ExportScope: String, CaseIterable, Identifiable {
         case fullHistory = "Full history"
@@ -133,6 +128,16 @@ struct HistoryDashboardView: View {
 
     @State var selectedSessionSamples: [HistoricalChargingSample] = []
 
+    @State var presentation = HistoryPresentationSnapshot()
+
+    @State var tripPresentation = HistoryTripPresentation()
+
+    @State var filteredSessionRows: [HistoricalChargingSession] = []
+
+    @State var selectedSessionCurvePoints: [HistoryInsights.ChargingCurvePoint] = []
+
+    @State var loadedLifetimeKey: String?
+
     @State var previousSessionCurve: [HistoryInsights.ChargingCurvePoint] = []
 
     /// Inclusive date window for the selected period. `nil` means "no filter" (the All case).
@@ -153,21 +158,7 @@ struct HistoryDashboardView: View {
         }
     }
 
-    var trips: [TripHistoryEntry] {
-        let hidden = preferences.hiddenTripIDs(for: state.identity.vin)
-        let base = hidden.isEmpty ? snapshot.trips : snapshot.trips.filter { !hidden.contains($0.id) }
-        let searched = tripFilterText.isEmpty
-            ? base
-            : base.filter {
-                (tripDateStrings[$0.id] ?? Format.dateTimeFormatter.string(from: $0.endedAt))
-                    .localizedCaseInsensitiveContains(tripFilterText)
-            }
-        switch tripSort {
-        case .newest: return searched
-        case .distance: return searched.sorted { $0.distanceKm > $1.distanceKm }
-        case .duration: return searched.sorted { $0.duration > $1.duration }
-        }
-    }
+    var trips: [TripHistoryEntry] { tripPresentation.trips }
 
     var tripFilterText: String { tripSearchText.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -188,21 +179,19 @@ struct HistoryDashboardView: View {
     var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] { lifetime.cabinClimateRecords }
 
     var efficiencyPoints: [HistoryInsights.EfficiencyPoint] {
-        guard state.powertrain.hasElectricRange else { return [] }
-        return HistoryInsights.efficiencyTrend(from: telemetryRecords)
+        presentation.efficiencyPoints
     }
 
     var combustionConsumptionPoints: [HistoryInsights.EfficiencyPoint] {
-        guard state.powertrain.hasCombustionEngine else { return [] }
-        return HistoryInsights.combustionConsumptionTrend(from: telemetryRecords)
+        presentation.combustionConsumptionPoints
     }
 
     var odometerPoints: [HistoryInsights.OdometerPoint] {
-        HistoryInsights.odometerTrend(from: telemetryRecords)
+        presentation.odometerPoints
     }
 
     var allTimeOdometerPoints: [HistoryInsights.OdometerPoint] {
-        HistoryInsights.odometerTrend(from: allTimeTelemetryRecords)
+        presentation.allTimeOdometerPoints
     }
 
     var selectedSession: HistoricalChargingSession? {
@@ -211,19 +200,15 @@ struct HistoryDashboardView: View {
     }
 
     var selectedSessionCurve: [HistoryInsights.ChargingCurvePoint] {
-        HistoryInsights.chargingCurve(from: selectedSessionSamples)
+        selectedSessionCurvePoints
     }
 
     var filteredSessionsForPicker: [HistoricalChargingSession] {
-        let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return chargingSessions }
-        return chargingSessions.filter {
-            (sessionLabelStrings[$0.id] ?? sessionLabel($0)).localizedCaseInsensitiveContains(trimmed)
-        }
+        filteredSessionRows
     }
 
     var commandStatistics: HistoryInsights.CommandStatistics {
-        HistoryInsights.commandStatistics(from: commands)
+        presentation.commandStatistics
     }
 
     var hasAnyDataInRange: Bool {
@@ -351,11 +336,10 @@ struct HistoryDashboardView: View {
                              Format.dateFormatter.string(from: entry.date),
                              Format.fuelVolume(liters: entry.liters, unit: preferences.fuelVolumeUnit)))
         }
-        .task(id: periodLoadKey) { await loadPeriodScopedData() }
-        .task(id: lifetimeLoadKey) { await loadLifetimeData() }
-        .task(id: hiddenTripsLoadKey) { await loadHiddenTrips() }
-        .task(id: selectedSession?.id) { await loadSelectedSessionSamples() }
-        .task(id: "\(selectedSession?.id ?? "")_\(overlayPreviousSession)") { await loadPreviousSessionCurve() }
+        .task(id: periodLoadKey) { await loadDashboardData() }
+        .task(id: tripPresentationKey) { await loadTripPresentation() }
+        .task(id: sessionPresentationKey) { await loadSessionPresentation() }
+        .task(id: sessionCurveLoadKey) { await loadSessionCurves() }
         .onChange(of: state.dataTimestamp) { _, _ in bumpDataToken() }
         .onChange(of: selectedSessionID) { _, newValue in
             preferences.setSelectedHistorySession(newValue, for: state.identity.vin)
@@ -418,6 +402,19 @@ struct HistoryDashboardView: View {
         return "\(state.identity.vin)_\(refreshToken)_\(hidden.sorted().joined(separator: ","))"
     }
 
+    var tripPresentationKey: String {
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
+        return "\(periodDataKey)_\(tripSort.rawValue)_\(tripFilterText)_\(hidden.sorted().joined(separator: ","))"
+    }
+
+    var sessionPresentationKey: String {
+        "\(periodDataKey)_\(sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
+
+    var sessionCurveLoadKey: String {
+        "\(selectedSession?.id ?? "")_\(overlayPreviousSession)_\(periodDataKey)"
+    }
+
     /// Full reload (manual refresh, fuel edits).
     func bumpRefresh() { refreshToken &+= 1 }
 
@@ -426,13 +423,13 @@ struct HistoryDashboardView: View {
 
     /// Row cap for the period-scoped queries. "All" is generous but still bounded so a
     /// long-lived database can't stall the tab; the other periods rarely approach it. Trips
-    /// are additionally capped inside `loadPeriodScopedData` because `derivedTrips` fans each
-    /// unit out to ~20 telemetry rows.
+    /// are additionally capped inside `loadDashboardData`; trip derivation itself enforces a
+    /// fixed telemetry-row ceiling.
     var rowCap: Int { period == .all ? 10_000 : 3_000 }
 
     var tripCap: Int { min(rowCap, 3_000) }
 
-    func loadPeriodScopedData() async {
+    func loadDashboardData() async {
         isLoading = true
 
         let vin = state.identity.vin
@@ -440,68 +437,118 @@ struct HistoryDashboardView: View {
         let range = activeRange
         let cap = rowCap
         let tripLimit = tripCap
-        let chargingCapacity = preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh
-            ?? state.configuredUsableBatteryCapacityKwh
+        let chargingCapacity = state.configuredCapacityReference(
+            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
+        let lifetimeKey = lifetimeLoadKey
+        let shouldLoadLifetime = loadedLifetimeKey != lifetimeKey
+        let existingLifetime = lifetime
+        let hasElectricRange = state.powertrain.hasElectricRange
+        let hasCombustion = state.powertrain.hasCombustionEngine
 
-        let loaded = await Task.detached(priority: .userInitiated) { () -> HistoryDataSnapshot in
-            db.history.dashboard(vin: vin, range: range, rowCap: cap,
-                                 tripLimit: tripLimit, chargingCapacity: chargingCapacity)
+        let loaded = await Task.detached(priority: .userInitiated) {
+            let dashboard = db.history.dashboard(
+                vin: vin, range: range, rowCap: cap,
+                tripLimit: tripLimit, chargingCapacity: chargingCapacity
+            )
+            guard !Task.isCancelled else { return Optional<HistoryDashboardLoadResult>.none }
+            let lifetime = shouldLoadLifetime
+                ? db.history.lifetime(vin: vin, hasCombustionEngine: hasCombustion)
+                : existingLifetime
+            guard !Task.isCancelled else { return Optional<HistoryDashboardLoadResult>.none }
+            return HistoryDashboardLoadResult(
+                dashboard: dashboard,
+                lifetime: lifetime,
+                presentation: HistoryPresentationSnapshot.build(
+                    dashboard: dashboard, lifetime: lifetime,
+                    hasElectricRange: hasElectricRange,
+                    hasCombustionEngine: hasCombustion
+                )
+            )
         }.value
 
         // A load cancelled by a newer key must not clear the loading flag the replacement
         // already set, so the flags reset only on the success path.
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, let loaded else { return }
         isLoading = false
         didInitialLoad = true
-        snapshot = loaded
+        snapshot = loaded.dashboard
+        lifetime = loaded.lifetime
+        presentation = loaded.presentation
+        if shouldLoadLifetime { loadedLifetimeKey = lifetimeKey }
         expandedTripIDs = []
         tripDateStrings = Dictionary(
-            loaded.trips.map { ($0.id, Format.dateTimeFormatter.string(from: $0.endedAt)) },
+            loaded.dashboard.reportTrips.map { ($0.id, Format.dateTimeFormatter.string(from: $0.endedAt)) },
             uniquingKeysWith: { first, _ in first })
         sessionLabelStrings = Dictionary(
-            loaded.chargingSessions.map { ($0.id, sessionLabel($0)) },
+            loaded.dashboard.chargingSessions.map { ($0.id, sessionLabel($0)) },
             uniquingKeysWith: { first, _ in first })
+        let hidden = preferences.hiddenTripIDs(for: vin).subtracting(restoredTripIDs)
+        hiddenTripRows = loaded.dashboard.reportTrips.filter { hidden.contains($0.id) }
         // `selectedSession` resolves to nil on its own when the remembered id isn't in the
         // current range, so the curve card just hides; the saved preference is kept so the
         // curve reappears if the range later includes that session again.
     }
 
-    func loadLifetimeData() async {
-        let vin = state.identity.vin
-        let db = database
-        let hasCombustion = state.powertrain.hasCombustionEngine
-        let loaded = await Task.detached(priority: .userInitiated) { () -> LifetimeSnapshot in
-            db.history.lifetime(vin: vin, hasCombustionEngine: hasCombustion)
-        }.value
-        guard !Task.isCancelled else { return }
-        lifetime = loaded
-    }
-
-    func loadSelectedSessionSamples() async {
+    func loadSessionCurves() async {
         guard let session = selectedSession else {
             selectedSessionSamples = []
-            return
-        }
-        let db = database
-        let samples = await Task.detached(priority: .userInitiated) { db.charging.reconciledSamples(for: session) }.value
-        guard !Task.isCancelled else { return }
-        selectedSessionSamples = samples
-    }
-
-    func loadPreviousSessionCurve() async {
-        guard overlayPreviousSession, let session = selectedSession,
-              let index = chargingSessions.firstIndex(where: { $0.id == session.id }),
-              index + 1 < chargingSessions.count else {
+            selectedSessionCurvePoints = []
             previousSessionCurve = []
             return
         }
-        let previous = chargingSessions[index + 1]
         let db = database
-        let curve = await Task.detached(priority: .userInitiated) {
-            HistoryInsights.chargingCurve(from: db.charging.reconciledSamples(for: previous))
+        let previous = overlayPreviousSession
+            ? chargingSessions.drop(while: { $0.id != session.id }).dropFirst().first
+            : nil
+        let curves = await Task.detached(priority: .userInitiated) {
+            let samples = db.charging.reconciledSamples(for: session)
+            let current = HistoryInsights.chargingCurve(from: samples)
+            let previousCurve = previous.map {
+                HistoryInsights.chargingCurve(from: db.charging.reconciledSamples(for: $0))
+            } ?? []
+            return (samples, current, previousCurve)
         }.value
         guard !Task.isCancelled else { return }
-        previousSessionCurve = curve
+        selectedSessionSamples = curves.0
+        selectedSessionCurvePoints = curves.1
+        previousSessionCurve = curves.2
+    }
+
+    func loadTripPresentation() async {
+        if !tripFilterText.isEmpty {
+            do { try await Task.sleep(for: .milliseconds(140)) } catch { return }
+        }
+        let source = snapshot.trips
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
+        let search = tripFilterText
+        let sort = tripSort
+        let dates = tripDateStrings
+        let loaded = await Task.detached(priority: .userInitiated) {
+            HistoryTripPresentation.build(
+                from: source, hidden: hidden, searchText: search,
+                sort: sort, dateStrings: dates
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+        tripPresentation = loaded
+        hiddenTripRows = snapshot.reportTrips.filter { hidden.contains($0.id) }
+    }
+
+    func loadSessionPresentation() async {
+        let search = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !search.isEmpty {
+            do { try await Task.sleep(for: .milliseconds(140)) } catch { return }
+        }
+        let sessions = chargingSessions
+        let labels = sessionLabelStrings
+        let loaded = await Task.detached(priority: .userInitiated) {
+            guard !search.isEmpty else { return sessions }
+            return sessions.filter {
+                (labels[$0.id] ?? "").localizedCaseInsensitiveContains(search)
+            }
+        }.value
+        guard !Task.isCancelled else { return }
+        filteredSessionRows = loaded
     }
 
     var loadingSkeleton: some View {

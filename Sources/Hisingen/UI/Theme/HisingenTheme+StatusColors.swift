@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @MainActor
@@ -43,15 +44,36 @@ extension HisingenTheme {
         }
     }
 
-    static func batteryColor(percentage: Double, charging: Bool) -> Color {
-        if percentage <= 15 { return semanticCritical }
-        if percentage <= 35 { return .yellow }
-        if charging {
-
-
-            return percentage >= 80 ? semanticGood : accent
+    /// Palette for the level the domain already decided (`VehicleState.batteryLevel`). Each
+    /// renderer owns its own colours; none of them owns the thresholds.
+    static func batteryColor(level: BatteryLevel) -> Color {
+        switch level {
+        case .critical: return semanticCritical
+        case .low: return .yellow
+        case .charging: return accent
+        case .chargingComplete: return semanticGood
+        case .normal: return .accentColor
         }
-        return .accentColor
+    }
+
+    /// The menu bar has room for one alert tint, so both low levels read orange and critical
+    /// escalates to red.
+    static func menuBarBatteryTint(level: BatteryLevel) -> NSColor {
+        switch level {
+        case .critical: return .systemRed
+        case .low: return .systemOrange
+        case .charging, .chargingComplete: return .systemGreen
+        case .normal: return .controlAccentColor
+        }
+    }
+
+    /// A fleet row is a two-state reading: charging is good news, a low pack is an alert.
+    static func fleetBatteryTint(level: BatteryLevel) -> Color {
+        switch level {
+        case .critical, .low: return .orange
+        case .charging, .chargingComplete: return .green
+        case .normal: return .secondary
+        }
     }
 
     static func fuelColor(percentage: Double) -> Color {

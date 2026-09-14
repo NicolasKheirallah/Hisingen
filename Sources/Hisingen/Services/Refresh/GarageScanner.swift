@@ -182,7 +182,7 @@ final class GarageScanner {
             // owns provider selection from that moment.
             if preferences.vin(for: brand) != selectedVIN { return .abort }
             if brand == originalBrand && car.vin == selectedVIN { continue }
-            let state = try await provider.fetchVehicleState(vin: car.vin, features: preferences.features)
+            let state = try await provider.fetchVehicleState(vin: car.vin, features: .garageScan)
             guard preferences.activeBrand == originalBrand,
                   preferences.vin(for: brand) == selectedVIN,
                   !context.commandPipelineIsBusy else { return .abort }

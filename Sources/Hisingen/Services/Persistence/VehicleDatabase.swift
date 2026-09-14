@@ -521,9 +521,13 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Vehicle Artwork & Images
 
-    func saveVehicleImage(vin: String, angle: Int, data: Data, thumbnailData: Data? = nil, pixelBudget: Int? = nil) {
+    @discardableResult
+    func saveVehicleImage(
+        vin: String, angle: Int, data: Data,
+        thumbnailData: Data? = nil, pixelBudget: Int? = nil
+    ) -> Bool {
         let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty, !data.isEmpty else { return }
+        guard !cleanVIN.isEmpty, !data.isEmpty else { return false }
         let sql = """
         INSERT INTO vehicle_images (vin, angle, image_data, thumbnail_data, pixel_budget, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -533,7 +537,7 @@ final class VehicleDatabase: @unchecked Sendable {
             pixel_budget=excluded.pixel_budget,
             updated_at=excluded.updated_at;
         """
-        try? db.query(sql: sql) { stmt in
+        let saved: Void? = try? db.query(sql: sql) { stmt in
             try stmt.bindText(cleanVIN, at: 1)
             try stmt.bindInt64(Int64(angle), at: 2)
             try stmt.bindBlob(data, at: 3)
@@ -542,13 +546,14 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDate(Date(), at: 6)
             try stmt.executeUpdate()
         } process: { _ in }
+        return saved != nil
     }
 
     func loadVehicleImage(for vin: String, angle: Int) -> (data: Data, thumbnailData: Data?)? {
         let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !cleanVIN.isEmpty else { return nil }
         let sql = "SELECT image_data, thumbnail_data FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;"
-        return try? db.query(sql: sql) { stmt in
+        return try? db.readQuery(sql: sql) { stmt in
             try stmt.bindText(cleanVIN, at: 1)
             try stmt.bindInt64(Int64(angle), at: 2)
         } process: { stmt -> (data: Data, thumbnailData: Data?)? in
@@ -556,6 +561,19 @@ final class VehicleDatabase: @unchecked Sendable {
             let thumb = stmt.columnBlob(at: 1)
             return (data: data, thumbnailData: thumb)
         }
+    }
+
+    func hasVehicleImage(for vin: String, angle: Int) -> Bool {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return false }
+        return (try? db.readQuery(
+            sql: "SELECT 1 FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;",
+            bindings: { stmt in
+                try stmt.bindText(cleanVIN, at: 1)
+                try stmt.bindInt64(Int64(angle), at: 2)
+            },
+            process: { $0.step() }
+        )) ?? false
     }
 
     // MARK: - Vehicle Snapshots
@@ -669,7 +687,8 @@ final class VehicleDatabase: @unchecked Sendable {
     @discardableResult
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
                                       sohPct: Double, degPct: Double, usableKwh: Double,
-                                      measurementSource: String = "calculated-v2") -> Bool {
+                                      measurementSource: String = "calculated-v2",
+                                      timestamp: Date = Date()) -> Bool {
         let previous = history.batteryHealthHistory(for: vin, limit: 50)
             .first { $0.measurementSource == measurementSource }
         guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
@@ -681,7 +700,7 @@ final class VehicleDatabase: @unchecked Sendable {
         """
         return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDate(timestamp, at: 2)
             try stmt.bindDouble(odometerKm, at: 3)
             try stmt.bindDouble(sohPct, at: 4)
             try stmt.bindDouble(degPct, at: 5)
@@ -717,10 +736,11 @@ final class VehicleDatabase: @unchecked Sendable {
     /// recorded reading. Returns whether a row was actually written.
     @discardableResult
     func recordAirQuality(vin: String, airQualityIndex: Double?, particulateMatter25: Double?,
-                          particulateMatter10: Double?, filterRemainingPercent: Double?) -> Bool {
+                          particulateMatter10: Double?, filterRemainingPercent: Double?,
+                          timestamp: Date = Date()) -> Bool {
         guard airQualityIndex != nil || particulateMatter25 != nil else { return false }
         if let last = lastAirQualitySample(for: vin),
-           Date().timeIntervalSince(last.timestamp) < Self.airQualityHeartbeat,
+           timestamp.timeIntervalSince(last.timestamp) < Self.airQualityHeartbeat,
            abs((airQualityIndex ?? 0) - (last.aqi ?? 0)) < Self.airQualityIndexDelta,
            abs((particulateMatter25 ?? 0) - (last.pm25 ?? 0)) < Self.airQualityPM25Delta {
             return false
@@ -731,7 +751,7 @@ final class VehicleDatabase: @unchecked Sendable {
         """
         return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDate(timestamp, at: 2)
             try stmt.bindDouble(airQualityIndex, at: 3)
             try stmt.bindDouble(particulateMatter25, at: 4)
             try stmt.bindDouble(particulateMatter10, at: 5)
@@ -772,9 +792,10 @@ final class VehicleDatabase: @unchecked Sendable {
     func recordTelemetry(vin: String, odometerKm: Double?, tripManualKm: Double?,
                          tripAutoKm: Double?, avgConsumption: Double?,
                          consumptionUnit: String? = nil, ambientTempC: Double?,
-                         latitude: Double?, longitude: Double?) -> Bool {
+                         latitude: Double?, longitude: Double?,
+                         timestamp: Date = Date()) -> Bool {
         if let last = lastTelemetryReadings(for: vin),
-           Date().timeIntervalSince(last.timestamp) < Self.telemetryHeartbeat,
+           timestamp.timeIntervalSince(last.timestamp) < Self.telemetryHeartbeat,
            last.odometerKm == odometerKm,
            last.tripManualKm == tripManualKm,
            last.tripAutoKm == tripAutoKm {
@@ -792,7 +813,7 @@ final class VehicleDatabase: @unchecked Sendable {
         """
         return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDate(timestamp, at: 2)
             try stmt.bindDouble(odometerKm, at: 3)
             try stmt.bindDouble(tripManualKm, at: 4)
             try stmt.bindDouble(tripAutoKm, at: 5)
@@ -841,7 +862,8 @@ final class VehicleDatabase: @unchecked Sendable {
     // MARK: - Remote Commands Audit
 
     func recordCommandAudit(id: String = UUID().uuidString, vin: String,
-                            command: String, status: String, durationMs: Int? = nil, error: String? = nil) {
+                            command: String, status: String, durationMs: Int? = nil, error: String? = nil,
+                            timestamp: Date = Date()) {
         let sql = """
         INSERT INTO remote_commands_log (id, vin, command_name, status, executed_at, duration_ms, error_message)
         VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -851,7 +873,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindText(vin, at: 2)
             try stmt.bindText(command, at: 3)
             try stmt.bindText(status, at: 4)
-            try stmt.bindDate(Date(), at: 5)
+            try stmt.bindDate(timestamp, at: 5)
             try stmt.bindInt64(durationMs.map(Int64.init), at: 6)
             try stmt.bindText(error, at: 7)
             try stmt.executeUpdate()
@@ -908,18 +930,12 @@ final class VehicleDatabase: @unchecked Sendable {
         )
     }
 
-    func vacuum() {
-        try? vacuumOrThrow()
-    }
-
-    /// Error-reporting maintenance entry point for interactive callers.
+    /// Maintenance entry point for interactive callers. Throws so a caller that shows success
+    /// only reports it after the work finished; callers that want best effort write `try?` at
+    /// the call site rather than choosing it here.
     func vacuumOrThrow() throws {
         try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE);")
         try db.execute(sql: "VACUUM;")
-    }
-
-    func pruneHistoricalSamples(olderThanDays: Int = 90) {
-        try? pruneHistoricalSamplesOrThrow(olderThanDays: olderThanDays)
     }
 
     /// Error-reporting variant used by Settings so success is only shown after the
@@ -946,29 +962,6 @@ final class VehicleDatabase: @unchecked Sendable {
     /// audit rows are low-volume summaries (one per charge, one per command, health is
     /// change-gated), so there's little storage pressure to justify discarding a user's
     /// longer-term charging or health history as aggressively as the high-volume samples.
-    func pruneAgedHistory(
-        chargingSessionsOlderThanDays: Int = 730,
-        batteryHealthOlderThanDays: Int = 730,
-        commandAuditsOlderThanDays: Int = 180,
-        airQualityOlderThanDays: Int = 365,
-        connectivityOlderThanDays: Int = 180,
-        cabinClimateOlderThanDays: Int = 180,
-        vehicleImagesOlderThanDays: Int = 120,
-        vehicleImagesHardCap: Int = 24
-    ) {
-        try? pruneAgedHistoryOrThrow(
-            chargingSessionsOlderThanDays: chargingSessionsOlderThanDays,
-            batteryHealthOlderThanDays: batteryHealthOlderThanDays,
-            commandAuditsOlderThanDays: commandAuditsOlderThanDays,
-            airQualityOlderThanDays: airQualityOlderThanDays,
-            connectivityOlderThanDays: connectivityOlderThanDays,
-            cabinClimateOlderThanDays: cabinClimateOlderThanDays,
-            vehicleImagesOlderThanDays: vehicleImagesOlderThanDays,
-            vehicleImagesHardCap: vehicleImagesHardCap)
-    }
-
-    /// Error-reporting variant used by the automatic retention pass, so a failed prune is
-    /// not recorded as run (which would skip retention for another week).
     func pruneAgedHistoryOrThrow(
         chargingSessionsOlderThanDays: Int = 730,
         batteryHealthOlderThanDays: Int = 730,
@@ -1011,10 +1004,6 @@ final class VehicleDatabase: @unchecked Sendable {
         try vacuumOrThrow()
     }
 
-    func clearStoredLocations(for vin: String? = nil) {
-        try? clearStoredLocationsOrThrow(for: vin)
-    }
-
     /// Privacy-sensitive, error-reporting variant used by Settings. The compaction is part
     /// of the operation so deleted coordinates are not left behind in free SQLite pages.
     func clearStoredLocationsOrThrow(for vin: String? = nil) throws {
@@ -1046,10 +1035,6 @@ final class VehicleDatabase: @unchecked Sendable {
 
 
     // MARK: - Wipe / Purge
-
-    func wipeAll(for vin: String? = nil) {
-        try? wipeAllOrThrow(for: vin)
-    }
 
     func wipeAllOrThrow(for vin: String? = nil) throws {
         // One transaction: a crash mid-wipe previously left partially cleared history, which
@@ -1470,7 +1455,7 @@ extension VehicleDatabase {
     /// cars would otherwise duplicate one row per poll.
     @discardableResult
     func recordConnectivity(vin: String, networkType: String?, signalBars: Int?,
-                            wakeReason: String?) -> Bool {
+                            wakeReason: String?, timestamp: Date = Date()) -> Bool {
         let sql = """
         SELECT timestamp, network_type, signal_bars, wake_reason
         FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
@@ -1484,13 +1469,13 @@ extension VehicleDatabase {
         }
         if let last {
             let unchanged = last.1 == networkType && last.2 == signalBars && last.3 == wakeReason
-            if unchanged, Date().timeIntervalSince(last.0) < 60 * 60 { return false }
+            if unchanged, timestamp.timeIntervalSince(last.0) < 60 * 60 { return false }
         }
         return executeInsert(
             "INSERT INTO connectivity_history (vin, timestamp, network_type, signal_bars, wake_reason) VALUES (?,?,?,?,?);"
         ) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDate(timestamp, at: 2)
             try stmt.bindText(networkType, at: 3)
             try stmt.bindInt64(signalBars.map(Int64.init), at: 4)
             try stmt.bindText(wakeReason, at: 5)
@@ -1498,7 +1483,8 @@ extension VehicleDatabase {
     }
 
     @discardableResult
-    func recordCabinClimate(vin: String, interiorCelsius: Double?, requestedCelsius: Double?) -> Bool {
+    func recordCabinClimate(vin: String, interiorCelsius: Double?, requestedCelsius: Double?,
+                            timestamp: Date = Date()) -> Bool {
         guard interiorCelsius != nil || requestedCelsius != nil else { return false }
         let sql = "SELECT timestamp FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;"
         var last: Date?
@@ -1506,12 +1492,12 @@ extension VehicleDatabase {
             if stmt.step() { last = stmt.columnDate(at: 0) }
         }
         // One row per hour is plenty for a temperature trend.
-        if let last, Date().timeIntervalSince(last) < 60 * 60 { return false }
+        if let last, timestamp.timeIntervalSince(last) < 60 * 60 { return false }
         return executeInsert(
             "INSERT INTO cabin_climate_history (vin, timestamp, interior_c, requested_c) VALUES (?,?,?,?);"
         ) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(Date(), at: 2)
+            try stmt.bindDate(timestamp, at: 2)
             try stmt.bindDouble(interiorCelsius, at: 3)
             try stmt.bindDouble(requestedCelsius, at: 4)
         }

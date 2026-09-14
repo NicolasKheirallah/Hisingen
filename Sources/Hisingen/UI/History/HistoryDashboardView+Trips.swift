@@ -9,8 +9,8 @@ extension HistoryDashboardView {
     // MARK: - Driving patterns
 
     var drivingPatternsCard: AnyView {
-        let hours = HistoryInsights.tripsByHourOfDay(from: trips)
-        let split = HistoryInsights.weekdayWeekendDistance(from: trips)
+        let hours = tripPresentation.hours
+        let split = tripPresentation.weekdayWeekend
         guard trips.count >= 4 else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -46,7 +46,7 @@ extension HistoryDashboardView {
     // MARK: - Trips
 
     var mileageReports: [MonthlyMileageReport] {
-        MonthlyMileageReport.build(from: snapshot.reportTrips, purposes: snapshot.tripPurposes)
+        presentation.mileageReports
     }
 
     var selectedMileageReport: MonthlyMileageReport? {
@@ -269,25 +269,6 @@ extension HistoryDashboardView {
     var hiddenTripsKey: String {
         let trips = hiddenTrips
         return "\(trips.count)_\(trips.first?.id ?? "")_\(trips.last?.id ?? "")"
-    }
-
-    /// `derivedTrips` fans each trip out to ~20 telemetry rows, so the query runs off the
-    /// main actor once per `hiddenTripsLoadKey` change; rendering only filters the cache.
-    func loadHiddenTrips() async {
-        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
-        guard !hidden.isEmpty else {
-            hiddenTripRows = []
-            return
-        }
-        let vin = state.identity.vin
-        let db = database
-        let loaded = await Task.detached(priority: .userInitiated) { () -> [TripHistoryEntry] in
-            db.history.derivedTrips(for: vin, limit: 2_000)
-                .filter { hidden.contains($0.id) }
-                .sorted { $0.endedAt > $1.endedAt }
-        }.value
-        guard !Task.isCancelled else { return }
-        hiddenTripRows = loaded
     }
 
     @ViewBuilder

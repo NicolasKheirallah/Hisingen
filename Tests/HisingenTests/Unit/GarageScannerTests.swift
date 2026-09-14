@@ -83,6 +83,10 @@ struct GarageScannerTests {
         // P1 skipped (active selection); P2 + V1 + V2 scanned.
         #expect(context.capturedStates.count == 3)
         #expect(context.completePassCount == 1)
+        let polestarSelections = await polestar.fetchSelections
+        let volvoSelections = await volvo.fetchSelections
+        #expect(polestarSelections == [.garageScan])
+        #expect(volvoSelections == [.garageScan, .garageScan])
     }
 
     /// A dormant brand whose provider is still warm is scanned without a restore round trip.
@@ -203,6 +207,7 @@ private actor StubProvider: VehicleProviding {
     /// Defaults to cold so the dormant-brand restore path stays exercised; a test can pass
     /// `warm: true` to check the skip.
     let warm: Bool
+    private(set) var fetchSelections: [FeatureSelection] = []
 
     init(brand: VehicleBrand, vins: [String], warm: Bool = false) {
         self.brand = brand
@@ -219,7 +224,8 @@ private actor StubProvider: VehicleProviding {
     func resolvedVIN(preferred: String?) -> String? { vins.first }
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
-        vehicle(vin: vin, brand: brand)
+        fetchSelections.append(features)
+        return vehicle(vin: vin, brand: brand)
     }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         RemoteCommandResult(outcome: .completed, message: nil)

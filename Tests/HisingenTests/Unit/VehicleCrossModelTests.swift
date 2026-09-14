@@ -206,7 +206,7 @@ struct VehicleCrossModelTests {
         #expect(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
         #expect(my23State.batteryDegradationPercent == nil)
         #expect(my23State.batteryHealthStatus == "Unavailable")
-        #expect(my23State.configuredUsableBatteryCapacityKwh == 75.0)
+        #expect(my23State.configuredCapacityReference(specification: nil).kwh == 75.0)
     }
 
     @Test
@@ -226,7 +226,7 @@ struct VehicleCrossModelTests {
         #expect(state.factoryNominalBatteryCapacityKwh == 11.6)
         #expect(state.factoryUsableBatteryCapacityKwh == 9.1)
         #expect(state.batteryDegradationPercent == nil)
-        #expect(state.configuredUsableBatteryCapacityKwh == 9.1)
+        #expect(state.configuredCapacityReference(specification: nil).kwh == 9.1)
     }
 
     @Test
@@ -244,7 +244,10 @@ struct VehicleCrossModelTests {
         )
 
         #expect(state.factoryNominalBatteryCapacityKwh == 0.0)
-        #expect(state.configuredUsableBatteryCapacityKwh == 0.0)
+        #expect(state.configuredCapacityReference(specification: nil).kwh == 0.0)
+        // The configured rule is the one that must not invent a capacity; the measured rule is
+        // allowed to use what the provider actually reported.
+        #expect(state.measuredCapacityReference(specification: nil) == .providerReported(18.8))
     }
 
     @MainActor

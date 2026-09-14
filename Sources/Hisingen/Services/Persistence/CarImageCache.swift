@@ -10,7 +10,9 @@ final class CarImageCache: @unchecked Sendable {
 
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
+    private let database: VehicleDatabase
     private let lock = NSLock()
+    private let ioQueue = DispatchQueue(label: "com.hisingen.image-cache-io", qos: .utility)
     private let logger = AppLog.logger("image-cache")
     // Raw source bytes are capped so a long session switching vehicles/angles cannot pin
     // hundreds of MB (each entry is up to the 5 MB download cap); entries evict
@@ -25,11 +27,12 @@ final class CarImageCache: @unchecked Sendable {
     /// the wrong-angle render as the side profile. -1 is already the interior sentinel.
     private static let primaryImageSQLiteAngle = -2
 
-    init() {
+    init(cacheDirectory: URL? = nil, database: VehicleDatabase = .shared) {
+        self.database = database
         let paths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
         let base = paths.first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let dir = base.appendingPathComponent("Hisingen/CarImages", isDirectory: true)
-        cacheDirectory = dir
+        let dir = cacheDirectory ?? base.appendingPathComponent("Hisingen/CarImages", isDirectory: true)
+        self.cacheDirectory = dir
         do {
             try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
@@ -42,10 +45,13 @@ final class CarImageCache: @unchecked Sendable {
         guard !cleanVIN.isEmpty else { return false }
         let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN
         lock.lock()
-        defer { lock.unlock() }
-        if memoryCache[key] != nil { return true }
+        let inMemory = memoryCache[key] != nil
+        lock.unlock()
+        if inMemory { return true }
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
-        return fileManager.fileExists(atPath: fileURL.path)
+        if fileManager.fileExists(atPath: fileURL.path) { return true }
+        guard let parts = parseKey(key) else { return false }
+        return database.hasVehicleImage(for: parts.vin, angle: parts.angle)
     }
 
     func image(for vin: String, angle: Int? = nil) -> Data? {
@@ -76,23 +82,30 @@ final class CarImageCache: @unchecked Sendable {
 
     private func read(key: String) -> Data? {
         lock.lock()
-        defer { lock.unlock() }
         if let mem = cachedBytes(forKey: key) {
+            lock.unlock()
             return mem
         }
+        lock.unlock()
 
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
-        if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
-            store(data, forKey: key)
-            return data
-        }
-
-        // Try SQLite database storage
         if let parts = parseKey(key) {
-            if let dbImage = VehicleDatabase.shared.loadVehicleImage(for: parts.vin, angle: parts.angle) {
+            if let dbImage = database.loadVehicleImage(for: parts.vin, angle: parts.angle) {
+                lock.lock()
                 store(dbImage.data, forKey: key)
+                lock.unlock()
                 return dbImage.data
             }
+        }
+
+        // Files are a legacy tier. Migrate a hit into the single SQLite durable store and
+        // remove the duplicate only after the database write has completed.
+        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
+        if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
+            lock.lock()
+            store(data, forKey: key)
+            lock.unlock()
+            persist(data, key: key, legacyFileURL: fileURL)
+            return data
         }
 
         return nil
@@ -105,15 +118,24 @@ final class CarImageCache: @unchecked Sendable {
         store(data, forKey: key)
         lock.unlock()
 
-        if let parts = parseKey(key) {
-            VehicleDatabase.shared.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
-        }
+        persist(data, key: key, legacyFileURL: nil)
+    }
 
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
-        do {
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            logger.error("Could not write cached vehicle image: \(error, privacy: .public)")
+    private func persist(_ data: Data, key: String, legacyFileURL: URL?) {
+        guard let parts = parseKey(key) else { return }
+        let database = self.database
+        ioQueue.async { [logger] in
+            let saved = database.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
+            if saved, let legacyFileURL {
+                do { try FileManager.default.removeItem(at: legacyFileURL) }
+                catch { logger.debug("Could not remove migrated image cache file: \(error, privacy: .public)") }
+            }
+        }
+    }
+
+    func waitUntilIdle() async {
+        await withCheckedContinuation { continuation in
+            ioQueue.async { continuation.resume() }
         }
     }
 

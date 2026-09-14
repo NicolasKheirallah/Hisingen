@@ -119,6 +119,12 @@ final class VehicleSessionController {
     func dismissCommandReceipt(id: UUID) {
         refreshCoordinator.dismissCommandReceipt(id: id)
     }
+    /// A receipt for a vehicle that is not the visible one. It goes to the coordinator's ledger
+    /// rather than a second one in the shell, so it is stamped by the same clock and window as
+    /// every other receipt.
+    func recordOffTargetReceipt(_ receipt: CommandReceipt, targetVIN: String) {
+        refreshCoordinator.recordOffTargetReceipt(receipt, targetVIN: targetVIN)
+    }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
     func signOut() { refreshCoordinator.signOut() }

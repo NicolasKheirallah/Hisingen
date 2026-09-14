@@ -21,7 +21,7 @@ protocol VehicleProviding: RemoteCommandExecuting {
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
 }
 
-enum VehicleLiveUpdate: Sendable {
+enum VehicleLiveUpdate: Equatable, Sendable {
     case connected(activeTransportStreams: Int)
     case battery(GrpcBatteryExtras)
     case exterior(ExteriorSnapshot, reportedAt: Date?)

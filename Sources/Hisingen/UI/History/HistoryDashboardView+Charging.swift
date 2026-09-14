@@ -18,7 +18,10 @@ extension HistoryDashboardView {
         let tenToEighty = HistoryInsights.tenToEightyDuration(from: curve)
         let idleTail = HistoryInsights.idleTailDuration(from: curve)
         let lossPct: Double? = state.powertrain.hasElectricRange
-            ? ChargingSessionLedger.estimatedChargingLossPct(from: samples, packCapacityKwh: state.configuredUsableBatteryCapacityKwh)
+            ? ChargingSessionLedger.estimatedChargingLossPct(
+                from: samples,
+                packCapacityKwh: state.configuredCapacityReference(
+                    specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh)
             : nil
         let displayedCost = session.flatMap { stored in
             stored.estimatedCost
@@ -363,7 +366,7 @@ extension HistoryDashboardView {
 
         // Back on the main actor only for the reload decision.
         guard pricedSessions > 0, !Task.isCancelled else { return }
-        await loadPeriodScopedData()
+        await loadDashboardData()
     }
 
     static let stockholmCalendar = ElectricityPriceService.stockholmCalendar

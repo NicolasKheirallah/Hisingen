@@ -1,6 +1,6 @@
 # Swift Concurrency
 
-Hisingen builds in the **Swift 6 language mode** with complete concurrency checking. Both are declared in `Package.swift` (`swift-tools-version:6.0`; `.enableUpcomingFeature("StrictConcurrency")` on every target), so `swift build`, Xcode, IDE indexing, and `make run` are all checked, not only the CI invocation. Every architecturally significant type declares its isolation explicitly; there are exactly two places that fall back to a manual lock instead of actor isolation, both called out below.
+Hisingen builds in the **Swift 6 language mode** with complete concurrency checking. Both are declared in `Package.swift` (`swift-tools-version:6.0`; `.enableUpcomingFeature("StrictConcurrency")` on every target), so `swift build`, Xcode, IDE indexing, and `make run` are all checked, not only the CI invocation. Every architecturally significant type declares its isolation explicitly. The few lock- or queue-backed components are called out below.
 
 ## Isolation by component
 
@@ -18,7 +18,9 @@ Hisingen builds in the **Swift 6 language mode** with complete concurrency check
 | `ReverseGeocoder` | `actor` | in-memory geocode cache | Actor isolation |
 | `UpdateService` | `@MainActor` class | Sparkle controller and UI state | Main-actor confinement; Sparkle serializes update sessions |
 | `Preferences` | `@MainActor enum` | none directly (UserDefaults façade) | Main-actor confinement |
-| `VehicleStateStore` / `VehicleHistoryRecorder` | `@MainActor` classes | migration cache and ordered snapshot-to-history ingestion state | Compiler-enforced main-actor confinement |
+| `VehicleStateStore` / `VehicleHistoryRecorder` | `@MainActor` entry points with a serial writer queue | migration cache and pending per-VIN snapshot ingestion | Main-actor confinement at the API boundary; the writer coalesces pending snapshots per VIN and performs SQLite work off-main |
+| `SQLiteDatabase` | `final class`, `@unchecked Sendable` | writer handle and optional WAL read handle | Independent locks serialize each handle; dashboard reads do not wait behind writer work |
+| `CarImageCache` | `final class`, `@unchecked Sendable` | bounded memory cache and SQLite persistence queue | `NSLock` protects only memory bookkeeping; a serial utility queue owns durable image writes |
 | `Keychain` / `KeychainStore` | `struct` (stateless) delegating to `InMemorySecretCache` | none itself | Delegates to the manual-lock singleton below |
 | `InMemorySecretCache` | `final class`, `@unchecked Sendable` | `[account: secret]` dictionary | `NSLock` (the one deliberate manual-lock pattern for shared mutable state; see [technical-debt.md](technical-debt.md) for its cache-key caveat) |
 | `OAuthRedirectDelegate` (Polestar login) | `final class`, `@unchecked Sendable`, `NSObject`/`URLSessionTaskDelegate` | captured redirect `URL` | `NSLock`, required because `URLSessionTaskDelegate` callbacks can't be actor-isolated |

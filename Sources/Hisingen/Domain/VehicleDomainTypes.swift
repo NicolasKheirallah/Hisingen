@@ -1065,8 +1065,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
               endBattery > first.batteryPercentage else { return nil }
         let percentageAdded = endBattery - first.batteryPercentage
         // Prefer an explicitly supplied (user-calibrated) usable capacity; the model-table
-        // fallback is only a nominal estimate.
-        let capacity = usableCapacityKwh ?? current.configuredUsableBatteryCapacityKwh
+        // fallback is only a nominal estimate. The caller resolved the user's override, so no
+        // specification is re-read here.
+        let capacity = usableCapacityKwh ?? current.configuredCapacityReference(specification: nil).kwh
         let estimatedKwh = percentageAdded / 100 * capacity
         guard estimatedKwh > 0 else { return nil }
         return ChargingSession(

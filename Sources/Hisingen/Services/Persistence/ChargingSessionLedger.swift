@@ -468,11 +468,15 @@ final class ChargingSessionLedger: Sendable {
     }
 
     /// Completed sessions for a VIN with a real SoC gain or recorded energy, newest first.
-    func recentChargingSessions(for vin: String, limit: Int = 20) -> [HistoricalChargingSession] {
+    func recentChargingSessions(
+        for vin: String, limit: Int = 20, since: Date? = nil
+    ) -> [HistoricalChargingSession] {
+        let dateClause = since == nil ? "" : " AND started_at >= ?"
         let query = """
         SELECT \(Self.chargingSessionColumns)
         FROM charging_sessions
         WHERE vin = ? AND ended_at IS NOT NULL
+          \(dateClause)
           AND lifecycle_state IN ('completed', 'interrupted')
           AND (
             end_soc > start_soc OR energy_delivered_kwh > 0 OR EXISTS (
@@ -483,9 +487,10 @@ final class ChargingSessionLedger: Sendable {
           )
         ORDER BY started_at DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
+            if let since { try stmt.bindDate(since, at: 2) }
+            try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
         } process: { stmt -> [HistoricalChargingSession] in
             var list: [HistoricalChargingSession] = []
             while stmt.step() {
@@ -589,7 +594,7 @@ final class ChargingSessionLedger: Sendable {
     /// Lifetime charging energy for a VIN across all stored sessions (kWh).
     func lifetimeChargingEnergyKwh(for vin: String) -> Double {
         var total = 0.0
-        try? sql.query(sql: "SELECT COALESCE(SUM(energy_delivered_kwh),0) FROM charging_sessions WHERE vin = ? AND lifecycle_state IN ('completed', 'interrupted');", bindings: { stmt in
+        try? sql.readQuery(sql: "SELECT COALESCE(SUM(energy_delivered_kwh),0) FROM charging_sessions WHERE vin = ? AND lifecycle_state IN ('completed', 'interrupted');", bindings: { stmt in
             try stmt.bindText(vin, at: 1)
         }, process: { stmt in
             if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }

@@ -45,7 +45,7 @@ Verified against the previous implementation by rendering the old SwiftUI chain 
 
 ## 3. Lifecycle: what triggers what
 
-Hisingen is a menu bar app. Clicking the status item builds a fresh `NSHostingController`, so the whole SwiftUI tree and every layer under it is new on every open. A telemetry refresh does the opposite: it assigns `hosting.rootView`, and SwiftUI re-evaluates bodies while keeping the views. The two have to be told apart, and no per-view flag can do it.
+Hisingen is a menu bar app. Clicking the status item builds a fresh `NSHostingController`, so the whole SwiftUI tree and every layer under it is new on every open. During that panel session, telemetry refreshes update a stable `PopoverViewModel`; SwiftUI re-evaluates dependent bodies without replacing the root view. The two lifecycle events have to be told apart, and no per-view flag can do it.
 
 **What counts as a change.** `VehiclePresentationRequest` is `(identity, byteCount)`, identity being VIN plus angle. Telemetry refreshes arrive several times a minute with the same identity and the same bytes from `CarImageCache`, and `present(identity:imageData:)` returns on the equality check without touching a layer. The byte count stands in for the bytes: the cache hands back the same buffer, and comparing megabytes per body evaluation would cost more than the check saves. A genuinely re-downloaded render for the same angle has a different length, so it crosses over rather than popping.
 

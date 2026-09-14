@@ -96,6 +96,29 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    @Test
+    func identicalLiveFramesPublishStateOnlyOnce() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let provider = StreamingMockProvider(
+            script: [.repeatedBattery(frames: 2)], recorder: StreamRecorder()
+        )
+        let events = DiagnosticsRecorder()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        let deadline = Date().addingTimeInterval(2)
+        while events.states.last?.energy.batteryPercentage != 61, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(events.states.last?.energy.batteryPercentage == 61)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(events.states.count == 2,
+                "Expected the initial fetch and one changed live state, not one event per identical frame")
+        coordinator.stop()
+    }
+
     /// The slow integrity poll still runs while the stream is healthy — that is the drift
     /// check the design keeps, and it is the only thing that fetches.
     @Test
@@ -1260,6 +1283,7 @@ struct RefreshCoordinatorStreamTests {
 private enum StreamBehavior: Sendable {
     case fail(Error)
     case healthy(frames: Int)
+    case repeatedBattery(frames: Int)
     case exteriorLocked
 }
 
@@ -1389,6 +1413,17 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
                 }
                 // No finish: the connection holds open until cancelled, like the real
                 // server-streaming gRPC endpoint.
+                continuation.onTermination = { _ in recorder.close() }
+            }
+        case .repeatedBattery(let frames):
+            recorder.open(purpose: purpose, vin: vin)
+            let recorder = self.recorder
+            let frame = Self.frame(percent: 61)
+            return AsyncThrowingStream(bufferingPolicy: .unbounded) { continuation in
+                continuation.yield(.connected(activeTransportStreams: 1))
+                for _ in 0..<frames {
+                    continuation.yield(.battery(frame))
+                }
                 continuation.onTermination = { _ in recorder.close() }
             }
         case .exteriorLocked:

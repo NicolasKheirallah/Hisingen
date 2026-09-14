@@ -84,13 +84,14 @@ final class VehicleHistoryLedger: Sendable {
                    tripLimit: Int, chargingCapacity: Double) -> DashboardSnapshot {
         var snap = DashboardSnapshot()
         func inRange(_ date: Date) -> Bool { range.map { $0.contains(date) } ?? true }
+        let queryStart = Self.dashboardQueryStart(for: range)
 
-        let rawTrips = derivedTrips(for: vin, limit: tripLimit)
+        let rawTrips = derivedTrips(for: vin, limit: tripLimit, since: queryStart)
         snap.trips = rawTrips.filter { inRange($0.endedAt) }
         snap.reportTrips = rawTrips
         snap.tripPurposes = tripPurposes(for: vin)
 
-        let rawSessions = charging.recentChargingSessions(for: vin, limit: rowCap)
+        let rawSessions = charging.recentChargingSessions(for: vin, limit: rowCap, since: queryStart)
         let reconciledSessions = rawSessions.map {
             charging.reconciled($0, usableCapacityKwh: chargingCapacity)
         }
@@ -101,16 +102,16 @@ final class VehicleHistoryLedger: Sendable {
         snap.chargingSessions = reconciledSessions.filter { inRange($0.startedAt) }
         snap.anomalousSessionIDs = HistoryInsights.sessionPeakAnomalies(in: snap.chargingSessions)
 
-        let rawCommands = recentCommandAudits(for: vin, limit: min(rowCap, 2_000))
+        let rawCommands = recentCommandAudits(for: vin, limit: min(rowCap, 2_000), since: queryStart)
         snap.commands = rawCommands.filter { inRange($0.executedAt) }
-        let rawActivities = recentActivities(for: vin, limit: 1000)
+        let rawActivities = recentActivities(for: vin, limit: 1000, since: queryStart)
         snap.activities = rawActivities.filter { inRange($0.timestamp) }
 
-        let rawAir = recentAirQuality(for: vin, limit: min(rowCap, 5_000))
+        let rawAir = recentAirQuality(for: vin, limit: min(rowCap, 5_000), since: queryStart)
         snap.airQualityRecords = rawAir.filter { inRange($0.timestamp) }
 
         let telemetryLimit = min(rowCap, 10_000)
-        let rawTelemetry = recentTelemetry(for: vin, limit: telemetryLimit)
+        let rawTelemetry = recentTelemetry(for: vin, limit: telemetryLimit, since: range?.lowerBound)
         snap.telemetryRecords = rawTelemetry.filter { inRange($0.timestamp) }
 
         snap.truncated = rawTrips.count >= tripLimit || rawSessions.count >= rowCap
@@ -132,6 +133,23 @@ final class VehicleHistoryLedger: Sendable {
             snap.lastYear = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: year.previous)
         }
         return snap
+    }
+
+    /// The dashboard needs enough history for its previous-month and previous-YTD chips, but
+    /// not records older than every visible/comparison window. Keeping that lower bound in SQL
+    /// avoids decoding the vehicle's entire recent history and filtering it afterward.
+    nonisolated static func dashboardQueryStart(
+        for range: ClosedRange<Date>?, now: Date = Date(), calendar: Calendar = .current
+    ) -> Date? {
+        guard range != nil else { return nil }
+        var starts = [range!.lowerBound]
+        if let month = HistoryInsights.monthToDateWindows(now: now, calendar: calendar) {
+            starts.append(month.previous.start)
+        }
+        if let year = HistoryInsights.yearToDateWindows(now: now, calendar: calendar) {
+            starts.append(year.previous.start)
+        }
+        return starts.min()
     }
 
     func lifetime(vin: String, hasCombustionEngine: Bool) -> LifetimeSnapshot {
@@ -179,83 +197,23 @@ final class VehicleHistoryLedger: Sendable {
     // MARK: - Trips
 
     /// Derives trips from telemetry rows. `since` pushes the lower time bound into SQL so a
-    /// Shortcuts query for "last 7 days" no longer decodes the entire table first.
+    /// Shortcuts query for "last 7 days" no longer decodes the entire table first. The
+    /// segmentation rules themselves live in `TripSegmentation`.
     func derivedTrips(for vin: String, limit: Int = 100, since: Date? = nil) -> [TripHistoryEntry] {
-        let records = Array(recentTelemetry(for: vin, limit: max(2_000, limit * 20), since: since).reversed())
-        var trips: [TripHistoryEntry] = []
-        var segmentStart: HistoricalTelemetryRecord?
-        var segmentEnd: HistoricalTelemetryRecord?
-        var segmentDistance = 0.0
-        var consumptionTotal = 0.0
-        var consumptionCount = 0
-        var temperatureTotal = 0.0
-        var temperatureCount = 0
+        // Four samples per requested trip is ample for the segmentation algorithm and keeps
+        // the unbounded "All" view from turning 3,000 trips into a 60,000-row decode.
+        let telemetryLimit = Self.telemetryRowLimit(forTripLimit: limit)
+        let records = Array(recentTelemetry(for: vin, limit: telemetryLimit, since: since).reversed())
+        return TripSegmentation.trips(from: records, vin: vin, limit: limit)
+    }
 
-        func appendSegment() {
-            guard let start = segmentStart, let end = segmentEnd, segmentDistance >= 0.05 else { return }
-            trips.append(TripHistoryEntry(
-                id: "\(start.id)-\(end.id)", vin: vin,
-                startedAt: start.timestamp, endedAt: end.timestamp,
-                distanceKm: segmentDistance,
-                averageConsumption: consumptionCount > 0 ? consumptionTotal / Double(consumptionCount) : nil,
-                ambientTemperatureCelsius: temperatureCount > 0 ? temperatureTotal / Double(temperatureCount) : nil,
-                startLatitude: start.latitude, startLongitude: start.longitude,
-                endLatitude: end.latitude, endLongitude: end.longitude
-            ))
-        }
-
-        func clearSegment() {
-            segmentStart = nil
-            segmentEnd = nil
-            segmentDistance = 0
-            consumptionTotal = 0
-            consumptionCount = 0
-            temperatureTotal = 0
-            temperatureCount = 0
-        }
-
-        for pair in zip(records, records.dropFirst()) {
-            let start = pair.0
-            let end = pair.1
-            let odometerDelta: Double? = {
-                guard let current = start.odometerKm, let next = end.odometerKm else { return nil }
-                return next - current
-            }()
-            let automaticDelta: Double? = {
-                guard let current = start.tripAutomaticKm, let next = end.tripAutomaticKm else { return nil }
-                return next >= current ? next - current : next
-            }()
-            let manualDelta: Double? = {
-                guard let current = start.tripManualKm, let next = end.tripManualKm else { return nil }
-                return next >= current ? next - current : next
-            }()
-            let distance = [odometerDelta, automaticDelta, manualDelta]
-                .compactMap { $0 }.first(where: { $0 >= 0.05 && $0 < 2_000 })
-            let gap = end.timestamp.timeIntervalSince(start.timestamp)
-            guard let distance, gap > 0, gap <= 45 * 60 else {
-                appendSegment()
-                clearSegment()
-                continue
-            }
-            if segmentStart == nil { segmentStart = start }
-            segmentEnd = end
-            segmentDistance += distance
-            if let value = end.averageConsumption ?? start.averageConsumption {
-                consumptionTotal += value
-                consumptionCount += 1
-            }
-            if let value = end.ambientTemperatureCelsius ?? start.ambientTemperatureCelsius {
-                temperatureTotal += value
-                temperatureCount += 1
-            }
-        }
-        appendSegment()
-        return Array(trips.suffix(limit).reversed())
+    nonisolated static func telemetryRowLimit(forTripLimit limit: Int) -> Int {
+        min(12_000, max(2_000, limit * 4))
     }
 
     func tripPurposes(for vin: String) -> [String: TripPurpose] {
         let query = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
         } process: { stmt -> [String: TripPurpose] in
             var result: [String: TripPurpose] = [:]
@@ -287,7 +245,7 @@ final class VehicleHistoryLedger: Sendable {
         WHERE vin = ? AND measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')
         ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt -> [BatteryHealthRecord] in
@@ -311,14 +269,16 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
     }
 
-    func recentAirQuality(for vin: String, limit: Int = 200) -> [AirQualityRecord] {
+    func recentAirQuality(for vin: String, limit: Int = 200, since: Date? = nil) -> [AirQualityRecord] {
+        let dateClause = since == nil ? "" : " AND timestamp >= ?"
         let query = """
         SELECT id, vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent
-        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
+        FROM air_quality_history WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
-            try stmt.bindInt64(Int64(limit), at: 2)
+            if let since { try stmt.bindDate(since, at: 2) }
+            try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
         } process: { stmt -> [AirQualityRecord] in
             var records: [AirQualityRecord] = []
             while stmt.step() {
@@ -347,13 +307,13 @@ final class VehicleHistoryLedger: Sendable {
             SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit
             FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
             """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(max(1, limit)), at: since != nil ? 3 : 2)
         } process: { stmt -> [HistoricalTelemetryRecord] in
             var records: [HistoricalTelemetryRecord] = []
-            while stmt.step() {
+            while !Task.isCancelled, stmt.step() {
                 guard let id = stmt.columnInt64(at: 0),
                       let rowVIN = stmt.columnText(at: 1),
                       let timestamp = stmt.columnDate(at: 2) else { continue }
@@ -373,15 +333,17 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
     }
 
-    func recentCommandAudits(for vin: String?, limit: Int = 20) -> [RemoteCommandAuditRecord] {
-        let filterClause = vin != nil ? "WHERE vin = ? " : ""
+    func recentCommandAudits(for vin: String?, limit: Int = 20, since: Date? = nil) -> [RemoteCommandAuditRecord] {
+        let filters = [vin == nil ? nil : "vin = ?", since == nil ? nil : "executed_at >= ?"].compactMap { $0 }
+        let filterClause = filters.isEmpty ? "" : "WHERE \(filters.joined(separator: " AND ")) "
         let query = """
         SELECT id, vin, command_name, status, executed_at, duration_ms, error_message
         FROM remote_commands_log \(filterClause)ORDER BY executed_at DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             var bindIndex: Int32 = 1
             if let vin { try stmt.bindText(vin, at: bindIndex); bindIndex += 1 }
+            if let since { try stmt.bindDate(since, at: bindIndex); bindIndex += 1 }
             try stmt.bindInt64(Int64(max(1, limit)), at: bindIndex)
         } process: { stmt -> [RemoteCommandAuditRecord] in
             var records: [RemoteCommandAuditRecord] = []
@@ -402,18 +364,22 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
     }
 
-    func recentActivities(for vin: String, limit: Int = 100) -> [VehicleActivity] {
-        (try? sql.query(sql: "SELECT payload FROM vehicle_activity WHERE vin = ? ORDER BY timestamp DESC, id DESC LIMIT ?;") { statement in
+    func recentActivities(for vin: String, limit: Int = 100, since: Date? = nil) -> [VehicleActivity] {
+        let dateClause = since == nil ? "" : " AND timestamp >= ?"
+        let payloads: [Data] = (try? sql.readQuery(sql: "SELECT payload FROM vehicle_activity WHERE vin = ?\(dateClause) ORDER BY timestamp DESC, id DESC LIMIT ?;") { statement in
             try statement.bindText(vin, at: 1)
-            try statement.bindInt64(Int64(min(max(limit, 1), 1000)), at: 2)
+            if let since { try statement.bindDate(since, at: 2) }
+            try statement.bindInt64(Int64(min(max(limit, 1), 1000)), at: since == nil ? 2 : 3)
         } process: { statement in
-            var result: [VehicleActivity] = []
-            while statement.step() {
-                if let data = statement.columnBlob(at: 0),
-                   let event = try? JSONDecoder().decode(VehicleActivity.self, from: data) { result.append(event) }
+            var result: [Data] = []
+            while !Task.isCancelled, statement.step() {
+                if let data = statement.columnBlob(at: 0) { result.append(data) }
             }
             return result
         }) ?? []
+        guard !Task.isCancelled else { return [] }
+        let decoder = JSONDecoder()
+        return payloads.compactMap { try? decoder.decode(VehicleActivity.self, from: $0) }
     }
 
     func recentConnectivity(for vin: String, limit: Int = 200) -> [VehicleDatabase.ConnectivityRecord] {
@@ -421,7 +387,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT id, vin, timestamp, network_type, signal_bars, wake_reason
         FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt -> [VehicleDatabase.ConnectivityRecord] in
@@ -444,7 +410,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT id, vin, timestamp, interior_c, requested_c
         FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt -> [VehicleDatabase.CabinClimateRecord] in
@@ -466,7 +432,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT id, vin, date, liters, price_per_liter, odometer_km
         FROM fuel_entries WHERE vin = ? ORDER BY date DESC LIMIT ?;
         """
-        return (try? sql.query(sql: query) { stmt in
+        return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt -> [VehicleDatabase.FuelEntry] in
@@ -486,7 +452,7 @@ final class VehicleHistoryLedger: Sendable {
     /// Total spend on fuel across stored entries — the combustion half of lifetime cost.
     func lifetimeFuelCost(for vin: String) -> Double {
         var total = 0.0
-        try? sql.query(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
+        try? sql.readQuery(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
             try stmt.bindText(vin, at: 1)
         }, process: { stmt in
             if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }

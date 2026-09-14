@@ -107,23 +107,30 @@ extension InfoTabView {
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car.fill"))
         let specification = preferences.vehicleSpecificationOverride(for: state.identity.vin)
-        let configuredCapacity = state.powertrain.hasElectricRange
-            ? (specification?.usableBatteryCapacityKwh
-                ?? state.energy.reportedBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh)
+        let capacityReference = state.powertrain.hasElectricRange
+            ? state.measuredCapacityReference(specification: specification)
             : nil
-        if let capacity = configuredCapacity, capacity > 0 {
-            let isUserReference = specification?.usableBatteryCapacityKwh != nil
-            let isProviderReported = !isUserReference && state.energy.reportedBatteryCapacityKwh != nil
+        if let reference = capacityReference, reference.kwh > 0 {
+            // The row label comes from the same resolution as the number, so the two can't
+            // describe different sources.
+            let title: String
+            let info: String
+            switch reference {
+            case .userEntered:
+                title = L10n.text("User-Entered Usable Capacity")
+                info = L10n.text("VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry.")
+            case .providerReported:
+                title = L10n.text("Reported Battery Capacity")
+                info = L10n.text("Vehicle specification returned by the provider. This is not measured battery health or current usable capacity.")
+            case .modelReference:
+                title = L10n.text("Model-Reference Battery Capacity")
+                info = L10n.text("Static model-family reference used because the provider did not report the exact vehicle variant capacity.")
+            }
             rows.append(KVRow(
-                isUserReference ? L10n.text("User-Entered Usable Capacity")
-                    : (isProviderReported ? L10n.text("Reported Battery Capacity") : L10n.text("Model-Reference Battery Capacity")),
-                String(format: "%.1f kWh", capacity),
+                title,
+                String(format: "%.1f kWh", reference.kwh),
                 symbol: "battery.100.bolt",
-                info: isUserReference
-                    ? L10n.text("VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry.")
-                    : isProviderReported
-                    ? L10n.text("Vehicle specification returned by the provider. This is not measured battery health or current usable capacity.")
-                    : L10n.text("Static model-family reference used because the provider did not report the exact vehicle variant capacity.")
+                info: info
             ))
         }
         let wltp = specification?.wltpRangeKm ?? state.model.nominalWltpRangeKm

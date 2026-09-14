@@ -110,3 +110,23 @@ struct VehicleStateSummary: Equatable, Sendable {
     let severity: VehicleStateSeverity
 }
 
+/// How a state-of-charge reading should read at a glance, so every renderer agrees on where
+/// the thresholds are and only the palette differs between them.
+///
+/// These are presentation thresholds. The user's own low-battery *alert* level is a separate
+/// setting (`PreferencesStore.lowBatteryThreshold`) that notifications and readiness use; the
+/// two were previously hardcoded side by side and drifted apart.
+enum BatteryLevel: Equatable, Sendable {
+    case critical
+    case low
+    /// Actively charging, not yet near full: the renderers show progress rather than alarm.
+    case charging
+    /// Actively charging and close enough to full to read as good news.
+    case chargingComplete
+    case normal
+
+    static let criticalPercentage = 15.0
+    static let lowPercentage = 35.0
+    static let chargingCompletePercentage = 80.0
+}
+

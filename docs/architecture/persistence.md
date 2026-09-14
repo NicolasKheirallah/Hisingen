@@ -244,7 +244,9 @@ end-to-end ingestion workflow for each fresh snapshot: it loads the previous aut
 snapshot, derives activities, saves the new snapshot, and records applicable telemetry,
 charging, air-quality, connectivity, cabin-climate, and battery-health history in a fixed order.
 This keeps the workflow behind `record(_:)` instead of exposing a sequence of database writes to
-every refresh caller.
+every refresh caller. A serial utility writer performs that work away from the main actor and
+coalesces a burst down to the newest pending snapshot for each VIN. SQLite uses its WAL writer
+handle plus an independent read-only handle, so dashboard reads do not queue behind ingestion.
 
 On save, the current implementation performs several independent operations:
 

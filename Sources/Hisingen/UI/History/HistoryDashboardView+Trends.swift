@@ -91,7 +91,9 @@ extension HistoryDashboardView {
                 if state.hasFreshReading(.battery), let battery = state.energy.batteryPercentage,
                    let estimate = HistoryInsights.historicalRange(
                     from: telemetryRecords, vin: state.identity.vin,
-                    usableCapacityKwh: state.configuredUsableBatteryCapacityKwh, batteryPercentage: battery) {
+                    usableCapacityKwh: state.configuredCapacityReference(
+                        specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh,
+                    batteryPercentage: battery) {
                     Text(L10n.format("Range from recorded consumption: %@",
                                      Format.distance(km: estimate.typicalKm, unit: preferences.distanceUnit)))
                         .font(.caption.weight(.medium))

@@ -72,7 +72,7 @@ private final class PreparationRequestCounts: @unchecked Sendable {
     func value(_ key: String) -> Int { lock.lock(); defer { lock.unlock() }; return values[key, default: 0] }
 }
 
-private final class PreparationTransport: URLProtocol, @unchecked Sendable {
+private final class PreparationTransport: URLProtocol {
     static let counts = PreparationRequestCounts()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }

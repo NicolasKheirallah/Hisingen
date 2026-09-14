@@ -10,11 +10,17 @@ import Foundation
 final class VehicleHistoryRecorder {
     private let database: VehicleDatabase
     private let preferences: PreferencesStore
+    private let writer: Writer
     private var parkedChargeLossDetector = ParkedChargeLossDetector()
 
-    init(database: VehicleDatabase, preferences: PreferencesStore) {
+    init(
+        database: VehicleDatabase,
+        preferences: PreferencesStore,
+        beforePersist: (@Sendable () -> Void)? = nil
+    ) {
         self.database = database
         self.preferences = preferences
+        self.writer = Writer(beforePersist: beforePersist)
     }
 
     /// Main-actor-owned preference values resolved once per observation so the storage pass
@@ -29,6 +35,79 @@ final class VehicleHistoryRecorder {
         var nightTariffStartHour: Int
         var nightTariffEndHour: Int
         var currencySymbol: String
+    }
+
+    private struct RecordingRequest: Sendable {
+        let state: VehicleState
+        let parkedChargeLoss: VehicleActivity?
+        let inputs: RecordingInputs
+        let database: VehicleDatabase
+    }
+
+    /// One long-lived utility queue replaces a detached task per observation. Pending values
+    /// coalesce by VIN, while distinct vehicles retain FIFO order. This bounds memory when a
+    /// dashboard read or another writer temporarily occupies SQLite.
+    private final class Writer: @unchecked Sendable {
+        private let lock = NSLock()
+        private let queue = DispatchQueue(label: "com.hisingen.history-writer", qos: .utility)
+        private var pending: [String: RecordingRequest] = [:]
+        private var order: [String] = []
+        private var draining = false
+        private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+        private let beforePersist: (@Sendable () -> Void)?
+
+        init(beforePersist: (@Sendable () -> Void)?) {
+            self.beforePersist = beforePersist
+        }
+
+        func enqueue(_ request: RecordingRequest) {
+            let vin = request.state.identity.vin
+            lock.lock()
+            if pending[vin] == nil { order.append(vin) }
+            pending[vin] = request
+            let shouldStart = !draining
+            if shouldStart { draining = true }
+            lock.unlock()
+            if shouldStart {
+                // The queued drain owns the writer until every accepted observation lands.
+                // A short-lived VehicleStateStore may be released immediately after `save`.
+                queue.async { self.drain() }
+            }
+        }
+
+        func waitUntilIdle() async {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                if !draining && order.isEmpty {
+                    lock.unlock()
+                    continuation.resume()
+                } else {
+                    idleWaiters.append(continuation)
+                    lock.unlock()
+                }
+            }
+        }
+
+        private func drain() {
+            while true {
+                lock.lock()
+                guard let vin = order.first else {
+                    draining = false
+                    let waiters = idleWaiters
+                    idleWaiters.removeAll()
+                    lock.unlock()
+                    waiters.forEach { $0.resume() }
+                    return
+                }
+                order.removeFirst()
+                let request = pending.removeValue(forKey: vin)
+                lock.unlock()
+                if let request {
+                    beforePersist?()
+                    VehicleHistoryRecorder.persist(request)
+                }
+            }
+        }
     }
 
     func record(_ state: VehicleState) {
@@ -55,19 +134,30 @@ final class VehicleHistoryRecorder {
             nightTariffEndHour: preferences.nightTariffEndHour,
             currencySymbol: preferences.currencySymbol
         )
-        let database = self.database
-        Task.detached(priority: .utility) {
-            Self.recordActivitiesAndSnapshot(
-                state, parkedChargeLossActivity: parkedChargeLoss, into: database)
-            Self.recordAirQuality(state, into: database)
-            Self.recordTelemetry(
-                state, persistLocationHistory: inputs.persistLocationHistory, into: database)
-            Self.recordBatteryHistory(state, inputs: inputs, into: database)
-        }
+        writer.enqueue(RecordingRequest(
+            state: state, parkedChargeLoss: parkedChargeLoss,
+            inputs: inputs, database: database
+        ))
     }
+
+    func waitUntilIdle() async { await writer.waitUntilIdle() }
 
     func resetTransientState(vin: String? = nil) {
         parkedChargeLossDetector.reset(vin: vin)
+    }
+
+    private nonisolated static func persist(_ request: RecordingRequest) {
+        recordActivitiesAndSnapshot(
+            request.state, parkedChargeLossActivity: request.parkedChargeLoss,
+            into: request.database
+        )
+        recordAirQuality(request.state, into: request.database)
+        recordTelemetry(
+            request.state,
+            persistLocationHistory: request.inputs.persistLocationHistory,
+            into: request.database
+        )
+        recordBatteryHistory(request.state, inputs: request.inputs, into: request.database)
     }
 
     private nonisolated static func recordActivitiesAndSnapshot(
@@ -90,7 +180,8 @@ final class VehicleHistoryRecorder {
             airQualityIndex: airQuality.airQualityIndex.map(Double.init),
             particulateMatter25: airQuality.particulateMatter25.map(Double.init),
             particulateMatter10: airQuality.particulateMatter10.map(Double.init),
-            filterRemainingPercent: airQuality.filterRemainingPercent.map(Double.init)
+            filterRemainingPercent: airQuality.filterRemainingPercent.map(Double.init),
+            timestamp: state.freshness.fetchedAt
         )
     }
 
@@ -111,7 +202,8 @@ final class VehicleHistoryRecorder {
                 : (state.fuelSystem.averageConsumptionLPer100Km != nil ? "l" : nil),
             ambientTempC: state.weather?.temperatureCelsius,
             latitude: persistLocationHistory ? state.location?.latitude : nil,
-            longitude: persistLocationHistory ? state.location?.longitude : nil
+            longitude: persistLocationHistory ? state.location?.longitude : nil,
+            timestamp: state.freshness.fetchedAt
         )
     }
 
@@ -124,7 +216,8 @@ final class VehicleHistoryRecorder {
             vin: state.identity.vin,
             networkType: state.connectivity?.networkType,
             signalBars: state.connectivity?.signalBars,
-            wakeReason: state.connectivity?.wakeReason
+            wakeReason: state.connectivity?.wakeReason,
+            timestamp: state.freshness.fetchedAt
         )
         database.recordCabinClimate(
             vin: state.identity.vin,
@@ -132,8 +225,7 @@ final class VehicleHistoryRecorder {
             requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
         )
 
-        let capacity = inputs.specification?.usableBatteryCapacityKwh
-            ?? state.configuredUsableBatteryCapacityKwh
+        let capacity = state.configuredCapacityReference(specification: inputs.specification).kwh
         database.charging.ingest(
             ChargingSessionObservation(
                 vin: state.identity.vin,
@@ -186,7 +278,8 @@ final class VehicleHistoryRecorder {
             sohPct: estimate.stateOfHealthPercent,
             degPct: estimate.degradationPercent,
             usableKwh: estimate.estimatedUsableCapacityKwh,
-            measurementSource: BatteryHealthRecord.fullChargeRangeSource
+            measurementSource: BatteryHealthRecord.fullChargeRangeSource,
+            timestamp: state.freshness.fetchedAt
         )
     }
 }

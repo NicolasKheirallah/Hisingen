@@ -101,6 +101,14 @@ struct FeatureSelection: Codable, Equatable, Sendable {
         ])
     }
 
+    /// Background fleet cards and warning badges need current energy, availability, exterior,
+    /// and health data. Images, location, weather, trip meters, software and remote-command
+    /// capabilities are intentionally left to the selected vehicle's interactive refresh.
+    static let garageScan = FeatureSelection(enabled: [
+        .vehicleIdentity, .chargingDetails, .vehicleAvailability,
+        .vehicleHealth, .exteriorStatus, .tyreAndWarnings
+    ])
+
     func contains(_ feature: AppFeature) -> Bool { enabled.contains(feature) }
 
     mutating func set(_ feature: AppFeature, enabled isEnabled: Bool) {

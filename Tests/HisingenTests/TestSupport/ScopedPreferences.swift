@@ -11,7 +11,7 @@ final class ScopedPreferences {
     // `removePersistentDomain` is thread-safe; nonisolated(unsafe) exists only so `deinit`
     // (which cannot be isolated) can perform the guaranteed cleanup.
     nonisolated(unsafe) let defaults: UserDefaults
-    nonisolated(unsafe) private let suiteName: String
+    private let suiteName: String
 
     init(label: String) {
         suiteName = "HisingenTests.\(label).\(UUID().uuidString)"

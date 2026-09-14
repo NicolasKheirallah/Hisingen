@@ -5,7 +5,7 @@ import Foundation
 /// ordering rule and downsampling decision stays unit-testable.
 enum HistoryInsights {
 
-    struct ChargingCurvePoint: Identifiable, Equatable {
+    struct ChargingCurvePoint: Identifiable, Equatable, Sendable {
         let id: Int64
         let timestamp: Date
         let soc: Double
@@ -14,14 +14,14 @@ enum HistoryInsights {
         let currentAmps: Double?
     }
 
-    struct EfficiencyPoint: Identifiable, Equatable {
+    struct EfficiencyPoint: Identifiable, Equatable, Sendable {
         let id: Int64
         let timestamp: Date
         /// kWh per 100 km — the canonical internal unit. Presentation converts on display.
         let kwhPer100Km: Double
     }
 
-    struct OdometerPoint: Identifiable, Equatable {
+    struct OdometerPoint: Identifiable, Equatable, Sendable {
         let id: Int64
         let timestamp: Date
         let odometerKm: Double
@@ -415,7 +415,7 @@ enum HistoryInsights {
 
     // MARK: - Command statistics
 
-    struct CommandStatistics: Equatable {
+    struct CommandStatistics: Equatable, Sendable {
         let totalCount: Int
         let successCount: Int
         let successRatePct: Double?
@@ -770,7 +770,7 @@ extension HistoryInsights {
 // MARK: - Driving patterns
 
 extension HistoryInsights {
-    struct HourBucket: Identifiable, Equatable {
+    struct HourBucket: Identifiable, Equatable, Sendable {
         var id: Int { hour }
         let hour: Int
         let tripCount: Int
@@ -792,7 +792,7 @@ extension HistoryInsights {
         return (0..<24).map { HourBucket(hour: $0, tripCount: counts[$0], distanceKm: distances[$0]) }
     }
 
-    struct WeekdayWeekendSplit: Equatable {
+    struct WeekdayWeekendSplit: Equatable, Sendable {
         let weekdayKm: Double
         let weekendKm: Double
         let weekdayTripCount: Int

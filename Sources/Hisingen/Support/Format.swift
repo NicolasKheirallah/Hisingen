@@ -42,12 +42,6 @@ enum Format {
         return String(format: "%.*f %@", decimals, unit.convert(kilopascals: kilopascals), unit.suffix)
     }
 
-    static func batteryColor(percentage: Double, charging: Bool) -> NSColor {
-        if charging { return .systemGreen }
-        if percentage <= 20 { return .systemOrange }
-        return .controlAccentColor
-    }
-
     static func icon(for data: VehicleState?, includeConnection: Bool = true) -> String {
         guard let data else { return "car" }
         if data.powertrain.isCombustionOnly {

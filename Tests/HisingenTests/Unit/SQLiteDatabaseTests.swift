@@ -360,7 +360,7 @@ struct SQLiteDatabaseTests {
     }
 
     @Test("VehicleDatabase computes record counts and diagnostic metrics")
-    func testRecordCountsAndDiagnostics() {
+    func testRecordCountsAndDiagnostics() throws {
         let vdb = VehicleDatabase.inMemory()
         let vin = "DIAG_VIN_004"
 
@@ -377,7 +377,7 @@ struct SQLiteDatabaseTests {
         #expect(counts.telemetry == 1)
         #expect(counts.commands == 1)
 
-        vdb.vacuum()
+        try vdb.vacuumOrThrow()
     }
 
     @Test("VehicleDatabase exposes typed telemetry history without requiring coordinates")
@@ -402,7 +402,7 @@ struct SQLiteDatabaseTests {
         #expect(vdb.recordTelemetry(vin: vin, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
                                     avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
         _ = vdb.charging.startChargingSession(vin: vin, startSoc: 20, location: "57.7000°, 11.9000°")
-        vdb.clearStoredLocations(for: vin)
+        try vdb.clearStoredLocationsOrThrow(for: vin)
         let remaining = try vdb.db.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> (Double?, Double?) in
@@ -468,7 +468,7 @@ struct SQLiteDatabaseTests {
     }
 
     @Test("VehicleDatabase prunes historical samples correctly")
-    func testPruneSamples() {
+    func testPruneSamples() throws {
         let vdb = VehicleDatabase.inMemory()
         let vin = "PRUNE_VIN_007"
 
@@ -476,12 +476,12 @@ struct SQLiteDatabaseTests {
         vdb.charging.recordChargingSample(sessionId: sId, vin: vin, soc: 20.0, powerKw: 10.0, voltage: 230.0, current: 16.0)
 
         // Pruning older than 90 days should keep recent samples
-        vdb.pruneHistoricalSamples(olderThanDays: 90)
+        try vdb.pruneHistoricalSamplesOrThrow(olderThanDays: 90)
         let counts = vdb.recordCounts()
         #expect(counts.chargingSamples == 1)
 
         // Pruning older than 0 days (i.e. everything in past) should remove samples
-        vdb.pruneHistoricalSamples(olderThanDays: 0)
+        try vdb.pruneHistoricalSamplesOrThrow(olderThanDays: 0)
         let prunedCounts = vdb.recordCounts()
         #expect(prunedCounts.chargingSamples == 0)
         #expect(prunedCounts.chargingSessions == 1) // Session header is preserved!

@@ -173,7 +173,25 @@ enum RefreshCoordinatorEvent {
 
 @MainActor
 final class RefreshCoordinator {
-    enum Trigger { case timer, manual, wake, networkRestored }
+    enum Trigger {
+        case timer, manual, wake, networkRestored
+
+        /// A scheduled tick is the only trigger that narrows its fetch to the telemetry a
+        /// pending command still needs.
+        var isScheduledTick: Bool {
+            if case .timer = self { return true }
+            return false
+        }
+
+        var intent: RefreshIntent {
+            switch self {
+            case .timer: return .scheduled
+            case .manual: return .manual
+            case .wake: return .wake
+            case .networkRestored: return .networkRestored
+            }
+        }
+    }
 
     private let api: any VehicleProviding
     private let stateStore: VehicleStateStore
@@ -185,11 +203,6 @@ final class RefreshCoordinator {
     private let retryDelay: (_ failureCount: Int, _ retryAfter: TimeInterval?, _ requiresNewSession: Bool) -> TimeInterval
     /// Delay between automatic retries of a raced vehicle selection. Injectable for tests.
     private let selectionRetryDelay: TimeInterval
-    /// Maximum time to seek fresh telemetry after a command. Injectable so tests can
-    /// collapse the production safety cap.
-    private let commandConfirmationWindow: TimeInterval
-    private let commandConfirmationInitialPollDelay: TimeInterval
-    private let commandConfirmationPollInterval: TimeInterval
     private let liveStreamPolicy: LiveStreamPolicy
     private let liveStreamJitter: () -> Double
     private let now: () -> Date
@@ -205,7 +218,6 @@ final class RefreshCoordinator {
     /// longer defers them — and cancel structurally (shared `AsyncTimerLoop`, RT-08).
     private let scheduler = AsyncTimerLoop()
     private var task: Task<Void, Never>?
-    private var commandWatchdogTask: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var failureCount = 0
     private var rateLimitedUntil: Date?
@@ -215,7 +227,9 @@ final class RefreshCoordinator {
     /// Connection lifecycle for `.realTimeUpdates`: reconnects, circuit breaker, metrics.
     /// `nil` until a first stream starts, replaced on every restart.
     private var streamEngine: LiveStreamEngine?
-    private let receiptLedger: CommandConfirmationLedger
+    /// Owns the whole Command receipt lifecycle: records, deadlines, watchdog, the display
+    /// fields an awaiting command still owns, and which transport could prove it.
+    private let confirmations: CommandConfirmationLoop
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
@@ -259,6 +273,23 @@ final class RefreshCoordinator {
     /// through the window extends the backoff and starves the interactive paths.
     var isRateLimited: Bool { rateLimitedUntil.map({ $0 > now() }) ?? false }
 
+    /// The facts `RefreshGate` decides from.
+    private var admissionSituation: RefreshGate.Situation {
+        RefreshGate.Situation(
+            isAsleep: sleeping,
+            isOnline: networkAvailable,
+            hasSession: sessionReady,
+            isWorking: task != nil,
+            rateLimitedUntil: rateLimitedUntil,
+            selectedVIN: preferences.vin,
+            now: now()
+        )
+    }
+
+    private func admit(_ intent: RefreshIntent) -> RefreshAdmission {
+        RefreshGate.admit(intent, in: admissionSituation)
+    }
+
     init(api: any VehicleProviding, stateStore: VehicleStateStore,
          observesEnvironment: Bool = true,
          imageCache: CarImageCache = CarImageCache(),
@@ -269,6 +300,7 @@ final class RefreshCoordinator {
          liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
          liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
          now: @escaping () -> Date = Date.init,
+         confirmationLoop: CommandConfirmationLoop? = nil,
          commandConfirmationWindow: TimeInterval = CommandReceipt.maximumConfirmationDuration,
          commandConfirmationInitialPollDelay: TimeInterval = 2,
          commandConfirmationPollInterval: TimeInterval = 3) {
@@ -282,10 +314,13 @@ final class RefreshCoordinator {
         self.liveStreamPolicy = liveStreamPolicy
         self.liveStreamJitter = liveStreamJitter
         self.now = now
-        self.commandConfirmationWindow = commandConfirmationWindow
-        self.commandConfirmationInitialPollDelay = commandConfirmationInitialPollDelay
-        self.commandConfirmationPollInterval = commandConfirmationPollInterval
-        self.receiptLedger = CommandConfirmationLedger(store: stateStore, now: now, confirmationWindow: commandConfirmationWindow)
+        // A test can hand in a loop it already holds; otherwise the confirmation timing lives
+        // with the confirmation behaviour rather than as three loose knobs here.
+        self.confirmations = confirmationLoop ?? CommandConfirmationLoop(
+            store: stateStore, now: now,
+            confirmationWindow: commandConfirmationWindow,
+            initialPollDelay: commandConfirmationInitialPollDelay,
+            pollInterval: commandConfirmationPollInterval)
         guard observesEnvironment else { return }
         installSystemObservers()
         monitor.pathUpdateHandler = { [weak self] path in
@@ -299,13 +334,13 @@ final class RefreshCoordinator {
     func start(preferredVIN: String?) {
         accountEmail = preferences.email
         if let preferredVIN {
-            if receiptLedger.restore(forVIN: preferredVIN) {
+            if confirmations.restore(forVIN: preferredVIN) {
                 scheduleConfirmationWatchdog(vin: preferredVIN)
             }
             if var cached = stateStore.snapshot(for: preferredVIN) {
                 cached.commandState.optimisticLockUntil = nil
                 latestAuthoritative = cached
-                cached.commandState.receipts = receiptLedger.visibleReceipts
+                cached.commandState.receipts = confirmations.visibleReceipts
                 latest = cached
                 onEvent?(.state(cached))
             }
@@ -353,22 +388,28 @@ final class RefreshCoordinator {
     }
 
     func refreshNow() {
-        if let rateLimitedUntil, rateLimitedUntil > now() {
-            nextRefresh = rateLimitedUntil
+        let admission = admit(.manual)
+        if case .refused(.rateLimited(let until)) = admission {
+            // A rate limit is the one refusal this path can present: tell the user when the
+            // pause ends rather than doing nothing visible.
+            nextRefresh = until
             publishDiagnostics()
             return
         }
-        // Debounce: skip manual refresh if one started less than 2 seconds ago — rapid
-        // clicks on the refresh button (or ⌘R spam) would otherwise stack requests.
+        // Protection for one surface against a repeated click, not precedence between sleep,
+        // network, rate limits and in-flight work.
         if let lastManualRefresh, now().timeIntervalSince(lastManualRefresh) < 2, task != nil {
             return
         }
         lastManualRefresh = now()
-        guard sessionReady else {
+        switch admission {
+        case .start:
+            refresh(trigger: .manual)
+        case .refused(.needsSession):
             beginSession(preferredVIN: preferences.vin.nilIfEmpty)
-            return
+        case .refused:
+            break
         }
-        refresh(trigger: .manual)
     }
 
     func beginCommandConfirmation(
@@ -380,75 +421,79 @@ final class RefreshCoordinator {
             optimisticState.commandState.receipts = []
             latest = optimisticState
         }
-        receiptLedger.begin(receipt)
-        receiptLedger.persist(vin: latest?.identity.vin)
-        logger.info(
-            "Command confirmation started for \(receipt.commandIdentifier, privacy: .public); telemetry observable: \(receipt.supportsTelemetryConfirmation, privacy: .public)"
-        )
+        let awaiting = confirmations.begin(receipt, vin: latest?.identity.vin)
         publishCommandReceipts()
-        if receipt.status.isAwaiting, let vin = latest?.identity.vin {
+        if awaiting, let vin = latest?.identity.vin {
             refreshCommandConfirmationInfrastructure(vin: vin)
         }
-        guard receipt.status.isAwaiting else {
+        guard awaiting else {
             publishDiagnostics()
             return
         }
-        schedule(after: min(commandConfirmationInitialPollDelay, commandConfirmationPollInterval),
+        schedule(after: min(confirmations.initialPollDelay, confirmations.pollInterval),
                  retrySession: false, addsJitter: false)
         publishDiagnostics()
     }
 
     func dismissCommandReceipt(id: UUID) {
-        guard receiptLedger.dismiss(id: id, vin: latest?.identity.vin) else { return }
+        guard confirmations.dismiss(id: id, vin: latest?.identity.vin) else { return }
         if var displayState = latest {
-            displayState.commandState.receipts = receiptLedger.visibleReceipts
+            displayState.commandState.receipts = confirmations.visibleReceipts
             onEvent?(.state(displayState))
         }
         publishDiagnostics()
     }
 
     func dismissCommandReceipt(issuedAt: Date) {
-        guard let record = receiptLedger.records.first(where: { $0.receipt.issuedAt == issuedAt }) else { return }
+        guard let record = confirmations.records.first(where: { $0.receipt.issuedAt == issuedAt }) else { return }
         dismissCommandReceipt(id: record.receipt.id)
+    }
+
+    /// Records a receipt for a vehicle that is not the selected one. There is no live
+    /// confirmation loop for it: the record waits under the target's VIN and is restored when
+    /// that vehicle is selected. It never enters the in-memory collection, so it cannot be
+    /// dismissed from here — which is why it must be written by this ledger and not a second
+    /// instance with a different clock.
+    func recordOffTargetReceipt(_ receipt: CommandReceipt, targetVIN: String) {
+        confirmations.recordOffTarget(receipt, targetVIN: targetVIN)
     }
 
     /// The confirmation window must actually end. A held-open exterior stream only
     /// re-evaluates its purpose on the next frame or reconnect — on a quiet car that could
     /// leave a battery/exterior connection running for the whole idle timeout after its
-    /// reason expired. The watchdog closes it the moment the window lapses.
+    /// reason expired. The loop owns the deadline and settles the records; this re-decides the
+    /// transport afterwards, which is what closes the stream.
     private func scheduleConfirmationWatchdog(vin: String) {
-        commandWatchdogTask?.cancel()
-        guard let until = receiptLedger.nextDeadline else { return }
         let requestGeneration = generation
-        let delay = max(0.05, until.timeIntervalSince(now()))
-        commandWatchdogTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(delay)) }
-            catch { return }
-            guard let self, !Task.isCancelled, requestGeneration == self.generation else { return }
-            self.enforceCommandWindowExpiry(vin: vin)
-        }
-    }
-
-    private func enforceCommandWindowExpiry(vin: String) {
-        commandWatchdogTask = nil
-        guard receiptLedger.nextDeadline.map({ $0 <= now() }) == true else { return }
-        if receiptLedger.timeOutExpired() {
-            receiptLedger.clearSuspension()
-            receiptLedger.persist(vin: latest?.identity.vin)
-            publishCommandReceipts()
-        }
-        guard latest?.identity.vin == vin else { return }
-        refreshCommandConfirmationInfrastructure(vin: vin)
-        scheduleFallbackPoll(for: latest)
-        publishDiagnostics()
+        confirmations.armWatchdog(
+            vin: vin,
+            isValid: { [weak self] in
+                guard let self else { return false }
+                return requestGeneration == self.generation
+            },
+            onExpiry: { [weak self] didExpire in
+                guard let self else { return }
+                if didExpire { self.publishCommandReceipts() }
+                guard self.latest?.identity.vin == vin else { return }
+                self.refreshCommandConfirmationInfrastructure(vin: vin)
+                self.scheduleFallbackPoll(for: self.latest)
+                self.publishDiagnostics()
+            }
+        )
     }
 
     func reloadVehicleMetadata() {
         if !preferences.features.contains(.realTimeUpdates) {
             streamEngine?.stop()
         }
-        guard rateLimitedUntil.map({ $0 <= now() }) ?? true else { return }
-        guard sessionReady, task == nil, !preferences.vin.isEmpty else {
+        // Every refusal but the rate limit folds into an ordinary manual refresh, which is what
+        // an unestablished session or an in-flight fetch needs anyway.
+        switch admit(.metadata) {
+        case .start:
+            break
+        case .refused(.rateLimited):
+            return
+        case .refused:
             refreshNow()
             return
         }
@@ -497,12 +542,12 @@ final class RefreshCoordinator {
     /// re-clicking the new car was vetoed here, and the switcher locked up entirely until
     /// relaunch — invisible with one car, fatal with two on the same account.
     func selectCar(vin: String) {
-        guard rateLimitedUntil.map({ $0 <= now() }) ?? true else {
+        if case .refused(.rateLimited(let until)) = admit(.selection(vin: vin)) {
             // A silent drop reads as a frozen app; surface why switching is paused instead.
             // Multi-vehicle accounts double the request volume and hit this window far
             // more often than the single-car case.
             onEvent?(.switchPaused(.rateLimited(
-                retryAfter: rateLimitedUntil.map { $0.timeIntervalSince(now()) }
+                retryAfter: until.timeIntervalSince(now())
             )))
             return
         }
@@ -520,25 +565,24 @@ final class RefreshCoordinator {
     }
 
     private func beginSelection(vin: String) {
-        receiptLedger.persist(vin: latest?.identity.vin)
+        confirmations.persist(vin: latest?.identity.vin)
         generation &+= 1
         failureCount = 0
         task?.cancel()
         task = nil
-        commandWatchdogTask?.cancel()
-        commandWatchdogTask = nil
-        receiptLedger.clear()
+        confirmations.cancelWatchdog()
+        confirmations.clear()
         streamEngine?.stop()
         scheduler.cancel()
         preferences.vin = vin
         requestedSelectionVIN = vin
-        if receiptLedger.restore(forVIN: vin) {
+        if confirmations.restore(forVIN: vin) {
             scheduleConfirmationWatchdog(vin: vin)
         }
         latestAuthoritative = stateStore.snapshot(for: vin)
         latestAuthoritative?.commandState.optimisticLockUntil = nil
         latest = latestAuthoritative
-        latest?.commandState.receipts = receiptLedger.visibleReceipts
+        latest?.commandState.receipts = confirmations.visibleReceipts
         if let latest { onEvent?(.state(latest)) } else { onEvent?(.loading) }
         onEvent?(.selectionChanged(vin))
         publishDiagnostics()
@@ -661,8 +705,10 @@ final class RefreshCoordinator {
     }
 
     private func beginSession(preferredVIN: String?, deferIfBusy: Bool = false) {
-        guard !sleeping else { return }
-        if task != nil {
+        switch admit(.establishSession) {
+        case .refused(.asleep):
+            return
+        case .refused(.alreadyRunning):
             // Direct triggers (launch, wake, network restore, manual refresh) can safely
             // stand down here: the in-flight operation owns subsequent scheduling and will
             // rearm itself. A one-shot retry TIMER cannot — if it bailed silently nothing
@@ -672,10 +718,11 @@ final class RefreshCoordinator {
             guard deferIfBusy else { return }
             schedule(after: 5, retrySession: true)
             return
-        }
-        guard networkAvailable else {
+        case .refused(.offline):
             handle(.network(URLError(.notConnectedToInternet)), retrySession: true)
             return
+        case .start, .refused:
+            break
         }
         onEvent?(.loading)
         let requestGeneration = generation
@@ -694,12 +741,11 @@ final class RefreshCoordinator {
                     if let preferredVIN {
                         stateStore.clearCommandReceipts(for: preferredVIN)
                     }
-                    commandWatchdogTask?.cancel()
-                    commandWatchdogTask = nil
-                    receiptLedger.clear()
+                    confirmations.cancelWatchdog()
+                    confirmations.clear()
                 }
-                if receiptLedger.isEmpty {
-                    if receiptLedger.restore(forVIN: vin) {
+                if confirmations.isEmpty {
+                    if confirmations.restore(forVIN: vin) {
                         scheduleConfirmationWatchdog(vin: vin)
                     }
                 }
@@ -734,16 +780,20 @@ final class RefreshCoordinator {
     }
 
     private func refresh(trigger: Trigger) {
-        guard task == nil, !sleeping, networkAvailable, sessionReady else { return }
-        let vin = preferences.vin
-        guard !vin.isEmpty else {
+        switch admit(trigger.intent) {
+        case .start:
+            break
+        case .refused(.noVehicleSelected):
             handle(.notConfigured, retrySession: false)
+            return
+        case .refused:
             return
         }
         if trigger == .manual { onEvent?(.loading) }
+        let vin = preferences.vin
         scheduler.cancel()
         nextRefresh = nil
-        let confirmationFeatures = confirmationFeatures(for: trigger)
+        let confirmationFeatures = confirmations.targetedFeatures(isScheduledTick: trigger.isScheduledTick)
         let features = confirmationFeatures ?? preferences.features
         let requestGeneration = generation
         let started = now()
@@ -774,16 +824,6 @@ final class RefreshCoordinator {
         publishDiagnostics()
     }
 
-    private func confirmationFeatures(for trigger: Trigger) -> FeatureSelection? {
-        guard case .timer = trigger,
-              receiptLedger.isConfirmationPending else {
-            return nil
-        }
-        let enabled = Set(receiptLedger.activeRecords.compactMap { $0.receipt.confirmationFeatures }
-            .flatMap(\.enabled))
-        return enabled.isEmpty ? nil : FeatureSelection(enabled: enabled)
-    }
-
     private func apply(
         _ state: VehicleState,
         latency: TimeInterval,
@@ -798,8 +838,7 @@ final class RefreshCoordinator {
         )
         // Command receipts and optimistic locks are coordinator-owned presentation state,
         // never provider telemetry or durable history.
-        authoritative.commandState.receipts = []
-        authoritative.commandState.optimisticLockUntil = nil
+        authoritative.stripPresentationState()
         // SQLite is the single source of truth for completed charging history. Clear legacy
         // snapshot-carried sessions so the UI cannot alternate between two divergent stores.
         authoritative.energy.sessions = []
@@ -812,7 +851,7 @@ final class RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(authoritative)
         SpotlightIndexer.indexVehicle(authoritative, nickname: preferences.vehicleNickname(for: authoritative.identity.vin))
-        let confirmation = reconcileCommandConfirmation(in: authoritative)
+        let confirmed = confirmations.observe(authoritative, vin: latest?.identity.vin)
         let displayed = commandPresentation(
             authoritative: authoritative,
             previous: previous,
@@ -820,7 +859,7 @@ final class RefreshCoordinator {
         )
         latest = displayed
         onEvent?(.state(displayed))
-        if confirmation.confirmed {
+        if confirmed {
             refreshCommandConfirmationInfrastructure(vin: authoritative.identity.vin)
         }
         if desiredLiveStreamPurpose(for: displayed) == nil {
@@ -829,7 +868,7 @@ final class RefreshCoordinator {
             startLiveStreamingIfNeeded(vin: authoritative.identity.vin)
         }
         let interval = pollingInterval(for: displayed)
-        schedule(after: interval, retrySession: false, addsJitter: !receiptLedger.isConfirmationPending)
+        schedule(after: interval, retrySession: false, addsJitter: !confirmations.isConfirmationPending)
         publishDiagnostics()
     }
 
@@ -839,12 +878,12 @@ final class RefreshCoordinator {
         refreshedFeatures: Set<AppFeature>? = nil
     ) -> VehicleState {
         var displayed = authoritative
-        if receiptLedger.isConfirmationPending,
+        if confirmations.isConfirmationPending,
            var optimistic = previous,
            optimistic.identity.vin == authoritative.identity.vin {
             // The optimistic overlay owns these display fields while its command awaits
             // telemetry; every other field accepts the authoritative read.
-            let preserved = Set(receiptLedger.activeRecords.compactMap { $0.receipt.command?.descriptor.displayField })
+            let preserved = confirmations.optimisticFields
             if !preserved.contains(.climateStatus) { optimistic.climateStatus = authoritative.climateStatus }
             if !preserved.contains(.airQuality) { optimistic.airQuality = authoritative.airQuality }
             if !preserved.contains(.exterior) {
@@ -866,7 +905,7 @@ final class RefreshCoordinator {
                 imageCache: imageCache
             )
         }
-        displayed.commandState.receipts = receiptLedger.visibleReceipts
+        displayed.commandState.receipts = confirmations.visibleReceipts
         return displayed
     }
 
@@ -976,17 +1015,16 @@ final class RefreshCoordinator {
     }
 
     private func cancelCurrentWork(preservingCommandConfirmation: Bool = false) {
-        let preserveReceipt = preservingCommandConfirmation && !receiptLedger.isEmpty
+        let preserveReceipt = preservingCommandConfirmation && !confirmations.isEmpty
         if preserveReceipt {
-            receiptLedger.suspend()
+            confirmations.suspend()
         }
         generation &+= 1
         task?.cancel()
         task = nil
-        commandWatchdogTask?.cancel()
-        commandWatchdogTask = nil
+        confirmations.cancelWatchdog()
         if !preserveReceipt {
-            receiptLedger.clear()
+            confirmations.clear()
         }
         streamEngine?.stop()
         scheduler.cancel()
@@ -994,16 +1032,16 @@ final class RefreshCoordinator {
     }
 
     private func resumeCommandConfirmationIfNeeded() {
-        guard receiptLedger.suspensionStartedAt != nil else { return }
-        guard receiptLedger.resume() else { return }
-        receiptLedger.persist(vin: latest?.identity.vin)
+        guard confirmations.isSuspended else { return }
+        guard confirmations.resume() else { return }
+        confirmations.persist(vin: latest?.identity.vin)
         if let vin = latest?.identity.vin {
             refreshCommandConfirmationInfrastructure(vin: vin)
         }
     }
 
     private func publishDiagnostics() {
-        let diagnosticRecord = receiptLedger.activeRecords.last ?? receiptLedger.records.last
+        let diagnosticRecord = confirmations.diagnosticRecord
         onEvent?(.diagnostics(DiagnosticsSnapshot(
             lastSuccess: lastFullRefreshAt,
             lastError: lastError?.localizedDescription,
@@ -1026,10 +1064,10 @@ final class RefreshCoordinator {
             commandConfirmationDeadline: diagnosticRecord?.confirmationDeadline,
             commandConfirmationFeatures: diagnosticRecord?.receipt.confirmationFeatures?.enabled
                 .sorted { $0.rawValue < $1.rawValue } ?? [],
-            commandConfirmationSuspended: receiptLedger.suspensionStartedAt != nil,
-            commandReceiptVisible: !receiptLedger.visibleReceipts.isEmpty,
-            commandReceiptCount: receiptLedger.visibleReceipts.count,
-            awaitingCommandReceiptCount: receiptLedger.activeRecords.count,
+            commandConfirmationSuspended: confirmations.isSuspended,
+            commandReceiptVisible: !confirmations.visibleReceipts.isEmpty,
+            commandReceiptCount: confirmations.visibleReceipts.count,
+            awaitingCommandReceiptCount: confirmations.awaitingCount,
             vehicleSwitchPending: requestedSelectionVIN != nil
         )))
     }
@@ -1058,7 +1096,7 @@ final class RefreshCoordinator {
                 },
                 onConnected: { [weak self] in
                     guard let self else { return }
-                    if receiptLedger.isConfirmationPending {
+                    if confirmations.isConfirmationPending {
                         scheduleCommandConfirmationPoll()
                     } else {
                         schedule(after: liveStreamPolicy.integrityPollInterval, retrySession: false)
@@ -1067,11 +1105,16 @@ final class RefreshCoordinator {
                 },
                 onFrame: { [weak self] update in
                     guard let self, requestGeneration == self.generation,
-                          var current = self.latestAuthoritative,
-                          current.identity.vin == vin else { return false }
-                    current.applyLiveUpdate(update)
-                    current.commandState.receipts = []
-                    current.commandState.optimisticLockUntil = nil
+                          let authoritative = self.latestAuthoritative,
+                          authoritative.identity.vin == vin else { return false }
+                    let current = await Task.detached(priority: .userInitiated) {
+                        var updated = authoritative
+                        updated.applyLiveUpdate(update)
+                        updated.stripPresentationState()
+                        return updated
+                    }.value
+                    guard requestGeneration == self.generation,
+                          self.latestAuthoritative?.identity.vin == vin else { return false }
                     latestAuthoritative = current
                     let frameTime = now()
                     if frameTime.timeIntervalSince(lastPersistAt) >= 10 {
@@ -1079,14 +1122,16 @@ final class RefreshCoordinator {
                         stateStore.save(current)
                     }
                     let previous = latest
-                    let confirmation = reconcileCommandConfirmation(in: current)
+                    let confirmed = confirmations.observe(current, vin: latest?.identity.vin)
                     let displayed = commandPresentation(
                         authoritative: current,
                         previous: previous
                     )
                     latest = displayed
-                    onEvent?(.state(displayed))
-                    if confirmation.confirmed {
+                    if isMeaningfullyDifferentForPresentation(displayed, from: previous) {
+                        onEvent?(.state(displayed))
+                    }
+                    if confirmed {
                         refreshCommandConfirmationInfrastructure(vin: vin)
                     }
                     return true
@@ -1110,12 +1155,22 @@ final class RefreshCoordinator {
         engine.setPurpose(purpose, vin: vin)
     }
 
+    private func isMeaningfullyDifferentForPresentation(
+        _ candidate: VehicleState,
+        from previous: VehicleState?
+    ) -> Bool {
+        guard let previous else { return true }
+        return VehiclePresentationFingerprint(candidate) != VehiclePresentationFingerprint(previous)
+    }
+
 
     private func desiredLiveStreamPurpose(for state: VehicleState?) -> VehicleLiveStreamPurpose? {
         guard let state else { return nil }
-        if let commandPurpose = receiptLedger.activeRecords.reversed().compactMap({
-            confirmationStreamPurpose(for: $0.receipt)
-        }).first {
+        // The loop owns which purpose could prove an awaiting command; the routine charging
+        // stream is this coordinator's own fallback.
+        if case .stream(let commandPurpose) = confirmations.transport(
+            for: state, realTimeEnabled: preferences.features.contains(.realTimeUpdates)
+        ) {
             return commandPurpose
         }
         return liveStreamPolicy.shouldStream(state) ? .charging : nil
@@ -1123,7 +1178,7 @@ final class RefreshCoordinator {
 
     private func scheduleFallbackPoll(for state: VehicleState?) {
         guard let state else { return }
-        if receiptLedger.isConfirmationPending {
+        if confirmations.isConfirmationPending {
             scheduleCommandConfirmationPoll()
             return
         }
@@ -1132,12 +1187,12 @@ final class RefreshCoordinator {
 
     private func scheduleCommandConfirmationPoll() {
         if scheduler.isArmed, nextRefresh != nil { return }
-        schedule(after: commandConfirmationPollInterval, retrySession: false, addsJitter: false)
+        schedule(after: confirmations.pollInterval, retrySession: false, addsJitter: false)
     }
 
     private func pollingInterval(for state: VehicleState) -> TimeInterval {
-        if receiptLedger.isConfirmationPending {
-            return commandConfirmationPollInterval
+        if confirmations.isConfirmationPending {
+            return confirmations.pollInterval
         }
         if streamEngine?.isConnected == true { return liveStreamPolicy.integrityPollInterval }
         return RefreshPolicy.interval(
@@ -1151,20 +1206,9 @@ final class RefreshCoordinator {
         )
     }
 
-    private func reconcileCommandConfirmation(
-        in state: VehicleState
-    ) -> (state: VehicleState, confirmed: Bool) {
-        guard !receiptLedger.isEmpty else { return (state, false) }
-        let confirmedReceipts = receiptLedger.reconcile(against: state, vin: latest?.identity.vin)
-        var displayState = state
-        displayState.commandState.receipts = receiptLedger.visibleReceipts
-        return (displayState, !confirmedReceipts.isEmpty)
-    }
-
     private func refreshCommandConfirmationInfrastructure(vin: String) {
         guard latest?.identity.vin == vin else { return }
-        if receiptLedger.timeOutExpired() {
-            receiptLedger.persist(vin: latest?.identity.vin)
+        if confirmations.expireLapsedWindows(vin: latest?.identity.vin) {
             publishCommandReceipts()
         }
         let desiredPurpose = desiredLiveStreamPurpose(for: latest)
@@ -1177,21 +1221,8 @@ final class RefreshCoordinator {
 
     private func publishCommandReceipts() {
         guard var displayState = latest else { return }
-        displayState.commandState.receipts = receiptLedger.visibleReceipts
+        displayState.commandState.receipts = confirmations.visibleReceipts
         onEvent?(.state(displayState))
-    }
-
-    private func confirmationStreamPurpose(for receipt: CommandReceipt) -> VehicleLiveStreamPurpose? {
-        guard preferences.features.contains(.realTimeUpdates) else { return nil }
-        switch receipt.command {
-        case .startChargingOverride:
-            return .charging
-        case .lock, .unlock,
-             .openTailgate, .closeTailgate, .openWindows, .closeWindows:
-            return .exteriorConfirmation
-        default:
-            return nil
-        }
     }
 
     private func stopLiveStreaming() {

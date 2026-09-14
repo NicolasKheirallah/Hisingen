@@ -73,9 +73,14 @@ struct VehicleSessionControllerTests {
         let suite = "VehicleSessionControllerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)"))
         preferences.email = "old@example.invalid"
         preferences.vin = "P1"
+        // The account email round-trips through the Keychain, so a store pointed at the real one
+        // silently reads back empty in a test process and the account-change branch never runs.
+        #expect(preferences.email == "old@example.invalid")
         let database = VehicleDatabase.inMemory()
         let store = VehicleStateStore(defaults: defaults, database: database, preferences: preferences)
         let fleet = FleetStore(stateStore: store, preferences: preferences)

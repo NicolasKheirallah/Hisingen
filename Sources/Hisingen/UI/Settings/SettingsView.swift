@@ -102,6 +102,7 @@ struct SettingsView: View {
                             SettingsDatabaseCard(
                                 state: state,
                                 database: database,
+                                imageCache: imageCache,
                                 persistLocationHistory: $persistLocationHistory
                             )
                         }

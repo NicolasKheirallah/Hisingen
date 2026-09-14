@@ -229,7 +229,8 @@ final class CommandCoordinator {
                 vin: target.vin,
                 command: command.identifier,
                 status: result.outcome.rawValue,
-                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000)
+                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
+                timestamp: startedAt
             )
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             let targetIsCurrent = isCurrentExecutionContext(target)
@@ -287,7 +288,8 @@ final class CommandCoordinator {
                 command: command.identifier,
                 status: "failed",
                 durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
-                error: message
+                error: message,
+                timestamp: startedAt
             )
             context.presentResult(
                 title: L10n.text("Command failed"),

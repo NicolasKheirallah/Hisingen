@@ -34,7 +34,10 @@ final class StatusItemController: NSObject {
     /// so a popover closed mid-pass reopens onto the pass instead of silently skipping it.
     private var setupMode = false
     private var selectedTab: HisingenContentView.Tab = .vehicle
-    private var pendingPopoverRefresh: Task<Void, Never>?
+    private lazy var popoverRefreshCoalescer = PopoverRefreshCoalescer { [weak self] in
+        self?.applyPopoverRefresh()
+    }
+    private var popoverViewModel: PopoverViewModel?
     private let database: VehicleDatabase
     private let reverseGeocoder: ReverseGeocoder
     private let imageCache: CarImageCache
@@ -700,7 +703,12 @@ final class StatusItemController: NSObject {
         popover.behavior = preferences.panelCloseBehavior.popoverBehavior
         let layout = PanelLayout.resolve(from: preferences)
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
-        let hosting = NSHostingController(rootView: makeRootView())
+        let model = PopoverViewModel(snapshot: currentPopoverSnapshot())
+        popoverViewModel = model
+        let root = AnyView(PopoverRootView(model: model) { [weak self] snapshot in
+            self?.makeRootView(snapshot: snapshot) ?? AnyView(EmptyView())
+        })
+        let hosting = NSHostingController(rootView: root)
         popover.contentViewController = hosting
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -826,7 +834,7 @@ final class StatusItemController: NSObject {
             : Format.symbolFallback(for: glyph)
         var icon = NSImage(systemSymbolName: iconName, accessibilityDescription: L10n.text("Hisingen"))
         if preferences.tintMenuBarIcon, let data {
-            let tintColor: NSColor = data.isCharging ? .systemGreen : ((data.energy.batteryPercentage ?? 100) <= 20 ? .systemOrange : .controlAccentColor)
+            let tintColor = HisingenTheme.menuBarBatteryTint(level: data.batteryLevel)
             if let configured = icon?.withSymbolConfiguration(.init(paletteColors: [tintColor])) {
                 icon = configured
                 icon?.isTemplate = false
@@ -838,13 +846,11 @@ final class StatusItemController: NSObject {
     }
 
     /// Tint for the custom artwork when "Tint menu bar icon" is on — the same
-    /// color rules the SF-Symbol path uses, plus orange for the warning glyph.
+    /// level the SF-Symbol path reads, plus orange for the warning glyph.
     private func menuBarTintColor(for data: VehicleState, glyph: MenuBarGlyph) -> NSColor? {
         guard preferences.tintMenuBarIcon else { return nil }
         if glyph == .warning { return .systemOrange }
-        if data.isCharging { return .systemGreen }
-        if (data.energy.batteryPercentage ?? 100) <= 20 { return .systemOrange }
-        return .controlAccentColor
+        return HisingenTheme.menuBarBatteryTint(level: data.batteryLevel)
     }
 
     /// The completion acknowledgement is a fixed dwell rather than a state the
@@ -943,20 +949,14 @@ final class StatusItemController: NSObject {
 
     func refreshPopoverIfNeeded() {
         guard popover.isShown else { return }
-        guard pendingPopoverRefresh == nil else { return }
-        pendingPopoverRefresh = Task { @MainActor [weak self] in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            self?.pendingPopoverRefresh = nil
-            self?.applyPopoverRefresh()
-        }
+        popoverRefreshCoalescer.schedule()
     }
 
     /// Single home for the popover's SwiftUI tree construction. `showPopover` and
     /// `applyPopoverRefresh` were previously two verbatim copies of these ~30 lines, already
     /// drifting in their trailing statements.
-    private func makeRootView() -> AnyView {
-        AnyView(HisingenContentView(
+    private func currentPopoverSnapshot() -> PopoverViewModel.Snapshot {
+        PopoverViewModel.Snapshot(
             state: latestState,
             error: latestError,
             authenticated: authenticated,
@@ -970,6 +970,26 @@ final class StatusItemController: NSObject {
             checkingForUpdates: checkingForUpdates,
             notificationPermission: notificationPermission,
             diagnostics: diagnostics,
+            settingsMode: settingsMode,
+            setupMode: setupMode
+        )
+    }
+
+    private func makeRootView(snapshot: PopoverViewModel.Snapshot) -> AnyView {
+        AnyView(HisingenContentView(
+            state: snapshot.state,
+            error: snapshot.error,
+            authenticated: snapshot.authenticated,
+            activeVin: snapshot.activeVin,
+            fleet: snapshot.fleet,
+            remoteCommandInProgress: snapshot.remoteCommandInProgress,
+            commandBrand: snapshot.commandBrand,
+            inFlightRemoteCommandID: snapshot.inFlightRemoteCommandID,
+            lastRemoteCommandFeedback: snapshot.lastRemoteCommandFeedback,
+            updateVersion: snapshot.updateVersion,
+            checkingForUpdates: snapshot.checkingForUpdates,
+            notificationPermission: snapshot.notificationPermission,
+            diagnostics: snapshot.diagnostics,
             onRefresh: { [weak self] in self?.onRefresh() },
             onSettings: { [weak self] in self?.toggleSettings() },
             onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
@@ -984,8 +1004,8 @@ final class StatusItemController: NSObject {
             onTestConnection: { [weak self] brand in
                 await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."), nil)
             },
-            settingsMode: settingsMode,
-            setupMode: setupMode,
+            settingsMode: snapshot.settingsMode,
+            setupMode: snapshot.setupMode,
             onCompleteSetup: { [weak self] in self?.completeSetupPass() },
             selectedTab: selectedTabBinding,
             database: database,
@@ -995,6 +1015,7 @@ final class StatusItemController: NSObject {
 
     private func applyPopoverRefresh() {
         guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
+        popoverViewModel?.update(currentPopoverSnapshot())
          popover.appearance = preferences.appearanceMode.nsAppearance
         // Live-apply the close behavior so switching modes in Settings takes effect on
         // the open panel without closing it first.
@@ -1014,7 +1035,6 @@ final class StatusItemController: NSObject {
             popover.contentSize = newSize
             hosting.preferredContentSize = newSize
         }
-        hosting.rootView = makeRootView()
     }
 
     private func barTitle(for data: VehicleState?) -> String {
@@ -1048,7 +1068,8 @@ extension StatusItemController: NSPopoverDelegate {
         preferences.markFirstLaunchWelcomeSeen()
         // Tear the SwiftUI tree down with the popover: hidden views kept running geocode
         // tasks and pulse animations, and the copied snapshot dictionaries stayed alive
-        // until the next rootView replacement. The tree is rebuilt by `showPopover`.
+        // until the next panel session. The tree is rebuilt by `showPopover`.
         popover.contentViewController = nil
+        popoverViewModel = nil
     }
 }

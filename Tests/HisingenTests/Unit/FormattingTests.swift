@@ -32,13 +32,6 @@ struct FormattingTests {
     }
 
     @Test
-    func testBatteryColor() {
-        #expect(Format.batteryColor(percentage: 15, charging: true) == .systemGreen)
-        #expect(Format.batteryColor(percentage: 15, charging: false) == .systemOrange)
-        #expect(Format.batteryColor(percentage: 80, charging: false) == .controlAccentColor)
-    }
-
-    @Test
     func testDistanceFormattingAndConversion() {
         #expect(DistanceUnit.kilometers.convert(km: 412) == 412)
         #expect(DistanceUnit.miles.convert(km: 412) == 256)

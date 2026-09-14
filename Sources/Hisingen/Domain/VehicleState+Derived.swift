@@ -70,6 +70,17 @@ extension VehicleState {
 
     var isCharging: Bool { chargingState.isActivelyCharging }
 
+    /// The one battery-level answer every surface reads. Charging only softens the reading
+    /// above the low thresholds: a critically low pack is an alarm whether or not it is on a
+    /// charger, which is what the hero gauge already showed while the menu bar showed green.
+    var batteryLevel: BatteryLevel {
+        guard let percentage = batteryPercentage else { return .normal }
+        if percentage <= BatteryLevel.criticalPercentage { return .critical }
+        if percentage <= BatteryLevel.lowPercentage { return .low }
+        guard isCharging else { return .normal }
+        return percentage >= BatteryLevel.chargingCompletePercentage ? .chargingComplete : .charging
+    }
+
     var isClimateActive: Bool {
         climateStatus?.activity.isActiveSession == true
     }
@@ -105,16 +116,52 @@ extension VehicleState {
         return model.nominalUsableCapacityKwh
     }
 
+    /// Where a reference capacity came from. Returning the source alongside the number lets a
+    /// display label its row from the same resolution the estimator computes with, instead of
+    /// re-deriving which input won.
+    enum CapacityReference: Equatable, Sendable {
+        case userEntered(Double)
+        case providerReported(Double)
+        case modelReference(Double)
+
+        var kwh: Double {
+            switch self {
+            case .userEntered(let value): return value
+            case .providerReported(let value): return value
+            case .modelReference(let value): return value
+            }
+        }
+    }
+
+    /// Reference capacity for energy, cost and charging-loss estimates. Deliberately excludes
+    /// the provider's reported pack size: a partial or round-number report would move money
+    /// figures, while the model table is stable for a given vehicle and year.
+    func configuredCapacityReference(specification: VehicleSpecificationOverride?) -> CapacityReference {
+        if let entered = specification?.usableBatteryCapacityKwh {
+            return .userEntered(entered)
+        }
+        return .modelReference(factoryUsableBatteryCapacityKwh)
+    }
+
+    /// Reference capacity for state-of-health and for the capacity the vehicle reports about
+    /// itself. The provider's own pack size is a better input than the model table, so it slots
+    /// between the user's figure and the table. `nil` only when nothing usable is known.
+    func measuredCapacityReference(specification: VehicleSpecificationOverride?) -> CapacityReference? {
+        if let entered = specification?.usableBatteryCapacityKwh {
+            return .userEntered(entered)
+        }
+        if let reported = energy.reportedBatteryCapacityKwh, reported > 0 {
+            return .providerReported(reported)
+        }
+        let factory = factoryUsableBatteryCapacityKwh
+        return factory > 0 ? .modelReference(factory) : nil
+    }
+
     var batteryDegradationPercent: Double? {
         // Neither provider exposes a validated measured capacity or SoH value. This property
         // represents that absence and stays nil. The separate BatteryHealthEstimate type holds
         // Hisingen's remembered full-charge range calculation.
         return nil
-    }
-
-    var configuredUsableBatteryCapacityKwh: Double {
-        // This value is suitable for nominal charging-energy estimates only.
-        return factoryUsableBatteryCapacityKwh
     }
 
     /// Every capacity figure below is interpolated from `factoryNominalBatteryCapacityKwh`/

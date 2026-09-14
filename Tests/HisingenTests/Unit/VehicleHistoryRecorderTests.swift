@@ -17,9 +17,7 @@ struct VehicleHistoryRecorderTests {
         let state = vehicle(vin: "YSM-HISTORY", battery: 72, brand: .polestar)
 
         recorder.record(state)
-        // The storage pass runs detached (PERSIST-06/07); wait for the snapshot to land.
-        let stored = await awaitStored(timeout: 5) { database.loadSnapshot(for: state.identity.vin) != nil }
-        #expect(stored, "snapshot never reached the database after record")
+        await recorder.waitUntilIdle()
 
         let snapshot = try #require(database.loadSnapshot(for: state.identity.vin))
         #expect(snapshot.identity.vin == state.identity.vin)
@@ -41,10 +39,7 @@ struct VehicleHistoryRecorderTests {
         state.maintenance.odometerKm = 10_000
 
         recorder.record(state)
-        let firstLanded = await awaitStored(timeout: 5) {
-            database.history.batteryHealthHistory(for: state.identity.vin).count == 1
-        }
-        #expect(firstLanded, "battery-health row never reached the database after record")
+        await recorder.waitUntilIdle()
         let saved = try #require(database.history.batteryHealthHistory(for: state.identity.vin).first)
         #expect(saved.measurementSource == BatteryHealthRecord.fullChargeRangeSource)
 
@@ -52,12 +47,7 @@ struct VehicleHistoryRecorderTests {
         state.energy.rangeKm = 50
         state.maintenance.odometerKm = 11_000
         recorder.record(state)
-        // Await the second snapshot before asserting the health history stayed deduped,
-        // so the check cannot pass just because the second pass has not run yet.
-        let secondLanded = await awaitStored(timeout: 5) {
-            database.loadSnapshot(for: state.identity.vin)?.maintenance.odometerKm == 11_000
-        }
-        #expect(secondLanded, "second observation never reached the database after record")
+        await recorder.waitUntilIdle()
 
         let history = database.history.batteryHealthHistory(for: state.identity.vin)
         #expect(history.count == 1)
