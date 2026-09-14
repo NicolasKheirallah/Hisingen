@@ -64,11 +64,16 @@ final class VehicleStateStore {
         // time. Rows keep the usable capacity they were written with; the current preference
         // override is the fallback for rows that never stored one.
         if preferences.storeChargingHistory {
-            for vin in database.charging.legacySummaryVINs() {
-                database.charging.reconcileLegacySummaries(
-                    for: vin,
-                    usableCapacityKwh: preferences.vehicleSpecificationOverride(for: vin)?
-                        .usableBatteryCapacityKwh)
+            // Resolve the MainActor-backed preference lookups here, then run the repair (an
+            // N+1 over potentially hundreds of queries per VIN) off the main thread so the
+            // launch path only hands off values. The database handle is Sendable.
+            let capacities = Dictionary(uniqueKeysWithValues: database.charging.legacySummaryVINs().map { vin in
+                (vin, preferences.vehicleSpecificationOverride(for: vin)?.usableBatteryCapacityKwh)
+            })
+            Task.detached(priority: .utility) {
+                for (vin, usableCapacityKwh) in capacities {
+                    database.charging.reconcileLegacySummaries(for: vin, usableCapacityKwh: usableCapacityKwh)
+                }
             }
         }
     }
@@ -162,6 +167,9 @@ final class VehicleStateStore {
     /// choice, while the deliberate "Erase local vehicle data" action wipes directly.
     func clear(vin: String? = nil, eraseHistory: Bool = false) {
         historyRecorder.resetTransientState(vin: vin)
+        // Part of the sign-out/clear path: the vehicle's rendered images leave the bounded
+        // in-memory tier with the session (nil VIN clears every cached entry).
+        CarImageCache.shared.dropMemoryCache(for: vin)
         if eraseHistory {
             database.wipeAll(for: vin)
         } else if let vin {

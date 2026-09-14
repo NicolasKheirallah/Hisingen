@@ -10,6 +10,7 @@ struct BatteryGauge: View {
     @State private var breathingGlow = false
     @State private var completionPulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.preferencesStore) private var preferences
 
     private var accessibilityValue: String {
         let percent = Int((fraction * 100).rounded())
@@ -20,7 +21,7 @@ struct BatteryGauge: View {
         return L10n.format("Battery %d percent", percent)
     }
 
-    private var isPolestar: Bool { PreferencesStore().appTheme == .polestar }
+    private var isPolestar: Bool { preferences.appTheme == .polestar }
     private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
 
     /// Energy is actively moving into the battery. Every charging effect —
@@ -86,7 +87,7 @@ struct BatteryGauge: View {
                             radius: isPolestar ? 0 : shadowRadius,
                             x: 0, y: 1)
                     .animation(Motion.progress, value: fraction)
-                    .animation(.easeInOut(duration: Motion.fast), value: color)
+                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: color)
 
 
                 // One-shot acknowledgement as the pack reaches 100 %: a brief
@@ -136,6 +137,7 @@ struct BatteryGauge: View {
                         .frame(width: 3, height: 13)
                         .offset(x: targetX, y: -2)
                         .shadow(color: .black.opacity(isPolestar ? 0 : 0.2), radius: isPolestar ? 0 : 1, x: 0, y: 1)
+                        .animation(reduceMotion ? nil : Motion.progress, value: targetFraction)
                 }
             }
         }
@@ -156,12 +158,12 @@ struct BatteryGauge: View {
         }
         .onChange(of: isComplete) { _, complete in
             guard complete, !reduceMotion, !isPolestar else { return }
-            withAnimation(.easeInOut(duration: 0.22)) {
+            withAnimation(Motion.pulseIn) {
                 completionPulse = true
             }
             Task {
-                try? await Task.sleep(for: .seconds(0.26))
-                withAnimation(.easeOut(duration: 0.34)) {
+                try? await Task.sleep(for: .seconds(Motion.pulseDwell))
+                withAnimation(Motion.pulseOut) {
                     completionPulse = false
                 }
             }
@@ -181,7 +183,9 @@ struct FuelGauge: View {
     let fraction: Double
     let color: Color
 
-    private var isPolestar: Bool { PreferencesStore().appTheme == .polestar }
+    @Environment(\.preferencesStore) private var preferences
+
+    private var isPolestar: Bool { preferences.appTheme == .polestar }
     private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
 
     private var accessibilityValue: String {
@@ -214,7 +218,7 @@ struct FuelGauge: View {
                             radius: isPolestar ? 0 : 3,
                             x: 0, y: 1)
                     .animation(Motion.progress, value: fraction)
-                    .animation(.easeInOut(duration: Motion.fast), value: color)
+                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: color)
             }
         }
         .frame(height: 9)
@@ -231,6 +235,8 @@ struct DualEnergyGauge: View {
     let fuelColor: Color
     var isCharging: Bool = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -246,6 +252,7 @@ struct DualEnergyGauge: View {
                         .font(.system(size: 10, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
+                        .hisTelemetryValue(batteryFraction, reduceMotion: reduceMotion)
                 }
                 if let batteryFraction {
                     BatteryGauge(
@@ -272,6 +279,7 @@ struct DualEnergyGauge: View {
                         .font(.system(size: 10, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
+                        .hisTelemetryValue(fuelFraction, reduceMotion: reduceMotion)
                 }
                 if let fuelFraction {
                     FuelGauge(
@@ -288,8 +296,11 @@ struct DualEnergyGauge: View {
 
 @MainActor
 struct UnavailableEnergyGauge: View {
+    @Environment(\.preferencesStore) private var preferences
+
     var body: some View {
-        RoundedRectangle(cornerRadius: PreferencesStore().appTheme == .polestar ? 0 : 5, style: .continuous)
+        let isPolestar = preferences.appTheme == .polestar
+        return RoundedRectangle(cornerRadius: isPolestar ? 0 : 5, style: .continuous)
             .fill(HisingenTheme.ink.opacity(0.08))
             .frame(height: 9)
             .accessibilityLabel(L10n.text("Energy level unavailable"))

@@ -7,7 +7,7 @@ struct PanelLayoutTests {
 
     private func makeStore() throws -> PreferencesStore {
         let suiteName = "hisingen.tests.panel-layout.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         return PreferencesStore(defaults: defaults)
     }
@@ -17,48 +17,48 @@ struct PanelLayoutTests {
     @Test
     func testPanelSizeAndDensityRoundTrip() throws {
         let store = try makeStore()
-        XCTAssertEqual(store.panelSize, .standard)
-        XCTAssertEqual(store.contentDensity, .standard)
+        #expect(store.panelSize == .standard)
+        #expect(store.contentDensity == .standard)
 
         for size in PanelSize.allCases {
             store.panelSize = size
-            XCTAssertEqual(store.panelSize, size)
+            #expect(store.panelSize == size)
         }
         for density in ContentDensity.allCases {
             store.contentDensity = density
-            XCTAssertEqual(store.contentDensity, density)
+            #expect(store.contentDensity == density)
         }
     }
 
     @Test
     func testCustomSizePersistenceRoundTrip() throws {
         let store = try makeStore()
-        XCTAssertFalse(store.customPanelSizeEnabled)
+        #expect(!(store.customPanelSizeEnabled))
 
         store.customPanelSizeEnabled = true
         store.customPanelWidth = 560
         store.customPanelHeight = 720
-        XCTAssertTrue(store.customPanelSizeEnabled)
-        XCTAssertEqual(store.customPanelWidth, 560)
-        XCTAssertEqual(store.customPanelHeight, 720)
+        #expect(store.customPanelSizeEnabled)
+        #expect(store.customPanelWidth == 560)
+        #expect(store.customPanelHeight == 720)
     }
 
     @Test
     func testWideCardLayoutDefaultsToFullWidthAndRoundTrips() throws {
         let suiteName = "hisingen.tests.panel-layout.cardflow.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
 
-        XCTAssertEqual(store.wideCardLayout, .fullWidth)
+        #expect(store.wideCardLayout == .fullWidth)
         for layout in WideCardLayout.allCases {
             store.wideCardLayout = layout
-            XCTAssertEqual(store.wideCardLayout, layout)
+            #expect(store.wideCardLayout == layout)
         }
 
         // A corrupt persisted value falls back to full width.
         defaults.set("bogus", forKey: "wide_card_layout")
-        XCTAssertEqual(store.wideCardLayout, .fullWidth)
+        #expect(store.wideCardLayout == .fullWidth)
     }
 
     @Test
@@ -67,9 +67,9 @@ struct PanelLayoutTests {
             panelSizeRaw: "bogus", densityRaw: "bogus",
             customEnabled: false, customWidth: 0, customHeight: 0
         )
-        XCTAssertEqual(layout.width, PanelSize.standard.width)
-        XCTAssertEqual(layout.unclampedHeight, PanelSize.standard.idealHeight)
-        XCTAssertEqual(layout.contentScale, ContentDensity.standard.scale)
+        #expect(layout.width == PanelSize.standard.width)
+        #expect(layout.unclampedHeight == PanelSize.standard.idealHeight)
+        #expect(layout.contentScale == ContentDensity.standard.scale)
     }
 
     // MARK: - Resolution invariants
@@ -81,8 +81,8 @@ struct PanelLayoutTests {
                 panelSizeRaw: size.rawValue, densityRaw: ContentDensity.standard.rawValue,
                 customEnabled: false, customWidth: 0, customHeight: 0
             )
-            XCTAssertEqual(layout.width, size.width, "\(size.rawValue) width")
-            XCTAssertEqual(layout.unclampedHeight, size.idealHeight, "\(size.rawValue) height")
+            #expect(layout.width == size.width, "\(size.rawValue) width")
+            #expect(layout.unclampedHeight == size.idealHeight, "\(size.rawValue) height")
         }
     }
 
@@ -94,9 +94,7 @@ struct PanelLayoutTests {
                     panelSizeRaw: size.rawValue, densityRaw: density.rawValue,
                     customEnabled: false, customWidth: 0, customHeight: 0
                 )
-                XCTAssertEqual(layout.logicalWidth * layout.contentScale, layout.width,
-                               accuracy: 0.01,
-                               "\(size.rawValue) @ \(density.rawValue)")
+                #expect(abs(layout.logicalWidth * layout.contentScale - layout.width) <= 0.01, "\(size.rawValue) @ \(density.rawValue)")
             }
         }
     }
@@ -108,24 +106,24 @@ struct PanelLayoutTests {
             panelSizeRaw: PanelSize.compact.rawValue, densityRaw: ContentDensity.standard.rawValue,
             customEnabled: true, customWidth: 600, customHeight: 700
         )
-        XCTAssertEqual(inRange.width, 600)
-        XCTAssertEqual(inRange.unclampedHeight, 700)
+        #expect(inRange.width == 600)
+        #expect(inRange.unclampedHeight == 700)
 
         // Out-of-range values clamp to the documented bounds.
         let clamped = PanelLayout.resolve(
             panelSizeRaw: PanelSize.grand.rawValue, densityRaw: ContentDensity.relaxed.rawValue,
             customEnabled: true, customWidth: 100, customHeight: 5000
         )
-        XCTAssertEqual(clamped.width, PanelLayout.minimumWidth)
-        XCTAssertEqual(clamped.unclampedHeight, PanelLayout.maximumHeight)
+        #expect(clamped.width == PanelLayout.minimumWidth)
+        #expect(clamped.unclampedHeight == PanelLayout.maximumHeight)
 
         // Unseeded (zero) values fall back to the selected preset's dimensions.
         let unseeded = PanelLayout.resolve(
             panelSizeRaw: PanelSize.wide.rawValue, densityRaw: ContentDensity.standard.rawValue,
             customEnabled: true, customWidth: 0, customHeight: 0
         )
-        XCTAssertEqual(unseeded.width, PanelSize.wide.width)
-        XCTAssertEqual(unseeded.unclampedHeight, PanelSize.wide.idealHeight)
+        #expect(unseeded.width == PanelSize.wide.width)
+        #expect(unseeded.unclampedHeight == PanelSize.wide.idealHeight)
     }
 
     @Test
@@ -136,9 +134,8 @@ struct PanelLayoutTests {
                     panelSizeRaw: size.rawValue, densityRaw: density.rawValue,
                     customEnabled: false, customWidth: 0, customHeight: 0
                 )
-                XCTAssertEqual(layout.width.rounded(), layout.width, "\(size.rawValue) width")
-                XCTAssertEqual(layout.unclampedHeight.rounded(), layout.unclampedHeight,
-                               "\(size.rawValue) height")
+                #expect(layout.width.rounded() == layout.width, "\(size.rawValue) width")
+                #expect(layout.unclampedHeight.rounded() == layout.unclampedHeight, "\(size.rawValue) height")
             }
         }
     }
@@ -151,7 +148,7 @@ struct PanelLayoutTests {
             panelSizeRaw: PanelSize.grand.rawValue, densityRaw: ContentDensity.standard.rawValue,
             customEnabled: false, customWidth: 0, customHeight: 0
         )
-        XCTAssertEqual(grand.clampedToVisibleFrame(1200), grand.unclampedHeight)
+        #expect(grand.clampedToVisibleFrame(1200) == grand.unclampedHeight)
     }
 
     @Test
@@ -162,8 +159,8 @@ struct PanelLayoutTests {
         )
         // A 600 pt visible frame must never be asked for more than fits.
         let fitted = grand.clampedToVisibleFrame(600)
-        XCTAssertLessThanOrEqual(fitted, 576) // 600 - 24 margin
-        XCTAssertTrue(fitted >= PanelLayout.minimumHeight)
+        #expect(fitted <= 576) // 600 - 24 margin
+        #expect(fitted >= PanelLayout.minimumHeight)
     }
 
     @Test
@@ -172,14 +169,14 @@ struct PanelLayoutTests {
             panelSizeRaw: PanelSize.compact.rawValue, densityRaw: ContentDensity.compact.rawValue,
             customEnabled: false, customWidth: 0, customHeight: 0
         )
-        XCTAssertEqual(compact.clampedToVisibleFrame(100), PanelLayout.minimumHeight)
+        #expect(compact.clampedToVisibleFrame(100) == PanelLayout.minimumHeight)
     }
 
     // MARK: - Dimensions label
 
     @Test
     func testDimensionsLabelFormat() {
-        XCTAssertEqual(PanelSize.standard.dimensionsLabel, "430 × 580")
-        XCTAssertEqual(PanelSize.grand.dimensionsLabel, "600 × 760")
+        #expect(PanelSize.standard.dimensionsLabel == "430 × 580")
+        #expect(PanelSize.grand.dimensionsLabel == "600 × 760")
     }
 }

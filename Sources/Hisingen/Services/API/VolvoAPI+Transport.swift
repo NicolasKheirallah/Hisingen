@@ -9,15 +9,6 @@ extension VolvoAPI {
     }
 
     static func formBody(_ fields: [String: String]) -> Data? {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._*")
-        let encoded = fields.sorted(by: { $0.key < $1.key })
-            .compactMap { key, value in
-                guard let k = key.addingPercentEncoding(withAllowedCharacters: allowed),
-                      let v = value.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
-                return "\(k)=\(v)"
-            }
-            .joined(separator: "&")
-        return Data(encoded.utf8)
+        FormURLEncoding.body(fields)
     }
 }

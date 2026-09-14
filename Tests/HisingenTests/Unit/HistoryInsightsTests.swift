@@ -28,7 +28,7 @@ struct HistoryInsightsTests {
 
     @Test
     func testChargingCurveEmptyInput() {
-        XCTAssertTrue(HistoryInsights.chargingCurve(from: []).isEmpty)
+        #expect(HistoryInsights.chargingCurve(from: []).isEmpty)
     }
 
     @Test
@@ -38,9 +38,9 @@ struct HistoryInsightsTests {
             sample(1, minutesAfterStart: 0, soc: 40, powerKw: 7.4),
             sample(3, minutesAfterStart: 60, soc: 60, powerKw: nil),
         ])
-        XCTAssertEqual(curve.map(\.id), [1, 2, 3])
-        XCTAssertEqual(curve.first?.soc, 40)
-        XCTAssertEqual(curve.last?.powerKw, nil)
+        #expect(curve.map(\.id) == [1, 2, 3])
+        #expect(curve.first?.soc == 40)
+        #expect(curve.last?.powerKw == nil)
     }
 
     @Test
@@ -52,7 +52,7 @@ struct HistoryInsightsTests {
             sample(4, minutesAfterStart: 30, soc: 55, powerKw: 900),   // absurd power dropped
             sample(5, minutesAfterStart: 40, soc: 60, powerKw: 7),
         ])
-        XCTAssertEqual(curve.map(\.soc), [40, 60])
+        #expect(curve.map(\.soc) == [40, 60])
     }
 
     @Test
@@ -61,12 +61,12 @@ struct HistoryInsightsTests {
             sample(Int64(index + 1), minutesAfterStart: Double(index), soc: Double(index % 100) + 1, powerKw: 11)
         }
         let curve = HistoryInsights.chargingCurve(from: samples, maximumPoints: 120)
-        XCTAssertLessThanOrEqual(curve.count, 120)
-        XCTAssertEqual(curve.first?.soc, 1)
-        XCTAssertEqual(curve.last?.soc, 100)
+        #expect(curve.count <= 120)
+        #expect(curve.first?.soc == 1)
+        #expect(curve.last?.soc == 100)
         // Timestamps stay strictly non-decreasing after downsampling.
         let timestamps = curve.map(\.timestamp)
-        XCTAssertEqual(timestamps, timestamps.sorted())
+        #expect(timestamps == timestamps.sorted())
     }
 
     @Test
@@ -76,7 +76,7 @@ struct HistoryInsightsTests {
             sample(2, minutesAfterStart: 15, soc: 35, powerKw: 6.6),
         ]
         let curve = HistoryInsights.chargingCurve(from: samples, maximumPoints: 160)
-        XCTAssertEqual(curve.count, 2)
+        #expect(curve.count == 2)
     }
 
     // MARK: - Efficiency trend
@@ -90,7 +90,7 @@ struct HistoryInsightsTests {
             telemetry(4, daysAfterStart: 3, odometerKm: nil, consumption: nil),
             telemetry(5, daysAfterStart: 4, odometerKm: nil, consumption: 22),
         ])
-        XCTAssertEqual(points.map(\.kwhPer100Km), [18, 22])
+        #expect(points.map(\.kwhPer100Km) == [18, 22])
     }
 
     @Test
@@ -109,18 +109,18 @@ struct HistoryInsightsTests {
         // point even though its value matches #2 — it's 2 days later, well outside the
         // collapse window, so it's a genuinely separate reading worth its own point on the
         // chart rather than a duplicate poll of the same one. #4 is simply a different value.
-        XCTAssertEqual(points.count, 3)
-        XCTAssertTrue(points.first!.timestamp < points.last!.timestamp)
+        #expect(points.count == 3)
+        #expect(points.first!.timestamp < points.last!.timestamp)
     }
 
     @Test
     func testAverageEfficiency() {
-        XCTAssertNil(HistoryInsights.averageEfficiency(of: []))
+        #expect(HistoryInsights.averageEfficiency(of: []) == nil)
         let points = [
             HistoryInsights.EfficiencyPoint(id: Int64(1), timestamp: Date(), kwhPer100Km: 10),
             HistoryInsights.EfficiencyPoint(id: Int64(2), timestamp: Date(), kwhPer100Km: 30),
         ]
-        XCTAssertEqual(HistoryInsights.averageEfficiency(of: points) ?? 0, 20, accuracy: 0.001)
+        #expect(abs((HistoryInsights.averageEfficiency(of: points) ?? 0) - 20) <= 0.001)
     }
 
     // MARK: - Odometer trend
@@ -132,7 +132,7 @@ struct HistoryInsightsTests {
             telemetry(2, daysAfterStart: 1, odometerKm: 0, consumption: nil),
             telemetry(3, daysAfterStart: 2, odometerKm: 1_500, consumption: nil),
         ])
-        XCTAssertEqual(points.map(\.odometerKm), [1_500])
+        #expect(points.map(\.odometerKm) == [1_500])
     }
 
     @Test
@@ -142,16 +142,16 @@ struct HistoryInsightsTests {
             telemetry(2, daysAfterStart: 1, odometerKm: 400, consumption: nil),  // rollover glitch
             telemetry(3, daysAfterStart: 2, odometerKm: 10_050, consumption: nil),
         ])
-        XCTAssertEqual(points.map(\.odometerKm), [10_000, 10_050])
+        #expect(points.map(\.odometerKm) == [10_000, 10_050])
     }
 
     @Test
     func testDistanceCovered() {
-        XCTAssertNil(HistoryInsights.distanceCovered(from: []))
+        #expect(HistoryInsights.distanceCovered(from: []) == nil)
         let points = [
             HistoryInsights.OdometerPoint(id: Int64(1), timestamp: Date().addingTimeInterval(-3600), odometerKm: 100),
             HistoryInsights.OdometerPoint(id: Int64(2), timestamp: Date(), odometerKm: 250),
         ]
-        XCTAssertEqual(HistoryInsights.distanceCovered(from: points) ?? 0, 150, accuracy: 0.001)
+        #expect(abs((HistoryInsights.distanceCovered(from: points) ?? 0) - 150) <= 0.001)
     }
 }

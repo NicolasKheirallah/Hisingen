@@ -15,6 +15,7 @@ struct SettingsDisplayCard: View {
     @State private var electricityPrice = "2.00"
     @State private var currencySymbol = "kr"
     @State private var nightElectricityPrice = "2.00"
+    @State private var gridCarbonIntensity = "120"
 
     private var preferences: PreferencesStore { binder.preferences }
 
@@ -387,10 +388,10 @@ struct SettingsDisplayCard: View {
                         }
                     }
                     if !isValidElectricityPrice(electricityPrice) {
-                        inlineValidation(L10n.text("Enter a rate between 0.01 and 1,000."))
+                        InlineValidationLabel(message: L10n.text("Enter a rate between 0.01 and 1,000."))
                     }
                     if !isValidCurrencySymbol(currencySymbol) {
-                        inlineValidation(L10n.text("Enter a currency symbol or code using 1–8 characters."))
+                        InlineValidationLabel(message: L10n.text("Enter a currency symbol or code using 1–8 characters."))
                     }
 
                     HStack(spacing: 8) {
@@ -407,38 +408,73 @@ struct SettingsDisplayCard: View {
                             .controlSize(.small)
                     }
                     if preferences.nightTariffEnabled {
+                        Group {
+                            HStack(spacing: 4) {
+                                TextField("2.00", text: $nightElectricityPrice)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 55)
+                                    .multilineTextAlignment(.trailing)
+                                    .controlSize(.small)
+                                    .onChange(of: nightElectricityPrice) { _, _ in
+                                        if let price = NumberParsing.decimal(from: nightElectricityPrice),
+                                           (0.01...1_000).contains(price) {
+                                            preferences.nightElectricityPricePerKwh = price
+                                        }
+                                    }
+                                Text(L10n.text("/kWh from"))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
+                                    Text(String(format: "%02d:00", preferences.nightTariffStartHour))
+                                        .font(.system(size: 11, design: .monospaced))
+                                }
+                                .controlSize(.small)
+                                Text(L10n.text("to"))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
+                                    Text(String(format: "%02d:00", preferences.nightTariffEndHour))
+                                        .font(.system(size: 11, design: .monospaced))
+                                }
+                                .controlSize(.small)
+                            }
+                            if !isValidElectricityPrice(nightElectricityPrice) {
+                                InlineValidationLabel(message: L10n.text("Enter a night rate between 0.01 and 1,000."))
+                            }
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
+                    Divider().opacity(0.4)
+
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.text("Grid Carbon Intensity"))
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L10n.text("For the emissions comparison in History"))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
                         HStack(spacing: 4) {
-                            TextField("2.00", text: $nightElectricityPrice)
+                            TextField("120", text: $gridCarbonIntensity)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 55)
                                 .multilineTextAlignment(.trailing)
                                 .controlSize(.small)
-                                .onChange(of: nightElectricityPrice) { _, _ in
-                                    if let price = NumberParsing.decimal(from: nightElectricityPrice),
-                                       (0.01...1_000).contains(price) {
-                                        preferences.nightElectricityPricePerKwh = price
+                                .onChange(of: gridCarbonIntensity) { _, _ in
+                                    if let intensity = NumberParsing.decimal(from: gridCarbonIntensity),
+                                       (1...1_200).contains(intensity) {
+                                        preferences.gridCarbonIntensityGramsPerKwh = intensity
                                     }
                                 }
-                            Text(L10n.text("/kWh from"))
+                            Text(L10n.text("g CO₂/kWh"))
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                            Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
-                                Text(String(format: "%02d:00", preferences.nightTariffStartHour))
-                                    .font(.system(size: 11, design: .monospaced))
-                            }
-                            .controlSize(.small)
-                            Text(L10n.text("to"))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
-                                Text(String(format: "%02d:00", preferences.nightTariffEndHour))
-                                    .font(.system(size: 11, design: .monospaced))
-                            }
-                            .controlSize(.small)
                         }
-                        if !isValidElectricityPrice(nightElectricityPrice) {
-                            inlineValidation(L10n.text("Enter a night rate between 0.01 and 1,000."))
-                        }
+                    }
+                    if !isValidGridCarbonIntensity(gridCarbonIntensity) {
+                        InlineValidationLabel(message: L10n.text("Enter an intensity between 1 and 1,200 g CO₂/kWh."))
                     }
 
                     Divider().opacity(0.4)
@@ -459,6 +495,9 @@ struct SettingsDisplayCard: View {
                             .accessibilityLabel(L10n.text("Require device-owner authentication"))
                     }
                 }
+                // The night-tariff toggle writes through the binder with no
+                // transaction; this binding reveals the rate row with it.
+                .animation(Motion.resolve(Motion.layout), value: preferences.nightTariffEnabled)
             }
         }
         .onAppear {
@@ -471,6 +510,7 @@ struct SettingsDisplayCard: View {
             electricityPrice = String(format: "%.2f", preferences.electricityPricePerKwh)
             currencySymbol = preferences.currencySymbol
             nightElectricityPrice = String(format: "%.2f", preferences.nightElectricityPricePerKwh)
+            gridCarbonIntensity = String(format: "%.0f", preferences.gridCarbonIntensityGramsPerKwh)
         }
     }
 
@@ -478,15 +518,13 @@ struct SettingsDisplayCard: View {
         SettingsValidation.isValidElectricityPrice(text)
     }
 
-    private func isValidCurrencySymbol(_ text: String) -> Bool {
-        SettingsValidation.isValidCurrencySymbol(text)
+    private func isValidGridCarbonIntensity(_ text: String) -> Bool {
+        guard let value = NumberParsing.decimal(from: text) else { return false }
+        return (1...1_200).contains(value)
     }
 
-    private func inlineValidation(_ message: String) -> some View {
-        Label(message, systemImage: "exclamationmark.circle.fill")
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.red)
-            .accessibilityLabel(message)
+    private func isValidCurrencySymbol(_ text: String) -> Bool {
+        SettingsValidation.isValidCurrencySymbol(text)
     }
 
     /// Shared scaffolding for the unit pickers. Each caller keeps its own `onChange` because

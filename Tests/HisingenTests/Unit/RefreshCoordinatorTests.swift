@@ -6,7 +6,7 @@ import Testing
 struct RefreshCoordinatorTests {
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (defaults, suiteName)
     }
 
@@ -37,7 +37,7 @@ struct RefreshCoordinatorTests {
         }
 
         let fetchCount = await provider.fetchCount
-        XCTAssertEqual(fetchCount, 1)
+        #expect(fetchCount == 1)
         coordinator.stop()
     }
 
@@ -86,7 +86,7 @@ struct RefreshCoordinatorTests {
         }
 
         let restoreCount = await provider.restoreCount
-        XCTAssertEqual(restoreCount, 2, "Expected the coordinator to recover from storage after expiry")
+        #expect(restoreCount == 2, "Expected the coordinator to recover from storage after expiry")
         coordinator.stop()
     }
 }

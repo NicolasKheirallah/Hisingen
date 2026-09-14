@@ -395,7 +395,7 @@ actor PolestarGRPC {
     }
 
     func fetchAmpLimit(vin: String, accessToken: String) async throws -> Int? {
-        let request = Self.chronosEnvelope(vin: vin)
+        let request = Self.chronosRequest(vin)
         let body = try await firstMessage(path: ampLimitReadPath, message: request,
                                           vin: vin, accessToken: accessToken, host: .pccs)
         return Self.fetchAmpLimitResponse(body)
@@ -507,18 +507,6 @@ actor PolestarGRPC {
 
 
 
-    static func chronosEnvelope(vin: String, payload: Data = Data()) -> Data {
-        var chronos = Data()
-        chronos.append(Protobuf.stringField(1, UUID().uuidString))
-        chronos.append(Protobuf.stringField(2, vin))
-        chronos.append(Protobuf.stringField(3, "RCS"))
-        chronos.append(Protobuf.messageField(4,
-            Protobuf.intField(1, TimeZone.current.secondsFromGMT() / 60)))
-        var request = Protobuf.messageField(1, chronos)
-        request.append(payload)
-        return request
-    }
-
     func firstMessage(path: String, message: Data, vin: String,
                       accessToken: String, host: GRPCHost = .c3) async throws -> Data {
         try Task.checkCancellation()
@@ -628,7 +616,7 @@ actor PolestarGRPC {
     static func commandError(status: String, message: String?, path: String) -> Error {
         let detail = message?.removingPercentEncoding?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmptyValue
+            .nilIfEmpty
         let service = path.split(separator: "/").first.map(String.init) ?? path
         switch status {
         case "3":  // INVALID_ARGUMENT
@@ -691,6 +679,7 @@ actor PolestarGRPC {
             var latest: Data?
             var frameCount = 0
             var endedByTimeout = false
+            var cappedByFrameLimit = false
             do {
                 for try await byte in bytes {
                     if expected == nil {
@@ -717,7 +706,13 @@ actor PolestarGRPC {
                     if let frameSize = expected, body.count == frameSize {
                         latest = body
                         frameCount += 1
-                        guard frameCount < 32 else { break }
+                        guard frameCount < 32 else {
+                            // The frame cap is a runaway-stream safety valve; the frames read
+                            // so far are valid, so return the last one rather than reporting
+                            // the command as refused.
+                            cappedByFrameLimit = true
+                            break
+                        }
                         expected = nil
                         header.removeAll(keepingCapacity: true)
                         body.removeAll(keepingCapacity: true)
@@ -726,7 +721,7 @@ actor PolestarGRPC {
             } catch let error as URLError where error.code == .timedOut && latest != nil {
                 endedByTimeout = true
             }
-            guard let latest, expected == nil || endedByTimeout else {
+            guard let latest, expected == nil || endedByTimeout || cappedByFrameLimit else {
                 // 200 OK with no message frame is how a *late* gRPC rejection reaches us: the
                 // server opened the response, then put its real status in HTTP/2 trailers, which
                 // URLSession does not expose. An immediate rejection arrives as Trailers-Only and
@@ -776,8 +771,8 @@ actor PolestarGRPC {
                 if let seconds = Protobuf.fields(field.data).first(where: { $0.number == 1 })?.varint,
                    seconds > 0 { reportedAt = Date(timeIntervalSince1970: TimeInterval(seconds)) }
             case 2 where field.wire == 1: battery = Protobuf.double(from: field.data)
-            case 4 where field.wire == 0: range = Int(field.varint)
-            case 5 where field.wire == 0: minutes = Int(field.varint)
+            case 4 where field.wire == 0: range = Int(exactly: field.varint)
+            case 5 where field.wire == 0: minutes = Int(exactly: field.varint)
             case 6:
                 switch field.varint {
                 case 1: connection = .connected
@@ -810,10 +805,10 @@ actor PolestarGRPC {
                 default: name = String(field.varint)
                 }
                 state = ChargingState(apiValue: name)
-            case 10: watts = Int(field.varint)
-            case 11: amps = Int(field.varint)
+            case 10: watts = Int(exactly: field.varint)
+            case 11: amps = Int(exactly: field.varint)
             case 3 where field.wire == 1: averageConsumption = Protobuf.double(from: field.data)
-            case 9: timeToTarget = Int(field.varint)
+            case 9: timeToTarget = Int(exactly: field.varint)
             case 13 where field.wire == 1: averageSinceCharge = Protobuf.double(from: field.data)
             case 16 where field.wire == 1: energySinceCharge = Protobuf.double(from: field.data)
             case 17:
@@ -824,8 +819,8 @@ actor PolestarGRPC {
                 case 4: type = .wireless
                 default: break
                 }
-            case 18: volts = Int(field.varint)
-            case 19: timeToMinimumSOC = Int(field.varint)
+            case 18: volts = Int(exactly: field.varint)
+            case 19: timeToMinimumSOC = Int(exactly: field.varint)
             case 26:
                 switch field.varint {
                 case 1: powerState = .noPower
@@ -1030,8 +1025,10 @@ enum Protobuf {
         }
 
         while i < bytes.count {
-            guard let tag = readVarint() else { break }
-            let number = Int(tag >> 3), wire = Int(tag & 7)
+            // Wire values are server-controlled: a tag or length varint beyond Int's range
+            // must truncate the parse, not trap.
+            guard let tag = readVarint(), let number = Int(exactly: tag >> 3) else { break }
+            let wire = Int(tag & 7)
             switch wire {
             case 0:
                 guard let v = readVarint() else { return fields }
@@ -1043,10 +1040,11 @@ enum Protobuf {
                 i += width
                 fields.append(Field(number: number, wire: wire, varint: 0, data: value))
             case 2:
-                guard let len = readVarint(), i + Int(len) <= bytes.count else { return fields }
+                guard let len = readVarint(), let length = Int(exactly: len),
+                      length <= bytes.count - i else { return fields }
                 fields.append(Field(number: number, wire: 2, varint: 0,
-                                    data: Data(bytes[i..<i + Int(len)])))
-                i += Int(len)
+                                    data: Data(bytes[i..<i + length])))
+                i += length
             default:
                 return fields
             }
@@ -1077,8 +1075,7 @@ enum Protobuf {
 
 
 
+/// The one `String.nilIfEmpty` helper for the gRPC files (previously three divergent copies).
 extension String {
-    /// Local spelling of the common `nilIfEmpty` helper — the file-private ones in the
-    /// sibling gRPC files are not visible here.
-    var nilIfEmptyValue: String? { isEmpty ? nil : self }
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

@@ -9,8 +9,8 @@ struct AccountCredentialsForm: View {
 
     let style: Style
     let onSettingsChanged: (SettingsChange) -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
-        (false, L10n.text("Connection testing is not available."))
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
+        (false, L10n.text("Connection testing is not available."), nil)
     }
 
     @State private var selectedBrand = VehicleBrand.polestar
@@ -29,9 +29,14 @@ struct AccountCredentialsForm: View {
     @State private var showCustomVolvoApp = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
-    @State private var testConnectionResult: (success: Bool, message: String)?
+    @State private var testConnectionResult: (success: Bool, message: String, failureKind: SignInFailureKind?)?
+    /// Local Keychain-save failures, kept separate from `testConnectionResult` so the
+    /// banner's sessionExpired suppression can never hide them.
+    @State private var keychainError: String?
     @State private var showUpdateFields = false
-    @State private var showPolestarInteractiveFallback = false
+    /// Non-nil when the check (or the session state itself) says the interactive sign-in
+    /// window is the way back in. The card copy adapts to which failure it represents.
+    @State private var polestarFallbackKind: SignInFailureKind?
     @State private var attemptedPolestarSignIn = false
     @State private var attemptedVolvoSignIn = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -73,6 +78,24 @@ struct AccountCredentialsForm: View {
                        "authoriz", "token"]
         let lower = message.lowercased()
         return needles.contains { lower.contains($0) }
+    }
+
+    /// The kind the current session state implies before any check runs: an expired but
+    /// renewable Polestar session means the interactive window is already the way back.
+    private var inheritedPolestarFallbackKind: SignInFailureKind? {
+        guard selectedBrand == .polestar, connectionHealth == .sessionExpired else { return nil }
+        return .sessionExpired
+    }
+
+    private func fallbackCopy(for kind: SignInFailureKind) -> String {
+        switch kind {
+        case .signingFlowChanged:
+            return "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update."
+        case .sessionExpired:
+            return "Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added."
+        default:
+            return "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window."
+        }
     }
 
     var body: some View {
@@ -134,9 +157,12 @@ struct AccountCredentialsForm: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .onChange(of: selectedBrand) { _, _ in
-                testConnectionResult = nil
-                showPolestarInteractiveFallback = false
-                showUpdateFields = false
+                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                    testConnectionResult = nil
+                    keychainError = nil
+                    polestarFallbackKind = nil
+                    showUpdateFields = false
+                }
             }
         }
     }
@@ -145,10 +171,11 @@ struct AccountCredentialsForm: View {
         let isSelected = selectedBrand == brand
         let radius: CGFloat = HisingenTheme.cornerRadius == 0 ? 0 : 10
         return Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+            withAnimation(reduceMotion ? nil : Motion.interaction) {
                 selectedBrand = brand
                 testConnectionResult = nil
-                showPolestarInteractiveFallback = false
+                keychainError = nil
+                polestarFallbackKind = nil
             }
         } label: {
             VStack(spacing: 6) {
@@ -172,7 +199,7 @@ struct AccountCredentialsForm: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
@@ -211,8 +238,10 @@ struct AccountCredentialsForm: View {
             HStack(spacing: 10) {
                 if isTestingConnection {
                     ProgressView().controlSize(.small).frame(width: 8, height: 8)
+                        .transition(.opacity)
                 } else {
                     Circle().fill(statusColor).frame(width: 8, height: 8)
+                        .transition(.opacity)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -255,7 +284,7 @@ struct AccountCredentialsForm: View {
                     reSignInButton(prominent: health == .sessionExpired)
 
                     Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                        withAnimation(reduceMotion ? nil : Motion.selection) {
                             showUpdateFields.toggle()
                         }
                     } label: {
@@ -301,6 +330,9 @@ struct AccountCredentialsForm: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(statusColor.opacity(0.25), lineWidth: 0.5)
         )
+        // The Test flow mutates state from a Task continuation with no surrounding
+        // transaction; this binding powers the spinner↔dot swap and result row.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: isTestingConnection)
     }
 
     @ViewBuilder
@@ -338,7 +370,7 @@ struct AccountCredentialsForm: View {
                     .onChange(of: polestarEmail) { _, value in preferences.accountDraft.polestarEmail = value }
             }
             if attemptedPolestarSignIn && !isValidEmail(polestarEmail) {
-                validationMessage(L10n.text("Enter a valid email address."))
+                InlineValidationLabel(message: L10n.text("Enter a valid email address."))
             }
 
             labeledField(L10n.text("Password")) {
@@ -360,10 +392,10 @@ struct AccountCredentialsForm: View {
                     .onChange(of: polestarVIN) { _, value in preferences.accountDraft.polestarVIN = value }
             }
             if attemptedPolestarSignIn && !isValidOptionalVIN(polestarVIN) {
-                validationMessage(L10n.text("A VIN must contain 17 valid letters or digits."))
+                InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
-            if showPolestarInteractiveFallback || testConnectionResult?.message.contains("additional or changed sign-in step") == true {
+            if let fallbackKind = polestarFallbackKind ?? inheritedPolestarFallbackKind {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "globe")
@@ -372,9 +404,10 @@ struct AccountCredentialsForm: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Interactive Verification Required"))
                                 .font(.system(size: 11, weight: .semibold))
-                            Text(L10n.text("Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window."))
+                            Text(L10n.text(fallbackCopy(for: fallbackKind)))
                                 .font(.system(size: 10))
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     Button {
@@ -388,6 +421,19 @@ struct AccountCredentialsForm: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    HStack(spacing: 4) {
+                        Text(L10n.text("Still failing?"))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                        Button {
+                            onSettingsChanged(.exportDiagnosticLogs)
+                        } label: {
+                            Text(L10n.text("Export Diagnostic Logs"))
+                                .font(.system(size: 9, weight: .medium))
+                        }
+                        .buttonStyle(.pressable)
+                        .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
+                    }
                 }
                 .padding(8)
                 .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
@@ -399,7 +445,11 @@ struct AccountCredentialsForm: View {
             }
 
             Button {
-                attemptedPolestarSignIn = true
+                // Only the attempt flag is animated — keying on the field text would
+                // re-render (and risk focus churn) on every keystroke.
+                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                    attemptedPolestarSignIn = true
+                }
                 savePolestarCredentials()
             } label: {
                 HStack(spacing: 4) {
@@ -419,6 +469,11 @@ struct AccountCredentialsForm: View {
             .controlSize(.regular)
             .disabled(!isValidEmail(polestarEmail) || !isValidOptionalVIN(polestarVIN))
             .padding(.top, style == .welcoming ? 6 : 4)
+
+            if let keychainError {
+                InlineValidationLabel(message: keychainError)
+                    .transition(.opacity)
+            }
         }
     }
 
@@ -451,7 +506,7 @@ struct AccountCredentialsForm: View {
                         Text(L10n.text("Custom App"))
                             .font(.system(size: 10))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
                 }
                 .padding(8)
@@ -479,7 +534,7 @@ struct AccountCredentialsForm: View {
                             Text(L10n.text("Use Default Developer Keys"))
                                 .font(.system(size: 10))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .foregroundStyle(HisingenTheme.accent)
                     }
                 }
@@ -519,11 +574,13 @@ struct AccountCredentialsForm: View {
                         .onChange(of: volvoVIN) { _, value in preferences.accountDraft.volvoVIN = value }
             }
             if attemptedVolvoSignIn && !isValidOptionalVIN(volvoVIN) {
-                validationMessage(L10n.text("A VIN must contain 17 valid letters or digits."))
+                InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
             Button {
-                attemptedVolvoSignIn = true
+                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                    attemptedVolvoSignIn = true
+                }
                 beginVolvoSignIn()
             } label: {
                 HStack(spacing: 4) {
@@ -542,22 +599,33 @@ struct AccountCredentialsForm: View {
     }
 
     private func testCurrentConnection() {
-        isTestingConnection = true
-        testConnectionResult = nil
+        withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+            isTestingConnection = true
+            testConnectionResult = nil
+        }
         let brand = selectedBrand
         Task {
             let result = await onTestConnection(brand)
+            // Reset before the brand guard so a mid-check brand switch can't leave the
+            // spinner running and the Test button disabled.
+            withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                isTestingConnection = false
+            }
             guard brand == selectedBrand else { return } // user switched brands mid-check
-            isTestingConnection = false
-            testConnectionResult = (result.success, result.message)
-            if brand == .polestar && (result.message.contains("additional or changed sign-in step") || result.message.contains("Settings and try again")) {
-                showPolestarInteractiveFallback = true
+            // The result row and the interactive-verification panel both declare
+            // transitions; without this transaction they would pop in instead.
+            withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                testConnectionResult = result
+                if brand == .polestar, let kind = result.failureKind, kind.interactiveSignInHelps {
+                    polestarFallbackKind = kind
+                }
             }
         }
     }
 
     private func savePolestarCredentials() {
         guard isValidEmail(polestarEmail), isValidOptionalVIN(polestarVIN) else { return }
+        keychainError = nil
         let normalizedEmail = polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let oldVIN = preferences.vin(for: .polestar)
@@ -575,15 +643,15 @@ struct AccountCredentialsForm: View {
                 keychainFailed = true
             }
         }
-        withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.7)) {
+        withAnimation(reduceMotion ? nil : Motion.stateChange) {
             showSavedFeedback = !keychainFailed
             if keychainFailed {
-                testConnectionResult = (false, L10n.text("Couldn't save the password to the Keychain. Please try again."))
+                keychainError = L10n.text("Couldn't save the password to the Keychain. Please try again.")
             }
         }
         Task {
             try? await Task.sleep(for: .seconds(1.8))
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            withAnimation(reduceMotion ? nil : Motion.theme) {
                 showSavedFeedback = false
             }
         }
@@ -636,13 +704,6 @@ struct AccountCredentialsForm: View {
 
     private func isValidOptionalVIN(_ value: String) -> Bool {
         SettingsValidation.isValidOptionalVIN(value)
-    }
-
-    private func validationMessage(_ message: String) -> some View {
-        Label(message, systemImage: "exclamationmark.circle.fill")
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.red)
-            .accessibilityLabel(message)
     }
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {

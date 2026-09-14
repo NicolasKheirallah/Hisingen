@@ -42,10 +42,10 @@ struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !liveVolvoCredentialsConfigured, "Live Volvo credentials are not configured"))
     func testResumeDiscoveryFetchAndSessionPersistence() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = try XCTUnwrap(environment["HISINGEN_TEST_VOLVO_CLIENT_ID"])
-        let clientSecret = try XCTUnwrap(environment["HISINGEN_TEST_VOLVO_CLIENT_SECRET"])
-        let vccApiKey = try XCTUnwrap(environment["HISINGEN_TEST_VOLVO_VCC_API_KEY"])
-        let refreshToken = try XCTUnwrap(environment["HISINGEN_TEST_VOLVO_REFRESH_TOKEN"])
+        let clientID = try #require(environment["HISINGEN_TEST_VOLVO_CLIENT_ID"])
+        let clientSecret = try #require(environment["HISINGEN_TEST_VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try #require(environment["HISINGEN_TEST_VOLVO_VCC_API_KEY"])
+        let refreshToken = try #require(environment["HISINGEN_TEST_VOLVO_REFRESH_TOKEN"])
         let preferredVIN = environment["HISINGEN_TEST_VOLVO_VIN"].flatMap { $0.isEmpty ? nil : $0 }
 
 
@@ -62,28 +62,26 @@ struct LiveVolvoReadOnlyIntegrationTests {
         try await api.restoreSession(token: refreshToken, preferredVIN: preferredVIN, features: features)
 
         let cars = await api.cars
-        XCTAssertFalse(cars.isEmpty)
+        #expect(!(cars.isEmpty))
         let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
-        let vin = try XCTUnwrap(resolvedVIN)
+        let vin = try #require(resolvedVIN)
 
         let state = try await api.fetchVehicleState(vin: vin, features: features)
-        XCTAssertEqual(state.identity.vin, vin)
+        #expect(state.identity.vin == vin)
 
 
-        XCTAssertTrue(
-            state.energy.batteryPercentage != nil || state.energy.rangeKm != nil
-                || state.fuelSystem.rangeKm != nil || state.maintenance.odometerKm != nil
-        )
-        XCTAssertNotEqual(state.powertrain, .unknown)
+        #expect(state.energy.batteryPercentage != nil || state.energy.rangeKm != nil
+                || state.fuelSystem.rangeKm != nil || state.maintenance.odometerKm != nil)
+        #expect(state.powertrain != .unknown)
 
 
         await api.resetSession()
-        let persistedToken = try XCTUnwrap(try keychain.readVolvoSessionToken())
+        let persistedToken = try #require(try keychain.readVolvoSessionToken())
         let resumed = VolvoAPI(keychain: keychain)
         await resumed.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
         try await resumed.restoreSession(token: persistedToken, preferredVIN: vin, features: features)
         let resumedState = try await resumed.fetchVehicleState(vin: vin, features: features)
-        XCTAssertEqual(resumedState.identity.vin, vin)
+        #expect(resumedState.identity.vin == vin)
 
         try? keychain.deleteVolvoSessionToken()
     }
@@ -92,11 +90,11 @@ struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testProbeVolvoOAuthAuthorizeURL() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
-        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
-        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
-        let email = try XCTUnwrap(environment["POLESTAR_LOGIN"])
-        let password = try XCTUnwrap(environment["POLESTAR_PASS"])
+        let clientID = try #require(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try #require(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try #require(environment["VOLVO_VCC_API_KEY"])
+        let email = try #require(environment["POLESTAR_LOGIN"])
+        let password = try #require(environment["POLESTAR_PASS"])
 
         let api = VolvoAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.live-tests"))
         await api.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
@@ -114,9 +112,12 @@ struct LiveVolvoReadOnlyIntegrationTests {
         var req = URLRequest(url: authURL)
         req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: req)
-        let http = response as? HTTPURLResponse
-        print("  • Authorize Response Status: HTTP \(http?.statusCode ?? 0)")
-        let landingURL = http?.url?.absoluteString ?? "none"
+        // TESTS-08: hard signals — the probe fails (not just prints) when the IdP does not
+        // answer or the authorize form no longer exposes its authenticate action.
+        let http = try #require(response as? HTTPURLResponse, "authorize probe must get an HTTP response")
+        print("  • Authorize Response Status: HTTP \(http.statusCode)")
+        #expect(http.statusCode < 500, "authorize endpoint returned HTTP \(http.statusCode)")
+        let landingURL = http.url?.absoluteString ?? "none"
         print("  • Landing URL: \(landingURL)")
 
         let html = String(decoding: data, as: UTF8.self)
@@ -137,9 +138,10 @@ struct LiveVolvoReadOnlyIntegrationTests {
             postReq.httpBody = postBody.data(using: .utf8)
 
             let (postData, postResp) = try await session.data(for: postReq)
-            let postHttp = postResp as? HTTPURLResponse
-            print("  • POST Response Status: HTTP \(postHttp?.statusCode ?? 0)")
-            print("  • Final URL after POST: \(postHttp?.url?.absoluteString ?? "none")")
+            let postHttp = try #require(postResp as? HTTPURLResponse, "form POST must get an HTTP response")
+            print("  • POST Response Status: HTTP \(postHttp.statusCode)")
+            print("  • Final URL after POST: \(postHttp.url?.absoluteString ?? "none")")
+            #expect(postHttp.statusCode != 0, "form POST must reach a server")
 
             let postHtml = String(decoding: postData, as: UTF8.self)
             print("  • Checking error details in postHtml...")
@@ -148,13 +150,20 @@ struct LiveVolvoReadOnlyIntegrationTests {
                 print("  • Message Object: \(rest.prefix(300))")
             }
 
-            if let finalURL = postHttp?.url,
+            var receivedCode = false
+            if let finalURL = postHttp.url,
                let comps = URLComponents(url: finalURL, resolvingAgainstBaseURL: false),
                let code = comps.queryItems?.first(where: { $0.name == "code" })?.value {
                 print("  🎉 RECEIVED AUTHORIZATION CODE: \(code.prefix(15))...")
+                receivedCode = true
             }
+            // A rejection (error message / 4xx) is a valid probe outcome; silence is not.
+            let parsedRejection = postHtml.contains("\"message\":")
+                || (400...499).contains(postHttp.statusCode)
+            #expect(receivedCode || parsedRejection,
+                    "form POST produced neither an authorization code nor a parsed rejection — the flow shape changed")
         } else {
-            print("  ✗ url action not found")
+            Issue.record("Volvo authorize form no longer exposes the authenticate action URL — form-shape regression")
         }
         print("========================================================\n")
     }
@@ -162,24 +171,27 @@ struct LiveVolvoReadOnlyIntegrationTests {
     @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testComprehensiveVolvoAllAPIsProbeAndDump() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let clientID = try XCTUnwrap(environment["VOLVO_CLIENT_ID"])
-        let clientSecret = try XCTUnwrap(environment["VOLVO_CLIENT_SECRET"])
-        let vccApiKey = try XCTUnwrap(environment["VOLVO_VCC_API_KEY"])
-        let vin = try XCTUnwrap(environment["VOLVO_VIN"])
-        let login = try XCTUnwrap(environment["POLESTAR_LOGIN"])
-        let pass = try XCTUnwrap(environment["POLESTAR_PASS"])
+        let clientID = try #require(environment["VOLVO_CLIENT_ID"])
+        let clientSecret = try #require(environment["VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try #require(environment["VOLVO_VCC_API_KEY"])
+        let vin = try #require(environment["VOLVO_VIN"])
+        let login = try #require(environment["POLESTAR_LOGIN"])
+        let pass = try #require(environment["POLESTAR_PASS"])
 
         print("\n========================================================")
         print("🔍 [1. VOLVO OIDC DISCOVERY & IDENTITY]")
         let oidcURL = URL(string: "https://volvoid.eu.volvocars.com/.well-known/openid-configuration")!
         let (oidcData, _) = try await URLSession.shared.data(from: oidcURL)
-        if let oidcJson = try? JSONSerialization.jsonObject(with: oidcData) as? [String: Any] {
-            print("  • Token Endpoint:          \(oidcJson["token_endpoint"] ?? "N/A")")
-            print("  • Authorization Endpoint:  \(oidcJson["authorization_endpoint"] ?? "N/A")")
-            print("  • UserInfo Endpoint:       \(oidcJson["userinfo_endpoint"] ?? "N/A")")
-            print("  • Scopes Supported Count:  \((oidcJson["scopes_supported"] as? [String])?.count ?? 0)")
-            print("  • Grant Types Supported:   \(oidcJson["grant_types_supported"] ?? "N/A")")
-        }
+        // TESTS-08: discovery must actually answer with an OIDC document.
+        let oidcJson = try #require(
+            try? JSONSerialization.jsonObject(with: oidcData) as? [String: Any],
+            "OIDC discovery must return a JSON document")
+        #expect(oidcJson["token_endpoint"] != nil, "OIDC discovery document must contain token_endpoint")
+        print("  • Token Endpoint:          \(oidcJson["token_endpoint"] ?? "N/A")")
+        print("  • Authorization Endpoint:  \(oidcJson["authorization_endpoint"] ?? "N/A")")
+        print("  • UserInfo Endpoint:       \(oidcJson["userinfo_endpoint"] ?? "N/A")")
+        print("  • Scopes Supported Count:  \((oidcJson["scopes_supported"] as? [String])?.count ?? 0)")
+        print("  • Grant Types Supported:   \(oidcJson["grant_types_supported"] ?? "N/A")")
 
         print("\n========================================================")
         print("🔑 [2. VOLVO TOKEN ENDPOINT PROBE]")
@@ -250,6 +262,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
             ("Extended Vehicle Telematics", "/extended-vehicle/v1/vehicles/\(vin)/resources", "GET")
         ]
 
+        var endpointStatuses: [(endpoint: String, status: Int)] = []
         for ep in endpoints {
             let url = URL(string: "https://api.volvocars.com\(ep.path)")!
             var req = URLRequest(url: url)
@@ -263,6 +276,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
             let (data, res) = try await URLSession.shared.data(for: req)
             let http = res as? HTTPURLResponse
             let status = http?.statusCode ?? 0
+            endpointStatuses.append((ep.name, status))
             let statusBadge = (200...299).contains(status) ? "✅ HTTP \(status)" : (status == 401 ? "🔒 HTTP 401 (Auth Required)" : "⚠️ HTTP \(status)")
             print("  • [\(ep.method)] \(ep.name.padding(toLength: 28, withPad: " ", startingAt: 0)) -> \(statusBadge)")
             if let bodyStr = String(data: data, encoding: .utf8), !bodyStr.isEmpty, status != 401 {
@@ -270,6 +284,13 @@ struct LiveVolvoReadOnlyIntegrationTests {
                 print("    Payload: \(trimmed.prefix(120))...")
             }
         }
+
+        // TESTS-08: hard signal — the sweep must reach at least one endpoint successfully;
+        // per-endpoint 401s are expected when the deliberately-rejected grants yield no token.
+        let successfulEndpoints = endpointStatuses.filter { (200...299).contains($0.status) }
+        #expect(!successfulEndpoints.isEmpty,
+                "the API sweep returned 0 successful endpoints: \(endpointStatuses.map { "\($0.endpoint)=\($0.status)" }.joined(separator: ", "))")
+        Issue.record("Endpoint status summary: \(endpointStatuses.map { "\($0.endpoint)=\($0.status)" }.joined(separator: ", "))")
 
         print("\n========================================================")
         print("🎨 [4. VOLVO CAS & STUDIO IMAGE CDN PROBE]")

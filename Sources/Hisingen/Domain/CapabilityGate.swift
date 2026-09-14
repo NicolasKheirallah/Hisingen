@@ -47,6 +47,28 @@ enum CommandAvailability: Equatable, Sendable {
 /// The single application-level decision point for whether a remote command may be shown or sent.
 /// Provider probing remains provider-specific; this combines those facts with app policy.
 struct CapabilityGate: Sendable {
+    /// The one wiring for every availability question — UI dimming and dispatch refusal
+    /// both come through here, so they can never consult different catalogs. The brand is
+    /// the caller's authority for the vehicle the question is about: the executor's brand
+    /// when dispatching, the current session's brand when rendering controls.
+    static func availability(
+        for command: RemoteCommand,
+        state: VehicleState,
+        brand: VehicleBrand,
+        enabledFeatures: Set<AppFeature>,
+        commandInProgress: Bool,
+        volvoRestrictedScopesEnabled: Bool = true
+    ) -> CommandAvailability {
+        evaluate(
+            command: command,
+            state: state,
+            commandCatalog: ProviderCommandCatalog(brand: brand),
+            enabledFeatures: enabledFeatures,
+            commandInProgress: commandInProgress,
+            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled
+        )
+    }
+
     func availability(
         for command: RemoteCommand,
         state: VehicleState,
@@ -54,6 +76,24 @@ struct CapabilityGate: Sendable {
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool,
         volvoRestrictedScopesEnabled: Bool = true
+    ) -> CommandAvailability {
+        Self.evaluate(
+            command: command,
+            state: state,
+            commandCatalog: commandCatalog,
+            enabledFeatures: enabledFeatures,
+            commandInProgress: commandInProgress,
+            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled
+        )
+    }
+
+    private static func evaluate(
+        command: RemoteCommand,
+        state: VehicleState,
+        commandCatalog: ProviderCommandCatalog,
+        enabledFeatures: Set<AppFeature>,
+        commandInProgress: Bool,
+        volvoRestrictedScopesEnabled: Bool
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard commandCatalog.implements(command) else { return .unimplementedByProvider }

@@ -23,19 +23,22 @@ enum HTTPExchange {
             }
             var data = Data()
             data.reserveCapacity(min(max(0, Int(http.expectedContentLength)), limit))
-            var pending = [UInt8]()
-            pending.reserveCapacity(64 * 1_024)
+            // Append straight into the result and re-check the size bound only at chunk
+            // boundaries: the per-byte loop used to pay a staging-buffer append plus a
+            // two-term comparison on every element of every response in the app.
+            var nextLimitCheck = 64 * 1_024
             for try await byte in bytes {
-                guard data.count + pending.count < limit else {
-                    throw Self.responseTooLarge(operation: operation, provider: provider)
-                }
-                pending.append(byte)
-                if pending.count >= 64 * 1_024 {
-                    data.append(contentsOf: pending)
-                    pending.removeAll(keepingCapacity: true)
+                data.append(byte)
+                if data.count >= nextLimitCheck {
+                    guard data.count < limit else {
+                        throw Self.responseTooLarge(operation: operation, provider: provider)
+                    }
+                    nextLimitCheck = data.count + 64 * 1_024
                 }
             }
-            data.append(contentsOf: pending)
+            guard data.count < limit else {
+                throw Self.responseTooLarge(operation: operation, provider: provider)
+            }
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
                 statusCode: http.statusCode, responseBytes: data.count,

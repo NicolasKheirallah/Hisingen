@@ -8,9 +8,10 @@ enum Format {
         return remainder == 0 ? L10n.format("%dh", hours) : L10n.format("%dh%dm", hours, remainder)
     }
 
+    /// Locale-aware via `powerKw`, so the menu bar and charging cards agree with the
+    /// planner/history surfaces on the decimal separator.
     static func kilowatts(watts: Int) -> String {
-        let value = Double(watts) / 1_000
-        return value >= 10 ? String(format: "%.0f kW", value) : String(format: "%.1f kW", value)
+        powerKw(Double(watts) / 1_000)
     }
 
     private static let groupedDistanceFormatter: NumberFormatter = {
@@ -74,16 +75,6 @@ enum Format {
         case .warning: return "exclamationmark.triangle.fill"
         case .offline: return "zzz"
         }
-    }
-
-    static func batterySymbol(for percentage: Double?, isCharging: Bool) -> String {
-        if isCharging { return "bolt.car.fill" }
-        guard let percentage else { return "car" }
-        if percentage >= 90 { return "battery.100percent" }
-        if percentage >= 65 { return "battery.75percent" }
-        if percentage >= 40 { return "battery.50percent" }
-        if percentage >= 15 { return "battery.25percent" }
-        return "battery.0percent"
     }
 
     /// A crisp SF Symbol for the security state. Keeping this separate from the menu-bar
@@ -175,7 +166,7 @@ enum Format {
         L10n.format("%@ kWh", decimal(kwh, decimals: decimals))
     }
 
-    /// "48.2 kW" — one decimal under 10 kW, whole numbers above, matching `kilowatts(watts:)`.
+    /// "48.2 kW" — one decimal under 10 kW, whole numbers above; `kilowatts(watts:)` delegates here.
     static func powerKw(_ kw: Double) -> String {
         L10n.format("%@ kW", decimal(kw, decimals: kw >= 10 ? 0 : 1))
     }
@@ -354,8 +345,4 @@ enum Format {
             return primaryPct ?? "--"
         }
     }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

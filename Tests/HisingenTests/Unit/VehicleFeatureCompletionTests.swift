@@ -71,7 +71,7 @@ struct VehicleFeatureCompletionTests {
     }
 
     @Test
-    func otaNotifications() throws {
+    func otaNotifications() async throws {
         let harness = try NotificationTestHarness()
         harness.preferences.notifySoftwareUpdates = true
         let notifier = harness.makeNotifier()
@@ -88,15 +88,17 @@ struct VehicleFeatureCompletionTests {
             state.softwareInfo = VehicleSoftwareInfo(version: "4.2", state: softwareState,
                                                      scheduledAt: softwareState == .scheduled ? Date() : nil)
             notifier.vehicleStateDidUpdate(state)
+            await harness.drainNotificationHops()
             #expect(harness.dispatcher.added.last?.content.title == expectedTitle)
             let count = harness.dispatcher.added.count
             notifier.vehicleStateDidUpdate(state)
+            await harness.drainNotificationHops()
             #expect(harness.dispatcher.added.count == count)
         }
     }
 
     @Test
-    func airQualityHistory() throws {
+    func airQualityHistory() async throws {
         let database = VehicleDatabase.inMemory()
         let suite = "HisingenTests.AQI.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -107,7 +109,11 @@ struct VehicleFeatureCompletionTests {
             cleaningState: .off, airQualityIndex: 18, particulateMatter25: 4
         )
         store.save(polestar)
-        #expect(database.history.recentAirQuality(for: polestar.identity.vin).count == 1)
+        // The storage pass runs detached; wait for the row before asserting.
+        let storedPolestarAQI = await awaitStored(timeout: 5) {
+            database.history.recentAirQuality(for: polestar.identity.vin).count == 1
+        }
+        #expect(storedPolestarAQI)
 
         let volvo = VehicleState(
             batteryPercentage: 60, rangeKm: 300, chargingState: .idle,
@@ -124,6 +130,13 @@ struct VehicleFeatureCompletionTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
         store.save(volvo)
+        // The Polestar snapshot's storage pass may still be in flight when the Volvo one
+        // is asserted; wait for the Volvo snapshot to land so this negative cannot pass
+        // merely because the row "is not written yet".
+        let storedVolvoSnapshot = await awaitStored(timeout: 5) {
+            database.loadSnapshot(for: volvo.identity.vin) != nil
+        }
+        #expect(storedVolvoSnapshot)
         #expect(database.history.recentAirQuality(for: volvo.identity.vin).isEmpty)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
@@ -156,6 +169,12 @@ struct VehicleFeatureCompletionTests {
         }
         state.climateStatus = VehicleClimateStatus(
             activity: .heating, timeRemainingMinutes: 20, timerTriggered: false
+        )
+        #expect(StatusItemController.climateCommand(for: state, temperatureCelsius: 21.5) == .stopClimate)
+        // The backend holds a session in STARTING after the command is accepted; the
+        // menu must offer Stop there too, not a second Start that the car rejects.
+        state.climateStatus = VehicleClimateStatus(
+            activity: .starting, timeRemainingMinutes: 30, timerTriggered: false
         )
         #expect(StatusItemController.climateCommand(for: state, temperatureCelsius: 21.5) == .stopClimate)
     }

@@ -39,12 +39,19 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: .green)
                     if selectedSession?.endedAt == nil {
                         HStack(spacing: 3) {
-                            Circle().fill(HisingenTheme.chartPositive).frame(width: 5, height: 5)
+                            Circle().fill(HisingenTheme.chartPositive)
+                                .frame(width: 5, height: 5)
+                                .opacity(curveLivePulse ? 1.0 : 0.45)
+                                .animation(Motion.resolve(Motion.livePulse), value: curveLivePulse)
                             Text(L10n.text("Live")).font(.system(size: 8.5, weight: .bold, design: .rounded))
                         }
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(Color.green.opacity(0.15), in: Capsule())
                         .accessibilityLabel(L10n.text("Session in progress"))
+                        .onAppear {
+                            curveLivePulse = false
+                            withAnimation(Motion.resolve(Motion.livePulse)) { curveLivePulse = true }
+                        }
                     }
                     if let badgeColor = chargingTypeBadgeColor(chargingType) {
                         Text(chargingType.displayName)
@@ -59,7 +66,7 @@ extension HistoryDashboardView {
                     } label: {
                         Image(systemName: "xmark.circle.fill").font(.system(size: 11))
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.pressable)
                     .help(L10n.text("Close the charging curve"))
                     .accessibilityLabel(L10n.text("Close charging curve"))
                 }
@@ -109,6 +116,7 @@ extension HistoryDashboardView {
                 .chartYAxisLabel("%")
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Charging curve charge-level chart"))
+                .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
                 if let peak, peak > 0 {
                     Chart(powerCurve) { point in
                         AreaMark(
@@ -131,6 +139,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel("kW")
                     .frame(height: chartHeight * 0.72)
                     .accessibilityLabel(L10n.text("Charging curve power chart"))
+                    .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
                 }
                 if curve.contains(where: { $0.voltageVolts != nil || $0.currentAmps != nil }) {
                     Chart(curve) { point in
@@ -161,6 +170,7 @@ extension HistoryDashboardView {
                     ])
                     .frame(height: chartHeight * 0.62)
                     .accessibilityLabel(L10n.text("Charging curve voltage and current chart"))
+                    .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
                 }
                 curveStatsRow(session: session, socGain: socGain, durationMinutes: durationMinutes, peak: peak)
                 if tenToEighty != nil || idleTail != nil || lossPct != nil || displayedCost != nil {
@@ -198,13 +208,22 @@ extension HistoryDashboardView {
                 } ?? true)
                 if overlayPreviousSession, !previousSessionCurve.isEmpty {
                     previousSessionOverlayChart
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: curve.map(\.timestamp))
             }
+            // The overlay chart lands one async hop after the toggle flips, so the key
+            // covers both the toggle and the loaded curve.
+            .animation(Motion.resolve(Motion.layout), value: previousOverlayKey)
         }
+    }
+
+    /// Identity for the previous-session overlay animation: the toggle plus the loaded curve.
+    var previousOverlayKey: String {
+        "\(overlayPreviousSession)_\(previousSessionCurve.count)"
     }
 
     var previousSessionOverlayChart: some View {
@@ -284,10 +303,6 @@ extension HistoryDashboardView {
     var chargingSessionsCard: some View {
         let anomalies = snapshot.anomalousSessionIDs
         let matches = filteredSessionsForPicker
-        let pageSize = 8
-        let pageCount = HistoryPagination.pageCount(itemCount: matches.count, pageSize: pageSize)
-        let page = HistoryPagination.clampedPage(sessionPage, pageCount: pageCount)
-        let rows = HistoryPagination.page(of: matches, index: page, pageSize: pageSize)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -300,51 +315,55 @@ extension HistoryDashboardView {
                     searchField(L10n.text("Search sessions by date, place or energy"), text: $sessionSearchText,
                                 count: filteredSessionsForPicker.count, total: chargingSessions.count)
                 }
-                ForEach(rows) { session in
-                    Button {
-                        selectedSessionID = (selectedSessionID == session.id) ? nil : session.id
-                    } label: {
-                        chargingSessionRow(session, flagged: anomalies.contains(session.id))
+                PaginatedSection(items: matches, pageSize: 8,
+                                 resetKeys: [sessionSearchText, periodLoadKey]) { rows, footer in
+                    ForEach(rows) { session in
+                        Button {
+                            selectedSessionID = (selectedSessionID == session.id) ? nil : session.id
+                        } label: {
+                            chargingSessionRow(session, flagged: anomalies.contains(session.id))
+                        }
+                        .buttonStyle(.pressable)
+                        if session.id != rows.last?.id { Divider().opacity(0.2) }
                     }
-                    .buttonStyle(.plain)
-                    if session.id != rows.last?.id { Divider().opacity(0.2) }
-                }
-                if pageCount > 1 {
-                    HistoryPagerControls(page: page, pageCount: pageCount,
-                                         newerHelp: L10n.text("Show newer entries"),
-                                         olderHelp: L10n.text("Show older entries")) { sessionPage = $0 }
+                    footer
                 }
             }
         }
         .task(id: chargingSessions.count) {
             await backfillSpotCosts()
         }
-        .onChange(of: sessionSearchText) { _, _ in sessionPage = 0 }
     }
 
     /// Prices uncosted sessions once spot-price coverage reaches them. Historical day files
     /// are fetched lazily, bounded to the seven most recent uncovered days so a long history
-    /// cannot turn one card appearance into an unbounded fetch storm.
+    /// cannot turn one card appearance into an unbounded fetch storm. The uncovered scan and
+    /// the per-session pricing/UPDATE pass run off the main actor, like the other loads.
     private func backfillSpotCosts() async {
         let zone = preferences.electricityPriceZone
         let vin = state.identity.vin
-        var prices = await ElectricityPriceService.shared.prices(for: zone)
-        let uncovered = VehicleDatabase.shared.charging
-            .sessionsMissingSpotCost(vin: vin, limit: 400)
-        let covered = Set(prices.map { Self.stockholmCalendar.startOfDay(for: $0.startDate) })
-        let days = Set(uncovered.compactMap { session -> Date? in
-            guard session.endedAt != nil else { return nil }
-            let day = Self.stockholmCalendar.startOfDay(for: session.startedAt)
-            return covered.contains(day) ? nil : day
-        })
-        for day in days.sorted(by: >).prefix(7)
-        where Date().timeIntervalSince(day) < 8 * 86_400 {
-            prices = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
-        }
-        guard !prices.isEmpty else { return }
-        if VehicleDatabase.shared.charging.backfillSpotEstimatedCosts(vin: vin, prices: prices) > 0 {
-            await loadPeriodScopedData()
-        }
+        let calendar = Self.stockholmCalendar
+        let db = VehicleDatabase.shared
+        let pricedSessions = await Task.detached(priority: .userInitiated) { () -> Int in
+            var prices = await ElectricityPriceService.shared.prices(for: zone)
+            let uncovered = db.charging.sessionsMissingSpotCost(vin: vin, limit: 400)
+            let covered = Set(prices.map { calendar.startOfDay(for: $0.startDate) })
+            let days = Set(uncovered.compactMap { session -> Date? in
+                guard session.endedAt != nil else { return nil }
+                let day = calendar.startOfDay(for: session.startedAt)
+                return covered.contains(day) ? nil : day
+            })
+            for day in days.sorted(by: >).prefix(7)
+            where Date().timeIntervalSince(day) < 8 * 86_400 {
+                prices = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
+            }
+            guard !prices.isEmpty else { return 0 }
+            return db.charging.backfillSpotEstimatedCosts(vin: vin, prices: prices)
+        }.value
+
+        // Back on the main actor only for the reload decision.
+        guard pricedSessions > 0, !Task.isCancelled else { return }
+        await loadPeriodScopedData()
     }
 
     static let stockholmCalendar = ElectricityPriceService.stockholmCalendar
@@ -396,6 +415,7 @@ extension HistoryDashboardView {
         .accessibilityHint(selectedSessionID == session.id
                            ? L10n.text("Selected. Activate to close the charging curve.")
                            : L10n.text("Activate to show the charging curve."))
+        .animation(Motion.resolve(Motion.selection), value: selectedSessionID)
     }
 
     func chargingSessionAccessibilityLabel(_ session: HistoricalChargingSession, flagged: Bool,
@@ -437,6 +457,7 @@ extension HistoryDashboardView {
                 .chartYAxisLabel("kWh")
                 .frame(height: chartHeight * 0.8)
                 .accessibilityLabel(L10n.text("Charging energy per month chart"))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 if !mixed && hasCost {
                     Chart(monthly) { bucket in
                         if let cost = bucket.cost {
@@ -458,6 +479,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(currency)
                     .frame(height: chartHeight * 0.6)
                     .accessibilityLabel(L10n.text("Charging cost per month chart"))
+                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 }
                 dataConfidenceNote(for: monthly.map(\.month))
             }
@@ -490,6 +512,7 @@ extension HistoryDashboardView {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(HisingenTheme.chartPositive.opacity(0.3))
                                 .frame(width: max(2, geo.size.width * stat.energyKwh / totalEnergy), height: 4)
+                                .animation(Motion.resolve(Motion.progress), value: stat.energyKwh)
                         }
                         .frame(height: 4)
                         HStack(spacing: 5) {

@@ -17,10 +17,7 @@ final class StatusItemController: NSObject {
     }
 
     static func climateCommand(for state: VehicleState?, temperatureCelsius: Double) -> RemoteCommand {
-        let activity = state?.climateStatus?.activity
-        let active = activity == .active || activity == .heating
-            || activity == .cooling || activity == .ventilating
-        if active { return .stopClimate }
+        if state?.isClimateActive == true { return .stopClimate }
         return .startClimate(
             temperatureCelsius: Float(temperatureCelsius),
             frontLeftSeat: .off, frontRightSeat: .off,
@@ -33,6 +30,9 @@ final class StatusItemController: NSObject {
     private var latestError: String?
     private var authenticated = false
     private var settingsMode = false
+    /// Set at the first successful sign-in and cleared only when the setup pass completes,
+    /// so a popover closed mid-pass reopens onto the pass instead of silently skipping it.
+    private var setupMode = false
     private var selectedTab: HisingenContentView.Tab = .vehicle
     private var pendingPopoverRefresh: Task<Void, Never>?
     private let database: VehicleDatabase
@@ -66,11 +66,14 @@ final class StatusItemController: NSObject {
     var onCheckForUpdates: () -> Void = {}
     var onOpenUpdate: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
+    /// The live session's brand — the availability authority shared by the controls gate
+    /// and command dispatch, so a brand-switch window can never make them disagree.
+    var onCommandBrand: () -> VehicleBrand = { .polestar }
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
-        (false, L10n.text("Connection testing is not available."))
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
+        (false, L10n.text("Connection testing is not available."), nil)
     }
 
     private var selectedTabBinding: Binding<HisingenContentView.Tab> {
@@ -354,7 +357,10 @@ final class StatusItemController: NSObject {
         }
 
         if let state = latestState {
-            let isVolvo = preferences.activeBrand == .volvo
+            // Live session brand, not preferences.activeBrand: during a brand-switch
+            // rebuild window the two can disagree and the quick-controls layout must
+            // match the session that would receive the commands.
+            let isVolvo = onCommandBrand() == .volvo
             let controlsMenu = NSMenu()
 
             if isVolvo {
@@ -367,10 +373,7 @@ final class StatusItemController: NSObject {
                 lockItem.target = self
                 controlsMenu.addItem(lockItem)
 
-                let climateActive = state.climateStatus?.activity == .active
-                    || state.climateStatus?.activity == .heating
-                    || state.climateStatus?.activity == .cooling
-                    || state.climateStatus?.activity == .ventilating
+                let climateActive = state.isClimateActive
                 let climateItem = NSMenuItem(
                     title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
                     action: #selector(contextToggleClimate),
@@ -438,10 +441,7 @@ final class StatusItemController: NSObject {
 
                 controlsMenu.addItem(.separator())
 
-                let climateActive = state.climateStatus?.activity == .active
-                    || state.climateStatus?.activity == .heating
-                    || state.climateStatus?.activity == .cooling
-                    || state.climateStatus?.activity == .ventilating
+                let climateActive = state.isClimateActive
                 let climateItem = NSMenuItem(
                     title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
                     action: #selector(contextToggleClimate),
@@ -626,26 +626,20 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextHonkAndFlash() {
-        guard preferences.activeBrand == .volvo else { return }
+        guard onCommandBrand() == .volvo else { return }
         onRemoteCommand(.honkAndFlash)
     }
 
     @objc private func contextExportChargingCSV() {
         guard let state = latestState, !state.energy.sessions.isEmpty else { return }
-        let csvData = ChargingHistoryExport.csv(
+        // Reuses the shared export's panel + write path so a failed write surfaces an
+        // NSAlert with the underlying error instead of being swallowed by `try?`.
+        ChargingHistoryExport.saveCSV(
             sessions: state.energy.sessions,
+            vin: state.identity.vin,
             tariffPricePerKwh: preferences.electricityPricePerKwh,
             currencySymbol: preferences.currencySymbol
         )
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "charging_history_\(state.identity.vin.prefix(8)).csv"
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                try? csvData.write(to: url, atomically: true, encoding: .utf8)
-            }
-        }
     }
 
     func showSettings() {
@@ -668,6 +662,26 @@ final class StatusItemController: NSObject {
 
     func dismissSettings() {
         settingsMode = false
+        if popover.isShown {
+            refreshPopoverIfNeeded()
+        }
+    }
+
+    /// Shows the one-time setup pass instead of the dashboard. Deliberately ignores
+    /// `settingsMode`: an interactive sign-in that ends inside Settings hands off here.
+    func showSetupPass() {
+        setupMode = true
+        settingsMode = false
+        if popover.isShown {
+            refreshPopoverIfNeeded()
+        } else {
+            showPopover()
+        }
+    }
+
+    func completeSetupPass() {
+        preferences.hasCompletedSetupPass = true
+        setupMode = false
         if popover.isShown {
             refreshPopoverIfNeeded()
         }
@@ -949,6 +963,7 @@ final class StatusItemController: NSObject {
             activeVin: activeVin,
             fleet: fleet,
             remoteCommandInProgress: remoteCommandInProgress,
+            commandBrand: onCommandBrand(),
             inFlightRemoteCommandID: inFlightRemoteCommandID,
             lastRemoteCommandFeedback: lastRemoteCommandFeedback,
             updateVersion: updateVersion,
@@ -967,9 +982,11 @@ final class StatusItemController: NSObject {
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
             onTestConnection: { [weak self] brand in
-                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."))
+                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."), nil)
             },
             settingsMode: settingsMode,
+            setupMode: setupMode,
+            onCompleteSetup: { [weak self] in self?.completeSetupPass() },
             selectedTab: selectedTabBinding,
             database: database,
              reverseGeocoder: reverseGeocoder, imageCache: imageCache
@@ -985,10 +1002,18 @@ final class StatusItemController: NSObject {
         // Re-apply the resolved panel geometry so an open dropdown resizes live when
         // the user switches presets, drags a custom slider, or changes density.
         // (The SwiftUI frames react via @AppStorage on their own; this keeps the
-        // NSPopover window itself in sync.)
+        // NSPopover window itself in sync.) The frame rides the same Motion.large
+        // pace as the SwiftUI relayout so window and content settle together
+        // instead of the window snapping while content springs.
         let layout = PanelLayout.resolve(from: preferences)
-        popover.contentSize = NSSize(width: layout.width, height: layout.height)
-        hosting.preferredContentSize = NSSize(width: layout.width, height: layout.height)
+        let newSize = NSSize(width: layout.width, height: layout.height)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Motion.large
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            popover.contentSize = newSize
+            hosting.preferredContentSize = newSize
+        }
         hosting.rootView = makeRootView()
     }
 
@@ -1018,13 +1043,12 @@ extension StatusItemController: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         lastPopoverCloseDate = Date()
         settingsMode = false
+        // The first-launch welcome card belongs to the first panel session only: once that
+        // session ends, it has had its moment even if the user never pressed dismiss.
+        preferences.markFirstLaunchWelcomeSeen()
         // Tear the SwiftUI tree down with the popover: hidden views kept running geocode
         // tasks and pulse animations, and the copied snapshot dictionaries stayed alive
         // until the next rootView replacement. The tree is rebuilt by `showPopover`.
         popover.contentViewController = nil
     }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

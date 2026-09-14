@@ -23,8 +23,12 @@ struct SettingsChargingStatOrderCard: View {
     private var order: [String] { binder.preferences.chargingStatOrder }
 
     private func setOrder(_ updated: [String]) {
-        binder.preferences.chargingStatOrder = updated
-        binder.bump()
+        // Same treatment as the garage reorder: rows are keyed by id, so wrapping
+        // the order write makes the list slide instead of teleporting.
+        withAnimation(Motion.resolve(Motion.layout)) {
+            binder.preferences.chargingStatOrder = updated
+            binder.bump()
+        }
         binder.notify(.presentation)
     }
 
@@ -41,7 +45,7 @@ struct SettingsChargingStatOrderCard: View {
                     Spacer()
                     if !order.isEmpty {
                         Button(L10n.text("Reset")) { setOrder([]) }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .controlSize(.small)
                     }
                 }
@@ -58,7 +62,7 @@ struct SettingsChargingStatOrderCard: View {
                             updated.swapAt(index, index - 1)
                             setOrder(updated)
                         } label: { Image(systemName: "arrow.up") }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.pressable)
                         .disabled(index == 0)
                         Button {
                             guard index < order.count - 1 else { return }
@@ -66,7 +70,7 @@ struct SettingsChargingStatOrderCard: View {
                             updated.swapAt(index, index + 1)
                             setOrder(updated)
                         } label: { Image(systemName: "arrow.down") }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.pressable)
                         .disabled(index == order.count - 1)
                     }
                     .padding(.vertical, 1)
@@ -80,7 +84,7 @@ struct SettingsChargingStatOrderCard: View {
                             let key = Self.knownKeys.first { Self.titles[$0] == pending } ?? pending
                             setOrder(order + [key])
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.pressable)
                         .controlSize(.small)
                     }
                 }

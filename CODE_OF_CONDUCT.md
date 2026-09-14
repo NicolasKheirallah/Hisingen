@@ -38,7 +38,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
-Security vulnerabilities should **not** be reported through this process — use [SECURITY.md](SECURITY.md) instead.
+Security vulnerabilities should **not** be reported through this process; use [SECURITY.md](SECURITY.md) instead.
 
 ## Attribution
 

@@ -12,15 +12,15 @@
 | Vehicle telemetry cache | `VehicleStateStore` | SQLite authoritative snapshot; `UserDefaults` migration fallback | Per VIN |
 | Charging state-machine baseline | `VehicleStateStore` (same store as above) | `UserDefaults`, 7-day TTL | Per VIN |
 | Command receipts | `RefreshCoordinator` through `VehicleStateStore` | `UserDefaults`, separate from telemetry | Per VIN; all awaiting plus five recent terminal receipts, until individual dismissal or vehicle/session clear |
-| Capability observations | `VehicleState.probedCapabilities` — travels with the cached snapshot | `UserDefaults` (embedded in the cached `VehicleState`) | Per VIN, 6-hour staleness window on top of the store's 7-day TTL |
+| Capability observations | `VehicleState.probedCapabilities`, travels with the cached snapshot | `UserDefaults` (embedded in the cached `VehicleState`) | Per VIN, 6-hour staleness window on top of the store's 7-day TTL |
 | UI state (selected tab, settings-mode flag, scroll position) | `StatusItemController` / SwiftUI `@State` | In-memory only | Popover lifetime |
 | Reverse-geocode cache | `ReverseGeocoder` (actor) | In-memory only | Process lifetime |
 | Update state | `UpdateService` / Sparkle | Sparkle-managed `UserDefaults` (schedule, skip/download preference) | Global |
 
 ## Who is allowed to mutate what
 
-- **Tokens** are only ever written by the owning provider actor (`PolestarAPI`/`VolvoAPI`) — no other type calls the Keychain token-save methods directly except `AppDelegate.resumeStoredSession()` (read-only) and the sign-out path.
-- **`Preferences`** is a `@MainActor enum` with static computed properties — anything on the main actor can read or write any preference. There's no per-feature access control; this is a deliberate simplicity choice appropriate for a single-user local app, not an oversight.
+- **Tokens** are only ever written by the owning provider actor (`PolestarAPI`/`VolvoAPI`); no other type calls the Keychain token-save methods directly except `AppDelegate.resumeStoredSession()` (read-only) and the sign-out path.
+- **`Preferences`** is a `@MainActor enum` with static computed properties: anything on the main actor can read or write any preference. There's no per-feature access control; this is a deliberate simplicity choice appropriate for a single-user local app, not an oversight.
 - **`VehicleStateStore`** is written to by exactly two callers: `RefreshCoordinator.apply(_:latency:)` (after every successful fetch) and `Notifier.vehicleStateDidUpdate(_:)` (after every charging-baseline evaluation, even when the resulting notification is suppressed). The `@MainActor` store delegates fresh-snapshot persistence to `VehicleHistoryRecorder.record(_:)`, preserving one ordering for comparison, snapshot, telemetry, charging, and derived history writes.
 - **`RefreshCoordinator`'s own state** (timer, generation, failure count) is private and mutated only from within its own `@MainActor` methods.
 - **UI state** is owned by whichever SwiftUI view declares it (`@State`) or by `StatusItemController` (plain `var` properties); it's never shared outside the popover/menu-bar chain.

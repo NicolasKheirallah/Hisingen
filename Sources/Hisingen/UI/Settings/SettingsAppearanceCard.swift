@@ -43,6 +43,13 @@ struct SettingsAppearanceCard: View {
         return AppTheme.allCases.filter { $0.category == selectedThemeCategory }
     }
 
+    /// Two equal flexible columns; LazyVGrid replaces the old stride-chunked row
+    /// stacks and their odd-row Spacer padding.
+    private static let twoFlexibleColumns = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8)
+    ]
+
     private func themeCategoryCount(_ category: ThemeCategory) -> Int {
         if category == .all { return AppTheme.allCases.count }
         return AppTheme.allCases.filter { $0.category == category }.count
@@ -59,6 +66,23 @@ struct SettingsAppearanceCard: View {
         preferences.customPanelSizeEnabled = false
         preferences.customPanelWidth = customWidth
         preferences.customPanelHeight = customHeight
+        binder.notify(.presentation)
+    }
+
+    /// Single persistence path for Panel Size: the dropdown Picker and the
+    /// SegmentedPresetRow both write the same `$panelSize` binding, and the card-level
+    /// observer below applies the side effects for either.
+    private func applyPanelSize(_ newSize: PanelSize) {
+        preferences.panelSize = newSize
+        // A picked preset replaces any custom override.
+        customSizeEnabled = false
+        preferences.customPanelSizeEnabled = false
+        binder.notify(.presentation)
+    }
+
+    /// Single persistence path for Content Density (same dual-control setup as panel size).
+    private func applyContentDensity(_ newDensity: ContentDensity) {
+        preferences.contentDensity = newDensity
         binder.notify(.presentation)
     }
 
@@ -125,7 +149,7 @@ struct SettingsAppearanceCard: View {
                         ForEach(AppearanceMode.allCases, id: \.self) { mode in
                             let isModeSelected = appearanceMode == mode
                             Button {
-                                withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
+                                withAnimation(reduceMotion ? nil : Motion.interaction) {
                                     appearanceMode = mode
                                     preferences.appearanceMode = mode
                                 }
@@ -149,7 +173,7 @@ struct SettingsAppearanceCard: View {
                                 )
                                 .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                             .withoutFocusRing()
                         }
                     }
@@ -177,49 +201,38 @@ struct SettingsAppearanceCard: View {
                     )
 
                     if supportsMultipleAngles {
-                        let angleChunks = stride(from: 0, to: availableAngles.count, by: 2).map {
-                            Array(availableAngles[$0..<min($0 + 2, availableAngles.count)])
-                        }
-                        VStack(spacing: 8) {
-                            ForEach(0..<angleChunks.count, id: \.self) { rowIdx in
-                                let row = angleChunks[rowIdx]
-                                HStack(spacing: 8) {
-                                    ForEach(row, id: \.self) { angle in
-                                        let isAngleSelected = carRenderAngle == angle
-                                        Button {
-                                            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
-                                                carRenderAngle = angle
-                                                preferences.carRenderAngle = angle
-                                            }
-                                            binder.notify(.presentation)
-                                        } label: {
-                                            HStack(spacing: 5) {
-                                                Image(systemName: angle.symbol)
-                                                    .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                                Text(angle.title)
-                                                    .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
-                                                    .lineLimit(1)
-                                            }
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 6)
-                                            .padding(.horizontal, 4)
-                                            .background(
-                                                isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
-                                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            )
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                    .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                                            )
-                                            .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .withoutFocusRing()
+                        LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
+                            ForEach(availableAngles, id: \.self) { angle in
+                                let isAngleSelected = carRenderAngle == angle
+                                Button {
+                                    withAnimation(reduceMotion ? nil : Motion.interaction) {
+                                        carRenderAngle = angle
+                                        preferences.carRenderAngle = angle
                                     }
-                                    if row.count == 1 {
-                                        Spacer().frame(maxWidth: .infinity)
+                                    binder.notify(.presentation)
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: angle.symbol)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                        Text(angle.title)
+                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                            .lineLimit(1)
                                     }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+                                    .background(
+                                        isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                                    )
+                                    .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
                                 }
+                                .buttonStyle(.pressable)
+                                .withoutFocusRing()
                             }
                         }
                     }
@@ -242,20 +255,9 @@ struct SettingsAppearanceCard: View {
                 }
 
                 // 2-Column Responsive Grid of Themes
-                let themeChunks = stride(from: 0, to: filteredThemes.count, by: 2).map {
-                    Array(filteredThemes[$0..<min($0 + 2, filteredThemes.count)])
-                }
-                VStack(spacing: 8) {
-                    ForEach(0..<themeChunks.count, id: \.self) { rowIdx in
-                        let row = themeChunks[rowIdx]
-                        HStack(spacing: 8) {
-                            ForEach(row, id: \.self) { theme in
-                                themeTile(theme)
-                            }
-                            if row.count == 1 {
-                                Spacer().frame(maxWidth: .infinity)
-                            }
-                        }
+                LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
+                    ForEach(filteredThemes, id: \.self) { theme in
+                        themeTile(theme)
                     }
                 }
 
@@ -294,27 +296,15 @@ struct SettingsAppearanceCard: View {
                             .labelsHidden()
                             .controlSize(.small)
                             .frame(maxWidth: 160)
-                            .onChange(of: panelSize) { _, newSize in
-                                preferences.panelSize = newSize
-                                // A picked preset replaces any custom override.
-                                customSizeEnabled = false
-                                preferences.customPanelSizeEnabled = false
-                                binder.notify(.presentation)
-                            }
                         }
 
                         SegmentedPresetRow(options: PanelSize.allCases, selection: $panelSize)
-                            .onChange(of: panelSize) { _, newSize in
-                                preferences.panelSize = newSize
-                                customSizeEnabled = false
-                                preferences.customPanelSizeEnabled = false
-                                binder.notify(.presentation)
-                            }
 
                         PanelCustomSizeControls(
                             isEnabled: $customSizeEnabled,
                             width: $customWidth,
                             height: $customHeight,
+                            hasCommittedSize: preferences.customPanelSizeEnabled,
                             seedValues: { [panelSize] in
                                 (Double(panelSize.width), Double(panelSize.idealHeight))
                             },
@@ -373,17 +363,9 @@ struct SettingsAppearanceCard: View {
                             .labelsHidden()
                             .controlSize(.small)
                             .frame(maxWidth: 160)
-                            .onChange(of: contentDensity) { _, newDensity in
-                                preferences.contentDensity = newDensity
-                                binder.notify(.presentation)
-                            }
                         }
 
                         SegmentedPresetRow(options: ContentDensity.allCases, selection: $contentDensity)
-                            .onChange(of: contentDensity) { _, newDensity in
-                                preferences.contentDensity = newDensity
-                                binder.notify(.presentation)
-                            }
 
                         HStack(spacing: 6) {
                             Text(L10n.text("Current:"))
@@ -410,6 +392,12 @@ struct SettingsAppearanceCard: View {
                     }
             }
         }
+        .onChange(of: panelSize) { _, newSize in
+            applyPanelSize(newSize)
+        }
+        .onChange(of: contentDensity) { _, newDensity in
+            applyContentDensity(newDensity)
+        }
         .onAppear {
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
@@ -435,7 +423,7 @@ struct SettingsAppearanceCard: View {
         let isSelected = selectedThemeCategory == cat
         let count = themeCategoryCount(cat)
         return Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
+            withAnimation(reduceMotion ? nil : Motion.interaction) {
                 selectedThemeCategory = cat
             }
         } label: {
@@ -457,7 +445,7 @@ struct SettingsAppearanceCard: View {
             )
             .foregroundStyle(isSelected ? HisingenTheme.accent : Color.primary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private func themeTile(_ theme: AppTheme) -> some View {
@@ -465,7 +453,7 @@ struct SettingsAppearanceCard: View {
         let accentColor = Color(hex: theme.accentColorHex) ?? HisingenTheme.accent
         return Button {
             guard appTheme != theme else { return }
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
+            withAnimation(reduceMotion ? nil : Motion.interaction) {
                 appTheme = theme
                 preferences.appTheme = theme
             }
@@ -518,7 +506,7 @@ struct SettingsAppearanceCard: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(theme.title): \(theme.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
@@ -531,6 +519,9 @@ struct SettingsStudioRenderPreview: View {
     let angle: Int
     let imageCache: CarImageCache
     @State private var artwork: VehicleArtworkStore.Artwork?
+    /// Bumped with every assignment: tying the Image's identity to it makes a new
+    /// decode an insert+remove (both opacity-transitioning) instead of a content snap.
+    @State private var artworkGeneration = 0
 
     var body: some View {
         ZStack {
@@ -547,6 +538,7 @@ struct SettingsStudioRenderPreview: View {
                     .aspectRatio(contentMode: .fit)
                     .scaleEffect(1.22, anchor: .center)
                     .padding(.horizontal, 4)
+                    .id(artworkGeneration)
                     .transition(.opacity)
             }
         }
@@ -558,17 +550,27 @@ struct SettingsStudioRenderPreview: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
+        .animation(Motion.resolveCrossfade(Motion.theme), value: angle)
         .task(id: "\(vin)#\(angle)") {
             let store = VehicleArtworkStore.shared
             let budget = 600
             let source = VehicleArtworkStore.source(vin: vin, angle: angle)
             if let data = imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin) {
                 if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
-                    artwork = cached
+                    assignArtwork(cached)
                 } else {
-                    artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
+                    assignArtwork(await store.artwork(source: source, data: data, pixelBudget: budget))
                 }
             }
+        }
+    }
+
+    /// Decodes finish outside any SwiftUI transaction; wrapping here is what lets
+    /// the arrival transition (and the angle-swap crossfade) actually play.
+    private func assignArtwork(_ newArtwork: VehicleArtworkStore.Artwork?) {
+        withAnimation(Motion.resolveCrossfade(Motion.theme)) {
+            artwork = newArtwork
+            artworkGeneration += 1
         }
     }
 }

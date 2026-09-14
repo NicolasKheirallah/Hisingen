@@ -8,20 +8,20 @@ This directory is the engineering documentation. The root [README.md](../README.
 
 ```
 Sources/Hisingen/
-├── App/          AppDelegate, main.swift — app shell, launch sequence, menu, URL handling
+├── App/          AppDelegate, main.swift: app shell, launch sequence, menu, URL handling
 ├── Domain/       Brand-agnostic vehicle model: VehicleState, VehicleCapabilities, RemoteCommand, AppFeature
 ├── Services/
-│   ├── API/          PolestarAPI, PolestarGRPC*, VolvoAPI — the two VehicleProviding implementations
-│   ├── Refresh/       RefreshCoordinator — polling, backoff, coalescing
+│   ├── API/          PolestarAPI, PolestarGRPC*, VolvoAPI: the two VehicleProviding implementations
+│   ├── Refresh/       RefreshCoordinator: polling, backoff, coalescing
 │   ├── Persistence/   Keychain, Preferences, VehicleStateStore, SQLite history (sessions,
 │   │                  samples, telemetry, battery health, air quality, connectivity,
 │   │                  cabin climate, fuel fill-ups, command audits)
 │   ├── Notifications/ Notifier (+ quick actions), ChargingTransitionDetector
 │   ├── Security/      RemoteActionAuthorizer, VolvoSignInPresenter
 │   ├── Location/      ReverseGeocoder (cached CLGeocoder)
-│   ├── Integration/   SpotlightIndexer — local Spotlight publication of vehicle state
+│   ├── Integration/   SpotlightIndexer: local Spotlight publication of vehicle state
 │   └── Updates/       UpdateService (Sparkle)
-├── Support/      Format, L10n, PKCE — small stateless helpers
+├── Support/      Format, L10n, PKCE: small stateless helpers
 └── UI/           StatusItemController (AppKit shell) + SwiftUI views
 ```
 
@@ -33,21 +33,21 @@ Sources/Hisingen/
 - **Runtime capability probing, not model-name guessing.** Whether a vehicle supports a feature is a mix of a conservative static per-model table and live observations from real API responses, merged with a 6-hour staleness window. A failed request does not automatically mean "unsupported." See [architecture/capabilities.md](architecture/capabilities.md).
 - **`RefreshCoordinator` owns the polling loop.** One `@MainActor` class serializes timer, manual, wake, and network-recovery refreshes into a single in-flight task per generation, so none of them race each other. See [architecture/refresh-system.md](architecture/refresh-system.md).
 - **Read-only unless you opt in.** No remote feature is enabled by default, and every non-routine command needs Touch ID. Dispatch is compiled into all builds as of [ADR-0009](adr/0009-remote-commands-compiled-into-all-builds.md), which removed the former `HISINGEN_EXPERIMENTAL_REMOTE` flag. See [domain/vehicle.md](domain/vehicle.md) and [security/threat-model.md](security/threat-model.md).
-- **VIN-scoped state everywhere it matters.** Caches, capability observations, charging baselines, and notification dedup state are all keyed by VIN. Credentials are keyed by brand, not by VIN — see [security/keychain.md](security/keychain.md).
+- **VIN-scoped state everywhere it matters.** Caches, capability observations, charging baselines, and notification dedup state are all keyed by VIN. Credentials are keyed by brand, not by VIN; see [security/keychain.md](security/keychain.md).
 
 ## Supported vehicle providers
 
 | Provider | Auth | API family | File |
 |---|---|---|---|
 | Polestar | Scraped PingFederate/OIDC login (undocumented) | GraphQL + hand-rolled gRPC (C3 / PCCS-Chronos) | [api/polestar.md](api/polestar.md) |
-| Volvo | OAuth2 PKCE against Volvo ID (documented) | REST — Connected Vehicle API v2, Energy API v2, Location API v1 | [api/volvo.md](api/volvo.md) |
+| Volvo | OAuth2 PKCE against Volvo ID (documented) | REST: Connected Vehicle API v2, Energy API v2, Location API v1 | [api/volvo.md](api/volvo.md) |
 
-Both are documented in detail, including API confidence levels — see [api/overview.md](api/overview.md#api-confidence).
+Both are documented in detail, including API confidence levels; see [api/overview.md](api/overview.md#api-confidence).
 
 ## Where things live
 
-- API integrations: `Sources/Hisingen/Services/API/` — see [api/](api/)
-- Domain logic: `Sources/Hisingen/Domain/` — see [domain/](domain/)
+- API integrations: `Sources/Hisingen/Services/API/`; see [api/](api/)
+- Domain logic: `Sources/Hisingen/Domain/`; see [domain/](domain/)
 - Capability/refresh/concurrency architecture: [architecture/](architecture/)
 - Security posture, threat model, privacy: [security/](security/)
 - Contributor workflow: [development/](development/)
@@ -87,13 +87,13 @@ architecture/overview.md
 
 ## Documentation index
 
-- **architecture/** — [overview](architecture/overview.md), [theme-and-caching](architecture/theme-and-caching-architecture.md), [system-context](architecture/system-context.md), [components](architecture/components.md), [runtime](architecture/runtime.md), [concurrency](architecture/concurrency.md), [state-management](architecture/state-management.md), [data-flow](architecture/data-flow.md), [persistence](architecture/persistence.md), [capabilities](architecture/capabilities.md), [providers](architecture/providers.md), [refresh-system](architecture/refresh-system.md), [logging](architecture/logging.md), [motion-system](architecture/motion-system.md), [vehicle-motion](architecture/vehicle-motion.md), 
-- **api/** — [overview](api/overview.md), [authentication](api/authentication.md), [polestar](api/polestar.md), [volvo](api/volvo.md), [errors-and-rate-limits](api/errors-and-rate-limits.md)
-- **domain/** — [vehicle](domain/vehicle.md), [capability-matrix](domain/capability-matrix.md), [charging](domain/charging.md), [notifications](domain/notifications.md)
-- **security/** — [overview](security/overview.md), [keychain](security/keychain.md), [threat-model](security/threat-model.md), [privacy](security/privacy.md)
-- **development/** — [getting-started](development/getting-started.md), [repository-layout](development/repository-layout.md), [development-workflow](development/development-workflow.md), [adding-a-feature](development/adding-a-feature.md), [adding-a-provider](development/adding-a-provider.md)
-- **testing/** — [strategy](testing/strategy.md), 
-- **operations/** — [build](operations/build.md), [ci](operations/ci.md), [releases](operations/releases.md), [troubleshooting](operations/troubleshooting.md)
-- [native macOS updater](updater-architecture.md) — Sparkle packaging, trust model, appcast publication, and failure behavior
-- **adr/** — [index](adr/README.md)
+- **architecture/**: [overview](architecture/overview.md), [theme-and-caching](architecture/theme-and-caching-architecture.md), [system-context](architecture/system-context.md), [components](architecture/components.md), [runtime](architecture/runtime.md), [concurrency](architecture/concurrency.md), [state-management](architecture/state-management.md), [data-flow](architecture/data-flow.md), [persistence](architecture/persistence.md), [capabilities](architecture/capabilities.md), [providers](architecture/providers.md), [refresh-system](architecture/refresh-system.md), [logging](architecture/logging.md), [motion-system](architecture/motion-system.md), [vehicle-motion](architecture/vehicle-motion.md).
+- **api/**: [overview](api/overview.md), [authentication](api/authentication.md), [polestar](api/polestar.md), [volvo](api/volvo.md), [errors-and-rate-limits](api/errors-and-rate-limits.md)
+- **domain/**: [vehicle](domain/vehicle.md), [capability-matrix](domain/capability-matrix.md), [charging](domain/charging.md), [notifications](domain/notifications.md)
+- **security/**: [overview](security/overview.md), [keychain](security/keychain.md), [threat-model](security/threat-model.md), [privacy](security/privacy.md)
+- **development/**: [getting-started](development/getting-started.md), [repository-layout](development/repository-layout.md), [development-workflow](development/development-workflow.md), [adding-a-feature](development/adding-a-feature.md), [adding-a-provider](development/adding-a-provider.md)
+- **testing/**: [strategy](testing/strategy.md).
+- **operations/**: [build](operations/build.md), [ci](operations/ci.md), [releases](operations/releases.md), [troubleshooting](operations/troubleshooting.md)
+- [native macOS updater](updater-architecture.md): Sparkle packaging, trust model, appcast publication, and failure behavior
+- **adr/**: [index](adr/README.md)
 - [glossary](glossary.md)

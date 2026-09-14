@@ -1,16 +1,16 @@
 # Volvo API
 
-Unlike Polestar, this is built on Volvo's **official, documented** Connected Vehicle API v2, Energy API v2, and Location API v1 — accessed through the Volvo Developer Portal, which requires each user to register their own free application (Client ID, Client Secret, VCC API Key). Volvo On Call, the legacy consumer API, was shut down by Volvo in 2025 and is not used here at all.
+Unlike Polestar, this is built on Volvo's **official, documented** Connected Vehicle API v2, Energy API v2, and Location API v1, accessed through the Volvo Developer Portal, which requires each user to register their own free application (Client ID, Client Secret, VCC API Key). Volvo On Call, the legacy consumer API, was shut down by Volvo in 2025 and is not used here at all.
 
 Source: `Services/API/VolvoAPI.swift`, `VolvoModels.swift`, `VolvoServiceError.swift`.
 
-> **See also: `docs/api/volvo-backend-map.md`** — internal-only, not published in this repository.
+> **See also: `docs/api/volvo-backend-map.md`**: internal-only, not published in this repository.
 > Holds real captured payload samples and the full Volvo ID scope/grant-type catalog (broader
 > than what Hisingen actually requests); everything Hisingen implements is covered here instead.
 
 ## Host and gateway
 
-Everything goes through one host, `api.volvocars.com`, behind Volvo's API gateway (`vcc-api-key` header) plus an OAuth2 Bearer token from `volvoid.eu.volvocars.com`. There is no undocumented/internal endpoint in use — every call in `VolvoAPI.swift` targets a product family (`connected-vehicle`, `energy`, `location`) that Volvo documents and gates behind a Developer Portal subscription.
+Everything goes through one host, `api.volvocars.com`, behind Volvo's API gateway (`vcc-api-key` header) plus an OAuth2 Bearer token from `volvoid.eu.volvocars.com`. There is no undocumented/internal endpoint in use; every call in `VolvoAPI.swift` targets a product family (`connected-vehicle`, `energy`, `location`) that Volvo documents and gates behind a Developer Portal subscription.
 
 ## Authentication
 
@@ -26,7 +26,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 |---|---|---|---|
 | Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour (flat `externalColour` string or `externalColours` array), gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
 | Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status/type, charger connection/power state, current limit, power in watts, target SOC, time to target | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingType`, `chargingPowerWatts`, etc. |
-| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes — see [architecture/capabilities.md](../architecture/capabilities.md) |
+| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes; see [architecture/capabilities.md](../architecture/capabilities.md) |
 | Doors | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock, door/hood/tailgate/charge-lid state | `exteriorStatus` |
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
 | Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure); `NO_SENSOR` / `SYSTEM_FAULT` map to a distinct `.sensorFault` state | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
@@ -58,15 +58,15 @@ the whole authorization fail `invalid_scope`).
 
 `VolvoPowertrain.classify(fuelType:)` reads the vehicle-details `fuelType` string: contains `"ELECTRIC"` and not `"PETROL"`/`"DIESEL"` → `.bev`; both electric and fuel present → `.phev` (or `.mildHybrid` if the string contains `"MHEV"` or `"HYBRID"` without `"PLUG"`); fuel only → `.ice`; neither → `.unknown`.
 
-Model name → `VehicleModelFamily` is substring matching in `VehicleCapabilities.swift`'s `volvoModel(from:)` — order-sensitive (`"xc40"` is checked before the generic `"c40"` substring so an `XC40` isn't misidentified as a `C40`, confirmed by `VolvoModelIdentificationTests`).
+Model name → `VehicleModelFamily` is substring matching in `VehicleCapabilities.swift`'s `volvoModel(from:)`: order-sensitive (`"xc40"` is checked before the generic `"c40"` substring so an `XC40` isn't misidentified as a `C40`, confirmed by `VolvoModelIdentificationTests`).
 
 ## Vehicle images
 
-Both fields live inside the single vehicle-details response (`GET /connected-vehicle/v2/vehicles/{vin}` → `images: { exteriorImageUrl, interiorImageUrl }`), unlike Polestar which needs a second, separately-authenticated call. There is no angle/camera-position variant of either — each is exactly one fixed studio photo.
+Both fields live inside the single vehicle-details response (`GET /connected-vehicle/v2/vehicles/{vin}` → `images: { exteriorImageUrl, interiorImageUrl }`), unlike Polestar which needs a second, separately-authenticated call. There is no angle/camera-position variant of either; each is exactly one fixed studio photo.
 
-- **`exteriorImageUrl`** — one exterior render. Fetched by `VolvoAPI.fetchCarImage(vin:imageUrlString:)`, cached bare-VIN-keyed (`CarImageCache.shared.save(bytes, for: vin)`, no angle). Since there's only ever one URL, Settings' angle picker (`CarRenderAngle`, Polestar-only concept) has nothing to switch between for Volvo — the UI hides that picker for this brand rather than showing four buttons that would all display the same photo.
-- **`interiorImageUrl`** — one cabin render, fetched by the analogous `fetchInteriorImage(vin:imageUrlString:)`, cached under a separate `"<VIN>_interior"` key so it doesn't collide with the exterior entry.
-- **Volvo's own documentation disagrees with itself on the interior field's key name.** The Connected Vehicle API v2 [endpoint reference page](https://developer.volvocars.com/apis/connected-vehicle/v2/endpoints/vehicle/) shows a real (non-placeholder) example response using `"interiorImageUrl"` — an actual `cas.volvocars.com/image/vbsnext-v4/interior/...` CDN URL, clearly copied from a genuine API response. But the same API version's [OpenAPI/Specification page](https://developer.volvocars.com/apis/connected-vehicle/v2/specification/) defines the `Images` schema with `"internalImageUrl"` instead — both pages captured the same day (archived 2025-12-17), so this isn't a stale-vs-current version mismatch, just an inconsistency in Volvo's own docs. `VolvoModels.swift`'s `Images` struct decodes both key names defensively (custom `init(from:)`, preferring `interiorImageUrl` and falling back to `internalImageUrl`) rather than betting on either being the one Volvo's backend actually ships — following the same defensive-decoding philosophy already used elsewhere for Volvo (see below).
+- **`exteriorImageUrl`**: one exterior render. Fetched by `VolvoAPI.fetchCarImage(vin:imageUrlString:)`, cached bare-VIN-keyed (`CarImageCache.shared.save(bytes, for: vin)`, no angle). Since there's only ever one URL, Settings' angle picker (`CarRenderAngle`, Polestar-only concept) has nothing to switch between for Volvo; the UI hides that picker for this brand rather than showing four buttons that would all display the same photo.
+- **`interiorImageUrl`**: one cabin render, fetched by the analogous `fetchInteriorImage(vin:imageUrlString:)`, cached under a separate `"<VIN>_interior"` key so it doesn't collide with the exterior entry.
+- **Volvo's own documentation disagrees with itself on the interior field's key name.** The Connected Vehicle API v2 [endpoint reference page](https://developer.volvocars.com/apis/connected-vehicle/v2/endpoints/vehicle/) shows a real (non-placeholder) example response using `"interiorImageUrl"`: an actual `cas.volvocars.com/image/vbsnext-v4/interior/...` CDN URL, clearly copied from a genuine API response. But the same API version's [OpenAPI/Specification page](https://developer.volvocars.com/apis/connected-vehicle/v2/specification/) defines the `Images` schema with `"internalImageUrl"` instead; both pages captured the same day (archived 2025-12-17), so this isn't a stale-vs-current version mismatch, just an inconsistency in Volvo's own docs. `VolvoModels.swift`'s `Images` struct decodes both key names defensively (custom `init(from:)`, preferring `interiorImageUrl` and falling back to `internalImageUrl`) rather than betting on either being the one Volvo's backend actually ships, following the same defensive-decoding philosophy already used elsewhere for Volvo (see below).
 
 ## Capabilities
 
@@ -95,8 +95,8 @@ per-VIN probes for remote controls. See [architecture/capabilities.md](../archit
 
 Everything else (`unlockTrunk`, window control, charge-target/amp-limit, schedules, pre-cleaning, OTA) throws `RemoteCommandError.unsupported`. Commands without documented parameters send an empty JSON body; engine start sends only `runtimeMinutes`. Climate temperature and seat-heating values are not sent because Volvo's public climatization endpoint accepts no such body.
 
-The `/commands` list labels honk+flash `HONK_AND_FLASH`, but its `href` — the real invocation
-path, verified live — is `honk-flash`, which is what `dispatchCommand` POSTs. `VolvoCommandDTO.normalizedName`
+The `/commands` list labels honk+flash `HONK_AND_FLASH`, but its `href` (the real invocation
+path, verified live) is `honk-flash`, which is what `dispatchCommand` POSTs. `VolvoCommandDTO.normalizedName`
 derives capability probes from the `href` segment for the same reason.
 
 Response parsing uses `VolvoCommandResponseDTO`. Every documented `invokeStatus` failure value
@@ -118,8 +118,8 @@ Concurrency: single-in-flight-per-VIN via `remoteCommandsInFlight`, same pattern
 
 ## Defensive decoding
 
-Volvo's response envelope is inconsistent across endpoints/versions in practice: some return `{"data": {...}}`, others return the object at the root; some fields are wrapped (`{"value": ..., "timestamp"/"updatedAt": ...}`), others are bare scalars. `VolvoEnvelope<Payload>` and `VolvoField<Value>` both defensively decode either shape — validated against `volvo-vehicle-details-partial.json` (a bare-root fixture) and a dedicated "wrapped vs. bare scalar" decode test. This is not something Volvo's documentation guarantees; it's an empirical accommodation.
+Volvo's response envelope is inconsistent across endpoints/versions in practice: some return `{"data": {...}}`, others return the object at the root; some fields are wrapped (`{"value": ..., "timestamp"/"updatedAt": ...}`), others are bare scalars. `VolvoEnvelope<Payload>` and `VolvoField<Value>` both defensively decode either shape, validated against `volvo-vehicle-details-partial.json` (a bare-root fixture) and a dedicated "wrapped vs. bare scalar" decode test. This is not something Volvo's documentation guarantees; it's an empirical accommodation.
 
 ## Relevant tests
 
-`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml` — see [operations/ci.md](../operations/ci.md).
+`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml`; see [operations/ci.md](../operations/ci.md).

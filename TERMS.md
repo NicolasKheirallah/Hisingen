@@ -185,7 +185,7 @@ Depending on the vehicle, functionality can include operations such as:
 * starting or stopping an engine where supported; and
 * performing other vehicle functions exposed by the applicable manufacturer service.
 
-Some functionality is not implemented due to not having any documented API, all other API's are documnented.
+Some functionality is not implemented because no documented API exists for it. All other APIs are documented.
 
 Remote commands have real-world effects.
 

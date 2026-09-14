@@ -13,6 +13,11 @@ struct SettingsNotificationsCard: View {
     private var prefs: PreferencesStore { binder.preferences }
     private var settingsVehicleVIN: String { state?.identity.vin ?? prefs.vin }
 
+    /// Toggle-dependent rows slide down under their switch; opacity keeps the
+    /// insertion from reading as a pop.
+    private static let dependentRowTransition: AnyTransition =
+        .opacity.combined(with: .move(edge: .top))
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -45,6 +50,7 @@ struct SettingsNotificationsCard: View {
                     .padding(8)
                     .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                     .accessibilityElement(children: .combine)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 VStack(spacing: 4) {
@@ -118,6 +124,7 @@ struct SettingsNotificationsCard: View {
                             values: [5, 10, 15, 30, 60],
                             label: { L10n.format("%d min", $0) }
                         )
+                        .transition(Self.dependentRowTransition)
                     }
 
                     notificationRow(
@@ -154,6 +161,7 @@ struct SettingsNotificationsCard: View {
                             values: Array(stride(from: 10, through: 80, by: 10)),
                             label: { "\($0)%" }
                         )
+                        .transition(Self.dependentRowTransition)
                     }
 
                     notificationRow(
@@ -191,6 +199,7 @@ struct SettingsNotificationsCard: View {
                         }
                         .padding(.leading, 12)
                         .padding(.vertical, 2)
+                        .transition(Self.dependentRowTransition)
                     }
 
                     Divider().opacity(0.4)
@@ -216,6 +225,7 @@ struct SettingsNotificationsCard: View {
                             values: Array(18...23),
                             label: { String(format: "%02d:00", $0) }
                         )
+                        .transition(Self.dependentRowTransition)
                     }
 
                     Divider().opacity(0.4)
@@ -266,6 +276,7 @@ struct SettingsNotificationsCard: View {
                         }
                         .padding(.leading, 12)
                         .padding(.vertical, 2)
+                        .transition(Self.dependentRowTransition)
                     }
 
                     notificationRow(
@@ -313,7 +324,15 @@ struct SettingsNotificationsCard: View {
                         \.privateNotificationDetails
                     )
                 }
+                // Preference writes go through the binder with no transaction; these
+                // bindings give each dependent row its reveal/settle animation.
+                .animation(Motion.resolve(Motion.layout), value: prefs.notifyOpeningsLeftOpen)
+                .animation(Motion.resolve(Motion.layout), value: prefs.notifyPlugInReminder)
+                .animation(Motion.resolve(Motion.layout), value: prefs.notifyLowBattery)
+                .animation(Motion.resolve(Motion.layout), value: prefs.notifyEveningUnlocked)
+                .animation(Motion.resolve(Motion.layout), value: prefs.quietHoursEnabled)
             }
+            .animation(Motion.resolve(Motion.entrance), value: notificationPermission)
         }
     }
 
@@ -331,29 +350,8 @@ struct SettingsNotificationsCard: View {
         title: String,
         detail: String,
         isOn: Binding<Bool>
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.text(title))
-                    .font(.system(size: 11, weight: .medium))
-                Text(L10n.text(detail))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Toggle("", isOn: isOn)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .accessibilityLabel(L10n.text(title))
-                .accessibilityHint(L10n.text(detail))
-        }
-        .padding(.vertical, 3)
+    ) -> NotificationToggleRow {
+        NotificationToggleRow(symbol: symbol, title: title, detail: detail, isOn: isOn)
     }
 
     private func notificationThresholdRow(

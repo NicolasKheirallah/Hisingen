@@ -1812,7 +1812,6 @@
 "Hide" = "Hide";
 "Hide this trip if segmentation combined or invented it" = "Hide this trip if segmentation combined or invented it";
 "Hour" = "Hour";
-"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure with the \u{201C}grid_carbon_intensity_g_per_kwh\u{201D} preference." = "Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure with the “grid_carbon_intensity_g_per_kwh” preference.";
 "Loading history" = "Loading history";
 "Loading history…" = "Loading history…";
 "Minutes" = "Minutes";
@@ -1920,7 +1919,6 @@
 "Database optimization completed." = "Database optimization completed.";
 "Old historical samples were pruned." = "Old historical samples were pruned.";
 "Database maintenance failed: %@" = "Database maintenance failed: %@";
-"The backup could not be created." = "The backup could not be created.";
 "The diagnostic report could not be created." = "The diagnostic report could not be created.";
 "Export saved." = "Export saved.";
 "Export failed: %@" = "Export failed: %@";
@@ -2449,3 +2447,37 @@
 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
 "Tomorrow's spot prices have arrived." = "Tomorrow's spot prices have arrived.";
 "Use" = "Use";
+
+"Set up Hisingen" = "Set up Hisingen";
+"Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features." = "Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features.";
+"Quick setup" = "Quick setup";
+"Remote commands" = "Remote commands";
+"Polestar remote controls run through a separate one-time browser authorization." = "Polestar remote controls run through a separate one-time browser authorization.";
+"You can change this later in Settings → Features." = "You can change this later in Settings → Features.";
+
+"Hisingen lives in your menu bar" = "Hisingen lives in your menu bar";
+"Click the car icon in the menu bar any time to open this panel." = "Click the car icon in the menu bar any time to open this panel.";
+"Connect your vehicle account below to get started." = "Connect your vehicle account below to get started.";
+
+"Still failing?" = "Still failing?";
+"Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added." = "Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added.";
+"Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update." = "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update.";
+"Hidden trips (%d)" = "Hidden trips (%d)";
+"Restore" = "Restore";
+"Restore this hidden trip to the detected list." = "Restore this hidden trip to the detected list.";
+"Trips you hid from the detected list. Restoring puts them back." = "Trips you hid from the detected list. Restoring puts them back.";
+"Grid Carbon Intensity" = "Grid Carbon Intensity";
+"For the emissions comparison in History" = "For the emissions comparison in History";
+"g CO₂/kWh" = "g CO₂/kWh";
+"Enter an intensity between 1 and 1,200 g CO₂/kWh." = "Enter an intensity between 1 and 1,200 g CO₂/kWh.";
+"Cold raises consumption by about %@ per 10 °C, across %d trips." = "Cold raises consumption by about %@ per 10 °C, across %d trips.";
+"Full Backup (JSON)" = "Full Backup (JSON)";
+"The backup could not be created." = "The backup could not be created.";
+"Export Selected Month" = "Export Selected Month";
+"Export All Months" = "Export All Months";
+"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.";
+"Lead Time" = "Lead Time";
+"How long before the window opens the banner arrives" = "How long before the window opens the banner arrives";
+"When the window opens" = "When the window opens";
+"1 hour before" = "1 hour before";
+"%d minutes before" = "%d minutes before";

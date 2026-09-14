@@ -17,10 +17,25 @@ enum DiagnosticRedaction {
         return result
     }
 
-    private static let vinPattern = "(?i)[A-HJ-NPR-Z0-9]{17}"
+    // The scrubber runs per unified-log entry (up to 4,000 per export) and per recorded
+    // API request, so the patterns are compiled once here instead of on every call. The
+    // `try?` fallback stays only at these static initializers.
+    private static let vinExpression = try? NSRegularExpression(pattern: "(?i)[A-HJ-NPR-Z0-9]{17}")
+    private static let uuidExpression = try? NSRegularExpression(
+        pattern: "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+    /// `token=x` — secret directly after the separator, no space.
+    private static let delimiterSecretExpression = try? NSRegularExpression(
+        pattern: "(?i)(bearer|token|authorization|client_secret|password|api[_-]?key)[=:][^,; ]+")
+    /// `Authorization: Bearer eyJ…` — the canonical header form has a space after the
+    /// colon, which the no-space rule above never matches.
+    private static let authorizationBearerExpression = try? NSRegularExpression(
+        pattern: "(?i)(authorization\\s*:\\s*)bearer\\s+\\S+")
+    /// A bare `Bearer <token>` run long enough to be a credential rather than a word.
+    private static let bearerTokenExpression = try? NSRegularExpression(
+        pattern: "(?i)\\bbearer\\s+[A-Za-z0-9._~-]{16,}")
 
     private static func redactVINShapedTokens(_ value: String) -> String {
-        guard let expression = try? NSRegularExpression(pattern: vinPattern) else { return value }
+        guard let expression = vinExpression else { return value }
         let nsValue = value as NSString
         let fullRange = NSRange(value.startIndex..<value.endIndex, in: value)
         let matches = expression.matches(in: value, range: fullRange)
@@ -44,13 +59,16 @@ enum DiagnosticRedaction {
     /// legitimate 17-letter words ("batteryPercentage") inside the JSON.
     static func redactSecrets(_ value: String) -> String {
         var result = value
-        result = replacingMatches(in: result, pattern: "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", replacement: "<identifier>")
-        result = replacingMatches(in: result, pattern: "(?i)(bearer|token|authorization|client_secret|password|api[_-]?key)[=:][^,; ]+", replacement: "$1=<redacted>")
+        // Specific rules first so the generic ones never rewrite their capture groups.
+        result = replacingMatches(in: result, expression: authorizationBearerExpression, replacement: "$1Bearer <redacted>")
+        result = replacingMatches(in: result, expression: bearerTokenExpression, replacement: "$1 <redacted>")
+        result = replacingMatches(in: result, expression: uuidExpression, replacement: "<identifier>")
+        result = replacingMatches(in: result, expression: delimiterSecretExpression, replacement: "$1=<redacted>")
         return result
     }
 
-    static func replacingMatches(in value: String, pattern: String, replacement: String) -> String {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return value }
+    static func replacingMatches(in value: String, expression: NSRegularExpression?, replacement: String) -> String {
+        guard let expression else { return value }
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
         return expression.stringByReplacingMatches(in: value, range: range, withTemplate: replacement)
     }

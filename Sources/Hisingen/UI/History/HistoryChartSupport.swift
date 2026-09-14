@@ -92,17 +92,29 @@ enum HistoryExport {
     // mirrors `VehicleDatabase.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
     // so a period export and a full export open the same way.
 
+    /// Quotes a cell containing a comma, quote or newline, doubling embedded quotes — the
+    /// same rule as the passport export in InfoTabView+Specs, so no data the vehicle supplies
+    /// can shift the column layout.
+    static func csvField(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "" }
+        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+        return value.contains(",") || value.contains("\"") || value.contains("\n")
+            ? "\"\(escaped)\"" : value
+    }
+
+    private static func opt(_ value: Double?, _ places: Int) -> String {
+        value.map { String(format: "%.\(places)f", $0) } ?? ""
+    }
+
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
         let header = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude"
-        let df = ISO8601DateFormatter()
-        func opt(_ value: Double?, _ places: Int) -> String { value.map { String(format: "%.\(places)f", $0) } ?? "" }
         func coord(_ value: Double?) -> String { value.map { String($0) } ?? "" }
         var rows: [String] = [header]
         for trip in trips {
             let fields: [String] = [
-                trip.id, trip.vin,
-                df.string(from: trip.startedAt),
-                df.string(from: trip.endedAt),
+                csvField(trip.id), csvField(trip.vin),
+                Format.iso8601.string(from: trip.startedAt),
+                Format.iso8601.string(from: trip.endedAt),
                 String(format: "%.1f", trip.duration / 60),
                 String(format: "%.2f", trip.distanceKm),
                 opt(trip.averageConsumption, 2),
@@ -110,27 +122,25 @@ enum HistoryExport {
                 coord(trip.startLatitude), coord(trip.startLongitude),
                 coord(trip.endLatitude), coord(trip.endLongitude)
             ]
-            rows.append(fields.joined(separator: ","))
+            rows.append(fields.map(csvField).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }
 
     static func chargingSessionsCSV(_ sessions: [HistoricalChargingSession]) -> String {
         let header = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version"
-        let df = ISO8601DateFormatter()
-        func opt(_ value: Double?, _ places: Int) -> String { value.map { String(format: "%.\(places)f", $0) } ?? "" }
         var rows: [String] = [header]
         for s in sessions {
             let fields: [String] = [
                 s.id, s.vin,
-                df.string(from: s.startedAt),
-                s.endedAt.map { df.string(from: $0) } ?? "",
+                Format.iso8601.string(from: s.startedAt),
+                s.endedAt.map { Format.iso8601.string(from: $0) } ?? "",
                 String(format: "%.1f", s.startSoc),
                 opt(s.endSoc, 1),
                 String(format: "%.2f", s.energyDeliveredKwh),
                 String(format: "%.1f", s.peakPowerKw),
                 String(format: "%.1f", s.averagePowerKw),
-                (s.locationName ?? "").replacingOccurrences(of: ",", with: " "),
+                s.locationName ?? "",
                 s.lifecycleState.rawValue,
                 s.completionReason?.rawValue ?? "",
                 s.energySource.rawValue,
@@ -147,7 +157,7 @@ enum HistoryExport {
                 opt(s.targetSoc, 1),
                 String(s.summaryVersion)
             ]
-            rows.append(fields.joined(separator: ","))
+            rows.append(fields.map(csvField).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }

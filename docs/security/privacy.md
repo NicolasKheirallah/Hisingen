@@ -73,10 +73,10 @@ Sensitive authentication material that must survive application restarts belongs
 This includes provider session material and sensitive custom Volvo developer configuration where applicable.
 
 - Fetched from the provider (Polestar's `DtlInternetService`/`GetLastKnownLocation`, Volvo's `/location/v1/vehicles/{vin}/location`) only when the "Vehicle Location" feature is enabled.
-- Sent to Apple's `CLGeocoder` (reverse geocoding) only when that same feature is on — this is an Apple system framework call, not a raw HTTP request Hisingen constructs, and Apple's own privacy handling for `CLGeocoder` applies.
-- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled — this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast`, no API key, coordinates as query parameters).
-- Never sent anywhere else. Precise coordinates for *saved charging locations* (as opposed to the vehicle's current position) are explicitly discarded before they ever reach the domain model — Hisingen keeps the schedule's time/weekday/active fields but drops the location and any alias/name attached to it.
-- Never written to the on-disk telemetry cache — `VehicleState.cacheableCopy` (`Domain/VehicleState.swift`) builds its persisted copy by calling `VehicleState`'s memberwise initializer with only a specific subset of fields passed explicitly; every field it *doesn't* pass — including `location` and `exteriorStatus` — falls back to that initializer's default value, which is `nil`/empty for all of them. So the current vehicle position never reaches disk, full stop, regardless of feature toggles.
+- Sent to Apple's `CLGeocoder` (reverse geocoding) only when that same feature is on; this is an Apple system framework call, not a raw HTTP request Hisingen constructs, and Apple's own privacy handling for `CLGeocoder` applies.
+- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled; this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast`, no API key, coordinates as query parameters).
+- Never sent anywhere else. Precise coordinates for *saved charging locations* (as opposed to the vehicle's current position) are explicitly discarded before they ever reach the domain model; Hisingen keeps the schedule's time/weekday/active fields but drops the location and any alias/name attached to it.
+- Never written to the on-disk telemetry cache: `VehicleState.cacheableCopy` (`Domain/VehicleState.swift`) builds its persisted copy by calling `VehicleState`'s memberwise initializer with only a specific subset of fields passed explicitly; every field it *doesn't* pass (including `location` and `exteriorStatus`) falls back to that initializer's default value, which is `nil`/empty for all of them. So the current vehicle position never reaches disk, full stop, regardless of feature toggles.
 
 ## VIN
 
@@ -565,10 +565,10 @@ The Polestar account email is stored in the macOS Keychain under the
 
 The privacy documentation has intentionally separate responsibilities:
 
-- [`../../PRIVACY.md`](../../PRIVACY.md) — user-facing privacy policy.
-- [`privacy.md`](privacy.md) — technical data-flow and privacy boundaries.
-- [`../data-retention.md`](../data-retention.md) — retention and deletion.
-- [`../architecture/persistence.md`](../architecture/persistence.md) — storage implementation.
+- [`../../PRIVACY.md`](../../PRIVACY.md): user-facing privacy policy.
+- [`privacy.md`](privacy.md): technical data-flow and privacy boundaries.
+- [`../data-retention.md`](../data-retention.md): retention and deletion.
+- [`../architecture/persistence.md`](../architecture/persistence.md): storage implementation.
 
 These documents must not contradict each other.
 

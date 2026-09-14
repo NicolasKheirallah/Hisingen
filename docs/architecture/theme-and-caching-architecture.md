@@ -75,7 +75,7 @@ sequenceDiagram
    - `app_theme`: Global key observed by SwiftUI's `@AppStorage("app_theme")`.
 2. **Reactive Synchronization**:
    - Whenever `Preferences.vin` or `Preferences.activeBrand` changes, `Preferences.syncAppThemeStorageKey()` executes automatically.
-   - This writes the vehicle's specific theme to `app_theme`, which triggers a seamless SwiftUI view redraw across the whole popover.
+   - This writes the vehicle's specific theme to `app_theme`, which triggers an immediate SwiftUI view redraw across the whole popover.
 
 ---
 

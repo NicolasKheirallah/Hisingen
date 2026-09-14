@@ -12,40 +12,76 @@ final class VehicleHistoryRecorder {
     private let preferences: PreferencesStore
     private var parkedChargeLossDetector = ParkedChargeLossDetector()
 
-    /// The charging ledger lives on the database (both own the same SQLite handle); the
-    /// recorder routes every charging observation through it.
-    private var chargingSessionLedger: ChargingSessionLedger { database.charging }
-
     init(database: VehicleDatabase, preferences: PreferencesStore) {
         self.database = database
         self.preferences = preferences
     }
 
+    /// Main-actor-owned preference values resolved once per observation so the storage pass
+    /// can run detached without capturing the non-Sendable `PreferencesStore`.
+    private struct RecordingInputs: Sendable {
+        var persistLocationHistory: Bool
+        var storeChargingHistory: Bool
+        var specification: VehicleSpecificationOverride?
+        var tariffPricePerKwh: Double
+        var nightTariffEnabled: Bool
+        var nightTariffPricePerKwh: Double
+        var nightTariffStartHour: Int
+        var nightTariffEndHour: Int
+        var currencySymbol: String
+    }
+
     func record(_ state: VehicleState) {
-        recordActivitiesAndSnapshot(state)
-        recordAirQuality(state)
-        recordTelemetry(state)
-        recordBatteryHistory(state)
+        // The recording body is pure storage I/O (per-event inserts, dedupe reads, the
+        // charging-ledger ingest) with no UI dependency. The main actor only reads its own
+        // mutable state (preferences, the parked-charge detector) and hands off Sendable
+        // values; the SQLite handle is Sendable and safe for cross-thread use.
+        let storeChargingHistory = preferences.storeChargingHistory
+        let parkedChargeLoss: VehicleActivity?
+        if storeChargingHistory {
+            parkedChargeLoss = parkedChargeLossDetector.ingest(state)
+        } else {
+            parkedChargeLossDetector.reset(vin: state.identity.vin)
+            parkedChargeLoss = nil
+        }
+        let inputs = RecordingInputs(
+            persistLocationHistory: preferences.persistLocationHistory,
+            storeChargingHistory: storeChargingHistory,
+            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin),
+            tariffPricePerKwh: preferences.electricityPricePerKwh,
+            nightTariffEnabled: preferences.nightTariffEnabled,
+            nightTariffPricePerKwh: preferences.nightElectricityPricePerKwh,
+            nightTariffStartHour: preferences.nightTariffStartHour,
+            nightTariffEndHour: preferences.nightTariffEndHour,
+            currencySymbol: preferences.currencySymbol
+        )
+        let database = self.database
+        Task.detached(priority: .utility) {
+            Self.recordActivitiesAndSnapshot(
+                state, parkedChargeLossActivity: parkedChargeLoss, into: database)
+            Self.recordAirQuality(state, into: database)
+            Self.recordTelemetry(
+                state, persistLocationHistory: inputs.persistLocationHistory, into: database)
+            Self.recordBatteryHistory(state, inputs: inputs, into: database)
+        }
     }
 
     func resetTransientState(vin: String? = nil) {
         parkedChargeLossDetector.reset(vin: vin)
     }
 
-    private func recordActivitiesAndSnapshot(_ state: VehicleState) {
+    private nonisolated static func recordActivitiesAndSnapshot(
+        _ state: VehicleState, parkedChargeLossActivity: VehicleActivity?, into database: VehicleDatabase
+    ) {
         let previous = database.loadSnapshot(for: state.identity.vin)
-        if preferences.storeChargingHistory {
-            if let loss = parkedChargeLossDetector.ingest(state) {
-                database.recordActivities([loss])
-            }
-        } else {
-            parkedChargeLossDetector.reset(vin: state.identity.vin)
+        if let parkedChargeLossActivity {
+            database.recordActivities([parkedChargeLossActivity])
         }
         database.recordActivities(VehicleActivity.changes(from: previous, to: state))
         database.saveSnapshot(state)
     }
 
-    private func recordAirQuality(_ state: VehicleState) {
+    private nonisolated static func recordAirQuality(_ state: VehicleState, into database: VehicleDatabase) {
         // Cabin AQI comes from Polestar's GetPreCleaning service. Do not persist a value on
         // Volvo snapshots even if a stale or imported payload happens to carry that field.
         guard !state.isVolvo, let airQuality = state.airQuality else { return }
@@ -58,10 +94,11 @@ final class VehicleHistoryRecorder {
         )
     }
 
-    private func recordTelemetry(_ state: VehicleState) {
+    private nonisolated static func recordTelemetry(
+        _ state: VehicleState, persistLocationHistory: Bool, into database: VehicleDatabase
+    ) {
         guard state.maintenance.odometerKm != nil || state.tripComputer.manualTripKm != nil
                 || state.tripComputer.automaticTripKm != nil else { return }
-        let persistLocation = preferences.persistLocationHistory
         database.recordTelemetry(
             vin: state.identity.vin,
             odometerKm: state.maintenance.odometerKm.map(Double.init),
@@ -73,12 +110,14 @@ final class VehicleHistoryRecorder {
                 ? "kwh"
                 : (state.fuelSystem.averageConsumptionLPer100Km != nil ? "l" : nil),
             ambientTempC: state.weather?.temperatureCelsius,
-            latitude: persistLocation ? state.location?.latitude : nil,
-            longitude: persistLocation ? state.location?.longitude : nil
+            latitude: persistLocationHistory ? state.location?.latitude : nil,
+            longitude: persistLocationHistory ? state.location?.longitude : nil
         )
     }
 
-    private func recordBatteryHistory(_ state: VehicleState) {
+    private nonisolated static func recordBatteryHistory(
+        _ state: VehicleState, inputs: RecordingInputs, into database: VehicleDatabase
+    ) {
         guard let batteryPercentage = state.energy.batteryPercentage else { return }
 
         database.recordConnectivity(
@@ -93,10 +132,9 @@ final class VehicleHistoryRecorder {
             requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
         )
 
-        let specification = preferences.vehicleSpecificationOverride(for: state.identity.vin)
-        let capacity = specification?.usableBatteryCapacityKwh
+        let capacity = inputs.specification?.usableBatteryCapacityKwh
             ?? state.configuredUsableBatteryCapacityKwh
-        chargingSessionLedger.ingest(
+        database.charging.ingest(
             ChargingSessionObservation(
                 vin: state.identity.vin,
                 timestamp: state.freshness.fetchedAt,
@@ -111,30 +149,31 @@ final class VehicleHistoryRecorder {
             ),
             configuration: ChargingSessionLedgerConfiguration(
                 usableCapacityKwh: capacity,
-                tariffPricePerKwh: preferences.electricityPricePerKwh,
-                nightTariffEnabled: preferences.nightTariffEnabled,
-                nightTariffPricePerKwh: preferences.nightElectricityPricePerKwh,
-                nightTariffStartHour: preferences.nightTariffStartHour,
-                nightTariffEndHour: preferences.nightTariffEndHour,
-                currencySymbol: preferences.currencySymbol,
-                locationName: chargingLocationName(for: state)
+                tariffPricePerKwh: inputs.tariffPricePerKwh,
+                nightTariffEnabled: inputs.nightTariffEnabled,
+                nightTariffPricePerKwh: inputs.nightTariffPricePerKwh,
+                nightTariffStartHour: inputs.nightTariffStartHour,
+                nightTariffEndHour: inputs.nightTariffEndHour,
+                currencySymbol: inputs.currencySymbol,
+                locationName: chargingLocationName(for: state, persistLocationHistory: inputs.persistLocationHistory)
             ),
-            recordingEnabled: preferences.storeChargingHistory
+            recordingEnabled: inputs.storeChargingHistory
         )
-        recordBatteryHealth(state, specification: specification)
+        recordBatteryHealth(state, specification: inputs.specification, database: database)
     }
 
-    private func chargingLocationName(for state: VehicleState) -> String? {
-        guard preferences.persistLocationHistory,
+    private nonisolated static func chargingLocationName(for state: VehicleState, persistLocationHistory: Bool) -> String? {
+        guard persistLocationHistory,
               let location = state.location,
               let latitude = location.latitude,
               let longitude = location.longitude else { return nil }
         return String(format: "%.4f°, %.4f°", latitude, longitude)
     }
 
-    private func recordBatteryHealth(
+    private nonisolated static func recordBatteryHealth(
         _ state: VehicleState,
-        specification: VehicleSpecificationOverride?
+        specification: VehicleSpecificationOverride?,
+        database: VehicleDatabase
     ) {
         guard let odometer = state.maintenance.odometerKm,
               let estimate = BatteryHealthEstimator.estimate(

@@ -11,12 +11,12 @@ struct MultiCarFleetSwitchingTests {
 
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "HisingenFleetTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (defaults, suiteName)
     }
 
     @Test
-    func refreshCoordinatorDefaultTokenReaderResolvesByBrand() async throws {
+    func refreshCoordinatorsConstructPerBrandAndStartIdle() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = PreferencesStore(defaults: defaults)
@@ -38,8 +38,8 @@ struct MultiCarFleetSwitchingTests {
         )
 
         // Verify coordinators instantiate with brand-appropriate defaults without crashing or crossing tokens.
-        XCTAssertFalse(polestarCoordinator.isBusy)
-        XCTAssertFalse(volvoCoordinator.isBusy)
+        #expect(!(polestarCoordinator.isBusy))
+        #expect(!(volvoCoordinator.isBusy))
         polestarCoordinator.stop()
         volvoCoordinator.stop()
     }
@@ -73,31 +73,42 @@ struct MultiCarFleetSwitchingTests {
         }
 
         let preservedToken = try keychain.readVolvoSessionToken()
-        XCTAssertEqual(preservedToken, "valid-volvo-refresh-token", "Failed restoreSession must not delete stored Volvo token")
+        #expect(preservedToken == "valid-volvo-refresh-token", "Failed restoreSession must not delete stored Volvo token")
     }
 
     @Test
-    func polestarRestoreSessionDoesNotWipeKeychainOnAuthFailure() async throws {
+    func polestarRestoreSessionDeadGrantSurfacesNoStoredSessionAndClearsKeychain() async throws {
         let keyService = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
         let keychain = KeychainStore(service: keyService)
         defer {
             try? keychain.deleteSessionToken()
         }
 
-        try keychain.saveSessionToken("valid-polestar-refresh-token")
+        try keychain.saveSessionToken("dead-polestar-refresh-token")
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
         let polestarAPI = PolestarAPI(keychain: keychain, preferences: preferences)
 
+        // Stub the IdP: real discovery document, then a 400 invalid_grant for the token
+        // exchange, so the dead-grant contract is exercised without the live network.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeadGrantTransport.self]
+        await polestarAPI.installRestoreTestSession(URLSession(configuration: configuration))
+
         do {
-            try await polestarAPI.restoreSession(token: "bad-token", preferredVIN: nil, features: .default)
+            try await polestarAPI.restoreSession(token: "dead-polestar-refresh-token", preferredVIN: nil, features: .default)
+            Issue.record("A dead refresh grant must not restore a session")
+        } catch PolestarError.authenticationRequired(.noStoredSession) {
+            // expected: a dead grant surfaces as .noStoredSession (API-07)
         } catch {
-            // Expected failure
+            Issue.record("expected .noStoredSession for a dead grant, got \(error)")
         }
 
-        let preservedToken = try keychain.readSessionToken()
-        XCTAssertEqual(preservedToken, "valid-polestar-refresh-token", "Failed restoreSession must not delete stored Polestar token")
+        // API-07: the rejected grant is dropped from memory AND storage so nothing can
+        // keep replaying a rotated-out token against the IdP.
+        #expect(try keychain.readSessionToken() == nil,
+                "a dead refresh grant must clear the stored Polestar token")
     }
 
     @Test
@@ -111,11 +122,11 @@ struct MultiCarFleetSwitchingTests {
         cachedSnapshots[Self.volvoVin2] = vehicle(vin: Self.volvoVin2, brand: .volvo)
 
         let available = FleetSnapshot(cars: cars, snapshots: cachedSnapshots).vehicles
-        XCTAssertEqual(available.count, 4)
-        XCTAssertTrue(available.contains(Self.polestarVin1))
-        XCTAssertTrue(available.contains(Self.polestarVin2))
-        XCTAssertTrue(available.contains(Self.volvoVin1))
-        XCTAssertTrue(available.contains(Self.volvoVin2))
+        #expect(available.count == 4)
+        #expect(available.contains(Self.polestarVin1))
+        #expect(available.contains(Self.polestarVin2))
+        #expect(available.contains(Self.volvoVin1))
+        #expect(available.contains(Self.volvoVin2))
     }
 
     @Test
@@ -127,10 +138,10 @@ struct MultiCarFleetSwitchingTests {
         preferences.setVehicleNickname("My Swedish Wagon", for: Self.volvoVin1)
 
         let resolvedDirect = AutomationHandoff.resolveVIN(from: Self.volvoVin1, preferences: preferences)
-        XCTAssertEqual(resolvedDirect, Self.volvoVin1)
+        #expect(resolvedDirect == Self.volvoVin1)
 
         let resolvedNickname = AutomationHandoff.resolveVIN(from: "Swedish Wagon", preferences: preferences)
-        XCTAssertEqual(resolvedNickname, Self.volvoVin1)
+        #expect(resolvedNickname == Self.volvoVin1)
     }
 
     @Test
@@ -142,8 +153,8 @@ struct MultiCarFleetSwitchingTests {
         preferences.setTheme(.swedishGold, for: Self.polestarVin1, brand: .polestar)
         preferences.setTheme(.volvo, for: Self.volvoVin1, brand: .volvo)
 
-        XCTAssertEqual(preferences.theme(for: Self.polestarVin1), .swedishGold)
-        XCTAssertEqual(preferences.theme(for: Self.volvoVin1), .volvo)
+        #expect(preferences.theme(for: Self.polestarVin1) == .swedishGold)
+        #expect(preferences.theme(for: Self.volvoVin1) == .volvo)
     }
 }
 
@@ -166,5 +177,42 @@ private actor MockFleetProvider: VehicleProviding {
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState { vehicle(vin: vin, brand: brand) }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         RemoteCommandResult(outcome: .completed, message: nil)
+    }
+}
+
+/// Serves a valid Polestar discovery document and answers the token exchange with the
+/// OAuth marker of a permanently dead grant (invalid_grant), deterministically.
+private final class DeadGrantTransport: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let url = request.url ?? URL(string: "https://polestarid.eu.polestar.com")!
+        let body: Data
+        let status: Int
+        if url.path.hasSuffix(".well-known/openid-configuration") {
+            status = 200
+            body = Data(#"""
+            {"issuer":"https://polestarid.eu.polestar.com",
+             "token_endpoint":"https://polestarid.eu.polestar.com/token",
+             "authorization_endpoint":"https://polestarid.eu.polestar.com/authorize",
+             "userinfo_endpoint":"https://polestarid.eu.polestar.com/userinfo"}
+            """#.utf8)
+        } else {
+            status = 400
+            body = Data(#"{"error":"invalid_grant","error_description":"Token has been revoked"}"#.utf8)
+        }
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private extension PolestarAPI {
+    func installRestoreTestSession(_ transport: URLSession) {
+        session.invalidateAndCancel()
+        session = transport
     }
 }

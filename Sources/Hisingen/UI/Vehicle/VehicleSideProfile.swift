@@ -89,7 +89,6 @@ struct OutlineGeometry {
 @MainActor
 struct VehicleSideProfileDoorsView: View {
     let openings: [OpeningReading]
-    let isLocked: Bool?
     var hoveredOpening: VehicleOpening? = nil
 
     private func reading(for op: VehicleOpening) -> OpeningReading? {
@@ -172,14 +171,18 @@ struct VehicleSideProfileDoorsView: View {
                 }
 
                 // Front headlight beam traced from SVG X=[1419..1583], Y=[347..407].
-                if hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered {
-                    headlightsGlow(og: og, active: hoodOpen || frontDoorOpen || frontWindowOpen, hovered: hoodHovered || frontDoorHovered || frontWindowHovered)
-                }
+                headlightsGlow(
+                    og: og,
+                    shown: hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered,
+                    active: hoodOpen || frontDoorOpen || frontWindowOpen
+                )
 
                 // Rear taillight glow traced from SVG X=[72..211], Y=[278..343].
-                if tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen || tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered {
-                    taillightsGlow(og: og, active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen, hovered: tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered)
-                }
+                taillightsGlow(
+                    og: og,
+                    shown: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen || tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered,
+                    active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen
+                )
 
                 // Hood zone traced from SVG X=[1122..1541], Y=[275..361].
                 openingZone(
@@ -259,7 +262,6 @@ struct VehicleSideProfileDoorsView: View {
         case hood, tailgate, frontDoor, rearDoor, frontWindow, rearWindow, sunroof, chargeLid
     }
 
-    @ViewBuilder
     private func openingZone(
         kind: OpeningZoneKind,
         u: CGFloat, v: CGFloat,
@@ -268,40 +270,46 @@ struct VehicleSideProfileDoorsView: View {
         hoverColor: Color? = nil,
         hoverBadge: String? = nil, og: OutlineGeometry
     ) -> some View {
-        if open || hovered {
-            let activeColor = open ? HisingenTheme.semanticWarning : (hoverColor ?? HisingenTheme.accent)
-            let pos = og.point(u: u, v: v)
-            let size = og.size(wFraction: wFraction, hFraction: hFraction)
+        // The zone stays in the hierarchy and fades/scales on the flag (like
+        // tireWheelGlow); animating a view that only exists while `open || hovered`
+        // cannot animate its own insertion or removal.
+        let visible = open || hovered
+        let activeColor = open ? HisingenTheme.semanticWarning : (hoverColor ?? HisingenTheme.accent)
+        let pos = og.point(u: u, v: v)
+        let size = og.size(wFraction: wFraction, hFraction: hFraction)
 
-            ZStack {
-                zoneShape(kind: kind)
-                    .fill(
-                        RadialGradient(
-                            colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
-                            center: .center,
-                            startRadius: 2,
-                            endRadius: max(size.width, size.height) * 0.55
-                        )
+        return ZStack {
+            zoneShape(kind: kind)
+                .fill(
+                    RadialGradient(
+                        colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
+                        center: .center,
+                        startRadius: 2,
+                        endRadius: max(size.width, size.height) * 0.55
                     )
-                    .overlay(
-                        zoneShape(kind: kind)
-                            .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
-                    )
-                if hovered, let hoverBadge {
-                    Text(hoverBadge)
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundStyle(activeColor)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(.regularMaterial, in: Capsule())
-                }
+                )
+                .overlay(
+                    zoneShape(kind: kind)
+                        .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
+                )
+            if hovered, let hoverBadge {
+                Text(hoverBadge)
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .foregroundStyle(activeColor)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(.regularMaterial, in: Capsule())
             }
-            .frame(width: size.width, height: size.height)
-            .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
-            .scaleEffect(hovered || open ? 1.02 : 1.0)
-            .position(pos)
-            .animation(Motion.selection, value: open || hovered)
         }
+        .frame(width: size.width, height: size.height)
+        .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
+        .scaleEffect(visible ? 1.02 : 1.0)
+        .opacity(visible ? 1 : 0)
+        .position(pos)
+        // Accent→warning recolor and stroke width ride the open flag; the
+        // visibility animation below only owns hover in/out.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: open)
+        .animation(Motion.selection, value: visible)
     }
 
     private func zoneShape(kind: OpeningZoneKind) -> OutlineAnyShape {
@@ -317,14 +325,15 @@ struct VehicleSideProfileDoorsView: View {
         }
     }
 
-    @ViewBuilder
-    private func headlightsGlow(og: OutlineGeometry, active: Bool, hovered: Bool) -> some View {
+    private func headlightsGlow(og: OutlineGeometry, shown: Bool, active: Bool) -> some View {
         let color = active ? HisingenTheme.semanticWarning : HisingenTheme.accent
         // Traced lamp cluster centroid: SVG X=[1419..1583], Y=[347..407]
         let pos = og.point(u: 0.9125, v: 0.4902)
         let size = og.size(wFraction: 0.13, hFraction: 0.11)
 
-        Ellipse()
+        // Kept in the hierarchy and faded on the flag — a glow that only exists
+        // while shown cannot animate its own removal (same rule as openingZone).
+        return Ellipse()
             .fill(
                 LinearGradient(
                     colors: [color.opacity(0.55), color.opacity(0.0)],
@@ -335,17 +344,18 @@ struct VehicleSideProfileDoorsView: View {
             .frame(width: size.width, height: size.height)
             .position(pos)
             .blur(radius: 2)
-            .animation(Motion.interaction, value: active || hovered)
+            .opacity(shown ? 1 : 0)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: shown)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: active)
     }
 
-    @ViewBuilder
-    private func taillightsGlow(og: OutlineGeometry, active: Bool, hovered: Bool) -> some View {
+    private func taillightsGlow(og: OutlineGeometry, shown: Bool, active: Bool) -> some View {
         let color = active ? HisingenTheme.semanticWarning : Color.red
         // Traced lamp cluster centroid: SVG X=[72..211], Y=[278..343]
         let pos = og.point(u: 0.0860, v: 0.4038)
         let size = og.size(wFraction: 0.11, hFraction: 0.12)
 
-        Ellipse()
+        return Ellipse()
             .fill(
                 LinearGradient(
                     colors: [color.opacity(0.65), color.opacity(0.0)],
@@ -356,37 +366,39 @@ struct VehicleSideProfileDoorsView: View {
             .frame(width: size.width, height: size.height)
             .position(pos)
             .blur(radius: 2)
-            .animation(Motion.interaction, value: active || hovered)
+            .opacity(shown ? 1 : 0)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: shown)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: active)
     }
 
-    @ViewBuilder
     private func chargeLidIndicator(
         u: CGFloat, v: CGFloat,
         wFraction: CGFloat, hFraction: CGFloat,
         open: Bool, hovered: Bool,
         og: OutlineGeometry
     ) -> some View {
-        if open || hovered {
-            let color = open ? HisingenTheme.semanticWarning : HisingenTheme.accent
-            let pos = og.point(u: u, v: v)
-            let size = og.size(wFraction: wFraction, hFraction: hFraction)
+        let visible = open || hovered
+        let color = open ? HisingenTheme.semanticWarning : HisingenTheme.accent
+        let pos = og.point(u: u, v: v)
+        let size = og.size(wFraction: wFraction, hFraction: hFraction)
 
-            ZStack {
-                ChargeLidContourShape()
-                    .fill(color.opacity(open ? 0.60 : 0.40))
-                    .frame(width: size.width, height: size.height)
-                ChargeLidContourShape()
-                    .stroke(color, lineWidth: open ? 1.5 : 1.0)
-                    .frame(width: size.width, height: size.height)
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 4, height: 4)
-            }
-            .shadow(color: color.opacity(0.6), radius: 3)
-            .scaleEffect(hovered || open ? 1.18 : 1.0)
-            .position(pos)
-            .animation(Motion.selection, value: open || hovered)
+        return ZStack {
+            ChargeLidContourShape()
+                .fill(color.opacity(open ? 0.60 : 0.40))
+                .frame(width: size.width, height: size.height)
+            ChargeLidContourShape()
+                .stroke(color, lineWidth: open ? 1.5 : 1.0)
+                .frame(width: size.width, height: size.height)
+            Circle()
+                .fill(Color.white)
+                .frame(width: 4, height: 4)
         }
+        .shadow(color: color.opacity(0.6), radius: 3)
+        .scaleEffect(visible ? 1.18 : 1.0)
+        .opacity(visible ? 1 : 0)
+        .position(pos)
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: open)
+        .animation(Motion.selection, value: visible)
     }
 }
 
@@ -630,14 +642,15 @@ struct VehicleSideProfileTiresView: View {
         let pos = og.point(u: u, v: v)
 
         ZStack {
-            // Animated pulse halo when hovered or warning
-            if hovered || alerting {
-                Circle()
-                    .fill(activeColor.opacity(alerting ? 0.35 : 0.22))
-                    .frame(width: ringSize + 10, height: ringSize + 10)
-                    .scaleEffect(hovered ? 1.15 : 1.0)
-                    .blur(radius: 2)
-            }
+            // Pulse halo while hovered or warning. Kept in the hierarchy and
+            // faded on the flag so an escalation back to healthy eases out
+            // instead of popping (same rule as openingZone).
+            Circle()
+                .fill(activeColor.opacity(alerting ? 0.35 : 0.22))
+                .frame(width: ringSize + 10, height: ringSize + 10)
+                .scaleEffect(hovered ? 1.15 : 1.0)
+                .blur(radius: 2)
+                .opacity(hovered || alerting ? 1 : 0)
 
             // Outer tire ring border
             Circle()
@@ -652,6 +665,9 @@ struct VehicleSideProfileTiresView: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
         }
         .position(pos)
+        // Severity escalation (low→veryLow) recolors and thickens; keyed on the
+        // warning level so it crossfades instead of snapping.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state)
         .animation(Motion.selection, value: hovered || alerting)
     }
 }

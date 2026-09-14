@@ -21,6 +21,7 @@ struct SettingsDatabaseCard: View {
     @State private var retentionDays = 90
     @State private var eraseHistoryOnSignOut = false
     @State private var feedback: (message: String, isError: Bool)?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stats = Stats(
         counts: (snapshots: 0, chargingSessions: 0, chargingSamples: 0,
                  batteryHealth: 0, telemetry: 0, commands: 0),
@@ -178,6 +179,7 @@ struct SettingsDatabaseCard: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
+                    .transition(.opacity)
                 }
 
                 if let feedback {
@@ -185,6 +187,7 @@ struct SettingsDatabaseCard: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(feedback.isError ? Color.red : HisingenTheme.semanticGood)
                         .textSelection(.enabled)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 HStack(spacing: 8) {
@@ -299,7 +302,7 @@ struct SettingsDatabaseCard: View {
                             try? db.exportBackupJSON(includeCoordinates: includeCoords)
                         }.value
                         guard let data else {
-                            feedback = (L10n.text("The backup could not be created."), true)
+                            setFeedback((L10n.text("The backup could not be created."), true))
                             return
                         }
                         saveDataWithPanel(
@@ -338,7 +341,7 @@ struct SettingsDatabaseCard: View {
                             try? await DiagnosticLogExporter.buildReport(database: db)
                         }.value
                         guard let data else {
-                            feedback = (L10n.text("The diagnostic report could not be created."), true)
+                            setFeedback((L10n.text("The diagnostic report could not be created."), true))
                             return
                         }
                         saveDataWithPanel(
@@ -372,6 +375,9 @@ struct SettingsDatabaseCard: View {
                 .tint(.red)
                 .disabled(isMaintaining)
             }
+            // isMaintaining flips inside Task continuations without a transaction;
+            // this binding is what crossfades the spinner row in and out.
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: isMaintaining)
         }
     }
     .task {
@@ -423,10 +429,18 @@ struct SettingsDatabaseCard: View {
 
     private enum MaintenanceOperation: Equatable { case vacuum, prune, clearLocations, wipe }
 
+    /// Single animation context for the feedback banner: its writers include
+    /// NSSavePanel callbacks that run outside any SwiftUI transaction.
+    private func setFeedback(_ value: (message: String, isError: Bool)?) {
+        withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+            feedback = value
+        }
+    }
+
     private func runMaintenance(_ operation: MaintenanceOperation) {
         guard !isMaintaining else { return }
         isMaintaining = true
-        feedback = nil
+        setFeedback(nil)
         let db = database
         let selectedRetentionDays = retentionDays
         let selectedVIN = state?.identity.vin
@@ -453,18 +467,18 @@ struct SettingsDatabaseCard: View {
                 }
                 await loadStats()
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                withAnimation(reduceMotion ? nil : Motion.stateChange) {
                     vacuumed = operation == .vacuum
                     pruned = operation == .prune
                 }
                 switch operation {
-                case .vacuum: feedback = (L10n.text("Database optimization completed."), false)
-                case .prune: feedback = (L10n.text("Old historical samples were pruned."), false)
-                case .clearLocations: feedback = (L10n.text("Saved location history was cleared."), false)
-                case .wipe: feedback = (L10n.text("Local vehicle data was erased."), false)
+                case .vacuum: setFeedback((L10n.text("Database optimization completed."), false))
+                case .prune: setFeedback((L10n.text("Old historical samples were pruned."), false))
+                case .clearLocations: setFeedback((L10n.text("Saved location history was cleared."), false))
+                case .wipe: setFeedback((L10n.text("Local vehicle data was erased."), false))
                 }
             } catch {
-                feedback = (L10n.format("Database maintenance failed: %@", error.localizedDescription), true)
+                setFeedback((L10n.format("Database maintenance failed: %@", error.localizedDescription), true))
             }
             isMaintaining = false
         }
@@ -487,10 +501,10 @@ struct SettingsDatabaseCard: View {
             if response == .OK, let url = panel.url {
                 do {
                     try csvContent.write(to: url, atomically: true, encoding: .utf8)
-                    feedback = (L10n.text("Export saved."), false)
+                    setFeedback((L10n.text("Export saved."), false))
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 } catch {
-                    feedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
+                    setFeedback((L10n.format("Export failed: %@", error.localizedDescription), true))
                 }
             }
         }
@@ -504,10 +518,10 @@ struct SettingsDatabaseCard: View {
             if response == .OK, let url = panel.url {
                 do {
                     try data.write(to: url, options: .atomic)
-                    feedback = (L10n.text("Export saved."), false)
+                    setFeedback((L10n.text("Export saved."), false))
                     NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 } catch {
-                    feedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
+                    setFeedback((L10n.format("Export failed: %@", error.localizedDescription), true))
                 }
             }
         }

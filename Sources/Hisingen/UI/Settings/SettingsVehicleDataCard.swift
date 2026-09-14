@@ -33,13 +33,6 @@ struct SettingsVehicleDataCard: View {
             .padding(.top, 6)
     }
 
-    private func inlineValidation(_ message: String) -> some View {
-        Label(message, systemImage: "exclamationmark.circle.fill")
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.red)
-            .accessibilityLabel(message)
-    }
-
     private func saveSpecificationOverride(vin: String) {
         func parsed(_ text: String, range: ClosedRange<Double>) -> Double? {
             guard let value = NumberParsing.decimal(from: text),
@@ -106,6 +99,7 @@ struct SettingsVehicleDataCard: View {
                             )
                             .datePickerStyle(.compact)
                             .controlSize(.small)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                             .onChange(of: warrantyInServiceDate) { _, date in
                                 prefs.setWarrantyInServiceDate(date, for: warrantyVIN)
                                 binder.notify(.presentation)
@@ -114,6 +108,7 @@ struct SettingsVehicleDataCard: View {
                     }
                     .padding(8)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .animation(Motion.resolve(Motion.layout), value: hasWarrantyInServiceDate)
                 }
 
                 if !warrantyVIN.isEmpty, state?.powertrain.hasElectricRange == true {
@@ -153,7 +148,7 @@ struct SettingsVehicleDataCard: View {
                             Text("km").font(.system(size: 9)).foregroundStyle(.secondary)
                         }
                         if let specificationValidationMessage {
-                            inlineValidation(specificationValidationMessage)
+                            InlineValidationLabel(message: specificationValidationMessage)
                         }
                         HStack {
                             Spacer()
@@ -168,11 +163,16 @@ struct SettingsVehicleDataCard: View {
                                     saveSpecificationOverride(vin: warrantyVIN)
                                 }
                                 .controlSize(.small)
+                                .transition(.opacity)
                             }
                         }
                     }
                     .padding(8)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    // Both override texts feed the Reset button's visibility; keying
+                    // on their emptiness animates its appear/disappear as one.
+                    .animation(Motion.resolve(Motion.layout),
+                               value: usableBatteryCapacityOverride.isEmpty && wltpRangeOverride.isEmpty)
                 }
 
                 subsectionHeader("Vehicle & Identity")

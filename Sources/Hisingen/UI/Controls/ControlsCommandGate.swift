@@ -4,12 +4,14 @@ import SwiftUI
 @MainActor
 struct ControlsCommandGate {
     let state: VehicleState
+    /// The live session's brand, not `preferences.activeBrand` — the two can disagree for
+    /// the brief window while a brand switch rebuilds the session, and gating must agree
+    /// with what dispatch would actually use.
+    let brand: VehicleBrand
     let preferences: PreferencesStore
     let remoteCommandInProgress: Bool
     let inFlightCommandID: String?
     let onRemoteCommand: (RemoteCommand) -> Void
-
-    private let capabilityGate = CapabilityGate()
 
     var features: Set<AppFeature> { preferences.features.enabled }
 
@@ -25,10 +27,10 @@ struct ControlsCommandGate {
         _ command: RemoteCommand,
         ignoreBusy: Bool = false
     ) -> CommandAvailability {
-        capabilityGate.availability(
+        CapabilityGate.availability(
             for: command,
             state: state,
-            commandCatalog: ProviderCommandCatalog(brand: preferences.activeBrand),
+            brand: brand,
             enabledFeatures: features,
             commandInProgress: ignoreBusy ? false : remoteCommandInProgress,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled

@@ -26,7 +26,7 @@ extension HistoryDashboardView {
                     Image(systemName: period == .custom ? "calendar.badge.checkmark" : "calendar")
                         .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.pressable)
                 .help(L10n.text("Pick a custom date range"))
                 .accessibilityLabel(L10n.text("Custom date range"))
                 .popover(isPresented: $showCustomRangeEditor, arrowEdge: .bottom) { customRangePopover }
@@ -37,7 +37,7 @@ extension HistoryDashboardView {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.pressable)
                 .help(L10n.text("Reload history from the local database"))
                 .accessibilityLabel(L10n.text("Refresh history"))
             }
@@ -111,7 +111,7 @@ extension HistoryDashboardView {
                             Label(L10n.text("Add Fuel"), systemImage: "drop.fill")
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.pressable)
                         .help(L10n.text("Log a fill-up so fuel spend is included in cost estimates"))
                     }
                     exportMenu
@@ -226,6 +226,21 @@ extension HistoryDashboardView {
             }
             .disabled(cabinClimateRecords.isEmpty)
             Divider()
+            Button(L10n.text("Full Backup (JSON)")) {
+                let database = database
+                let includeCoordinates = preferences.persistLocationHistory
+                Task { @MainActor in
+                    let data = await Task.detached(priority: .userInitiated) {
+                        try? database.exportBackupJSON(includeCoordinates: includeCoordinates)
+                    }.value
+                    guard let data else {
+                        exportError = L10n.text("The backup could not be created.")
+                        return
+                    }
+                    exportJSON(data, name: "Full-Backup")
+                }
+            }
+            Divider()
             Button(L10n.text("Copy Summary")) {
                 HistoryExport.copyToClipboard(historySummaryText)
             }
@@ -245,7 +260,9 @@ extension HistoryDashboardView {
     func metric(_ title: String, _ value: String, _ symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Image(systemName: symbol).font(.system(size: 10)).foregroundStyle(HisingenTheme.accent)
-            Text(value).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+                .hisTelemetryValue(value, reduceMotion: reduceMotion)
             Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -307,13 +324,17 @@ extension HistoryDashboardView {
 
     func comparisonMetric(_ title: String, _ value: String, _ delta: Double?, higherIsBetter: Bool?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .rounded)).lineLimit(1)
+                .hisTelemetryValue(value, reduceMotion: reduceMotion)
             HStack(spacing: 4) {
                 Text(title).font(.system(size: 8.5)).foregroundStyle(.secondary).lineLimit(1)
                 if let delta {
+                    let color = deltaColor(delta, higherIsBetter: higherIsBetter)
                     Text(Format.signedPercent(delta))
                         .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(deltaColor(delta, higherIsBetter: higherIsBetter))
+                        .foregroundStyle(color)
+                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: color)
                 }
             }
         }
@@ -336,6 +357,7 @@ extension HistoryDashboardView {
             Text(Format.signedPercent(delta))
                 .font(.system(size: 8.5, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .hisTelemetryValue(delta, reduceMotion: reduceMotion)
         }
         .padding(.horizontal, 5).padding(.vertical, 2)
         .background(Color.primary.opacity(0.04), in: Capsule())
@@ -366,7 +388,7 @@ extension HistoryDashboardView {
                     curveStat(L10n.text("EV Generation"), Format.massKg(comparison.electricKgCO2))
                     curveStat(L10n.text("Petrol Equivalent"), Format.massKg(comparison.petrolKgCO2))
                 }
-                Text(L10n.format("Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure with the \u{201C}grid_carbon_intensity_g_per_kwh\u{201D} preference.",
+                Text(L10n.format("Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.",
                                  Format.count(Int(preferences.gridCarbonIntensityGramsPerKwh)),
                                  Format.count(170)))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
@@ -410,6 +432,18 @@ extension HistoryDashboardView {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try contents.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+        }
+    }
+
+    func exportJSON(_ data: Data, name: String) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try data.write(to: url, options: .atomic)
         } catch {
             exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
         }

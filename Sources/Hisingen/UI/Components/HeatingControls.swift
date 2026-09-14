@@ -36,6 +36,7 @@ struct SeatHeatingControl: View {
                                 .frame(width: 4, height: 8)
                         }
                     }
+                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: level)
                 }
                 .frame(maxWidth: .infinity, minHeight: 28)
             }
@@ -78,6 +79,7 @@ struct SteeringHeatingControl: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(isActive ? Color.orange : Color.secondary)
                 }
+                .animation(Motion.resolveCrossfade(Motion.stateChange), value: level)
                 .frame(maxWidth: .infinity, minHeight: 28)
             }
             .buttonStyle(.bordered)

@@ -17,6 +17,9 @@ struct KVRow: View {
         self.warning = warning
         self.info = info
     }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if let symbol {
@@ -40,7 +43,10 @@ struct KVRow: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .help(value)
+                .hisTelemetryValue(value, reduceMotion: reduceMotion)
         }
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: warning)
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: valueWarning)
         .accessibilityElement(children: info == nil ? .ignore : .contain)
         .accessibilityLabel({
             var label = warning || valueWarning ? "\(L10n.text("Warning")): \(key), \(value)" : "\(key): \(value)"

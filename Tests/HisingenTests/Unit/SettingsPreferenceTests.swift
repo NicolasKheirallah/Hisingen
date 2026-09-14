@@ -6,7 +6,7 @@ import Testing
 struct SettingsPreferenceTests {
     private func store() throws -> (PreferencesStore, UserDefaults, String) {
         let suite = "SettingsPreferenceTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
         return (PreferencesStore(defaults: defaults), defaults, suite)
     }
@@ -23,9 +23,9 @@ struct SettingsPreferenceTests {
         preferences.features = selection
 
         let relaunched = PreferencesStore(defaults: defaults)
-        XCTAssertFalse(relaunched.features.contains(.vehicleLocation))
-        XCTAssertFalse(relaunched.features.contains(.vehicleWeather))
-        XCTAssertFalse(relaunched.features.contains(.ownerGreeting))
+        #expect(!(relaunched.features.contains(.vehicleLocation)))
+        #expect(!(relaunched.features.contains(.vehicleWeather)))
+        #expect(!(relaunched.features.contains(.ownerGreeting)))
     }
 
     @Test
@@ -35,27 +35,27 @@ struct SettingsPreferenceTests {
         defaults.set([AppFeature.vehicleIdentity.rawValue],
                      forKey: "enabled_features_v2")
 
-        XCTAssertTrue(preferences.features.contains(.realTimeUpdates))
+        #expect(preferences.features.contains(.realTimeUpdates))
         var explicitlyDisabled = preferences.features
         explicitlyDisabled.set(.realTimeUpdates, enabled: false)
         preferences.features = explicitlyDisabled
 
-        XCTAssertFalse(PreferencesStore(defaults: defaults).features.contains(.realTimeUpdates))
+        #expect(!(PreferencesStore(defaults: defaults).features.contains(.realTimeUpdates)))
     }
 
     @Test
     func safeBulkEnableNeverIncludesRemoteCommands() {
-        XCTAssertFalse(AppFeature.safeBulkEnableCases.isEmpty)
-        XCTAssertTrue(Set(AppFeature.safeBulkEnableCases).isDisjoint(with: AppFeature.remoteFeatures))
-        XCTAssertTrue(AppFeature.remoteFeatures.allSatisfy(\.isRemoteControl))
+        #expect(!(AppFeature.safeBulkEnableCases.isEmpty))
+        #expect(Set(AppFeature.safeBulkEnableCases).isDisjoint(with: AppFeature.remoteFeatures))
+        #expect(AppFeature.remoteFeatures.allSatisfy { $0.isRemoteControl })
     }
 
     @Test
     func settingsSearchFindsWholeSectionsAndCanReturnNoResults() {
-        XCTAssertTrue(SettingsSection.accounts.matches("VIN"))
-        XCTAssertTrue(SettingsSection.privacyData.matches("backup"))
-        XCTAssertTrue(SettingsSection.notifications.matches("quiet hours"))
-        XCTAssertFalse(SettingsSection.appearance.matches("battery alert"))
+        #expect(SettingsSection.accounts.matches("VIN"))
+        #expect(SettingsSection.privacyData.matches("backup"))
+        #expect(SettingsSection.notifications.matches("quiet hours"))
+        #expect(!(SettingsSection.appearance.matches("battery alert")))
     }
 
     @Test
@@ -68,8 +68,8 @@ struct SettingsPreferenceTests {
         preferences.customPanelSizeEnabled = false
 
         let relaunched = PreferencesStore(defaults: defaults)
-        XCTAssertEqual(relaunched.panelSize, .large)
-        XCTAssertFalse(relaunched.customPanelSizeEnabled)
+        #expect(relaunched.panelSize == .large)
+        #expect(!(relaunched.customPanelSizeEnabled))
     }
 
     @Test
@@ -87,22 +87,20 @@ struct SettingsPreferenceTests {
         preferences.features = features
 
         let data = try preferences.exportSettingsPropertyList()
-        let archive = try XCTUnwrap(
-            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        )
-        XCTAssertNil(archive["polestar_email"])
-        XCTAssertNil(archive["polestar_vin"])
-        XCTAssertNil(archive["session_token"])
-        XCTAssertNil(archive["garage_vehicle_order_v1"])
-        XCTAssertEqual(archive["panel_size"] as? String, PanelSize.large.rawValue)
-        XCTAssertFalse((archive["enabled_features_v2"] as? [String] ?? []).contains(AppFeature.remoteLocks.rawValue))
+        let archive = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(archive["polestar_email"] == nil)
+        #expect(archive["polestar_vin"] == nil)
+        #expect(archive["session_token"] == nil)
+        #expect(archive["garage_vehicle_order_v1"] == nil)
+        #expect(archive["panel_size"] as? String == PanelSize.large.rawValue)
+        #expect(!((archive["enabled_features_v2"] as? [String] ?? []).contains(AppFeature.remoteLocks.rawValue)))
 
         preferences.panelSize = .compact
         preferences.notifySounds = true
         try preferences.importSettingsPropertyList(data)
-        XCTAssertEqual(preferences.panelSize, .large)
-        XCTAssertFalse(preferences.notifySounds)
-        XCTAssertFalse(preferences.features.contains(.remoteLocks))
+        #expect(preferences.panelSize == .large)
+        #expect(!(preferences.notifySounds))
+        #expect(!(preferences.features.contains(.remoteLocks)))
     }
 
     @Test
@@ -125,7 +123,7 @@ struct SettingsPreferenceTests {
         defer { defaults.removePersistentDomain(forName: suite) }
 
         // Every alert type ships default-on.
-        XCTAssertTrue(preferences.anyNotificationAlertEnabled)
+        #expect(preferences.anyNotificationAlertEnabled)
 
         let flags: [ReferenceWritableKeyPath<PreferencesStore, Bool>] = [
             \.notifyChargingStarted, \.notifyChargingComplete, \.notifyChargingProblem,
@@ -136,14 +134,13 @@ struct SettingsPreferenceTests {
         ]
 
         for flag in flags { preferences[keyPath: flag] = false }
-        XCTAssertFalse(preferences.anyNotificationAlertEnabled,
-                       "with every alert type off, nothing is enabled")
+        #expect(!(preferences.anyNotificationAlertEnabled), "with every alert type off, nothing is enabled")
 
         // Each flag on its own must be enough — catches a flag dropped from the OR chain.
         for flag in flags {
             for other in flags { preferences[keyPath: other] = false }
             preferences[keyPath: flag] = true
-            XCTAssertTrue(preferences.anyNotificationAlertEnabled)
+            #expect(preferences.anyNotificationAlertEnabled)
         }
     }
 
@@ -155,10 +152,10 @@ struct SettingsPreferenceTests {
         preferences.openingsAlertDelayMinutes = 999
         preferences.plugInReminderThreshold = 1
         preferences.eveningUnlockedStartHour = 4
-        XCTAssertEqual(preferences.historySampleRetentionDays, 90)
-        XCTAssertEqual(preferences.openingsAlertDelayMinutes, 60)
-        XCTAssertEqual(preferences.plugInReminderThreshold, 10)
-        XCTAssertEqual(preferences.eveningUnlockedStartHour, 18)
+        #expect(preferences.historySampleRetentionDays == 90)
+        #expect(preferences.openingsAlertDelayMinutes == 60)
+        #expect(preferences.plugInReminderThreshold == 10)
+        #expect(preferences.eveningUnlockedStartHour == 18)
     }
 
     @Test
@@ -166,11 +163,11 @@ struct SettingsPreferenceTests {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        XCTAssertEqual(preferences.updateCheckInterval, .daily)
+        #expect(preferences.updateCheckInterval == .daily)
 
         preferences.updateCheckInterval = .everyHour
         let relaunched = PreferencesStore(defaults: defaults)
-        XCTAssertEqual(relaunched.updateCheckInterval, .everyHour)
+        #expect(relaunched.updateCheckInterval == .everyHour)
     }
 
     @Test
@@ -179,7 +176,7 @@ struct SettingsPreferenceTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         // A removed case or hand-edited defaults must not break the updater.
         defaults.set("three_times_a_day", forKey: "update_check_interval")
-        XCTAssertEqual(preferences.updateCheckInterval, .daily)
+        #expect(preferences.updateCheckInterval == .daily)
     }
 
     @Test
@@ -189,14 +186,12 @@ struct SettingsPreferenceTests {
         preferences.updateCheckInterval = .weekly
 
         let data = try preferences.exportSettingsPropertyList()
-        let archive = try XCTUnwrap(
-            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        )
-        XCTAssertEqual(archive["update_check_interval"] as? String, UpdateCheckInterval.weekly.rawValue)
+        let archive = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(archive["update_check_interval"] as? String == UpdateCheckInterval.weekly.rawValue)
 
         preferences.updateCheckInterval = .daily
         try preferences.importSettingsPropertyList(data)
-        XCTAssertEqual(preferences.updateCheckInterval, .weekly)
+        #expect(preferences.updateCheckInterval == .weekly)
     }
 
     @Test
@@ -211,7 +206,7 @@ struct SettingsPreferenceTests {
             odometerKm: 1_000, imageData: nil, fetchedAt: Date(),
             vehicleReportedAt: Date(), dataWarnings: []
         )
-        XCTAssertTrue(Notifier.plugInReminderCondition(state, threshold: 40))
-        XCTAssertFalse(Notifier.plugInReminderCondition(state, threshold: 30))
+        #expect(Notifier.plugInReminderCondition(state, threshold: 40))
+        #expect(!(Notifier.plugInReminderCondition(state, threshold: 30)))
     }
 }

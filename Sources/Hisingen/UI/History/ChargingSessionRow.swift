@@ -37,10 +37,6 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
-                    if let spot = session.spotCost {
-                        KVRow(L10n.text("Spot Cost"), String(format: "%.2f %@", spot, session.currencySymbol ?? preferences.currencySymbol), symbol: "chart.line.uptrend.xyaxis",
-                              info: L10n.text("Estimated from the recorded charging power and the hourly market price for your price zone."))
-                    }
                     if let cost = session.estimatedCost(tariff: preferences.electricityPricePerKwh) {
                         KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
                     }
@@ -80,7 +76,7 @@ struct ChargingSessionRow: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
         )
-        .animation(Motion.selection, value: isHovered)
+        .animation(Motion.resolve(Motion.selection), value: isHovered)
         .onHover { isHovered = $0 }
     }
 

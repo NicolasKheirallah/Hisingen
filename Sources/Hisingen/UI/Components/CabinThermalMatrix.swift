@@ -41,6 +41,7 @@ struct CabinThermalMatrix: View {
                     .padding(.vertical, 2)
                     .background(activityBadgeColor.opacity(0.15), in: Capsule())
                     .foregroundStyle(activityBadgeColor)
+                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: activity)
             }
 
             HStack(alignment: .top, spacing: 10) {
@@ -132,5 +133,6 @@ struct CabinThermalMatrix: View {
         .padding(.vertical, 6)
         .background(active ? Color.orange.opacity(0.10) : Color.primary.opacity(0.03),
                     in: RoundedRectangle(cornerRadius: 6))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: level)
     }
 }

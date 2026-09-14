@@ -35,17 +35,14 @@ struct PolestarFeatureWiringTests {
     }
 
     @MainActor
-    private func makePreferences(_ label: String) -> PreferencesStore {
-        let suite = "polestar-features-\(label)-\(UUID())"
-        let defaults = UserDefaults(suiteName: suite)!
-        let store = PreferencesStore(defaults: defaults, keychain: .app)
-        return store
+    private func makePreferences(_ label: String) -> ScopedPreferences {
+        ScopedPreferences(label: "polestar-features-\(label)")
     }
 
     // MARK: - F1: Factory passport
 
     @Test @MainActor func factoryPassportCSVCoversAllIdentityFields() throws {
-        let prefs = makePreferences("passport")
+        let prefs = makePreferences("passport").store
         let state = makeState()
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         for header in ["VIN", "Nickname", "Model", "Registration No", "Internal Vehicle ID",
@@ -61,7 +58,7 @@ struct PolestarFeatureWiringTests {
     }
 
     @Test @MainActor func factoryPassportCSVEscapesCommasAndQuotes() throws {
-        let prefs = makePreferences("passport-esc")
+        let prefs = makePreferences("passport-esc").store
         let state = makeState(externalColour: "Space Black, \"Limited\"")
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
@@ -70,7 +67,7 @@ struct PolestarFeatureWiringTests {
     }
 
     @Test @MainActor func factoryPassportCSVOmitsUnknownFieldsInsteadOfPlaceholders() throws {
-        let prefs = makePreferences("passport-sparse")
+        let prefs = makePreferences("passport-sparse").store
         let state = makeState(externalColour: nil, upholstery: nil, registrationNo: nil)
         let csv = InfoTabView.factoryPassportCSV(state: state, preferences: prefs)
         let paintLine = csv.split(separator: "\n").first { $0.contains("Exterior Paint") }
@@ -89,7 +86,7 @@ struct PolestarFeatureWiringTests {
     }
 
     @Test @MainActor func factoryPassportIncludesFactoryContentCodes() throws {
-        let prefs = makePreferences("passport-content")
+        let prefs = makePreferences("passport-content").store
         var state = makeState()
         state.otaCapabilities = VehicleOTACapabilities(userIsOwner: true)
         var equipment = VehicleEquipment()

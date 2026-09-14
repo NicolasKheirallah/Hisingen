@@ -46,8 +46,8 @@ struct LivePolestarReadOnlyIntegrationTests {
     func testAuthenticationDiscoveryFetchRestoreAndSignOut() async throws {
         let startedAt = Date()
         let environment = ProcessInfo.processInfo.environment
-        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
-        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let email = try #require(environment["HISINGEN_TEST_EMAIL"])
+        let password = try #require(environment["HISINGEN_TEST_PASSWORD"])
         let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
         let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-tests")
         try? keychain.deleteSessionToken()
@@ -68,17 +68,17 @@ struct LivePolestarReadOnlyIntegrationTests {
                 email: email, password: password, preferredVIN: preferredVIN, features: features
             )
             let cars = await api.cars
-            XCTAssertFalse(cars.isEmpty)
+            #expect(!(cars.isEmpty))
             let resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
-            let vin = try XCTUnwrap(resolvedVIN)
+            let vin = try #require(resolvedVIN)
             let state = try await api.fetchVehicleState(vin: vin, features: features)
-            XCTAssertEqual(state.identity.vin, vin)
-            XCTAssertTrue(state.energy.batteryPercentage != nil || state.energy.rangeKm != nil)
+            #expect(state.identity.vin == vin)
+            #expect(state.energy.batteryPercentage != nil || state.energy.rangeKm != nil)
             let connectivitySupport = state.probedCapabilities?.support(for: .connectivity)
             if connectivitySupport == .unavailable {
-                XCTAssertFalse(state.freshness.unavailableFeatures.contains(.connectivityDiagnostics))
+                #expect(!(state.freshness.unavailableFeatures.contains(.connectivityDiagnostics)))
             } else if state.connectivity != nil {
-                XCTAssertEqual(connectivitySupport, .supported)
+                #expect(connectivitySupport == .supported)
             }
             if let installed = state.otaCapabilities?.installedSoftwareVersion, !installed.isEmpty {
                 #expect(state.softwareInfo?.installedVersion == installed)
@@ -89,37 +89,34 @@ struct LivePolestarReadOnlyIntegrationTests {
                 // ("unknown"), and `VehicleChargeBounds` supplies the fallback range. Only
                 // assert the advertised bounds are self-consistent when the vehicle sends them.
                 if capabilities.chargeAmperageMinLimit > 0 {
-                    XCTAssertTrue(capabilities.supportsGlobalChargeAmperageLimit)
-                    XCTAssertTrue(capabilities.chargeAmperageMaxLimit >= capabilities.chargeAmperageMinLimit)
+                    #expect(capabilities.supportsGlobalChargeAmperageLimit)
+                    #expect(capabilities.chargeAmperageMaxLimit >= capabilities.chargeAmperageMinLimit)
                 }
                 if capabilities.chargeAmperageMaxLimit > 0 {
-                    XCTAssertTrue(capabilities.chargeAmperageMaxLimit <= 64)
+                    #expect(capabilities.chargeAmperageMaxLimit <= 64)
                 }
                 if capabilities.targetChargeLevelPercentageMinLimit > 0 {
-                    XCTAssertTrue(capabilities.supportsTargetChargeLevel)
-                    XCTAssertTrue(capabilities.targetChargeLevelPercentageMinLimit <= 100)
+                    #expect(capabilities.supportsTargetChargeLevel)
+                    #expect(capabilities.targetChargeLevelPercentageMinLimit <= 100)
                 }
                 // Whatever the vehicle advertised (or didn't), the resolved control bounds
                 // must always be usable.
                 let bounds = VehicleChargeBounds(capabilities: capabilities)
-                XCTAssertTrue(bounds.targetRange.lowerBound >= 1 && bounds.targetRange.upperBound == 100)
-                XCTAssertTrue(bounds.amperageRange.lowerBound >= 1)
-                XCTAssertTrue(bounds.amperageRange.upperBound >= bounds.amperageRange.lowerBound)
+                #expect(bounds.targetRange.lowerBound >= 1 && bounds.targetRange.upperBound == 100)
+                #expect(bounds.amperageRange.lowerBound >= 1)
+                #expect(bounds.amperageRange.upperBound >= bounds.amperageRange.lowerBound)
             }
 
             await api.resetSession()
-            let token = try XCTUnwrap(try keychain.readSessionToken())
+            let token = try #require(try keychain.readSessionToken())
             try await api.restoreSession(token: token, preferredVIN: vin, features: features)
             let restored = try await api.fetchVehicleState(vin: vin, features: features)
-            XCTAssertEqual(restored.identity.vin, vin)
+            #expect(restored.identity.vin == vin)
             let tokenRequests = await APIDiagnosticLogStore.shared.snapshot().filter {
                 $0.provider == .polestar && $0.operation == "Polestar token request"
                     && $0.timestamp >= startedAt
             }
-            XCTAssertEqual(
-                tokenRequests.count, 2,
-                "Authentication and one explicit restore should be the only token grants"
-            )
+            #expect(tokenRequests.count == 2, "Authentication and one explicit restore should be the only token grants")
             try await api.signOut()
         } catch {
             try? await api.signOut()

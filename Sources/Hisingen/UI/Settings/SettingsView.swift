@@ -9,8 +9,8 @@ struct SettingsView: View {
     var imageCache: CarImageCache = CarImageCache.shared
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
-        (false, L10n.text("Connection testing is not available."))
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
+        (false, L10n.text("Connection testing is not available."), nil)
     }
 
     @State private var selectedSettingsSection = SettingsSection.all
@@ -19,6 +19,10 @@ struct SettingsView: View {
     @State private var persistLocationHistory = false
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
+
+    /// Section cards fade and settle from 98% — a nudge, not a zoom (scale floor 0.95).
+    private static let sectionSwapTransition: AnyTransition =
+        .opacity.combined(with: .scale(scale: 0.98))
 
     private var binder: PreferenceBinder {
         PreferenceBinder(
@@ -41,12 +45,15 @@ struct SettingsView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) {
-                        accountCard
-                        SettingsFleetCard(
-                            fleet: fleet,
-                            imageCache: imageCache,
-                            binder: binder
-                        )
+                        Group {
+                            accountCard
+                            SettingsFleetCard(
+                                fleet: fleet,
+                                imageCache: imageCache,
+                                binder: binder
+                            )
+                        }
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.appearance) {
                         SettingsAppearanceCard(
@@ -54,21 +61,29 @@ struct SettingsView: View {
                             imageCache: imageCache,
                             binder: binder
                         )
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.general) {
-                        SettingsDisplayCard(state: state, binder: binder)
-                        SettingsChargingStatOrderCard(binder: binder)
+                        Group {
+                            SettingsDisplayCard(state: state, binder: binder)
+                            SettingsChargingStatOrderCard(binder: binder)
+                        }
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.updates) {
                         SettingsUpdatesCard(binder: binder)
+                            .transition(Self.sectionSwapTransition)
                     }
                     if shows(.features) {
-                        featureQuickActions
-                        CalendarPreconditioningSettingsCard(binder: binder)
-                        SettingsChargingPlannerCard(binder: binder, state: state)
-                        SettingsVehicleDataCard(state: state, binder: binder)
-                        SettingsRemoteControlsCard(state: state, binder: binder)
-                        SettingsCapabilityMatrixCard(state: state)
+                        Group {
+                            featureQuickActions
+                            CalendarPreconditioningSettingsCard(binder: binder)
+                            SettingsChargingPlannerCard(binder: binder, state: state)
+                            SettingsVehicleDataCard(state: state, binder: binder)
+                            SettingsRemoteControlsCard(state: state, binder: binder)
+                            SettingsCapabilityMatrixCard(state: state)
+                        }
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.notifications) {
                         SettingsNotificationsCard(
@@ -76,21 +91,28 @@ struct SettingsView: View {
                             state: state,
                             binder: binder
                         )
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.privacyData) {
-                        SettingsPrivacyCard(
-                            persistLocationHistory: $persistLocationHistory,
-                            binder: binder
-                        )
-                        SettingsDatabaseCard(
-                            state: state,
-                            database: database,
-                            persistLocationHistory: $persistLocationHistory
-                        )
+                        Group {
+                            SettingsPrivacyCard(
+                                persistLocationHistory: $persistLocationHistory,
+                                binder: binder
+                            )
+                            SettingsDatabaseCard(
+                                state: state,
+                                database: database,
+                                persistLocationHistory: $persistLocationHistory
+                            )
+                        }
+                        .transition(Self.sectionSwapTransition)
                     }
                     if shows(.about) {
-                        SettingsActionsCard(binder: binder, onSignOut: onSignOut)
-                        SettingsVersionFooter()
+                        Group {
+                            SettingsActionsCard(binder: binder, onSignOut: onSignOut)
+                            SettingsVersionFooter()
+                        }
+                        .transition(Self.sectionSwapTransition)
                     }
 
                     if !hasVisibleSection {
@@ -102,10 +124,15 @@ struct SettingsView: View {
                             )
                         )
                         .padding(.vertical, 30)
+                        .transition(.opacity)
                     }
                 }
                 .padding(HisingenTheme.sectionSpacing)
                 .frame(maxWidth: .infinity)
+                // Card insertions/removals are driven by section picks and search
+                // edits; both ride Motion.cardChange so the swap reads as one system.
+                .animation(Motion.resolve(Motion.cardChange), value: selectedSettingsSection)
+                .animation(Motion.resolve(Motion.cardChange), value: settingsSearchText)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -179,7 +206,7 @@ struct SettingsView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .help(L10n.text("Back to Dashboard"))
         }
         .padding(.horizontal, 4)

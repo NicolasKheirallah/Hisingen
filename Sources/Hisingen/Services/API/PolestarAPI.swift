@@ -500,7 +500,8 @@ actor PolestarAPI {
         let task = Task {
             try await Self.requestToken(request: tokenRequest, session: currentSession,
                                         invalidReason: .expiredSession,
-                                        diagnosticLog: diagnosticLog)
+                                        diagnosticLog: diagnosticLog,
+                                        deadGrantReason: .noStoredSession)
         }
         refreshTask = task
         refreshTaskID = taskID
@@ -521,8 +522,29 @@ actor PolestarAPI {
             try apply(token)
         } catch {
             guard requestEpoch == sessionEpoch else { throw CancellationError() }
+            if case PolestarError.authenticationRequired(.noStoredSession) = error {
+                discardDeadRefreshToken()
+            }
             throw error
         }
+    }
+
+    /// The IdP rejected the refresh grant with `invalid_grant`/`expired_token`: the stored
+    /// token was rotated out or revoked, and every replay is a failed login against it
+    /// (lockout risk). Drop the persisted copies — memory and Keychain, plus the command
+    /// client's — so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
+    /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
+    /// still resolves its own outcome (`.notAuthorized`) from the now-empty storage.
+    func discardDeadRefreshToken() {
+        accessToken = nil
+        refreshToken = nil
+        tokenExpiry = nil
+        tokenLifetime = 0
+        try? keychain.deleteSessionToken()
+        commandAccessToken = nil
+        commandRefreshToken = nil
+        commandTokenExpiry = nil
+        try? keychain.deleteCommandSessionToken()
     }
 
     private func apply(_ token: TokenResponseDTO) throws {
@@ -555,13 +577,20 @@ actor PolestarAPI {
 
     static func requestToken(request: URLRequest, session: URLSession,
                              invalidReason: AuthFailureReason,
-                             diagnosticLog: APIDiagnosticLogStore) async throws -> TokenResponseDTO {
+                             diagnosticLog: APIDiagnosticLogStore,
+                             deadGrantReason: AuthFailureReason? = nil) async throws -> TokenResponseDTO {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: "Polestar token request", provider: .polestar,
             diagnosticLog: diagnosticLog
         )
         if response.statusCode == 400 {
+            // `invalid_grant`/`expired_token` mean the presented grant (a refresh token
+            // rotated out or revoked) is permanently dead; only this body distinguishes it
+            // from the other 400 rejections.
+            if let deadGrantReason, Self.isDeadGrant(data) {
+                throw PolestarError.authenticationRequired(deadGrantReason)
+            }
             throw PolestarError.authenticationRequired(invalidReason)
         }
         if let failure = PolestarError.httpFailure(
@@ -578,6 +607,13 @@ actor PolestarAPI {
             throw PolestarError.decoding(operation: "token response")
         }
         return token
+    }
+
+    /// Whether a token-endpoint 400 body carries the OAuth marker of a permanently dead grant.
+    private static func isDeadGrant(_ data: Data) -> Bool {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = body["error"] as? String else { return false }
+        return code == "invalid_grant" || code == "expired_token"
     }
 
 
@@ -760,7 +796,7 @@ actor PolestarAPI {
         vdms: [ConsumerCarDTO]
     ) -> [ConsumerCarDTO] {
         guard !vdms.isEmpty else { return primary }
-        return vdms.map { vdmsCar in
+        let merged = vdms.map { vdmsCar in
             guard let matching = primary.first(where: { $0.vin == vdmsCar.vin }) else {
                 return vdmsCar
             }
@@ -774,6 +810,9 @@ actor PolestarAPI {
                 structureWeek: matching.structureWeek
             )
         }
+        // VDMS only enriches the primary discovery, so a partial VDMS list must not evict
+        // vehicles the primary source still reports.
+        return merged + primary.filter { car in !vdms.contains(where: { $0.vin == car.vin }) }
     }
 
     private func fetchAppBackendCars(token: String) async throws -> [ConsumerCarDTO] {
@@ -983,21 +1022,6 @@ actor PolestarAPI {
                 self.imageCache.save(data, for: vin, angle: otherAngle)
             }
         }
-
-        if let interiorPool = images["interior"] as? [[String: Any]],
-           let interiorPick = interiorPool.first,
-           let interiorUrlStr = interiorPick["url"] as? String,
-           let interiorUrl = URL(string: interiorUrlStr),
-           interiorUrl.scheme == "https",
-           imageCache.interiorImage(for: vin) == nil {
-            enqueueImageDownload(
-                key: "\(vin)-interior",
-                request: URLRequest(url: interiorUrl),
-                operation: "vehicle interior image"
-            ) { data in
-                self.imageCache.saveInterior(data, for: vin)
-            }
-        }
     }
 
     private func enqueueImageDownload(
@@ -1096,10 +1120,7 @@ actor PolestarAPI {
     }
 
     static func formBody(_ fields: [String: String]) -> Data? {
-        var components = URLComponents()
-        components.queryItems = fields.sorted(by: { $0.key < $1.key })
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
-        return components.percentEncodedQuery.map { Data($0.utf8) }
+        FormURLEncoding.body(fields)
     }
 
     private static func authorizationQueryItems(clientID: String, redirectURI: String,
@@ -1117,15 +1138,14 @@ actor PolestarAPI {
         ]
     }
 
-    /// The app-scheme callback (`polestar-explore://explore.polestar.com`) carries no path,
-    /// which URL reports as "" here and "/" in some redirect forms — treat those as equal.
+    /// See `OAuthCallback.normalizedPath` — kept as a forwarding shim for the redirect
+    /// delegate and existing call sites.
     static func normalizedPath(_ url: URL) -> String {
-        url.path == "/" ? "" : url.path
+        OAuthCallback.normalizedPath(url)
     }
 
     static func queryValue(_ name: String, from url: URL?) -> String? {
-        guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        return components.queryItems?.first(where: { $0.name == name })?.value
+        OAuthCallback.queryValue(name, from: url)
     }
 
     /// Wraps `PKCE.randomURLSafeString()` only to translate its `URLError` into the

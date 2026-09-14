@@ -52,7 +52,12 @@ enum MenuBarIconState: Int, Comparable, CaseIterable, Sendable {
             )
         case .remoteOperation:
             // Shorter and shallower, so "working" reads differently from "charging".
-            return MenuBarPulseProfile(cycle: 1.2, frames: 12, minAlpha: 0.7, maxAlpha: 1.0)
+            return MenuBarPulseProfile(
+                cycle: Motion.menuBarRemoteOpCycle,
+                frames: Motion.menuBarRemoteOpFrames,
+                minAlpha: 0.7,
+                maxAlpha: 1.0
+            )
         default:
             return nil
         }
@@ -115,9 +120,7 @@ extension MenuBarIconState {
         guard let state else {
             return MenuBarIconInputs(remoteCommandInProgress: remoteCommandInProgress)
         }
-        let activity = state.climateStatus?.activity
-        let climateActive = activity == .active || activity == .heating
-            || activity == .cooling || activity == .ventilating || activity == .starting
+        let climateActive = state.isClimateActive
         let fault = state.energy.chargingState == .fault || state.energy.connection == .fault
         return MenuBarIconInputs(
             isCharging: state.isCharging,

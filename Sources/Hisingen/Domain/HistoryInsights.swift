@@ -347,6 +347,36 @@ enum HistoryInsights {
         return Statistics.pearsonCorrelation(pairs)
     }
 
+    struct ConsumptionTemperatureSlope: Equatable {
+        /// Relative consumption increase per 10 °C of cooling, against the median
+        /// consumption of the paired trips.
+        let percentPer10DegreesColder: Double
+        let observationCount: Int
+    }
+
+    /// OLS slope of consumption against ambient temperature, expressed as a percentage of
+    /// the median consumption per 10 °C of cooling. The correlation coefficient alone says
+    /// nothing about magnitude; this is what makes "colder trips consume more" quantified.
+    /// `nil` below five paired trips, when the fit runs the wrong way, or when the effect
+    /// is small enough to sit within ordinary trip-to-trip noise.
+    static func temperatureConsumptionSlope(from trips: [TripHistoryEntry]) -> ConsumptionTemperatureSlope? {
+        let pairs: [(x: Double, y: Double)] = trips.compactMap { trip in
+            guard let temperature = trip.ambientTemperatureCelsius,
+                  let consumption = trip.averageConsumption,
+                  efficiencyBounds.contains(consumption) else { return nil }
+            return (temperature, consumption)
+        }
+        guard pairs.count >= 5,
+              let fit = Statistics.linearRegression(pairs),
+              fit.slope < 0 else { return nil }
+        let medianConsumption = Statistics.median(pairs.map(\.y))
+        guard let medianConsumption, medianConsumption > 0 else { return nil }
+        let percentPer10C = (-fit.slope * 10) / medianConsumption * 100
+        guard percentPer10C >= 2 else { return nil }
+        return ConsumptionTemperatureSlope(percentPer10DegreesColder: percentPer10C,
+                                           observationCount: pairs.count)
+    }
+
     // MARK: - Battery health
 
     struct BatteryHealthTrend: Equatable {
@@ -396,7 +426,11 @@ enum HistoryInsights {
         guard !records.isEmpty else {
             return CommandStatistics(totalCount: 0, successCount: 0, successRatePct: nil, mostUsedCommand: nil)
         }
-        let successCount = records.filter { $0.status != "failed" }.count
+        // Only known-good outcomes count as success (statuses written by
+        // CommandCoordinator/CommandConfirmationLedger). A vehicle that silently ignored a
+        // command ends up "confirmation_timed_out" — or stays pending on "accepted"/"delivered" —
+        // and neither may inflate the rate the way a plain != "failed" test allowed.
+        let successCount = records.filter { ["completed", "confirmed", "acknowledged"].contains($0.status) }.count
         let counts = Dictionary(grouping: records, by: \.command).mapValues(\.count)
         return CommandStatistics(
             totalCount: records.count,

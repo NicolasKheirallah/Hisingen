@@ -23,7 +23,7 @@ struct ChargeLocationEditorSheet: View {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

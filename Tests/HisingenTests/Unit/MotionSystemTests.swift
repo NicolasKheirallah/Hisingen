@@ -13,23 +13,23 @@ struct MotionSystemTests {
 
     @Test
     func durationsRunFromInstantToDeliberate() {
-        XCTAssertTrue(Motion.micro < Motion.fast)
-        XCTAssertTrue(Motion.fast < Motion.standard)
-        XCTAssertTrue(Motion.standard < Motion.large)
-        XCTAssertTrue(Motion.large < Motion.deliberate)
+        #expect(Motion.micro < Motion.fast)
+        #expect(Motion.fast < Motion.standard)
+        #expect(Motion.standard < Motion.large)
+        #expect(Motion.large < Motion.deliberate)
         // Interaction is always quicker than a full breath.
-        XCTAssertTrue(Motion.deliberate < Motion.breathCycle)
+        #expect(Motion.deliberate < Motion.breathCycle)
     }
 
     @Test
     func ambientIsSlowAndAutoreversing() {
         // A breath is measured in seconds, not fractions of one.
-        XCTAssertTrue(Motion.breathCycle >= 2.0)
+        #expect(Motion.breathCycle >= 2.0)
         // The "live" heartbeat is quicker than a breath but still unhurried.
-        XCTAssertTrue(Motion.livePulseCycle < Motion.breathCycle)
-        XCTAssertTrue(Motion.livePulseCycle >= 1.0)
+        #expect(Motion.livePulseCycle < Motion.breathCycle)
+        #expect(Motion.livePulseCycle >= 1.0)
         // Continuous rotation completes a turn in about a second and a half.
-        XCTAssertTrue(Motion.spinCycle >= 1.0 && Motion.spinCycle <= 2.0)
+        #expect(Motion.spinCycle >= 1.0 && Motion.spinCycle <= 2.0)
     }
 
     // MARK: - Menu-bar ambient must be cheap
@@ -38,15 +38,15 @@ struct MotionSystemTests {
     func menuBarBreathIsSlowerAndCoarserThanInPanel() {
         // The tray glyph is on screen for hours, so it breathes more slowly than
         // anything inside the panel.
-        XCTAssertTrue(Motion.menuBarBreathCycle > Motion.breathCycle)
+        #expect(Motion.menuBarBreathCycle > Motion.breathCycle)
 
         // And it is sampled coarsely: one redraw every ~0.15 s or slower.
         let tick = Motion.menuBarBreathCycle / Double(Motion.menuBarBreathFrames)
-        XCTAssertTrue(tick >= 0.15, "menu-bar breath ticks too often (\(tick)s) for a multi-hour charge")
-        XCTAssertTrue(Motion.menuBarBreathFrames >= 2)
+        #expect(tick >= 0.15, "menu-bar breath ticks too often (\(tick)s) for a multi-hour charge")
+        #expect(Motion.menuBarBreathFrames >= 2)
 
         // The completion acknowledgement is a brief dwell, not a lingering state.
-        XCTAssertTrue(Motion.menuBarCompletionDwell >= 2 && Motion.menuBarCompletionDwell <= 8)
+        #expect(Motion.menuBarCompletionDwell >= 2 && Motion.menuBarCompletionDwell <= 8)
     }
 
     // MARK: - Reduce Motion resolves in one place
@@ -57,16 +57,16 @@ struct MotionSystemTests {
         defer { VehicleMotionPreference.reduceMotionOverride = original }
 
         VehicleMotionPreference.reduceMotionOverride = false
-        XCTAssertFalse(Motion.prefersReducedMotion)
-        XCTAssertNotNil(Motion.resolve(Motion.interaction))
-        XCTAssertNotNil(Motion.resolve(Motion.stateChange))
+        #expect(!(Motion.prefersReducedMotion))
+        #expect(Motion.resolve(Motion.interaction) != nil)
+        #expect(Motion.resolve(Motion.stateChange) != nil)
 
         VehicleMotionPreference.reduceMotionOverride = true
-        XCTAssertTrue(Motion.prefersReducedMotion)
-        XCTAssertNil(Motion.resolve(Motion.interaction))
-        XCTAssertNil(Motion.resolve(Motion.stateChange))
+        #expect(Motion.prefersReducedMotion)
+        #expect(Motion.resolve(Motion.interaction) == nil)
+        #expect(Motion.resolve(Motion.stateChange) == nil)
         // A cross-fade is still allowed through, so a state change is noticed.
-        XCTAssertNotNil(Motion.resolveCrossfade(Motion.stateChange))
+        #expect(Motion.resolveCrossfade(Motion.stateChange) != nil)
     }
 
     @Test
@@ -75,7 +75,7 @@ struct MotionSystemTests {
         defer { VehicleMotionPreference.reduceMotionOverride = original }
 
         VehicleMotionPreference.reduceMotionOverride = false
-        XCTAssertNotNil(Motion.resolve(Motion.entrance))
-        XCTAssertNil(Motion.resolve(nil))
+        #expect(Motion.resolve(Motion.entrance) != nil)
+        #expect(Motion.resolve(nil) == nil)
     }
 }

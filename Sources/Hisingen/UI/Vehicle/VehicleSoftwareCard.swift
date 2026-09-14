@@ -23,6 +23,14 @@ struct VehicleSoftwareCard: View {
 
     private var eventDismissed: Bool { dismissedSoftwareEventIdentifier == software.eventIdentifier }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+    /// Reduce Motion keeps the fade and drops the movement.
+    private var cardTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
+
     private var rows: [KVRow] {
         var rows: [KVRow] = []
         if let installed = software.installedVersion {
@@ -61,6 +69,7 @@ struct VehicleSoftwareCard: View {
                         Text(L10n.format("Version %@ is ready to install in Controls.", software.latestAvailableVersion ?? software.version ?? "—"))
                             .font(.system(size: 10.5, weight: .medium)).foregroundStyle(HisingenTheme.ink)
                     }
+                    .transition(cardTransition)
                 }
                 if software.state == .failed { failedEventControls }
                 if software.rawState == .updateAvailable { waitingForAuthorization }
@@ -70,17 +79,24 @@ struct VehicleSoftwareCard: View {
                         Text(L10n.text("Release notes")).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(HisingenTheme.ink)
                         Text(Self.strippedReleaseNotes(notes)).font(.system(size: 10)).foregroundStyle(.secondary)
                     }
+                    .transition(cardTransition)
                 }
                 if let code = software.qbCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty,
                    code.lowercased() != software.latestAvailableVersion?.lowercased(), code.lowercased() != software.installedVersion?.lowercased() {
                     Divider().opacity(0.4)
                     Text(L10n.format("Build code: %@", code)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    .transition(cardTransition)
                 }
                 if let originator = software.originator?.trimmingCharacters(in: .whitespacesAndNewlines), !originator.isEmpty {
                     Divider().opacity(0.4)
                     Text(L10n.format("Schedule originator: %@", originator)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    .transition(cardTransition)
                 }
             }
+            // The conditional blocks live and die with the software state and
+            // the local dismissal, so those are the keys the swaps ride.
+            .animation(cardChangeAnimation, value: software.state)
+            .animation(cardChangeAnimation, value: eventDismissed)
         }
     }
 
@@ -94,11 +110,13 @@ struct VehicleSoftwareCard: View {
             } label: {
                 Label(eventDismissed ? L10n.text("Restore software event") : L10n.text("Dismiss software event"), systemImage: eventDismissed ? "arrow.uturn.backward.circle" : "xmark.circle")
                     .font(.system(size: 10.5, weight: .medium))
+                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.pressable)
             Text(eventDismissed ? L10n.text("This event is hidden from Needs Attention on this Mac.") : L10n.text("Dismissal is local and does not alter vehicle or Polestar backend data."))
                 .font(.system(size: 9.5)).foregroundStyle(.secondary)
         }
+        .transition(cardTransition)
     }
 
     private var waitingForAuthorization: some View {
@@ -118,6 +136,7 @@ struct VehicleSoftwareCard: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
         }
+        .transition(cardTransition)
     }
 
     nonisolated static func strippedReleaseNotes(_ html: String) -> String {

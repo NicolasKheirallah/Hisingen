@@ -89,7 +89,7 @@ With Hisingen you can:
 * use supported remote controls without picking up your phone
 * bring vehicle information into Apple Shortcuts
 * monitor a real multi-provider garage in one place
-* manage saved Polestar charge locations — rename, per-location current limit,
+* manage saved Polestar charge locations: rename, per-location current limit,
   minimum charge level, optimised-charging mode, delete
 * log fuel fill-ups so hybrid and petrol costs count toward lifetime cost-per-distance
 * keep an optional always-on-top charging mini-panel on screen while plugged in
@@ -105,7 +105,7 @@ Hisingen supports both Polestar and Volvo, but the two integrations work differe
 
 |                         | Polestar                                | Volvo                                                                |
 | ----------------------- | --------------------------------------- | -------------------------------------------------------------------- |
-| **Setup**               | Sign in with your Polestar account      | Sign in with your Volvo ID — ready out of the box (own developer application optional) |
+| **Setup**               | Sign in with your Polestar account      | Sign in with your Volvo ID, ready out of the box (own developer application optional) |
 | **Battery EVs**         | Yes                                     | Yes                                                                  |
 | **Plug-in hybrids**     | No                                      | Yes                                                                  |
 | **Combustion vehicles** | No                                      | Yes                                                                  |
@@ -155,7 +155,7 @@ The Polestar integration therefore uses interfaces based on the services used by
 
 ### Volvo
 
-Volvo provides official developer APIs, and Hisingen ships with default developer application credentials — so most people can simply sign in with their Volvo ID, no registration needed.
+Volvo provides official developer APIs, and Hisingen ships with default developer application credentials, so most people can simply sign in with their Volvo ID, no registration needed.
 
 If you prefer, you can use your own Volvo Cars Developer application and credentials instead. See [Volvo setup](#volvo-setup).
 
@@ -220,7 +220,7 @@ For electric and plug-in hybrid vehicles, Hisingen can show information such as:
 The interface only shows values that make sense for the selected vehicle.
 
 If a completed session at a known location peaks far below its usual level,
-Hisingen flags it — often the first sign of a failing cable or derated charger.
+Hisingen flags it, often the first sign of a failing cable or derated charger.
 
 Hisingen can also calculate an experimental battery State of Health estimate
 from the telemetry it has observed. This is always labelled as a calculated
@@ -737,7 +737,7 @@ Global shortcuts can require macOS Accessibility permission.
 ### System Spotlight
 
 Search your car's nickname and see battery, range and charging state right in Spotlight
-results — entirely local, no VIN stored in the index.
+results. Entirely local, no VIN stored in the index.
 
 ### Screenshot Privacy Mode
 
@@ -752,8 +752,8 @@ steals focus; drag it anywhere and the position is remembered.
 ### Calendar preconditioning
 
 Hisingen can start cabin climate a set number of minutes before timed events in the calendars
-you choose (Settings → Features). It reads events through macOS Calendar (EventKit) — the
-events stay on your Mac and are never sent anywhere — schedules a single timer for the next one,
+you choose (Settings → Features). It reads events through macOS Calendar (EventKit); the
+events stay on your Mac and are never sent anywhere. It schedules a single timer for the next one,
 and re-checks after sleep and when the calendar changes. The climate command targets the active
 vehicle and passes the same capability and feature checks as the manual control; because it is a
 preconfigured automation with nobody at the Mac to answer a prompt, it does not raise the
@@ -829,9 +829,9 @@ design principles from Polestar and Volvo Cars. They don't imply affiliation or 
 ### Panel size & content density
 
 The menu bar dropdown adapts to how you use it. In
-**Settings → General → Panel Size** you can pick one of five presets — Compact,
-Standard, Large (tall), Wide, Grand (wide & tall) — or enable **Custom Size**
-for independent width and height sliders. On Wide and Grand panels, mid-size
+**Settings → General → Panel Size** you can pick one of five presets:
+Compact, Standard, Large (tall), Wide, and Grand (wide & tall). **Custom Size**
+enables independent width and height sliders. On Wide and Grand panels, mid-size
 cards flow two per row and the vehicle render grows to use the extra room.
 
 **Content Density** zooms everything inside the panel independently of its
@@ -920,13 +920,13 @@ Releases are universal and support both:
 
 Both **Hisingen.app** and **Hisingen.dmg** are signed with a personal Apple Developer ID certificate, built with the hardened runtime enabled, and notarized and stapled by Apple.
 
-This means macOS Gatekeeper recognizes the app as trusted software from an identified developer — no security warnings, no right-click-to-open workaround.
+This means macOS Gatekeeper recognizes the app as trusted software from an identified developer: no security warnings, no right-click-to-open workaround.
 
 The same Developer ID signing is performed in the GitHub Actions release workflow: the certificate is imported into the CI runner's keychain, both the app bundle and the disk image are individually signed, submitted for notarization, stapled, and verified with `spctl` before publication. Every release also ships with SHA-256 checksums and GitHub build provenance attestations. Locally, `make app`/`make dmg` follow the same submit/staple/validate sequence through `Scripts/notarize.sh` whenever notarization credentials are configured.
 
 ### Install
 
-**Option 1 — Homebrew:**
+**Option 1: Homebrew**
 
 ```bash
 brew install --cask nicolaskheirallah/tap/hisingen
@@ -934,7 +934,7 @@ brew install --cask nicolaskheirallah/tap/hisingen
 
 Updates are picked up with `brew upgrade --cask hisingen`. The cask is updated automatically on every release.
 
-**Option 2 — Manual download:**
+**Option 2: Manual download**
 
 1. [Download the latest `Hisingen.dmg`](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg).
 2. Open the disk image.
@@ -957,13 +957,13 @@ Run this in the folder containing the downloaded files. It should report `OK` fo
 
 ### Verify the signature
 
-macOS checks the signature and notarization automatically at first launch. You can also verify it yourself — `codesign` and `spctl` ship with every Mac, no Xcode needed:
+macOS checks the signature and notarization automatically at first launch. You can also verify it yourself; `codesign` and `spctl` ship with every Mac, no Xcode needed:
 
 ```bash
 spctl -a -t exec -vv /Applications/Hisingen.app
 ```
 
-This should report `accepted` with `source=Notarized Developer ID`. If macOS ever reports Hisingen as **"damaged"** or from an **unidentified developer**, re-download the DMG and check the checksum first — a corrupted or truncated download is almost always the cause. Don't strip the quarantine flag with `xattr` or work around Gatekeeper: a correctly notarized app opens without any workaround, and if the signature doesn't verify, the download itself is bad and should be replaced, not bypassed.
+This should report `accepted` with `source=Notarized Developer ID`. If macOS ever reports Hisingen as **"damaged"** or from an **unidentified developer**, re-download the DMG and check the checksum first; a corrupted or truncated download is almost always the cause. Don't strip the quarantine flag with `xattr` or work around Gatekeeper: a correctly notarized app opens without any workaround, and if the signature doesn't verify, the download itself is bad and should be replaced, not bypassed.
 
 [View all releases](https://github.com/NicolasKheirallah/Hisingen/releases)
 
@@ -986,7 +986,7 @@ Because the services used for vehicle data aren't a documented third-party API, 
 
 ## Volvo setup
 
-Hisingen works with Volvo out of the box — no developer registration required.
+Hisingen works with Volvo out of the box, no developer registration required.
 
 ### Just sign in
 
@@ -1000,7 +1000,7 @@ Sign-in happens in a system browser window, so Hisingen never sees your Volvo ID
 
 ### Optional: use your own developer application
 
-If you'd rather use your own free [Volvo Cars Developer Platform](https://developer.volvocars.com/) application — for example to bill API usage against your own quota — click **Custom App** in the Volvo section of Settings and:
+If you'd rather use your own free [Volvo Cars Developer Platform](https://developer.volvocars.com/) application, for example to bill API usage against your own quota, click **Custom App** in the Volvo section of Settings and:
 
 1. Create an application in the [Volvo Developer Portal](https://developer.volvocars.com/) and enable the API products you want (Connected Vehicle and Energy as a baseline; add Location if you want vehicle location).
 2. Add this exact OAuth callback URL to your application:
@@ -1014,7 +1014,7 @@ If you'd rather use your own free [Volvo Cars Developer Platform](https://develo
 
 You can switch back to the built-in credentials at any time with **Use Default Developer Keys**.
 
-Some features — particularly location and remote operations — depend on the permissions approved for whichever developer application is in use.
+Some features, particularly location and remote operations, depend on the permissions approved for whichever developer application is in use.
 
 For the technical details, see [Authentication](docs/api/authentication.md).
 
@@ -1041,7 +1041,7 @@ It reflects what the car last reported. Parked or sleeping vehicles can stop sen
 No. Like any menu bar app, it refreshes while your Mac is awake.
 
 **Where is my data stored?**
-Locally on your Mac. Credentials live in the macOS Keychain. There is no Hisingen backend — see [Privacy](#privacy).
+Locally on your Mac. Credentials live in the macOS Keychain. There is no Hisingen backend; see [Privacy](#privacy).
 
 **Can I mix Polestar and Volvo cars in one garage?**
 Yes, and their histories, caches and authentication stay separate per vehicle.
@@ -1086,7 +1086,7 @@ Check the [latest release](https://github.com/NicolasKheirallah/Hisingen/release
 If you're using the built-in default credentials:
 
 * make sure you're running the [latest release](https://github.com/NicolasKheirallah/Hisingen/releases/latest)
-* complete sign-in in the browser window that opens — allow pop-ups if your default browser blocks them
+* complete sign-in in the browser window that opens; allow pop-ups if your default browser blocks them
 * try again later; temporary gateway issues on Volvo's side do happen
 
 If you're using your own developer application, check that:
@@ -1126,14 +1126,14 @@ A few things are worth keeping in mind:
 
 ## Roadmap & non-goals
 
-Development direction is driven by real-world testing feedback — see [open issues](https://github.com/NicolasKheirallah/Hisingen/issues) and propose features with the [feature request template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=feature_request.md).
+Development direction is driven by real-world testing feedback; see [open issues](https://github.com/NicolasKheirallah/Hisingen/issues) and propose features with the [feature request template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=feature_request.md).
 
 Things Hisingen deliberately will not do:
 
 * run any Hisingen cloud service, account or middleman server
 * include analytics or advertising SDKs
-* provide live tracking — location is the latest reported position only
-* ship iOS or Android companions — this is a macOS menu bar app
+* provide live tracking; location is the latest reported position only
+* ship iOS or Android companions; this is a macOS menu bar app
 * present controls a vehicle cannot actually perform
 
 ---
@@ -1175,7 +1175,7 @@ open releases/Hisingen.app
 
 When the app is signed with a **Developer ID** certificate, the build also submits it to Apple's notary service and staples the ticket, matching what the release workflow does in CI. Credentials are read from a notarytool keychain profile (set up once with `xcrun notarytool store-credentials hisingen-notary --apple-id <APPLE_ID> --team-id <TEAM_ID> --password <APP_PASSWORD>`) or from the `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID` and `NOTARY_APP_PASSWORD` environment variables. Without credentials the step skips automatically so development builds keep working; `make notarize` notarizes an already-built app, and `NOTARIZE=never make app` disables the step.
 
-Normal CI and the deterministic test suite don't need access to a real Polestar or Volvo account. If `.env.secrets` isn't present, the build injects empty placeholder credentials and compiles cleanly — the app then asks for your own Volvo credentials at sign-in. Live integration testing is kept separate from the deterministic test suite.
+Normal CI and the deterministic test suite don't need access to a real Polestar or Volvo account. If `.env.secrets` isn't present, the build injects empty placeholder credentials and compiles cleanly; the app then asks for your own Volvo credentials at sign-in. Live integration testing is kept separate from the deterministic test suite.
 
 See [Getting Started](docs/development/getting-started.md) for the development setup.
 
@@ -1223,7 +1223,7 @@ Security vulnerabilities should be reported privately through [SECURITY.md](SECU
 
 * Found a bug? → [bug report template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=bug_report.md)
 * Missing a feature? → [feature request template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=feature_request.md)
-* Tested Hisingen with an unusual model, year or region? → [vehicle compatibility template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=vehicle_compatibility.md) — this is one of the most useful contributions there is
+* Tested Hisingen with an unusual model, year or region? → [vehicle compatibility template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=vehicle_compatibility.md); this is one of the most useful contributions there is
 * Security issue? → [responsible disclosure via SECURITY.md](SECURITY.md)
 
 Please check the [Troubleshooting](#troubleshooting) section and [existing issues](https://github.com/NicolasKheirallah/Hisingen/issues) before opening a new one.

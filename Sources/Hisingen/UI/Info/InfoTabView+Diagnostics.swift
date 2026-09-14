@@ -2,6 +2,14 @@ import Charts
 import SwiftUI
 
 extension InfoTabView {
+    /// Data identity for the connectivity history chart, so a refresh that lands new
+    /// samples animates the plot instead of snapping.
+    var signalHistoryChartKey: String {
+        let history = asyncData.connectivityHistory
+        return "\(history.count)_\(history.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_\(history.last?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
     // MARK: - Software & updates
 
     var softwareUpdateCard: some View {
@@ -214,11 +222,6 @@ extension InfoTabView {
         if let speed = state.tripComputer.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
         }
-        if let speed = state.tripComputer.automaticAverageSpeedKmH, speed > 0 {
-            rows.append(KVRow(L10n.text("Average Speed (AT)"),
-                              Format.speed(kmH: speed, unit: preferences.distanceUnit),
-                              symbol: "gauge.with.needle.fill"))
-        }
         if let odo = state.maintenance.odometerKm {
             rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
         }
@@ -278,6 +281,7 @@ extension InfoTabView {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Signal strength history chart"))
                     .accessibilityValue(chartAccessibilityValue(points: signalHistory.map { Double($0.signalBars ?? 0) }))
+                    .animation(Motion.resolve(Motion.progress), value: signalHistoryChartKey)
                 }
                 let wakes = history.compactMap(\.wakeReason)
                 if !wakes.isEmpty {

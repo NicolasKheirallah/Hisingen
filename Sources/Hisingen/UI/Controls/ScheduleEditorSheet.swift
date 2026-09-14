@@ -18,6 +18,7 @@ struct ScheduleEditorSheet: View {
     @State private var selectedWeekdays: Set<VehicleWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
     @State private var isEnabled: Bool = true
     @State private var editingScheduleID: String? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let hours = Array(0...23)
     private let minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
@@ -42,9 +43,11 @@ struct ScheduleEditorSheet: View {
                         Label(L10n.text("Start and end time cannot be the same."), systemImage: "exclamationmark.triangle.fill")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(HisingenTheme.semanticWarning)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 .padding(16)
+                .animation(Motion.resolve(Motion.entrance), value: chargingWindowInvalid)
             }
 
             Divider().opacity(0.4)
@@ -73,7 +76,7 @@ struct ScheduleEditorSheet: View {
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -96,8 +99,12 @@ struct ScheduleEditorSheet: View {
                     ForEach(allSchedules.indices, id: \.self) { idx in
                         let sched = allSchedules[idx]
                         scheduleRow(sched)
+                            .transition(.opacity)
                     }
                 }
+                // Keyed on backend identities so a deleted timer reflows instead
+                // of vanishing the moment the command lands.
+                .animation(Motion.resolve(Motion.cardChange), value: allSchedules.map(\.backendID))
             }
         }
     }
@@ -128,7 +135,7 @@ struct ScheduleEditorSheet: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .help(L10n.text("Edit this timer"))
             }
             if let id = sched.backendID {
@@ -140,7 +147,7 @@ struct ScheduleEditorSheet: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.red.opacity(0.8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
         .padding(8)
@@ -154,6 +161,7 @@ struct ScheduleEditorSheet: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(editingScheduleID == sched.backendID && isEditable ? HisingenTheme.accent.opacity(0.4) : .clear, lineWidth: 1)
         )
+        .animation(Motion.resolve(Motion.selection), value: editingScheduleID)
         .contentShape(Rectangle())
         .onTapGesture { if isEditable { beginEditing(sched) } }
     }
@@ -191,13 +199,16 @@ struct ScheduleEditorSheet: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if editingScheduleID != nil {
-                    Spacer()
-                    Button(L10n.text("Cancel Edit")) {
-                        resetToAddMode()
+                    HStack {
+                        Spacer()
+                        Button(L10n.text("Cancel Edit")) {
+                            resetToAddMode()
+                        }
+                        .buttonStyle(.pressable)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(HisingenTheme.accent)
                     }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(HisingenTheme.accent)
+                    .transition(.opacity)
                 }
             }
 
@@ -247,6 +258,7 @@ struct ScheduleEditorSheet: View {
                             .controlSize(.small)
                         }
                     }
+                    .transition(.opacity)
                 }
             }
 
@@ -265,8 +277,9 @@ struct ScheduleEditorSheet: View {
                                 .frame(maxWidth: .infinity, minHeight: 24)
                                 .background(selected ? HisingenTheme.accent : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
                                 .foregroundStyle(selected ? Color.white : Color.primary)
+                                .animation(reduceMotion ? nil : Motion.selection, value: selected)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .accessibilityLabel(day.shortName)
                         .accessibilityAddTraits(selected ? [.isSelected] : [])
                     }
@@ -277,6 +290,7 @@ struct ScheduleEditorSheet: View {
                 .font(.system(size: 11))
                 .toggleStyle(.checkbox)
         }
+        .animation(Motion.resolve(Motion.layout), value: selectedKind)
     }
 
     private var footerButtons: some View {

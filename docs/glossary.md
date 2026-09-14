@@ -3,119 +3,115 @@
 Terms used throughout this documentation set that aren't self-explanatory
 from context alone.
 
-**AppFeature** — an enum of individually toggleable capabilities (e.g.
+**AppFeature**: an enum of individually toggleable capabilities (e.g.
 `.remoteClimate`, `.chargingSchedule`, `.vehicleImage`) that gates which data
 a provider fetches and which UI is shown. `isRemoteControl` distinguishes
 read-only features from ones that would dispatch a command.
 
-**C3 / PCCS-Chronos** — the internal names used for Polestar's newer
+**C3 / PCCS-Chronos**: the internal names used for Polestar's newer
 gRPC-based vehicle-data API, which Hisingen talks to via a hand-rolled
-client — see [ADR-0008](adr/0008-hand-rolled-grpc-no-swiftprotobuf.md).
+client; see [ADR-0008](adr/0008-hand-rolled-grpc-no-swiftprotobuf.md).
 
-**Capability staleness window** — the 6-hour period after which a
+**Capability staleness window**: the 6-hour period after which a
 runtime-observed vehicle capability reverts to the static baseline if not
-reconfirmed — see [ADR-0006](adr/0006-runtime-capability-probing.md).
+reconfirmed; see [ADR-0006](adr/0006-runtime-capability-probing.md).
 
-**Developer ID** — the Apple code-signing certificate type used to sign
+**Developer ID**: the Apple code-signing certificate type used to sign
 software distributed outside the Mac App Store. Required for notarization.
 
-**Remote Command dispatch** — the awaited seam every Remote Command entry
+**Remote Command dispatch**: the awaited seam every Remote Command entry
 point (Controls tab, `hisingen://` deep links, Shortcuts intents) crosses once
 the app shell is wired: vehicle selection plus one dispatch that returns the
 outcome. Brand policy lives in `CapabilityGate` and the provider command
-catalog, never in an entry point — see
+catalog, never in an entry point; see
 [ADR-0012](adr/0012-single-remote-command-dispatch-authority.md).
 
-**Command receipt** — the display-only record of an accepted Remote Command in any lifecycle
+**Command receipt**: the display-only record of an accepted Remote Command in any lifecycle
 state: awaiting confirmation, provider-acknowledged (when no observable reading exists), confirmed,
 or timed out. `RefreshCoordinator` owns confirmation,
 suspension, timeout, and individual dismissal. A bounded per-vehicle receipt collection survives
 relaunch; provider telemetry and persisted vehicle snapshots never own the receipts.
 
-**Gatekeeper** — macOS's system that checks code signing and notarization
+**Gatekeeper**: macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates
 this check.
 
-**Charging Session ledger** — the module that owns the Charging Session
+**Charging Session ledger**: the module that owns the Charging Session
 lifecycle: it ingests observations into `charging_samples`, advances
 `charging_sessions` through its explicit states, produces each session's
 authoritative energy summary, and is the one place where sample integration
 and its gap-tolerance policies live. See
 `Services/Persistence/ChargingSessionLedger.swift`.
 
-**Vehicle History ledger** — the read interface over the remaining local
+**Vehicle History ledger**: the read interface over the remaining local
 history tables (battery health, air quality, telemetry, trips, Remote Command
 outcomes, connectivity, cabin climate, fuel entries): one typed surface that
 assembles the History dashboard and Info tab bundles and owns the row-cap and
 freshness policy those consumers used to re-derive at every call site. See
 `Services/Persistence/VehicleHistoryLedger.swift`.
 
-**Gatekeeper** — macOS's system that checks code signing and notarization
-status before allowing a downloaded app to run; `spctl --assess` simulates
-this check.
-
-**Hardened runtime** — an Apple code-signing option (`codesign --options
+**Hardened runtime**: an Apple code-signing option (`codesign --options
 runtime`) that restricts a process's own capabilities (e.g. blocks arbitrary
 code injection into it); required for notarization.
 
-**KeychainStore** — Hisingen's wrapper around the macOS Keychain
+**KeychainStore**: Hisingen's wrapper around the macOS Keychain
 (`Services/Persistence/Keychain.swift`) used to store Polestar/Volvo
-credentials and tokens — see [ADR-0004](adr/0004-keychain-for-credentials.md).
+credentials and tokens; see [ADR-0004](adr/0004-keychain-for-credentials.md).
 
-**LSUIElement** — the `Info.plist` key that makes Hisingen a menu-bar-only
+**LSUIElement**: the `Info.plist` key that makes Hisingen a menu-bar-only
 "accessory" app: no Dock icon, no app switcher entry, no main menu bar.
 
-**Notarization** — Apple's automated scan (`notarytool submit`) that a
+**Notarization**: Apple's automated scan (`notarytool submit`) that a
 signed app is submitted to before distribution outside the Mac App Store; a
 successful result lets the app be "stapled" so Gatekeeper can verify it
 offline.
 
-**PKCE** (Proof Key for Code Exchange, RFC 7636) — the OAuth2 extension
+**PKCE** (Proof Key for Code Exchange, RFC 7636): the OAuth2 extension
 Hisingen uses for the Volvo sign-in flow, avoiding the need for a client
 secret to be embedded for the authorization step itself.
 
-**Read-only integration test** — a Swift Testing suite (e.g.
+**Read-only integration test**: a Swift Testing suite (e.g.
 `LivePolestarReadOnlyIntegrationTests`) that calls real vendor APIs with real
-test-account credentials but never dispatches a state-changing command — see
+test-account credentials but never dispatches a state-changing command; see
 [operations/releases.md](operations/releases.md#live-integrationyml).
 
-**RefreshCoordinator** — the single `@MainActor` class that serializes all
+**RefreshCoordinator**: the single `@MainActor` class that serializes all
 vehicle-state refresh triggers (timer, manual, wake-from-sleep,
 network-recovery) into one in-flight fetch per "generation," so they never
 race each other.
 
-**Stapling** — attaching Apple's notarization ticket directly to a signed
+**Stapling**: attaching Apple's notarization ticket directly to a signed
 app or DMG (`xcrun stapler staple`) so Gatekeeper can verify it was
 notarized even without a network connection at launch time.
 
-**Universal binary** — a single executable containing both `arm64` and
+**Universal binary**: a single executable containing both `arm64` and
 `x86_64` code, produced via `lipo -create`, so one download runs natively on
 both Apple Silicon and Intel Macs.
 
-**VCC API key** — a Volvo Cars Connected (developer portal) API key,
+**VCC API key**: a Volvo Cars Connected (developer portal) API key,
 required alongside OAuth client credentials to call Volvo's REST APIs.
 
-**VehicleProviding** — the protocol both `PolestarAPI` and `VolvoAPI`
+**VehicleProviding**: the protocol both `PolestarAPI` and `VolvoAPI`
 conform to, defining the one interface the rest of the app uses regardless
-of vehicle brand — see [ADR-0003](adr/0003-shared-vehicle-domain-provider-dtos.md).
+of vehicle brand; see [ADR-0003](adr/0003-shared-vehicle-domain-provider-dtos.md).
 
-**VIN** (Vehicle Identification Number) — the key nearly all per-vehicle
-state is scoped by — see [ADR-0007](adr/0007-vin-scoped-state.md). Treated as
+**VIN** (Vehicle Identification Number): the key nearly all per-vehicle
+state is scoped by; see [ADR-0007](adr/0007-vin-scoped-state.md). Treated as
 sensitive: never logged or included in issue reports.
 
 ## Added 2026-08-22
 
-**iTPMS** — indirect tyre-pressure monitoring: infers pressure loss from wheel-speed sensor
+**iTPMS**: indirect tyre-pressure monitoring: infers pressure loss from wheel-speed sensor
 imbalance rather than in-wheel sensors. Reports a warning level per corner but has no numeric
 pressure value. Polestar 2 (SPA platform) behaves this way over telematics.
 
-**Wake reason** — why the vehicle's connectivity module is currently awake (scheduled climate,
+**Wake reason**: why the vehicle's connectivity module is currently awake (scheduled climate,
 active charging, telemetry poll), reported by the C3 DashboardService.
 
-**Charge location** — a saved GPS position in Polestar's Chronos backend with per-location
+**Charge location**: a saved GPS position in Polestar's Chronos backend with per-location
 charging settings (amp limit, minimum SoC, optimised-charging mode).
 
-**Optimised charging mode** — per-location strategy: *intelligent timer* or *price-optimised*.
+**Optimised charging mode**: per-location strategy: *intelligent timer* or *price-optimised*.
 
-**SoH (State of Health)** — remaining usable battery capacity vs reference. Hisingen always
+**SoH (State of Health)**: remaining usable battery capacity vs reference. Hisingen always
 labels it a **calculated estimate**; neither provider exposes a BMS measurement.

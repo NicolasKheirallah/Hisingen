@@ -1,8 +1,11 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let preferences = PreferencesStore()
+    /// The process-wide store: intents and other non-view call sites read the same
+    /// `.shared` instance, so per-instance caches cannot drift between the shell and them.
+    private let preferences = PreferencesStore.shared
     /// The one process-wide storage handle: intents, image caching, and Settings default to
     /// `VehicleDatabase.shared`, so every consumer must share this same instance (and its
     /// SQLite handle) rather than opening parallel connections to the same file.
@@ -23,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var launchAtLoginController = LaunchAtLoginController(preferences: preferences)
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
+    /// Receipts recorded for non-selected Remote Command targets. Lazy so the state store
+    /// only materializes when a cross-vehicle command actually runs.
+    private lazy var offTargetReceiptLedger = CommandConfirmationLedger(store: stateStore)
     private var vehicleSession: VehicleSessionController!
     private var signInCoordinator: SignInCoordinator!
     private var garageScanner: GarageScanner!
@@ -40,7 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenuController = MainMenuController(
             onCheckForUpdates: { [weak self] in self?.updateController.checkNow() })
         mainMenuController.install()
-        preferences.applyAppearance()
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(systemAppearanceDidChange),
@@ -49,6 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         preferences.migrateLegacyDefaults()
         preferences.migrateLegacyPassword()
+        // Applied after the legacy-defaults migration: on the one launch that carries the
+        // old domain's keys over, the migrated appearance is the one that must take effect.
+        preferences.applyAppearance()
         HistoryRetention.pruneIfDue(database: vehicleDatabase)
         statusController = StatusItemController(
             onRefresh: { [weak self] in self?.vehicleSession.refreshNow() },
@@ -60,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
              preferences: preferences, fleetStore: fleetStore
         )
         statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
+        statusController.onCommandBrand = { [weak self] in
+            guard let self else { return .polestar }
+            return self.vehicleSession.currentProvider().brand
+        }
         statusController.onDismissCommandReceipt = { [weak self] id in
             self?.vehicleSession.dismissCommandReceipt(id: id)
         }
@@ -67,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.signOut() }
         statusController.onTestConnection = { [weak self] brand in
-            guard let self else { return (false, L10n.text("Hisingen is no longer running.")) }
+            guard let self else { return (false, L10n.text("Hisingen is no longer running."), nil) }
             return await self.connectionTester.test(brand: brand)
         }
         notifier.onPermissionChanged = { [weak self] permission in
@@ -148,8 +160,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // await this install, so a cold-launch intent waits here instead of round-tripping
         // through a URL open and polling the command audit table.
         AutomationHandoff.install(self)
+        AutomationHandoff.installRefreshAction { [weak self] in self?.refreshNow() }
         updateController = UpdateController(context: self, preferences: preferences)
         vehicleSession.primeDisplayState()
+        // Before any sign-in flow can run: installs upgrading from earlier versions carry
+        // session material and must never be greeted by the first-run setup pass.
+        preferences.seedSetupPassForExistingInstall()
         let initiallyAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
         launchAtLoginController.reconcile(userInitiated: false)
         updateController.applyConfiguration()
@@ -281,6 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusController.dismissSettings()
         case .closeSettings:
             statusController.dismissSettings()
+        case .exportDiagnosticLogs:
+            exportDiagnosticLogs()
         case .features:
             notifier.featureSelectionDidChange()
             notifier.requestAuthorizationIfAnyAlertEnabled()
@@ -304,6 +322,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             calendarPreconditioning.reload()
         }
         render()
+    }
+
+    /// Builds the redacted diagnostic bundle off the main thread and offers a save panel.
+    /// Reached from Settings → Privacy & Data and from the sign-in failure card, where
+    /// attaching the failed exchanges to a bug report is the whole point.
+    private func exportDiagnosticLogs() {
+        let database = vehicleDatabase
+        Task { @MainActor in
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try await DiagnosticLogExporter.buildReport(database: database)
+                }.value
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.json]
+                panel.nameFieldStringValue = "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json"
+                guard panel.runModal() == .OK, let url = panel.url else { return }
+                do {
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    presentExportFailure(error)
+                }
+            } catch {
+                presentExportFailure(error)
+            }
+        }
+    }
+
+    /// A silently missing export file reads as lost data; surface the underlying cause
+    /// (permissions, disk full) instead of swallowing it after the user picked a target.
+    private func presentExportFailure(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = L10n.text("Export Failed")
+        alert.informativeText = "\(L10n.text("The diagnostic report could not be written."))\n\n\(error.localizedDescription)"
+        alert.addButton(withTitle: L10n.text("OK"))
+        alert.runModal()
     }
 
     private func startCalendarClimate() async -> RemoteCommandDispatchOutcome {
@@ -408,17 +462,10 @@ extension AppDelegate: CommandExecutionContext {
     ) {
         if let targetVIN = receipt.targetVIN,
            vehicleSession.latest?.identity.vin.caseInsensitiveCompare(targetVIN) != .orderedSame {
-            var records = stateStore.commandReceipts(for: targetVIN)
-            if let key = receipt.confirmationConflictKey {
-                records.removeAll { $0.receipt.confirmationConflictKey == key }
-            }
-            records.append(StoredCommandReceipt(
-                receipt: receipt,
-                confirmationDeadline: receipt.status.isAwaiting
-                    ? receipt.issuedAt.addingTimeInterval(CommandReceipt.maximumConfirmationDuration)
-                    : nil
-            ))
-            stateStore.saveCommandReceipts(records, for: targetVIN)
+            // The Remote Command target isn't the visible vehicle: record it under the
+            // target's VIN so it survives relaunch and supersedes correctly there. The
+            // selected vehicle's receipt goes through the refresh coordinator instead.
+            offTargetReceiptLedger.recordOffTarget(receipt, targetVIN: targetVIN)
             return
         }
         vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
@@ -436,6 +483,12 @@ extension AppDelegate: SignInCoordinatorContext {
     }
 
     func dismissSettingsAfterSignIn() {
+        // A first successful sign-in hands off to the one-time setup pass instead of the
+        // dashboard. The pass itself sets hasCompletedSetupPass on completion or skip.
+        if !preferences.hasCompletedSetupPass {
+            statusController.showSetupPass()
+            return
+        }
         statusController.dismissSettings()
     }
 

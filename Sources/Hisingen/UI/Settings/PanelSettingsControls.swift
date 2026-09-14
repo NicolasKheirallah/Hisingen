@@ -29,7 +29,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
             ForEach(options, id: \.self) { option in
                 let isSelected = selection == option
                 Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.fast)) {
+                    withAnimation(reduceMotion ? nil : Motion.interaction) {
                         selection = option
                     }
                 } label: {
@@ -53,7 +53,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                     )
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.ink)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .withoutFocusRing()
                 .accessibilityLabel("\(option.title). \(option.subtitle)")
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
@@ -98,6 +98,8 @@ struct PanelProportionPreview: View {
                 .foregroundStyle(HisingenTheme.ink)
         }
         .frame(width: box.width, height: box.height)
+        // Ghost and current rectangles settle between presets instead of snapping.
+        .animation(Motion.resolve(Motion.layout), value: layout)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.format("Panel is %@ points wide and %@ points tall",
                                         String(Int(layout.width)), String(Int(layout.unclampedHeight))))
@@ -112,10 +114,16 @@ struct PanelCustomSizeControls: View {
     @Binding var isEnabled: Bool
     @Binding var width: Double
     @Binding var height: Double
+    /// True when a custom size was already committed (persisted) when the control
+    /// appeared — enabling custom mode must not clobber it with the preset.
+    let hasCommittedSize: Bool
     /// Seeds the sliders from the active preset the first time custom mode turns on.
     let seedValues: () -> (width: Double, height: Double)
     /// Fired after any persisted change so the host can emit `.presentation`.
     let onCommit: () -> Void
+
+    /// A custom size committed interactively since this control was mounted.
+    @State private var committedWhileVisible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -133,7 +141,11 @@ struct PanelCustomSizeControls: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .onChange(of: isEnabled) { _, newValue in
-                        if newValue && (width == 0 || height == 0) {
+                        // Seed from the resolved geometry on the false→true transition,
+                        // but only when no custom size was previously committed — the
+                        // host always initializes positive values, so a width/height == 0
+                        // check would never fire.
+                        if newValue && !hasCommittedSize && !committedWhileVisible {
                             let seeded = seedValues()
                             width = seeded.width
                             height = seeded.height
@@ -143,20 +155,24 @@ struct PanelCustomSizeControls: View {
             }
 
             if isEnabled {
-                dimensionSlider(
-                    label: L10n.text("Width"),
-                    value: $width,
-                    range: PanelLayout.minimumWidth...PanelLayout.maximumWidth,
-                    step: 10
-                )
-                dimensionSlider(
-                    label: L10n.text("Height"),
-                    value: $height,
-                    range: PanelLayout.minimumHeight...PanelLayout.maximumHeight,
-                    step: 20
-                )
+                Group {
+                    dimensionSlider(
+                        label: L10n.text("Width"),
+                        value: $width,
+                        range: PanelLayout.minimumWidth...PanelLayout.maximumWidth,
+                        step: 10
+                    )
+                    dimensionSlider(
+                        label: L10n.text("Height"),
+                        value: $height,
+                        range: PanelLayout.minimumHeight...PanelLayout.maximumHeight,
+                        step: 20
+                    )
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .animation(Motion.resolve(Motion.layout), value: isEnabled)
     }
 
     private func dimensionSlider(label: String, value: Binding<Double>,
@@ -171,6 +187,7 @@ struct PanelCustomSizeControls: View {
                     let snapped = (newValue / Double(step)).rounded() * Double(step)
                     if snapped != value.wrappedValue {
                         value.wrappedValue = snapped
+                        committedWhileVisible = true
                         onCommit()
                     }
                 }

@@ -22,7 +22,7 @@ final class ChargingPlannerController {
     private let activeVINs: () -> [String]
     private let startCharging: () async -> RemoteCommandDispatchOutcome
 
-    private var timer: Timer?
+    private let scheduler = AsyncTimerLoop()
     private var evaluationInProgress = false
     /// Auto-start fires at most once per planned window start, in memory. A relaunch
     /// mid-window may re-send one start command; the vehicle ignores a start while it is
@@ -52,21 +52,17 @@ final class ChargingPlannerController {
     }
 
     func start() {
-        guard timer == nil else { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.evaluate()
-            }
+        guard !scheduler.isArmed else { return }
+        scheduler.scheduleRepeating(after: Self.tickInterval) { [weak self] in
+            await self?.evaluate()
         }
-        self.timer = timer
         Task { @MainActor in
             await self.evaluate()
         }
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        scheduler.cancel()
     }
 
     /// Re-evaluated whenever feature selection changes.
@@ -79,7 +75,7 @@ final class ChargingPlannerController {
 
     /// Fresh vehicle data arrived: re-run the plan ahead of the next tick.
     func vehicleStateDidUpdate(_ state: VehicleState) {
-        guard preferences.features.contains(.smartChargingPlanner), timer != nil else { return }
+        guard preferences.features.contains(.smartChargingPlanner), scheduler.isArmed else { return }
         Task { @MainActor in
             await self.evaluate()
         }
@@ -136,9 +132,10 @@ final class ChargingPlannerController {
         guard ChargingPlannerDecisions.shouldNotifyWindowStart(
             plan: plan,
             now: Date(),
-            lastNotifiedStart: preferences.plannerNotifiedWindowStart(for: vin)
+            leadMinutes: preferences.plannerWindowLeadMinutes,
+            announcedWindowEnd: preferences.plannerNotifiedWindowEnd(for: vin)
         ) else { return }
-        preferences.setPlannerNotifiedWindowStart(plan.start, for: vin)
+        preferences.setPlannerNotifiedWindowEnd(plan.end, for: vin)
 
         let window = "\(Format.shortTime(date: plan.start)) – \(Format.shortTime(date: plan.end))"
         let body: String
@@ -214,10 +211,20 @@ final class ChargingPlannerController {
             chargingState: state.energy.chargingState
         ) else { return }
         guard autoStartedWindowStarts[vin] != plan.start else { return }
+        // Held while the dispatch is in flight so an intervening tick cannot double-send;
+        // released below when the outcome is retryable.
         autoStartedWindowStarts[vin] = plan.start
         Task { @MainActor [weak self] in
-            guard let outcome = await self?.dispatchStartCharging() else { return }
+            guard let self else { return }
+            let outcome = await self.dispatchStartCharging()
             AppLog.logger("elpriser").notice("Planner auto-start outcome: \(String(describing: outcome), privacy: .public)")
+            // Mirror CalendarPreconditioningDispatchDecision.consumesOccurrence: only an
+            // acknowledged send or a terminal refusal consumes the window. .deferred (command
+            // pipeline busy, vehicle context changed mid-flight, shell still loading) must
+            // stay retryable — the next 60 s tick re-evaluates while `now < plan.end` holds.
+            if !CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
+                self.autoStartedWindowStarts[vin] = nil
+            }
         }
     }
 

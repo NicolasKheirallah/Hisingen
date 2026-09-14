@@ -7,7 +7,7 @@ Status: Accepted
 A single Polestar or Volvo account can have more than one vehicle. Cached
 vehicle state, charging baselines, capability observations, and notification
 dedup state all need to avoid bleeding between vehicles when the user
-switches the selected car — showing one vehicle's cached battery level or
+switches the selected car; showing one vehicle's cached battery level or
 notification history against another vehicle would be a real, user-visible
 bug.
 
@@ -21,7 +21,7 @@ follow the same pattern.
 
 ## Alternatives considered
 
-- **Single-vehicle-assumption global state** — simpler for the common
+- **Single-vehicle-assumption global state**: simpler for the common
   single-car account, but breaks multi-vehicle accounts outright and would
   surface stale or wrong-vehicle data on every switch.
 

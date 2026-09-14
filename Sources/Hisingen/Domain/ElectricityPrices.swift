@@ -176,15 +176,22 @@ enum ChargingPlannerDecisions {
     /// Notify once per window, from `leadMinutes` before it opens until it ends — an app
     /// launched mid-window still earns the notice, a relaunch inside the same window does
     /// not repeat it.
+    ///
+    /// Dedupe keys on the announced window's *end*, not its start: while "charge now" is
+    /// cheapest, the recomputed plan starts at `now` and slides a minute forward on every
+    /// tick, so a start-keyed dedupe re-announces every minute. The sliding plan still
+    /// overlaps the window already announced, so it stays quiet until a plan begins at or
+    /// after the announced end — a genuinely later window.
     static func shouldNotifyWindowStart(
         plan: ChargingPlan,
         now: Date,
-        leadMinutes: Int = 15,
-        lastNotifiedStart: Date?
+        leadMinutes: Int,
+        announcedWindowEnd: Date?
     ) -> Bool {
         guard now >= plan.start.addingTimeInterval(TimeInterval(-leadMinutes * 60)),
               now < plan.end else { return false }
-        return lastNotifiedStart != plan.start
+        guard let announcedWindowEnd else { return true }
+        return plan.start >= announcedWindowEnd
     }
 
     /// Start charging automatically only strictly inside the planned window, when the

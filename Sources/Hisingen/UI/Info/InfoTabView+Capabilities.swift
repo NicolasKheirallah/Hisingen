@@ -79,6 +79,7 @@ extension InfoTabView {
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
+                            .disclosureGroupStyle(WholeRowDisclosureStyle())
                         }
                     }
                 }
@@ -93,6 +94,7 @@ extension InfoTabView {
                         Text(L10n.format("%d not reported by the backend", negative.count))
                             .font(.system(size: 11, weight: .medium))
                     }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }
 
                 DisclosureGroup(L10n.text("Effective Control Capabilities")) {
@@ -102,6 +104,7 @@ extension InfoTabView {
                               info: state.capabilityProfile.supportSource(for: capability))
                     }
                 }
+                .disclosureGroupStyle(WholeRowDisclosureStyle())
 
                 if let rawFields = caps.unknownWireFields, !rawFields.isEmpty {
                     DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
@@ -109,6 +112,7 @@ extension InfoTabView {
                             rawCapabilityFieldRow(rawFields[index])
                         }
                     }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }
 
                 Text(L10n.text("Controls also depend on account permissions, enabled features and available command implementations."))
@@ -178,6 +182,7 @@ extension InfoTabView {
                         Text(L10n.format("%d not available on this model", entries.negative.count))
                             .font(.system(size: 11, weight: .medium))
                     }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }
             }
         })

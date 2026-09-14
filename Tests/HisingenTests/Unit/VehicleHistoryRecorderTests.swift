@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct VehicleHistoryRecorderTests {
     @Test
-    func recordPersistsTheSnapshotBeforeDerivingLaterHistory() throws {
+    func recordPersistsTheSnapshotBeforeDerivingLaterHistory() async throws {
         let suite = "HisingenTests.VehicleHistoryRecorder.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -17,15 +17,18 @@ struct VehicleHistoryRecorderTests {
         let state = vehicle(vin: "YSM-HISTORY", battery: 72, brand: .polestar)
 
         recorder.record(state)
+        // The storage pass runs detached (PERSIST-06/07); wait for the snapshot to land.
+        let stored = await awaitStored(timeout: 5) { database.loadSnapshot(for: state.identity.vin) != nil }
+        #expect(stored, "snapshot never reached the database after record")
 
-        let stored = try #require(database.loadSnapshot(for: state.identity.vin))
-        #expect(stored.identity.vin == state.identity.vin)
-        #expect(stored.energy.batteryPercentage == state.energy.batteryPercentage)
-        #expect(stored.freshness.isCached)
+        let snapshot = try #require(database.loadSnapshot(for: state.identity.vin))
+        #expect(snapshot.identity.vin == state.identity.vin)
+        #expect(snapshot.energy.batteryPercentage == state.energy.batteryPercentage)
+        #expect(snapshot.freshness.isCached)
     }
 
     @Test
-    func stateOfHealthUpdatesOnlyFromAFullChargeSnapshot() throws {
+    func stateOfHealthUpdatesOnlyFromAFullChargeSnapshot() async throws {
         let suite = "HisingenTests.VehicleHistoryRecorder.SoH.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -38,6 +41,10 @@ struct VehicleHistoryRecorderTests {
         state.maintenance.odometerKm = 10_000
 
         recorder.record(state)
+        let firstLanded = await awaitStored(timeout: 5) {
+            database.history.batteryHealthHistory(for: state.identity.vin).count == 1
+        }
+        #expect(firstLanded, "battery-health row never reached the database after record")
         let saved = try #require(database.history.batteryHealthHistory(for: state.identity.vin).first)
         #expect(saved.measurementSource == BatteryHealthRecord.fullChargeRangeSource)
 
@@ -45,6 +52,12 @@ struct VehicleHistoryRecorderTests {
         state.energy.rangeKm = 50
         state.maintenance.odometerKm = 11_000
         recorder.record(state)
+        // Await the second snapshot before asserting the health history stayed deduped,
+        // so the check cannot pass just because the second pass has not run yet.
+        let secondLanded = await awaitStored(timeout: 5) {
+            database.loadSnapshot(for: state.identity.vin)?.maintenance.odometerKm == 11_000
+        }
+        #expect(secondLanded, "second observation never reached the database after record")
 
         let history = database.history.batteryHealthHistory(for: state.identity.vin)
         #expect(history.count == 1)

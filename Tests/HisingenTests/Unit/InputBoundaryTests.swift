@@ -9,50 +9,60 @@ struct InputBoundaryTests {
     func testTemperatureClampingAndStepPrecision() throws {
 
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
         store.remoteClimateTemperature = 21.5
-        XCTAssertEqual(store.remoteClimateTemperature, 21.5)
+        #expect(store.remoteClimateTemperature == 21.5)
 
         store.remoteClimateTemperature = 15.0
-        XCTAssertEqual(store.remoteClimateTemperature, 16.0)
+        #expect(store.remoteClimateTemperature == 16.0)
 
         store.remoteClimateTemperature = 35.0
-        XCTAssertEqual(store.remoteClimateTemperature, 30.0)
+        #expect(store.remoteClimateTemperature == 30.0)
 
         store.remoteClimateTemperature = 21.3
-        XCTAssertEqual(store.remoteClimateTemperature, 21.5)
+        #expect(store.remoteClimateTemperature == 21.5)
 
         store.remoteClimateTemperature = 21.2
-        XCTAssertEqual(store.remoteClimateTemperature, 21.0)
+        #expect(store.remoteClimateTemperature == 21.0)
     }
 
     @Test
     func testDistanceUnitConversions() {
-        XCTAssertEqual(DistanceUnit.kilometers.convert(km: 100), 100)
-        XCTAssertEqual(DistanceUnit.miles.convert(km: 100), 62)
-        XCTAssertEqual(DistanceUnit.miles.convert(km: 0), 0)
-        XCTAssertEqual(DistanceUnit.miles.convert(km: 450), 280)
+        #expect(DistanceUnit.kilometers.convert(km: 100) == 100)
+        #expect(DistanceUnit.miles.convert(km: 100) == 62)
+        #expect(DistanceUnit.miles.convert(km: 0) == 0)
+        #expect(DistanceUnit.miles.convert(km: 450) == 280)
 
-        XCTAssertEqual(Format.distance(km: 100, unit: .kilometers), "100 km")
-        XCTAssertEqual(Format.distance(km: 100, unit: .miles), "62 mi")
+        #expect(Format.distance(km: 100, unit: .kilometers) == "100 km")
+        #expect(Format.distance(km: 100, unit: .miles) == "62 mi")
     }
 
     @Test
     func testKilowattFormatting() {
-        XCTAssertEqual(Format.kilowatts(watts: 7400), "7.4 kW")
-        XCTAssertEqual(Format.kilowatts(watts: 11000), "11 kW")
-        XCTAssertEqual(Format.kilowatts(watts: 150000), "150 kW")
-        XCTAssertEqual(Format.kilowatts(watts: 0), "0.0 kW")
+        // Locale-aware decimals rule: sub-10 kW keeps one fraction digit, 10 kW and up none.
+        func expectedKw(_ kw: Double) -> String {
+            let decimals = kw >= 10 ? 0 : 1
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.usesGroupingSeparator = false
+            formatter.minimumFractionDigits = decimals
+            formatter.maximumFractionDigits = decimals
+            return formatter.string(from: NSNumber(value: kw))! + " kW"
+        }
+        #expect(Format.kilowatts(watts: 7400) == expectedKw(7.4))
+        #expect(Format.kilowatts(watts: 11000) == expectedKw(11))
+        #expect(Format.kilowatts(watts: 150000) == expectedKw(150))
+        #expect(Format.kilowatts(watts: 0) == expectedKw(0))
     }
 
     @Test
     func testDurationFormatting() {
-        XCTAssertEqual(Format.shortDuration(minutes: 45), "45min")
-        XCTAssertEqual(Format.shortDuration(minutes: 60), "1h")
-        XCTAssertEqual(Format.shortDuration(minutes: 90), "1h30m")
-        XCTAssertEqual(Format.shortDuration(minutes: 135), "2h15m")
+        #expect(Format.shortDuration(minutes: 45) == "45min")
+        #expect(Format.shortDuration(minutes: 60) == "1h")
+        #expect(Format.shortDuration(minutes: 90) == "1h30m")
+        #expect(Format.shortDuration(minutes: 135) == "2h15m")
     }
 
     @Test
@@ -68,33 +78,33 @@ struct InputBoundaryTests {
         )
         do {
             _ = try await PolestarGRPC().executeRemoteCommand(invalidTempCommand, vin: "YSMTEST", accessToken: "token")
-            XCTFail("Should reject non-0.5 step temperature")
-        } catch RemoteCommandError.rejected {
-
+            Issue.record("Should reject non-0.5 step temperature")
+        } catch RemoteCommandError.rejected(let message) {
+            #expect(message != nil, "local rejection must explain what was wrong")
         } catch {
-
+            Issue.record("Unexpected error \(error): input must be rejected locally, before any network dispatch")
         }
 
 
         let invalidTargetCommand = RemoteCommand.setChargeTarget(30)
         do {
             _ = try await PolestarGRPC().executeRemoteCommand(invalidTargetCommand, vin: "YSMTEST", accessToken: "token")
-            XCTFail("Should reject SoC < 40")
-        } catch RemoteCommandError.rejected {
-
+            Issue.record("Should reject SoC < 40")
+        } catch RemoteCommandError.rejected(let message) {
+            #expect(message != nil, "local rejection must explain what was wrong")
         } catch {
-
+            Issue.record("Unexpected error \(error): input must be rejected locally, before any network dispatch")
         }
 
 
         let invalidAmpCommand = RemoteCommand.setAmpLimit(0)
         do {
             _ = try await PolestarGRPC().executeRemoteCommand(invalidAmpCommand, vin: "YSMTEST", accessToken: "token")
-            XCTFail("Should reject amps < 1")
-        } catch RemoteCommandError.rejected {
-
+            Issue.record("Should reject amps < 1")
+        } catch RemoteCommandError.rejected(let message) {
+            #expect(message != nil, "local rejection must explain what was wrong")
         } catch {
-
+            Issue.record("Unexpected error \(error): input must be rejected locally, before any network dispatch")
         }
     }
 }

@@ -8,33 +8,45 @@ struct FormattingTests {
     /// `UserDefaults.standard` and leaked state across runs on developer machines.
     private func makeStore() throws -> (store: PreferencesStore, defaults: UserDefaults, suiteName: String) {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (PreferencesStore(defaults: defaults), defaults, suiteName)
+    }
+
+    /// Locale-aware kW string mirroring `Format.powerKw`'s decimals rule, so expectations
+    /// hold on comma-decimal systems too (the formatter is intentionally locale-aware).
+    private func expectedKw(_ kw: Double) -> String {
+        let decimals = kw >= 10 ? 0 : 1
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = decimals
+        formatter.maximumFractionDigits = decimals
+        return formatter.string(from: NSNumber(value: kw))! + " kW"
     }
 
     @Test
     func testShortDuration() {
-        XCTAssertEqual(Format.shortDuration(minutes: 45), "45min")
-        XCTAssertEqual(Format.shortDuration(minutes: 60), "1h")
-        XCTAssertEqual(Format.shortDuration(minutes: 135), "2h15m")
+        #expect(Format.shortDuration(minutes: 45) == "45min")
+        #expect(Format.shortDuration(minutes: 60) == "1h")
+        #expect(Format.shortDuration(minutes: 135) == "2h15m")
     }
 
     @Test
     func testBatteryColor() {
-        XCTAssertEqual(Format.batteryColor(percentage: 15, charging: true), .systemGreen)
-        XCTAssertEqual(Format.batteryColor(percentage: 15, charging: false), .systemOrange)
-        XCTAssertEqual(Format.batteryColor(percentage: 80, charging: false), .controlAccentColor)
+        #expect(Format.batteryColor(percentage: 15, charging: true) == .systemGreen)
+        #expect(Format.batteryColor(percentage: 15, charging: false) == .systemOrange)
+        #expect(Format.batteryColor(percentage: 80, charging: false) == .controlAccentColor)
     }
 
     @Test
     func testDistanceFormattingAndConversion() {
-        XCTAssertEqual(DistanceUnit.kilometers.convert(km: 412), 412)
-        XCTAssertEqual(DistanceUnit.miles.convert(km: 412), 256)
-        XCTAssertEqual(Format.distance(km: 412, unit: .kilometers), "412 km")
-        XCTAssertEqual(Format.distance(km: 412, unit: .miles), "256 mi")
+        #expect(DistanceUnit.kilometers.convert(km: 412) == 412)
+        #expect(DistanceUnit.miles.convert(km: 412) == 256)
+        #expect(Format.distance(km: 412, unit: .kilometers) == "412 km")
+        #expect(Format.distance(km: 412, unit: .miles) == "256 mi")
         let grouped = Format.distance(km: 23_412, grouped: true, unit: .kilometers)
-        XCTAssertTrue(grouped.hasSuffix(" km"))
-        XCTAssertTrue(grouped.contains("23"))
+        #expect(grouped.hasSuffix(" km"))
+        #expect(grouped.contains("23"))
     }
 
     @Test
@@ -43,63 +55,63 @@ struct FormattingTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("Range (km)", forKey: "statusbar_display_option")
         defaults.set("Miles (mi)", forKey: "distance_unit")
-        XCTAssertEqual(store.menuBarStyle, .range)
-        XCTAssertEqual(store.distanceUnit, .miles)
+        #expect(store.menuBarStyle == .range)
+        #expect(store.distanceUnit == .miles)
     }
 
     @Test
     func testVehicleModelBadgePositionPreference() throws {
         let (store, defaults, suite) = try makeStore()
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertEqual(store.vehicleModelBadgePosition, .inlineHeader)
+        #expect(store.vehicleModelBadgePosition == .inlineHeader)
         store.vehicleModelBadgePosition = .topRightOverlay
-        XCTAssertEqual(store.vehicleModelBadgePosition, .topRightOverlay)
+        #expect(store.vehicleModelBadgePosition == .topRightOverlay)
         store.vehicleModelBadgePosition = .topLeftOverlay
-        XCTAssertEqual(store.vehicleModelBadgePosition, .topLeftOverlay)
+        #expect(store.vehicleModelBadgePosition == .topLeftOverlay)
         store.vehicleModelBadgePosition = .subheadline
-        XCTAssertEqual(store.vehicleModelBadgePosition, .subheadline)
+        #expect(store.vehicleModelBadgePosition == .subheadline)
         store.vehicleModelBadgePosition = .hidden
-        XCTAssertEqual(store.vehicleModelBadgePosition, .hidden)
+        #expect(store.vehicleModelBadgePosition == .hidden)
         store.vehicleModelBadgePosition = .inlineHeader
-        XCTAssertEqual(store.vehicleModelBadgePosition, .inlineHeader)
+        #expect(store.vehicleModelBadgePosition == .inlineHeader)
     }
 
     @Test
     func testRegistrationBadgePositionPreference() throws {
         let (store, defaults, suite) = try makeStore()
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertEqual(store.registrationBadgePosition, .belowGreeting)
+        #expect(store.registrationBadgePosition == .belowGreeting)
         store.registrationBadgePosition = .platePill
-        XCTAssertEqual(store.registrationBadgePosition, .platePill)
+        #expect(store.registrationBadgePosition == .platePill)
         store.registrationBadgePosition = .inlineHeader
-        XCTAssertEqual(store.registrationBadgePosition, .inlineHeader)
+        #expect(store.registrationBadgePosition == .inlineHeader)
         store.registrationBadgePosition = .topRightOverlay
-        XCTAssertEqual(store.registrationBadgePosition, .topRightOverlay)
+        #expect(store.registrationBadgePosition == .topRightOverlay)
         store.registrationBadgePosition = .topLeftOverlay
-        XCTAssertEqual(store.registrationBadgePosition, .topLeftOverlay)
+        #expect(store.registrationBadgePosition == .topLeftOverlay)
         store.registrationBadgePosition = .hidden
-        XCTAssertEqual(store.registrationBadgePosition, .hidden)
+        #expect(store.registrationBadgePosition == .hidden)
         store.registrationBadgePosition = .belowGreeting
-        XCTAssertEqual(store.registrationBadgePosition, .belowGreeting)
+        #expect(store.registrationBadgePosition == .belowGreeting)
     }
 
     @Test
     func testVehicleLabelFormatPreference() throws {
         let (store, defaults, suite) = try makeStore()
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertEqual(store.vehicleLabelFormat, .modelAndYear)
+        #expect(store.vehicleLabelFormat == .modelAndYear)
         store.vehicleLabelFormat = .registration
-        XCTAssertEqual(store.vehicleLabelFormat, .registration)
+        #expect(store.vehicleLabelFormat == .registration)
         store.vehicleLabelFormat = .nickname
-        XCTAssertEqual(store.vehicleLabelFormat, .nickname)
+        #expect(store.vehicleLabelFormat == .nickname)
         store.vehicleLabelFormat = .modelOnly
-        XCTAssertEqual(store.vehicleLabelFormat, .modelOnly)
+        #expect(store.vehicleLabelFormat == .modelOnly)
         store.vehicleLabelFormat = .nicknameAndRegistration
-        XCTAssertEqual(store.vehicleLabelFormat, .nicknameAndRegistration)
+        #expect(store.vehicleLabelFormat == .nicknameAndRegistration)
         store.vehicleLabelFormat = .registrationAndModel
-        XCTAssertEqual(store.vehicleLabelFormat, .registrationAndModel)
+        #expect(store.vehicleLabelFormat == .registrationAndModel)
         store.vehicleLabelFormat = .modelAndYear
-        XCTAssertEqual(store.vehicleLabelFormat, .modelAndYear)
+        #expect(store.vehicleLabelFormat == .modelAndYear)
     }
 
     @Test
@@ -120,7 +132,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .registration
         )
-        XCTAssertEqual(regTitle, "ZCJ 06G")
+        #expect(regTitle == "ZCJ 06G")
 
         // Test Nickname Format
         let nickTitle = store.formattedVehicleTitle(
@@ -130,7 +142,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .nickname
         )
-        XCTAssertEqual(nickTitle, "Silver Comet")
+        #expect(nickTitle == "Silver Comet")
 
         // Test Model & Year Format
         let modelYrTitle = store.formattedVehicleTitle(
@@ -140,7 +152,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .modelAndYear
         )
-        XCTAssertEqual(modelYrTitle, "Polestar 2 · 2024")
+        #expect(modelYrTitle == "Polestar 2 · 2024")
 
         // Test Model Only Format
         let modelOnlyTitle = store.formattedVehicleTitle(
@@ -150,7 +162,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .modelOnly
         )
-        XCTAssertEqual(modelOnlyTitle, "Polestar 2")
+        #expect(modelOnlyTitle == "Polestar 2")
 
         // Test Nickname & Registration Format
         let nickAndRegTitle = store.formattedVehicleTitle(
@@ -160,7 +172,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .nicknameAndRegistration
         )
-        XCTAssertEqual(nickAndRegTitle, "Silver Comet (ZCJ 06G)")
+        #expect(nickAndRegTitle == "Silver Comet (ZCJ 06G)")
 
         // Test Registration & Model Format
         let regAndModelTitle = store.formattedVehicleTitle(
@@ -170,7 +182,7 @@ struct FormattingTests {
             registrationNo: "ZCJ 06G",
             format: .registrationAndModel
         )
-        XCTAssertEqual(regAndModelTitle, "ZCJ 06G · Polestar 2")
+        #expect(regAndModelTitle == "ZCJ 06G · Polestar 2")
 
         // Test fallback when registration is empty
         let regFallback = store.formattedVehicleTitle(
@@ -180,39 +192,39 @@ struct FormattingTests {
             registrationNo: nil,
             format: .registration
         )
-        XCTAssertEqual(regFallback, "Silver Comet")
+        #expect(regFallback == "Silver Comet")
     }
 
     @Test
     func testFeatureSelectionCanDisableOptionalCapabilities() {
         var features = FeatureSelection.default
-        XCTAssertTrue(features.contains(.vehicleImage))
-        XCTAssertTrue(features.contains(.chargingDetails))
-        XCTAssertFalse(features.contains(.connectivityDiagnostics))
-        XCTAssertFalse(features.contains(.airQuality))
+        #expect(features.contains(.vehicleImage))
+        #expect(features.contains(.chargingDetails))
+        #expect(!(features.contains(.connectivityDiagnostics)))
+        #expect(!(features.contains(.airQuality)))
         // batteryDiagnostics ships on by default now, alongside vehicleWeather and
         // ownerGreeting — see FeatureSelection.default.
-        XCTAssertTrue(features.contains(.batteryDiagnostics))
-        XCTAssertFalse(features.contains(.vehicleHealth))
-        XCTAssertFalse(AppFeature.remoteFeatures.contains { features.contains($0) })
+        #expect(features.contains(.batteryDiagnostics))
+        #expect(!(features.contains(.vehicleHealth)))
+        #expect(!(AppFeature.remoteFeatures.contains { features.contains($0) }))
         features.set(.chargingDetails, enabled: false)
         features.set(.vehicleImage, enabled: false)
-        XCTAssertFalse(features.contains(.chargingDetails))
-        XCTAssertFalse(features.contains(.vehicleImage))
+        #expect(!(features.contains(.chargingDetails)))
+        #expect(!(features.contains(.vehicleImage)))
     }
 
     @Test
     func testRemoteFeaturesAreOptInAndSelectable() {
         let selection = FeatureSelection.default
-        XCTAssertFalse(AppFeature.remoteFeatures.contains { selection.contains($0) })
-        XCTAssertTrue(AppFeature.userSelectableCases.contains(.remoteClimate))
+        #expect(!(AppFeature.remoteFeatures.contains { selection.contains($0) }))
+        #expect(AppFeature.userSelectableCases.contains(.remoteClimate))
     }
 
     @Test
     func testVINValidationSupportsGuestAccountFallback() {
-        XCTAssertTrue(PolestarAPI.isValidVIN("YSMVSEDE6PL000001"))
-        XCTAssertFalse(PolestarAPI.isValidVIN("TOO-SHORT"))
-        XCTAssertFalse(PolestarAPI.isValidVIN("YSMVSEDEIPL147228"))
+        #expect(PolestarAPI.isValidVIN("YSMVSEDE6PL000001"))
+        #expect(!(PolestarAPI.isValidVIN("TOO-SHORT")))
+        #expect(!(PolestarAPI.isValidVIN("YSMVSEDEIPL147228")))
     }
 
     @Test
@@ -220,19 +232,19 @@ struct FormattingTests {
         var features = FeatureSelection.default
         features.set(.vehicleHealth, enabled: true)
         let enabled = PolestarAPI.telematicsQuery(features: features)
-        XCTAssertTrue(enabled.contains("odometerMeters"))
-        XCTAssertTrue(enabled.contains("daysToService"))
+        #expect(enabled.contains("odometerMeters"))
+        #expect(enabled.contains("daysToService"))
         features.set(.vehicleHealth, enabled: false)
         let disabled = PolestarAPI.telematicsQuery(features: features)
-        XCTAssertFalse(disabled.contains("odometerMeters"))
-        XCTAssertFalse(disabled.contains("daysToService"))
-        XCTAssertTrue(disabled.contains("batteryChargeLevelPercentage"))
+        #expect(!(disabled.contains("odometerMeters")))
+        #expect(!(disabled.contains("daysToService")))
+        #expect(disabled.contains("batteryChargeLevelPercentage"))
     }
 
     @Test
     func testTelematicsQueryOmitsRemovedBatteryCapacityField() {
         let query = PolestarAPI.telematicsQuery(features: .default)
-        XCTAssertFalse(query.contains("reportedBatteryCapacityKwh"))
+        #expect(!(query.contains("reportedBatteryCapacityKwh")))
     }
 
     @Test
@@ -240,10 +252,10 @@ struct FormattingTests {
         let previous = vehicle(vin: "VIN-A", battery: 64)
         let current = vehicle(vin: "VIN-A", battery: nil)
         let merged = current.mergingLastKnown(from: previous, features: .default)
-        XCTAssertEqual(merged.energy.batteryPercentage, 64)
-        XCTAssertNil(current.mergingLastKnown(
+        #expect(merged.energy.batteryPercentage == 64)
+        #expect(current.mergingLastKnown(
             from: vehicle(vin: "VIN-B", battery: 81), features: .default
-        ).energy.batteryPercentage)
+        ).energy.batteryPercentage == nil)
     }
 
     @Test
@@ -252,9 +264,9 @@ struct FormattingTests {
         previous.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: false)
         let current = vehicle(vin: "VIN-A", battery: 65)
         let merged = current.mergingLastKnown(from: previous, features: .default)
-        XCTAssertEqual(merged.exteriorStatus?.isLocked, true)
-        XCTAssertTrue(merged.freshness.retainedDataCategories.contains(.exteriorStatus))
-        XCTAssertNotNil(merged.freshness.retainedDataAt)
+        #expect(merged.exteriorStatus?.isLocked == true)
+        #expect(merged.freshness.retainedDataCategories.contains(.exteriorStatus))
+        #expect(merged.freshness.retainedDataAt != nil)
     }
 
     @Test
@@ -270,8 +282,8 @@ struct FormattingTests {
         features.set(.connectivityDiagnostics, enabled: true)
         let merged = current.mergingLastKnown(from: previous, features: features)
 
-        XCTAssertNil(merged.connectivity)
-        XCTAssertFalse(merged.freshness.retainedDataCategories.contains(.connectivityDiagnostics))
+        #expect(merged.connectivity == nil)
+        #expect(!(merged.freshness.retainedDataCategories.contains(.connectivityDiagnostics)))
     }
 
     @Test
@@ -287,37 +299,37 @@ struct FormattingTests {
         var newerIncident = first
         newerIncident.freshness.retainedDataAt = sourceAt.addingTimeInterval(600)
 
-        let firstID = try XCTUnwrap(RetainedDataNoticeID(state: first))
-        XCTAssertEqual(firstID, RetainedDataNoticeID(state: sameIncident))
-        XCTAssertNotEqual(firstID, RetainedDataNoticeID(state: differentCategory))
-        XCTAssertNotEqual(firstID, RetainedDataNoticeID(state: newerIncident))
+        let firstID = try #require(RetainedDataNoticeID(state: first))
+        #expect(firstID == RetainedDataNoticeID(state: sameIncident))
+        #expect(firstID != RetainedDataNoticeID(state: differentCategory))
+        #expect(firstID != RetainedDataNoticeID(state: newerIncident))
 
         var fresh = first
         fresh.freshness.retainedDataCategories = []
-        XCTAssertNil(RetainedDataNoticeID(state: fresh))
+        #expect(RetainedDataNoticeID(state: fresh) == nil)
     }
 
     @Test
     func testDiskSnapshotExpiresAndOmitsPersonalDetails() throws {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         let stale = vehicle(
             vin: "VIN-A", fetchedAt: Date().addingTimeInterval(-8 * 24 * 60 * 60), reportedAt: nil
         )
         store.save(stale)
-        XCTAssertNil(store.snapshot(for: "VIN-A"))
-        XCTAssertNil(stale.cacheableCopy.identity.ownerFirstName)
-        XCTAssertNil(stale.cacheableCopy.identity.registrationNo)
-        XCTAssertNil(stale.cacheableCopy.identity.imageData)
+        #expect(store.snapshot(for: "VIN-A") == nil)
+        #expect(stale.cacheableCopy.identity.ownerFirstName == nil)
+        #expect(stale.cacheableCopy.identity.registrationNo == nil)
+        #expect(stale.cacheableCopy.identity.imageData == nil)
     }
 
     @Test
     func testKilowattsFormatting() {
-        XCTAssertEqual(Format.kilowatts(watts: 7_200), "7.2 kW")
-        XCTAssertEqual(Format.kilowatts(watts: 11_000), "11 kW")
-        XCTAssertEqual(Format.kilowatts(watts: 150_000), "150 kW")
+        #expect(Format.kilowatts(watts: 7_200) == expectedKw(7.2))
+        #expect(Format.kilowatts(watts: 11_000) == expectedKw(11))
+        #expect(Format.kilowatts(watts: 150_000) == expectedKw(150))
     }
 
     @Test
@@ -326,13 +338,13 @@ struct FormattingTests {
             var message = Protobuf.varint(UInt64(5 << 3))
             message.append(Protobuf.varint(value))
             let field = Protobuf.fields(message).first
-            XCTAssertEqual(field?.number, 5)
-            XCTAssertEqual(field?.varint, value)
+            #expect(field?.number == 5)
+            #expect(field?.varint == value)
         }
         let message = Protobuf.stringField(2, "LPSVSESEKML123456")
         let frame = Protobuf.grpcFrame(message)
-        XCTAssertEqual(frame[0], 0)
-        XCTAssertEqual(frame.count, message.count + 5)
+        #expect(frame[0] == 0)
+        #expect(frame.count == message.count + 5)
     }
 
     @Test
@@ -351,39 +363,39 @@ struct FormattingTests {
         battery.append(Protobuf.intField(18, 230))
 
         let result = PolestarGRPC.parseBattery(battery)
-        XCTAssertEqual(result.batteryPercentage, 54.5)
-        XCTAssertEqual(result.rangeKm, 321)
-        XCTAssertEqual(result.estimatedChargingTimeToFullMinutes, 95)
-        XCTAssertEqual(result.chargerConnection, .connected)
-        XCTAssertEqual(result.chargingState, .charging)
-        XCTAssertEqual(result.chargingType, .ac)
-        XCTAssertEqual(result.chargingPowerWatts, 7_200)
-        XCTAssertEqual(result.chargingCurrentAmps, 16)
-        XCTAssertEqual(result.chargingVoltageVolts, 230)
+        #expect(result.batteryPercentage == 54.5)
+        #expect(result.rangeKm == 321)
+        #expect(result.estimatedChargingTimeToFullMinutes == 95)
+        #expect(result.chargerConnection == .connected)
+        #expect(result.chargingState == .charging)
+        #expect(result.chargingType == .ac)
+        #expect(result.chargingPowerWatts == 7_200)
+        #expect(result.chargingCurrentAmps == 16)
+        #expect(result.chargingVoltageVolts == 230)
     }
 
     @Test
     func testTypedChargingStateAndIcons() {
-        XCTAssertEqual(ChargingState(apiValue: "CHARGING_STATUS_V2_SMART_CHARGING"), .smartCharging)
-        XCTAssertTrue(ChargingState(apiValue: "CHARGING_STATUS_CHARGING").isActivelyCharging)
-        XCTAssertFalse(ChargingState(apiValue: "CHARGING_STATUS_IDLE").isActivelyCharging)
-        XCTAssertEqual(Format.icon(for: vehicle(state: .charging, connection: .connected)), "bolt.car.fill")
-        XCTAssertEqual(Format.icon(for: vehicle(state: .idle, connection: .connected)), "bolt.car")
-        XCTAssertEqual(Format.icon(for: vehicle(state: .idle, connection: .disconnected)), "car")
-        XCTAssertEqual(Format.icon(
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_SMART_CHARGING") == .smartCharging)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_CHARGING").isActivelyCharging)
+        #expect(!(ChargingState(apiValue: "CHARGING_STATUS_IDLE").isActivelyCharging))
+        #expect(Format.icon(for: vehicle(state: .charging, connection: .connected)) == "bolt.car.fill")
+        #expect(Format.icon(for: vehicle(state: .idle, connection: .connected)) == "bolt.car")
+        #expect(Format.icon(for: vehicle(state: .idle, connection: .disconnected)) == "car")
+        #expect(Format.icon(
             for: vehicle(state: .charging, connection: .connected), includeConnection: false
-        ), "car")
-        XCTAssertEqual(Format.icon(for: nil), "car")
+        ) == "car")
+        #expect(Format.icon(for: nil) == "car")
     }
 
     @Test
     func testStaleThresholdIsStricterWhileCharging() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
-        XCTAssertTrue(vehicle(state: .charging, fetchedAt: now.addingTimeInterval(-901),
+        #expect(vehicle(state: .charging, fetchedAt: now.addingTimeInterval(-901),
                               reportedAt: now.addingTimeInterval(-901)).isStale(at: now))
-        XCTAssertFalse(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-901),
-                               reportedAt: now.addingTimeInterval(-901)).isStale(at: now))
-        XCTAssertTrue(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-3_601),
+        #expect(!(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-901),
+                               reportedAt: now.addingTimeInterval(-901)).isStale(at: now)))
+        #expect(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-3_601),
                               reportedAt: now.addingTimeInterval(-3_601)).isStale(at: now))
     }
 
@@ -392,10 +404,10 @@ struct FormattingTests {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
 
 
-        XCTAssertFalse(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-30),
-                               reportedAt: now.addingTimeInterval(-10_800)).isStale(at: now))
+        #expect(!(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-30),
+                               reportedAt: now.addingTimeInterval(-10_800)).isStale(at: now)))
 
-        XCTAssertTrue(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-130),
+        #expect(vehicle(state: .idle, fetchedAt: now.addingTimeInterval(-130),
                               reportedAt: now.addingTimeInterval(-10_800)).isStale(at: now))
     }
 
@@ -406,10 +418,10 @@ struct FormattingTests {
         // runs in parallel, so mutating it here made unrelated tests read Swedish strings
         // for the duration — see the macos-14 failures in VolvoDecodingTests and
         // VehicleServiceErrorTests, which passed on macos-15 purely by scheduling luck.
-        XCTAssertEqual(InterfaceLanguage.english.languageCode, "en")
-        XCTAssertEqual(InterfaceLanguage.swedish.languageCode, "sv")
-        XCTAssertEqual(Format.greeting("Nicolas", languageCode: InterfaceLanguage.english.languageCode), "Hi, Nicolas")
-        XCTAssertEqual(Format.greeting("Nicolas", languageCode: InterfaceLanguage.swedish.languageCode), "Hej, Nicolas")
+        #expect(InterfaceLanguage.english.languageCode == "en")
+        #expect(InterfaceLanguage.swedish.languageCode == "sv")
+        #expect(Format.greeting("Nicolas", languageCode: InterfaceLanguage.english.languageCode) == "Hi, Nicolas")
+        #expect(Format.greeting("Nicolas", languageCode: InterfaceLanguage.swedish.languageCode) == "Hej, Nicolas")
     }
 
     @Test
@@ -417,49 +429,31 @@ struct FormattingTests {
         // Explicit language, for the same reason as above: no process-global mutation.
         func sv(_ key: String) -> String { L10n.text(key, languageCode: "sv") }
 
-        XCTAssertEqual(sv("Charging & Energy"), "Laddning och energi")
-        XCTAssertEqual(sv("Charger Connection"), "Laddkontakt")
-        XCTAssertEqual(sv("Est. Charge Cost"), "Beräknad laddkostnad")
-        XCTAssertEqual(sv("Power Module"), "Laddarmodul")
-        XCTAssertEqual(sv("Vehicle Status"), "Fordonsstatus")
-        XCTAssertEqual(sv("Odometer"), "Mätarställning")
-        XCTAssertEqual(sv("Cloud Connectivity"), "Molnanslutning")
-        XCTAssertEqual(sv("Climate & Timers"), "Klimat och timers")
-        XCTAssertEqual(sv("Cabin Climate"), "Kupéklimat")
-        XCTAssertEqual(sv("Complete"), "Fulladdad")
-        XCTAssertEqual(sv("Securely Locked"), "Låst")
-        XCTAssertEqual(sv("Current Limit"), "Maximal laddström")
-        XCTAssertEqual(sv("Window controls"), "Rutreglage")
-        XCTAssertEqual(sv("Range Health Estimate"), "Räckviddsbedömning")
-        XCTAssertEqual(sv("System Default"), "Följ systemet")
-    }
-
-    @Test
-    func testCompletionTimeFormatting() {
-        let baseDate = Date(timeIntervalSince1970: 1700000000)
-        let utcZone = TimeZone(secondsFromGMT: 0)!
-        let formattedUTC = Format.completionTime(from: 90, baseDate: baseDate, timeZone: utcZone)
-        XCTAssertFalse(formattedUTC.isEmpty)
+        #expect(sv("Charging & Energy") == "Laddning och energi")
+        #expect(sv("Charger Connection") == "Laddkontakt")
+        #expect(sv("Est. Charge Cost") == "Beräknad laddkostnad")
+        #expect(sv("Power Module") == "Laddarmodul")
+        #expect(sv("Vehicle Status") == "Fordonsstatus")
+        #expect(sv("Odometer") == "Mätarställning")
+        #expect(sv("Cloud Connectivity") == "Molnanslutning")
+        #expect(sv("Climate & Timers") == "Klimat och timers")
+        #expect(sv("Cabin Climate") == "Kupéklimat")
+        #expect(sv("Complete") == "Fulladdad")
+        #expect(sv("Securely Locked") == "Låst")
+        #expect(sv("Current Limit") == "Maximal laddström")
+        #expect(sv("Window controls") == "Rutreglage")
+        #expect(sv("Range Health Estimate") == "Räckviddsbedömning")
+        #expect(sv("System Default") == "Följ systemet")
     }
 
     @Test
     func testChargingRateFormatting() {
-        XCTAssertEqual(Format.chargingRateKmPerHour(powerWatts: 7_200, consumptionWhPerKm: 180), 40)
-        XCTAssertEqual(Format.chargingRateKmPerHour(powerWatts: 150_000, consumptionWhPerKm: 200), 750)
-        XCTAssertEqual(Format.chargingRateKmPerHour(powerWatts: 0), 0)
+        #expect(Format.chargingRateKmPerHour(powerWatts: 7_200, consumptionWhPerKm: 180) == 40)
+        #expect(Format.chargingRateKmPerHour(powerWatts: 150_000, consumptionWhPerKm: 200) == 750)
+        #expect(Format.chargingRateKmPerHour(powerWatts: 0) == 0)
 
-        XCTAssertEqual(Format.chargingRateFormatted(powerWatts: 7_200, unit: .kilometers), "+40 km/h")
-        XCTAssertEqual(Format.chargingRateFormatted(powerWatts: 7_200, unit: .miles), "+25 mph")
-    }
-
-    @Test
-    func testBatterySymbol() {
-        XCTAssertEqual(Format.batterySymbol(for: 95, isCharging: false), "battery.100percent")
-        XCTAssertEqual(Format.batterySymbol(for: 75, isCharging: false), "battery.75percent")
-        XCTAssertEqual(Format.batterySymbol(for: 50, isCharging: false), "battery.50percent")
-        XCTAssertEqual(Format.batterySymbol(for: 20, isCharging: false), "battery.25percent")
-        XCTAssertEqual(Format.batterySymbol(for: 8, isCharging: false), "battery.0percent")
-        XCTAssertEqual(Format.batterySymbol(for: 50, isCharging: true), "bolt.car.fill")
+        #expect(Format.chargingRateFormatted(powerWatts: 7_200, unit: .kilometers) == "+40 km/h")
+        #expect(Format.chargingRateFormatted(powerWatts: 7_200, unit: .miles) == "+25 mph")
     }
 
     @Test
@@ -475,18 +469,18 @@ struct FormattingTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .battery, unit: .kilometers), "82%")
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .batteryAndRange, unit: .kilometers), "82% · 348km")
+        #expect(Format.barTitle(for: chargingCar, style: .battery, unit: .kilometers) == "82%")
+        #expect(Format.barTitle(for: chargingCar, style: .batteryAndRange, unit: .kilometers) == "82% · 348km")
         // Charging-aware renders as "82%→90 · 1h42m": the arrow shows time-to-TARGET when a
         // sub-100 % target is set, answering "when do I unplug" rather than "when is it full".
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .chargingAware, unit: .kilometers), "82%→90 · 1h42m")
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .compactCharging, unit: .kilometers), "82% (1h42m)")
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .batteryAndPower, unit: .kilometers), "82% · 7.2 kW")
-        XCTAssertEqual(Format.barTitle(for: chargingCar, style: .range, unit: .kilometers), "348km")
+        #expect(Format.barTitle(for: chargingCar, style: .chargingAware, unit: .kilometers) == "82%→90 · 1h42m")
+        #expect(Format.barTitle(for: chargingCar, style: .compactCharging, unit: .kilometers) == "82% (1h42m)")
+        #expect(Format.barTitle(for: chargingCar, style: .batteryAndPower, unit: .kilometers) == "82% · \(expectedKw(7.2))")
+        #expect(Format.barTitle(for: chargingCar, style: .range, unit: .kilometers) == "348km")
 
         let idleCar = vehicle(battery: 82, state: .idle, connection: .disconnected)
-        XCTAssertEqual(Format.barTitle(for: idleCar, style: .compactCharging, unit: .kilometers), "82%")
-        XCTAssertEqual(Format.barTitle(for: idleCar, style: .batteryAndPower, unit: .kilometers), "82% · 200km")
+        #expect(Format.barTitle(for: idleCar, style: .compactCharging, unit: .kilometers) == "82%")
+        #expect(Format.barTitle(for: idleCar, style: .batteryAndPower, unit: .kilometers) == "82% · 200km")
     }
 
     @Test
@@ -502,9 +496,9 @@ struct FormattingTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        XCTAssertNotNil(chargingCar.formattedCompletionTime)
-        XCTAssertEqual(chargingCar.formattedChargingRate(unit: .kilometers), "+70 km/h")
-        XCTAssertTrue(chargingCar.freshnessDescription.contains("Updated"))
+        #expect(chargingCar.formattedCompletionTime != nil)
+        #expect(chargingCar.formattedChargingRate(unit: .kilometers) == "+70 km/h")
+        #expect(chargingCar.freshnessDescription.contains("Updated"))
     }
 
     @Test
@@ -516,20 +510,20 @@ struct FormattingTests {
         let state2 = vehicle(battery: 52, state: .charging, connection: .connected, fetchedAt: Date(timeIntervalSince1970: 1060))
         let merged = state2.mergingLastKnown(from: state1, features: .default)
 
-        XCTAssertEqual(merged.energy.samples.count, 2)
-        XCTAssertEqual(merged.energy.samples.first?.batteryPercentage, 50)
-        XCTAssertEqual(merged.energy.samples.last?.batteryPercentage, 52)
+        #expect(merged.energy.samples.count == 2)
+        #expect(merged.energy.samples.first?.batteryPercentage == 50)
+        #expect(merged.energy.samples.last?.batteryPercentage == 52)
 
 
         let idleState = vehicle(battery: 80, state: .idle, connection: .disconnected)
         let cleared = idleState.mergingLastKnown(from: merged, features: .default)
-        XCTAssertTrue(cleared.energy.samples.isEmpty)
+        #expect(cleared.energy.samples.isEmpty)
     }
 
     @Test
-    func testChargingSessionSamplesSurviveCachedStateRoundTrip() throws {
+    func testChargingSessionSamplesSurviveCachedStateRoundTrip() async throws {
         let suiteName = "HisingenTests.ChargingSamples.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         var state = vehicle(battery: 64, state: .charging, connection: .connected)
@@ -539,9 +533,12 @@ struct FormattingTests {
         ]
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         store.save(state)
+        // Persistence hands off to a detached storage pass; wait for the snapshot to land.
+        let stored = await awaitStored(timeout: 5) { store.snapshot(for: state.identity.vin) != nil }
+        #expect(stored, "snapshot never reached the database after save")
 
-        let restored = try XCTUnwrap(store.snapshot(for: state.identity.vin))
-        XCTAssertEqual(restored.energy.samples, state.energy.samples)
+        let restored = try #require(store.snapshot(for: state.identity.vin))
+        #expect(restored.energy.samples == state.energy.samples)
     }
 
     @Test
@@ -555,29 +552,53 @@ struct FormattingTests {
         let current = vehicle(battery: 70, state: .idle, connection: .disconnected,
                               fetchedAt: Date(timeIntervalSince1970: 2_000))
 
-        let session = try XCTUnwrap(ChargingSession.completed(previous: previous, current: current, pricePerKwh: 2))
-        XCTAssertEqual(session.percentageAdded, 20)
-        XCTAssertEqual(session.peakPowerWatts, 7_200)
-        XCTAssertTrue(session.kwhDelivered > 0)
-        XCTAssertEqual(session.cost, session.kwhDelivered * 2)
+        let session = try #require(ChargingSession.completed(previous: previous, current: current, pricePerKwh: 2))
+        #expect(session.percentageAdded == 20)
+        #expect(session.peakPowerWatts == 7_200)
+        #expect(session.kwhDelivered > 0)
+        #expect(session.cost == session.kwhDelivered * 2)
     }
 
     @Test
     func testMenuBarTintingPreference() throws {
         let (store, defaults, suite) = try makeStore()
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertTrue(store.tintMenuBarIcon)
+        #expect(store.tintMenuBarIcon)
     }
 
     @Test
-    func testMultiCarIndexCycling() {
-        let count = 3
-        let currentIdx = 0
-        let nextIdx = (currentIdx + 1) % count
-        let prevIdx = (currentIdx - 1 + count) % count
+    @MainActor
+    func testMultiCarIndexCyclingWrapsThroughStatusItemController() throws {
+        // Drive the real cycling seam (TESTS-02): the arithmetic lives in
+        // StatusItemController.cycleVehicle, which orders the fleet the way the menu bar
+        // sees it, so a three-car fleet must step forward/backward and wrap at both ends.
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fleetStore = FleetStore(
+            stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
+            preferences: store
+        )
+        let controller = StatusItemController(
+            database: .inMemory(), preferences: store, fleetStore: fleetStore
+        )
+        let vins = ["YSMCYCLEAAA0000001", "YSMCYCLEBBB0000002", "YSMCYCLECCC0000003"]
+        fleetStore.updateCars(vins.enumerated().map { index, vin in
+            CarSummary(vin: vin, title: "Cycle car \(index + 1)")
+        })
+        var selected: [String] = []
+        controller.onSelectCar = { selected.append($0) }
 
-        XCTAssertEqual(nextIdx, 1)
-        XCTAssertEqual(prevIdx, 2)
+        func cycledVIN(forward: Bool) -> String? {
+            controller.cycleVehicle(forward: forward)
+            return selected.last
+        }
+
+        controller.activeVin = vins[0]
+        #expect(cycledVIN(forward: true) == vins[1], "forward must advance to the next fleet car")
+        #expect(cycledVIN(forward: true) == vins[2])
+        #expect(cycledVIN(forward: true) == vins[0], "forward must wrap past the last car")
+        #expect(cycledVIN(forward: false) == vins[2], "backward must wrap past the first car")
+        #expect(cycledVIN(forward: false) == vins[1])
     }
 
     @Test
@@ -590,13 +611,34 @@ struct FormattingTests {
         store.setVehicleNickname("Comet", for: firstVIN)
         store.setVehicleNickname("Nova", for: secondVIN)
 
-        XCTAssertEqual(store.vehicleNickname(for: firstVIN), "Comet")
-        XCTAssertEqual(store.vehicleNickname(for: secondVIN), "Nova")
+        #expect(store.vehicleNickname(for: firstVIN) == "Comet")
+        #expect(store.vehicleNickname(for: secondVIN) == "Nova")
     }
 
     @Test
-    func testShortTimeFormatting() {
-        let calendar = Calendar.current
+    func testCompletionTimeFormatting() throws {
+        // Fixed UTC fixture: the function must render baseDate + minutes in the timezone
+        // it is given. The reference formatter mirrors the product configuration
+        // (.short time, injected timezone) so the pin is locale-portable but still fails
+        // on offset math, timezone, or style regressions.
+        let baseDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let utcZone = TimeZone(secondsFromGMT: 0)!
+        let formattedUTC = Format.completionTime(from: 90, baseDate: baseDate, timeZone: utcZone)
+
+        let reference = DateFormatter()
+        reference.dateStyle = .none
+        reference.timeStyle = .short
+        reference.timeZone = utcZone
+        let target = baseDate.addingTimeInterval(90 * 60)
+        #expect(formattedUTC == reference.string(from: target), "completion time must render baseDate + 90 min in UTC")
+        #expect(formattedUTC != reference.string(from: baseDate), "the +90 min offset must be visible in the rendered time")
+    }
+
+    @Test
+    func testShortTimeFormatting() throws {
+        let utc = TimeZone(secondsFromGMT: 0)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
         var comps = DateComponents()
         comps.year = 2026
         comps.month = 8
@@ -604,14 +646,25 @@ struct FormattingTests {
         comps.hour = 18
         comps.minute = 52
         comps.second = 0
-        let date = calendar.date(from: comps) ?? Date()
+        let date = try #require(calendar.date(from: comps), "fixture construction must not silently fall back to now")
+
+        // The product formatter is locale- and timezone-bound (Locale.current), so pin the
+        // exact rendered instant via an identically-configured reference, plus a
+        // cross-instant inequality that fails if the time component is dropped.
+        let reference = DateFormatter()
+        reference.dateStyle = .none
+        reference.timeStyle = .short
         let formatted = Format.shortTime(date: date)
-        XCTAssertFalse(formatted.isEmpty)
+        #expect(formatted == reference.string(from: date))
+        #expect(Format.shortTime(date: date.addingTimeInterval(10 * 3_600)) == reference.string(from: date.addingTimeInterval(10 * 3_600)), "a 10-hour offset must change the rendered time")
+        #expect(!(formatted.isEmpty))
     }
 
     @Test
-    func testShortDateFormattingHasNoTime() {
-        let calendar = Calendar.current
+    func testShortDateFormattingHasNoTime() throws {
+        let utc = TimeZone(secondsFromGMT: 0)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
         var comps = DateComponents()
         comps.year = 2030
         comps.month = 12
@@ -619,39 +672,15 @@ struct FormattingTests {
         comps.hour = 14
         comps.minute = 30
         comps.second = 0
-        let date = calendar.date(from: comps) ?? Date()
-        let formatted = Format.shortDate(date: date)
-        XCTAssertFalse(formatted.isEmpty)
-        XCTAssertFalse(formatted.contains(":"))
-    }
-}
+        let date = try #require(calendar.date(from: comps), "fixture construction must not silently fall back to now")
 
-func vehicle(
-    vin: String = "YSMTEST",
-    battery: Double? = 50,
-    state: ChargingState = .idle,
-    connection: ChargerConnection = .disconnected,
-    target: Int? = 80,
-    fetchedAt: Date = Date(),
-    reportedAt: Date? = Date(),
-    brand: VehicleBrand? = nil
-) -> VehicleState {
-    // `VehicleState.model` derives its family from the model name, so an explicit brand
-    // request maps to a representative model name rather than forcing a field that does
-    // not exist on the state.
-    let modelName: String
-    switch brand {
-    case .volvo: modelName = "XC40"
-    case .polestar, nil: modelName = "Polestar 2"
+        let reference = DateFormatter()
+        reference.dateStyle = .short
+        reference.timeStyle = .none
+        let formatted = Format.shortDate(date: date)
+        #expect(formatted == reference.string(from: date), "short date must render the fixture's day, date-style short")
+        #expect(Format.shortDate(date: date.addingTimeInterval(24 * 3_600)) == reference.string(from: date.addingTimeInterval(24 * 3_600)), "the next day must render differently")
+        #expect(!(formatted.isEmpty))
+        #expect(!(formatted.contains(":")), "a short date must not carry a time component")
     }
-    return VehicleState(
-        batteryPercentage: battery, rangeKm: 200, chargingState: state,
-        estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: target,
-        chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
-        chargingType: .unknown, chargerConnection: connection, availability: .available,
-         modelName: modelName, modelYear: "2023", registrationNo: nil, vin: vin,
-        ownerFirstName: nil, odometerKm: nil, daysToService: nil,
-        distanceToServiceKm: nil, serviceWarning: false, fluidWarnings: [], imageData: nil,
-        fetchedAt: fetchedAt, vehicleReportedAt: reportedAt, dataWarnings: []
-    )
 }

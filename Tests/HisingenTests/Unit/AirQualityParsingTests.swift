@@ -25,24 +25,24 @@ struct AirQualityParsingTests {
 
     @Test
     func testFullPreCleaningPayloadDecodesEveryField() throws {
-        let air = try XCTUnwrap(PolestarGRPC.parseAirQuality(fullPayload()))
-        XCTAssertEqual(air.cleaningState, .on)
-        XCTAssertEqual(air.airQualityIndex, 12)
-        XCTAssertEqual(air.particulateMatter25, 3)
-        XCTAssertEqual(air.particulateMatter10, 8)
-        XCTAssertEqual(air.externalParticulateMatter25, 21)
-        XCTAssertEqual(air.filterRemainingPercent, 74)
-        XCTAssertEqual(air.runtimeRemainingMinutes, 17)
-        XCTAssertFalse(air.hasError)
+        let air = try #require(PolestarGRPC.parseAirQuality(fullPayload()))
+        #expect(air.cleaningState == .on)
+        #expect(air.airQualityIndex == 12)
+        #expect(air.particulateMatter25 == 3)
+        #expect(air.particulateMatter10 == 8)
+        #expect(air.externalParticulateMatter25 == 21)
+        #expect(air.filterRemainingPercent == 74)
+        #expect(air.runtimeRemainingMinutes == 17)
+        #expect(!(air.hasError))
         // Explicit `AirCleaningError.none`, not the bare `.none` shorthand — on an Optional
         // that shorthand resolves to `Optional.none` (nil), which would make this pass even if
         // `errorKind` came back unset instead of the wire value 0 ("no error") it's testing for.
-        XCTAssertEqual(air.errorKind, AirCleaningError.none)
-        XCTAssertEqual(air.startReason, .remote)
-        XCTAssertEqual(air.lastCycleValid, true)
-        XCTAssertEqual(air.reportedAt, Date(timeIntervalSince1970: 1_700_000_000))
-        XCTAssertEqual(air.startedAt, Date(timeIntervalSince1970: 1_700_000_100))
-        XCTAssertEqual(air.endingAt, Date(timeIntervalSince1970: 1_700_001_900))
+        #expect(air.errorKind == AirCleaningError.none)
+        #expect(air.startReason == .remote)
+        #expect(air.lastCycleValid == true)
+        #expect(air.reportedAt == Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(air.startedAt == Date(timeIntervalSince1970: 1_700_000_100))
+        #expect(air.endingAt == Date(timeIntervalSince1970: 1_700_001_900))
     }
 
     @Test
@@ -54,22 +54,22 @@ struct AirQualityParsingTests {
             return data
         }
         let generic = PolestarGRPC.parseAirQuality(payload(error: 1))
-        XCTAssertEqual(generic?.errorKind, .generic)
-        XCTAssertEqual(generic?.hasError, true)
+        #expect(generic?.errorKind == .generic)
+        #expect(generic?.hasError == true)
 
         let interrupted = PolestarGRPC.parseAirQuality(payload(error: 2))
-        XCTAssertEqual(interrupted?.errorKind, .interrupted)
+        #expect(interrupted?.errorKind == .interrupted)
         // An interrupted cycle is not a hardware fault.
-        XCTAssertEqual(interrupted?.hasError, true)
+        #expect(interrupted?.hasError == true)
 
         let none = PolestarGRPC.parseAirQuality(payload(error: 0))
-        XCTAssertEqual(none?.errorKind, AirCleaningError.none)
-        XCTAssertEqual(none?.hasError, false)
+        #expect(none?.errorKind == AirCleaningError.none)
+        #expect(none?.hasError == false)
     }
 
     @Test
     func testEmptyPayloadReturnsNil() {
-        XCTAssertNil(PolestarGRPC.parseAirQuality(Data()))
+        #expect(PolestarGRPC.parseAirQuality(Data()) == nil)
     }
 
     @Test
@@ -79,10 +79,10 @@ struct AirQualityParsingTests {
         payload.append(Protobuf.intField(7, 42))   // unmapped start reason
         payload.append(Protobuf.intField(9, 30))
         let air = PolestarGRPC.parseAirQuality(payload)
-        XCTAssertNotNil(air)
-        XCTAssertEqual(air?.cleaningState, .unknown)
-        XCTAssertEqual(air?.startReason, nil)
-        XCTAssertEqual(air?.airQualityIndex, 30)
+        #expect(air != nil)
+        #expect(air?.cleaningState == .unknown)
+        #expect(air?.startReason == nil)
+        #expect(air?.airQualityIndex == 30)
     }
 
     @Test
@@ -93,14 +93,14 @@ struct AirQualityParsingTests {
          "particulateMatter10":9,"externalParticulateMatter25":18,
          "filterRemainingPercent":66,"runtimeRemainingMinutes":9,"hasError":false}
         """
-        let data = try XCTUnwrap(legacyJSON.data(using: .utf8))
+        let data = try #require(legacyJSON.data(using: .utf8))
         let air = try JSONDecoder().decode(VehicleAirQuality.self, from: data)
-        XCTAssertEqual(air.cleaningState, .on)
-        XCTAssertEqual(air.airQualityIndex, 14)
-        XCTAssertNil(air.reportedAt)
-        XCTAssertNil(air.startReason)
-        XCTAssertNil(air.errorKind)
-        XCTAssertFalse(air.hasError)
+        #expect(air.cleaningState == .on)
+        #expect(air.airQualityIndex == 14)
+        #expect(air.reportedAt == nil)
+        #expect(air.startReason == nil)
+        #expect(air.errorKind == nil)
+        #expect(!(air.hasError))
     }
 
     @Test
@@ -122,6 +122,6 @@ struct AirQualityParsingTests {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(VehicleAirQuality.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 }

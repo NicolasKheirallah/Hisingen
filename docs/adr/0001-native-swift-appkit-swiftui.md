@@ -18,10 +18,10 @@ content views. No cross-platform UI framework.
 
 ## Alternatives considered
 
-- **Electron / web-based shell** — would add a large runtime footprint and
+- **Electron / web-based shell**: would add a large runtime footprint and
   bundle size for a menu-bar-only utility, and has no first-class story for
   Keychain access or launch-at-login on macOS.
-- **Flutter / React Native** — solves a multi-platform problem Hisingen
+- **Flutter / React Native**: solves a multi-platform problem Hisingen
   doesn't have, and both still require a native shim for Keychain,
   `NSStatusItem`, and login-item registration, so the cross-platform layer
   buys little here.

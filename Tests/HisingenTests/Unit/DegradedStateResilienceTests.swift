@@ -15,42 +15,38 @@ struct DegradedStateResilienceTests {
     func testExpiredSessionStillRetriesAutomatically() {
         let expired = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
         let noSession = VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
-        XCTAssertTrue(expired.allowsAutomaticRetry)
-        XCTAssertTrue(noSession.allowsAutomaticRetry)
+        #expect(expired.allowsAutomaticRetry)
+        #expect(noSession.allowsAutomaticRetry)
         // These are not "transient" — the point is that retry eligibility is a separate question.
-        XCTAssertFalse(expired.isTransient)
+        #expect(!(expired.isTransient))
     }
 
     @Test
     func testErrorsNeedingOwnerActionStopTheLoop() {
         let badPassword = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .invalidCredentials)
         let extraStep = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .callbackRejected)
-        XCTAssertFalse(badPassword.allowsAutomaticRetry)
-        XCTAssertFalse(extraStep.allowsAutomaticRetry)
-        XCTAssertFalse(VehicleServiceError.notConfigured.allowsAutomaticRetry)
-        XCTAssertFalse(VehicleServiceError.secureStorage.allowsAutomaticRetry)
+        #expect(!(badPassword.allowsAutomaticRetry))
+        #expect(!(extraStep.allowsAutomaticRetry))
+        #expect(!(VehicleServiceError.notConfigured.allowsAutomaticRetry))
+        #expect(!(VehicleServiceError.secureStorage.allowsAutomaticRetry))
     }
 
     @Test
     func testTransientErrorsStillRetry() {
-        XCTAssertTrue(VehicleServiceError.network(URLError(.timedOut)).allowsAutomaticRetry)
-        XCTAssertTrue(VehicleServiceError.server(statusCode: 503).allowsAutomaticRetry)
-        XCTAssertTrue(VehicleServiceError.rateLimited(retryAfter: nil).allowsAutomaticRetry)
+        #expect(VehicleServiceError.network(URLError(.timedOut)).allowsAutomaticRetry)
+        #expect(VehicleServiceError.server(statusCode: 503).allowsAutomaticRetry)
+        #expect(VehicleServiceError.rateLimited(retryAfter: nil).allowsAutomaticRetry)
     }
 
     @Test
     func testSessionRecoveryBacksOffHarderThanAPlainRefetch() {
         let refetch = RefreshPolicy.retryDelay(failureCount: 1, retryAfter: nil, requiresNewSession: false)
         let session = RefreshPolicy.retryDelay(failureCount: 1, retryAfter: nil, requiresNewSession: true)
-        XCTAssertTrue(session > refetch)
+        #expect(session > refetch)
         // An explicit Retry-After still wins over the session backoff.
-        XCTAssertEqual(
-            RefreshPolicy.retryDelay(failureCount: 4, retryAfter: 90, requiresNewSession: true), 90
-        )
+        #expect(RefreshPolicy.retryDelay(failureCount: 4, retryAfter: 90, requiresNewSession: true) == 90)
         // And the ceiling stays bounded no matter how many times we have failed.
-        XCTAssertTrue(
-            RefreshPolicy.retryDelay(failureCount: 99, retryAfter: nil, requiresNewSession: true) <= 1_800
-        )
+        #expect(RefreshPolicy.retryDelay(failureCount: 99, retryAfter: nil, requiresNewSession: true) <= 1_800)
     }
 
     // MARK: - A field-level denial is not a dead session
@@ -60,7 +56,7 @@ struct DegradedStateResilienceTests {
         let fieldDenied = graphQLError(
             message: "Not authorized to access field", path: ["carTelematicsV2", "health"]
         )
-        XCTAssertFalse(PolestarAPI.containsAuthenticationError([fieldDenied]))
+        #expect(!(PolestarAPI.containsAuthenticationError([fieldDenied])))
     }
 
     @Test
@@ -68,15 +64,15 @@ struct DegradedStateResilienceTests {
         let fieldDenied = graphQLError(
             message: "denied", path: ["carTelematicsV2", "battery"], code: "UNAUTHENTICATED"
         )
-        XCTAssertFalse(PolestarAPI.containsAuthenticationError([fieldDenied]))
+        #expect(!(PolestarAPI.containsAuthenticationError([fieldDenied])))
     }
 
     @Test
     func testTopLevelAuthenticationErrorIsStillSessionDeath() {
-        XCTAssertTrue(PolestarAPI.containsAuthenticationError([
+        #expect(PolestarAPI.containsAuthenticationError([
             graphQLError(message: "token has expired", path: [])
         ]))
-        XCTAssertTrue(PolestarAPI.containsAuthenticationError([
+        #expect(PolestarAPI.containsAuthenticationError([
             graphQLError(message: "nope", path: [], code: "UNAUTHENTICATED")
         ]))
     }
@@ -89,44 +85,45 @@ struct DegradedStateResilienceTests {
         let cached = full.cacheableCopy
 
         // Kept: identity, build specs, odometer, battery, options
-        XCTAssertEqual(cached.identity.vin, full.identity.vin)
-        XCTAssertEqual(cached.energy.batteryPercentage, full.energy.batteryPercentage)
-        XCTAssertEqual(cached.energy.rangeKm, full.energy.rangeKm)
-        XCTAssertEqual(cached.identity.modelName, full.identity.modelName)
+        #expect(cached.identity.vin == full.identity.vin)
+        #expect(cached.energy.batteryPercentage == full.energy.batteryPercentage)
+        #expect(cached.energy.rangeKm == full.energy.rangeKm)
+        #expect(cached.identity.modelName == full.identity.modelName)
         // Dropped for privacy: live GPS location coordinates, owner greeting, and registration plate
-        XCTAssertNil(cached.location)
-        XCTAssertNil(cached.identity.ownerFirstName)
-        XCTAssertNil(cached.identity.registrationNo)
+        #expect(cached.location == nil)
+        #expect(cached.identity.ownerFirstName == nil)
+        #expect(cached.identity.registrationNo == nil)
     }
 
     @Test
-    func testSnapshotReadFromDiskIsFlaggedAsCached() throws {
+    func testSnapshotReadFromDiskIsFlaggedAsCached() async throws {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
 
         let live = stateWithFullTelemetry()
-        XCTAssertFalse(live.freshness.isCached)
+        #expect(!(live.freshness.isCached))
         store.save(live)
+        // Persistence hands off to a detached storage pass; wait for it to land.
+        let stored = await awaitStored(timeout: 5) { store.snapshot(for: live.identity.vin) != nil }
+        #expect(stored, "snapshot never reached the database after save")
 
-        let restored = try XCTUnwrap(store.snapshot(for: live.identity.vin))
-        XCTAssertTrue(restored.freshness.isCached)
+        let restored = try #require(store.snapshot(for: live.identity.vin))
+        #expect(restored.freshness.isCached)
         // Cached snapshots must not retain precise location data.
-        XCTAssertNil(restored.location)
+        #expect(restored.location == nil)
     }
 
     @Test
     func testLegacyUserDefaultsSnapshotMigratesAndRedactsSensitiveFields() throws {
         let suiteName = "HisingenTests.legacy-cache.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let database = VehicleDatabase.inMemory()
         let live = stateWithFullTelemetry()
         let encoded = try JSONEncoder().encode(live)
-        var legacy = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
-        )
+        var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
 
         // Recreate the pre-clustered persisted layout: older releases wrote these flat
         // keys, whereas current snapshots group them under fuel/service/trip objects.
@@ -145,19 +142,19 @@ struct DegradedStateResilienceTests {
         defaults.set(cached, forKey: "cached_vehicle_snapshots_v1")
 
         let store = VehicleStateStore(defaults: defaults, database: database)
-        let migrated = try XCTUnwrap(store.snapshot(for: live.identity.vin))
-        XCTAssertTrue(migrated.freshness.isCached)
-        XCTAssertEqual(migrated.fuelSystem.levelPercent, 55.0)
-        XCTAssertEqual(migrated.maintenance.service.daysToService, 200)
-        XCTAssertEqual(migrated.tripComputer.manualTripKm, 12.5)
-        XCTAssertNil(migrated.location)
-        XCTAssertNil(migrated.identity.ownerFirstName)
-        XCTAssertNil(migrated.identity.registrationNo)
+        let migrated = try #require(store.snapshot(for: live.identity.vin))
+        #expect(migrated.freshness.isCached)
+        #expect(migrated.fuelSystem.levelPercent == 55.0)
+        #expect(migrated.maintenance.service.daysToService == 200)
+        #expect(migrated.tripComputer.manualTripKm == 12.5)
+        #expect(migrated.location == nil)
+        #expect(migrated.identity.ownerFirstName == nil)
+        #expect(migrated.identity.registrationNo == nil)
 
-        let remainingData = try XCTUnwrap(defaults.data(forKey: "cached_vehicle_snapshots_v1"))
+        let remainingData = try #require(defaults.data(forKey: "cached_vehicle_snapshots_v1"))
         let remaining = try JSONDecoder().decode([String: VehicleState].self, from: remainingData)
-        XCTAssertNil(remaining[live.identity.vin])
-        XCTAssertNil(database.loadSnapshot(for: live.identity.vin)?.location)
+        #expect(remaining[live.identity.vin] == nil)
+        #expect(database.loadSnapshot(for: live.identity.vin)?.location == nil)
     }
 
     // MARK: - Helpers
@@ -211,7 +208,7 @@ struct AuthFailureReschedulingTests {
     @Test
     func testAuthenticationFailureSchedulesAnotherSessionAttempt() async throws {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let preferences = PreferencesStore(defaults: defaults)
         preferences.vin = "YSMTEST"
@@ -238,8 +235,8 @@ struct AuthFailureReschedulingTests {
             coordinator.start(preferredVIN: "YSMTEST")
         }
 
-        XCTAssertNotNil(coordinator.lastError)
-        XCTAssertNotNil(coordinator.nextRefresh, "an expired session must keep the retry loop alive")
+        #expect(coordinator.lastError != nil)
+        #expect(coordinator.nextRefresh != nil, "an expired session must keep the retry loop alive")
     }
 }
 

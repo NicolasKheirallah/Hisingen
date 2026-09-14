@@ -15,7 +15,7 @@ struct RefreshCoordinatorStreamTests {
 
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (defaults, suiteName)
     }
 
@@ -1413,17 +1413,14 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     private static func makeMockState(vin: String, charging: Bool) -> VehicleState {
-        VehicleState(
-            batteryPercentage: 55, rangeKm: 280,
-            chargingState: charging ? .charging : .idle,
-            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 80,
-            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+        // TESTS-12: thin wrapper over the shared TestSupport fixture builder.
+        vehicle(
+            vin: vin, battery: 55, rangeKm: 280,
+            state: charging ? .charging : .idle,
+            connection: charging ? .connected : .disconnected,
             chargingType: charging ? .ac : .none,
-            chargerConnection: charging ? .connected : .disconnected,
-            availability: .available,
-            modelName: "Polestar 2", modelYear: nil, registrationNo: nil,
-            vin: vin, ownerFirstName: nil, odometerKm: nil,
-            imageData: nil, fetchedAt: Date(), vehicleReportedAt: nil, dataWarnings: []
+            modelYear: nil,
+            fetchedAt: Date(), reportedAt: nil
         )
     }
 

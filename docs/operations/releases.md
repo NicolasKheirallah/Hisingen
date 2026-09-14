@@ -1,6 +1,6 @@
 # Releases
 
-The real, current release process — traced from `make release` through to a published GitHub Release.
+The real, current release process, traced from `make release` through to a published GitHub Release.
 
 ## Repository configuration (live)
 
@@ -14,7 +14,7 @@ The real, current release process — traced from `make release` through to a pu
 - **`dependabot_security_updates`**: enabled (auto-PRs if a dependency gets a
   published vulnerability advisory).
 - **`secret_scanning_validity_checks`**: attempted, but the API left it
-  `disabled` — this feature may not be available for this account/repo tier.
+  `disabled`: this feature may not be available for this account/repo tier.
   Check **Settings → Code security** if you want it and it's offered there;
   secret scanning and push protection themselves are already enabled and
   unaffected either way.
@@ -32,7 +32,7 @@ flowchart TD
     E --> F["git push origin HEAD vX.Y.Z"]
     F -->|triggers| G["release.yml (tag push v*)"]
     G --> H["Validate required secrets, pinned tools checksum,<br/>tag, Info.plist, CHANGELOG, and main ancestry"]
-    H --> I["swift test --skip Live — full deterministic<br/>suite gates the release"]
+    H --> I["swift test --skip Live: full deterministic<br/>suite gates the release"]
     I --> J["Import Developer ID cert into ephemeral<br/>runner Keychain"]
     J --> K["Build universal signed app with embedded Sparkle"]
     K --> L["Verify architectures, updater configuration,<br/>framework load path, launch, and signatures"]
@@ -52,8 +52,8 @@ flowchart TD
 ```
 
 `release.yml`'s job runs under `environment: production-release` and has
-`--skip Live` on its test step (same defense-in-depth as `ci.yml` — see
-[ci.md](./ci.md)) — a release run never executes the live/remote-command
+`--skip Live` on its test step (same defense-in-depth as `ci.yml`; see
+[ci.md](./ci.md)), a release run never executes the live/remote-command
 test suites even though it runs the rest of the deterministic suite in full.
 
 ## Starting a release
@@ -106,21 +106,21 @@ existing tag.
 
 ## Gating checks (in order, all must pass)
 
-1. **Secure configuration** — every required backend, Developer ID, notarization, and Sparkle secret must be non-empty, and the pinned Sparkle tools checksum must be configured.
-2. **Tag format** — must match `vMAJOR.MINOR.PATCH` exactly.
-3. **Version match** — `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
-4. **Changelog match** — `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`, optionally followed by a date.
-5. **Tag is on `main`** — `git merge-base --is-ancestor HEAD origin/main` — a release can't be cut from a branch that hasn't been merged.
-6. **`Info.plist` validity** — `plutil -lint`.
-7. **Full deterministic test suite** — `swift test --skip Live`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
+1. **Secure configuration**: every required backend, Developer ID, notarization, and Sparkle secret must be non-empty, and the pinned Sparkle tools checksum must be configured.
+2. **Tag format**: must match `vMAJOR.MINOR.PATCH` exactly.
+3. **Version match**: `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
+4. **Changelog match**: `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`, optionally followed by a date.
+5. **Tag is on `main`**: `git merge-base --is-ancestor HEAD origin/main`; a release can't be cut from a branch that hasn't been merged.
+6. **`Info.plist` validity**: `plutil -lint`.
+7. **Full deterministic test suite**: `swift test --skip Live`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
 
 If any of these fail, nothing is signed, notarized, or published.
 
 ## Signing and notarization
 
-See [signing-and-notarization details below](#signing-and-notarization-detail). Both the `.app` and the `.dmg` are independently signed, notarized, and stapled — not just the app inside the DMG. The workflow's final verification step is deliberately paranoid: it mounts the *published* DMG and unzips the *published* zip and re-runs `codesign --verify`/`spctl --assess` on those extracted copies, not just on the build artifacts still sitting in the runner's working directory — catching a class of bug where packaging (zipping/DMG creation) subtly corrupts an otherwise-valid signature.
+See [signing-and-notarization details below](#signing-and-notarization-detail). Both the `.app` and the `.dmg` are independently signed, notarized, and stapled, not just the app inside the DMG. The workflow's final verification step is deliberately paranoid: it mounts the *published* DMG and unzips the *published* zip and re-runs `codesign --verify`/`spctl --assess` on those extracted copies, not just on the build artifacts still sitting in the runner's working directory, catching a class of bug where packaging (zipping/DMG creation) subtly corrupts an otherwise-valid signature.
 
-The same bar applies to local pre-release builds: `Scripts/validate-release.sh` (run by `Scripts/release.sh` before anything is committed or tagged) now fails when a Developer ID-signed app or DMG has no notarization ticket stapled to it, so an unnotarized "signed but not trusted" build cannot reach a tag push unnoticed. Ad-hoc and development-identity artifacts are exempt — they are local-only by definition.
+The same bar applies to local pre-release builds: `Scripts/validate-release.sh` (run by `Scripts/release.sh` before anything is committed or tagged) now fails when a Developer ID-signed app or DMG has no notarization ticket stapled to it, so an unnotarized "signed but not trusted" build cannot reach a tag push unnoticed. Ad-hoc and development-identity artifacts are exempt; they are local-only by definition.
 
 ## Checksums
 
@@ -159,7 +159,7 @@ Actions while leaving an unusable or incomplete release behind:
    `Hisingen.app.md`.
 2. **Post-publish**: after publishing, `gh release view "$GITHUB_REF_NAME"
    --json assets` is queried and the job fails unless exactly the six expected
-   assets are attached — the specific gap that matters, since it's
+   assets are attached, the specific gap that matters, since it's
    possible for an upload step to report success while silently attaching
    zero files (e.g. a glob matching nothing).
 
@@ -170,8 +170,8 @@ Actions while leaving an unusable or incomplete release behind:
 this exact workflow run, commit, and repository via Sigstore/GitHub's
 attestation API (`attestations: write` + `id-token: write` permissions on the
 release job). Anyone can verify a downloaded release asset was actually built
-by this repository's `release.yml` — not just re-signed or repackaged
-elsewhere — with:
+by this repository's `release.yml`, not just re-signed or repackaged
+elsewhere, with:
 
 ```bash
 gh attestation verify Hisingen.dmg --owner NicolasKheirallah
@@ -179,7 +179,7 @@ gh attestation verify Hisingen.zip --owner NicolasKheirallah
 ```
 
 This is a supply-chain integrity check layered on top of, not a replacement
-for, Apple code signing and notarization — it proves *provenance* (which
+for, Apple code signing and notarization; it proves *provenance* (which
 workflow run produced this file), while codesign/notarization prove the
 binary is trusted to run on macOS.
 
@@ -187,7 +187,7 @@ binary is trusted to run on macOS.
 
 **Trigger:** `workflow_dispatch` only (manual, from the Actions tab), with a
 `provider` choice (`all` / `polestar` / `volvo`). Never runs automatically.
-**Permissions:** `contents: read` — this workflow only ever runs tests, never
+**Permissions:** `contents: read`; this workflow only ever runs tests, never
 publishes anything.
 **Environment:** `live-integration` (both jobs).
 **Concurrency:** group `live-account-test`, shared across *both* jobs, so a
@@ -198,15 +198,15 @@ Only suites whose names make the read-only contract explicit are ever
 invoked: `--filter LivePolestarReadOnlyIntegrationTests` and `--filter
 LiveVolvoReadOnlyIntegrationTests`. `LivePolestarIntegrationTests.swift` also
 defines `LivePolestarRemoteCommandIntegrationTests`, which dispatches a real
-`startClimate` command against the configured vehicle — this workflow does
+`startClimate` command against the configured vehicle; this workflow does
 not filter it in, and it must stay that way; it's reachable only by running
 that Swift Testing suite directly and locally with a developer's own
 consciously-supplied credentials, never from CI.
 
-- **`live-polestar`** — requires `HISINGEN_TEST_EMAIL`, `HISINGEN_TEST_PASSWORD`
+- **`live-polestar`**: requires `HISINGEN_TEST_EMAIL`, `HISINGEN_TEST_PASSWORD`
   (checked for non-emptiness before any test runs); `HISINGEN_TEST_VIN` is
   optional.
-- **`live-volvo`** — requires `HISINGEN_TEST_VOLVO_CLIENT_ID`,
+- **`live-volvo`**: requires `HISINGEN_TEST_VOLVO_CLIENT_ID`,
   `HISINGEN_TEST_VOLVO_CLIENT_SECRET`, `HISINGEN_TEST_VOLVO_VCC_API_KEY`, and
   `HISINGEN_TEST_VOLVO_REFRESH_TOKEN` (all four checked); `HISINGEN_TEST_VOLVO_VIN`
   is optional.
@@ -230,11 +230,11 @@ branch can never read them.
 | `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` | release.yml | `production-release` | Volvo Developer API credentials embedded in the production build configuration. |
 | `SPARKLE_PUBLIC_ED_KEY` | release.yml | `production-release` | Base64-encoded 32-byte Ed25519 public key embedded in the app. |
 | `SPARKLE_PRIVATE_ED_KEY` | release.yml | `production-release` | Base64 encoding of the Sparkle private-key export, used only to sign the appcast. |
-| `HISINGEN_TEST_EMAIL` / `HISINGEN_TEST_PASSWORD` / `HISINGEN_TEST_VIN` | live-integration.yml (`live-polestar`) | `live-integration` | Dedicated Polestar test account — never a personal account. VIN is optional. |
+| `HISINGEN_TEST_EMAIL` / `HISINGEN_TEST_PASSWORD` / `HISINGEN_TEST_VIN` | live-integration.yml (`live-polestar`) | `live-integration` | Dedicated Polestar test account, never a personal account. VIN is optional. |
 | `HISINGEN_TEST_VOLVO_CLIENT_ID` / `_CLIENT_SECRET` / `_VCC_API_KEY` / `_REFRESH_TOKEN` / `_VIN` | live-integration.yml (`live-volvo`) | `live-integration` | Dedicated Volvo Developer Portal test app registration + test account refresh token. VIN is optional. |
 
 Rotate `NOTARY_APP_PASSWORD` and the Volvo refresh token if you suspect
-exposure — both are revocable without needing a new certificate or client
+exposure; both are revocable without needing a new certificate or client
 registration. Check the Developer ID certificate's expiry with `security
 find-identity -v -p codesigning` against a local copy before it lapses, since
 an expired cert fails `release.yml` at the "Import Developer ID certificate"
@@ -256,15 +256,15 @@ A dated heading such as `## [1.2.4] - 2026-08-28` is supported and preferred.
 
 ## Signing and notarization detail
 
-**Certificate handling:** the Developer ID certificate (`.p12`, base64-encoded in the `MACOS_CERT_P12` secret) is imported into a fresh, ephemeral Keychain created just for the CI run (`security create-keychain`), never the runner's default login keychain. `security find-identity -v -p codesigning` resolves the exact identity string dynamically rather than hardcoding it — the workflow fails clearly if no matching identity is found after import, rather than silently falling back to ad-hoc signing.
+**Certificate handling:** the Developer ID certificate (`.p12`, base64-encoded in the `MACOS_CERT_P12` secret) is imported into a fresh, ephemeral Keychain created just for the CI run (`security create-keychain`), never the runner's default login keychain. `security find-identity -v -p codesigning` resolves the exact identity string dynamically rather than hardcoding it; the workflow fails clearly if no matching identity is found after import, rather than silently falling back to ad-hoc signing.
 
-**Hardened runtime:** `make app`/`make app-universal` sign with `--options runtime --timestamp` whenever `IDENTITY` contains "Developer ID" — required for notarization to succeed.
+**Hardened runtime:** `make app`/`make app-universal` sign with `--options runtime --timestamp` whenever `IDENTITY` contains "Developer ID", which is required for notarization to succeed.
 
 **Notarization:** `ditto` zips the app, `xcrun notarytool submit --wait` submits it to Apple and blocks until a result, then `stapler staple` attaches the notarization ticket so the app can be verified offline afterward, and `stapler validate` confirms the staple took. The DMG goes through the same submit/staple/validate sequence separately. Local builds perform the same sequence through `Scripts/notarize.sh` whenever notarization credentials are configured (see [build.md](build.md)); without credentials the step skips, leaving the build Developer ID-signed but unstapled.
 
 **Gatekeeper assessment:** `spctl --assess` is run against both the app and the DMG as a final "would Gatekeeper actually let a user open this" check, not just a signature check.
 
-**Cleanup:** an `if: always()` step deletes the temporary `.p12`, any intermediate zip, the decoded Sparkle private key and downloaded tools archive, and the ephemeral signing keychain — even if an earlier step in the job failed, so a failed release run never leaves signing material sitting on a shared runner.
+**Cleanup:** an `if: always()` step deletes the temporary `.p12`, any intermediate zip, the decoded Sparkle private key and downloaded tools archive, and the ephemeral signing keychain, even if an earlier step in the job failed, so a failed release run never leaves signing material sitting on a shared runner.
 
 ## What's real vs. what's aspirational
 

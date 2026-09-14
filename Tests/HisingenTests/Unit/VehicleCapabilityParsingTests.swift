@@ -10,15 +10,15 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(3, 1))
         payload.append(Protobuf.intField(4, 2))
         payload.append(Protobuf.intField(12, 3))
-        let exterior = try XCTUnwrap(PolestarGRPC.parseExterior(payload))
-        XCTAssertEqual(exterior.isLocked, true)
-        XCTAssertEqual(Set(exterior.itemsNeedingAttention), [.frontLeftDoor, .tailgate])
+        let exterior = try #require(PolestarGRPC.parseExterior(payload))
+        #expect(exterior.isLocked == true)
+        #expect(Set(exterior.itemsNeedingAttention) == [.frontLeftDoor, .tailgate])
 
         var update = Data()
         update.append(Protobuf.intField(3, 2))
-        let merged = try XCTUnwrap(PolestarGRPC.parseExterior(update)).merging(previous: exterior)
-        XCTAssertEqual(merged.itemsNeedingAttention, [.tailgate])
-        XCTAssertEqual(merged.isLocked, true)
+        let merged = try #require(PolestarGRPC.parseExterior(update)).merging(previous: exterior)
+        #expect(merged.itemsNeedingAttention == [.tailgate])
+        #expect(merged.isLocked == true)
     }
 
     /// Exterior field 16 is an independent `LockStatus tailgate_lock` upstream — it is not
@@ -30,17 +30,17 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(2, 2))
         payload.append(Protobuf.intField(12, 1))
         payload.append(Protobuf.intField(16, 2))
-        let exterior = try XCTUnwrap(PolestarGRPC.parseExterior(payload))
-        XCTAssertEqual(exterior.isTailgateLocked, true)
-        XCTAssertEqual(exterior.isTailgateOpen, true)
-        XCTAssertEqual(exterior.isLocked, true)
+        let exterior = try #require(PolestarGRPC.parseExterior(payload))
+        #expect(exterior.isTailgateLocked == true)
+        #expect(exterior.isTailgateOpen == true)
+        #expect(exterior.isLocked == true)
 
         // Absent field 16 stays nil; enum 0/99 (unspecified/out of range) also stay nil.
-        let absent = try XCTUnwrap(PolestarGRPC.parseExterior(Protobuf.intField(2, 2)))
-        XCTAssertNil(absent.isTailgateLocked)
+        let absent = try #require(PolestarGRPC.parseExterior(Protobuf.intField(2, 2)))
+        #expect(absent.isTailgateLocked == nil)
         for raw in [0, 99] {
-            let unknown = try XCTUnwrap(PolestarGRPC.parseExterior(Protobuf.intField(2, 2) + Protobuf.intField(16, raw)))
-            XCTAssertNil(unknown.isTailgateLocked)
+            let unknown = try #require(PolestarGRPC.parseExterior(Protobuf.intField(2, 2) + Protobuf.intField(16, raw)))
+            #expect(unknown.isTailgateLocked == nil)
         }
     }
 
@@ -50,8 +50,8 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.messageField(1, timestamp(seconds: 1_780_000_000)))
         payload.append(Protobuf.intField(2, 2))
         payload.append(Protobuf.intField(3, 2))
-        let digitalTwin = try XCTUnwrap(PolestarGRPC.parseExterior(payload))
-        XCTAssertEqual(digitalTwin.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+        let digitalTwin = try #require(PolestarGRPC.parseExterior(payload))
+        #expect(digitalTwin.reportedAt == Date(timeIntervalSince1970: 1_780_000_000))
 
         // Legacy shape: field 1 is the central-lock message, not a timestamp, so no
         // reported time is fabricated there.
@@ -64,9 +64,9 @@ struct VehicleCapabilityParsingTests {
         var doors = Data()
         doors.append(Protobuf.messageField(1, doorStatus))
         legacy.append(Protobuf.messageField(2, doors))
-        let legacySnapshot = try XCTUnwrap(PolestarGRPC.parseExterior(legacy))
-        XCTAssertNil(legacySnapshot.reportedAt)
-        XCTAssertEqual(legacySnapshot.isLocked, true)
+        let legacySnapshot = try #require(PolestarGRPC.parseExterior(legacy))
+        #expect(legacySnapshot.reportedAt == nil)
+        #expect(legacySnapshot.isLocked == true)
     }
 
     @Test
@@ -81,9 +81,9 @@ struct VehicleCapabilityParsingTests {
             isLocked: nil, alarmTriggered: nil, isTailgateLocked: nil, reportedAt: nil
         )
         let merged = second.merging(previous: first)
-        XCTAssertEqual(merged.isTailgateLocked, true)
-        XCTAssertEqual(merged.reportedAt, Date(timeIntervalSince1970: 1_000))
-        XCTAssertEqual(merged.isLocked, true)
+        #expect(merged.isTailgateLocked == true)
+        #expect(merged.reportedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(merged.isLocked == true)
     }
 
     @Test
@@ -100,22 +100,22 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.doubleField(42, 214.0))
         payload.append(Protobuf.intField(38, 2))
         let report = PolestarGRPC.parseHealth(payload)
-        XCTAssertEqual(report.daysToService, 24)
-        XCTAssertTrue(report.serviceWarning)
-        XCTAssertEqual(report.details.tyres.first?.kilopascals, 208.5)
-        XCTAssertEqual(report.details.tyres.first?.warning, .low)
-        XCTAssertEqual(report.details.tyres.last?.kilopascals, 214.0)
-        XCTAssertTrue(report.details.warnings.contains(.lowVoltageBattery))
-        XCTAssertTrue(report.details.reportedWarnings.contains(.lowVoltageBattery))
-        XCTAssertFalse(report.details.reportedWarnings.contains(.brakeFluid))
+        #expect(report.daysToService == 24)
+        #expect(report.serviceWarning)
+        #expect(report.details.tyres.first?.kilopascals == 208.5)
+        #expect(report.details.tyres.first?.warning == .low)
+        #expect(report.details.tyres.last?.kilopascals == 214.0)
+        #expect(report.details.warnings.contains(.lowVoltageBattery))
+        #expect(report.details.reportedWarnings.contains(.lowVoltageBattery))
+        #expect(!(report.details.reportedWarnings.contains(.brakeFluid)))
     }
 
     @Test
     func testHealthDoesNotConvertAbsentFieldsIntoHealthyReadings() {
         let report = PolestarGRPC.parseHealth(Data())
-        XCTAssertTrue(report.details.tyres.allSatisfy { $0.kilopascals == nil && $0.warning == .unknown })
-        XCTAssertTrue(report.details.warnings.isEmpty)
-        XCTAssertTrue(report.details.reportedWarnings.isEmpty)
+        #expect(report.details.tyres.allSatisfy { $0.kilopascals == nil && $0.warning == .unknown })
+        #expect(report.details.warnings.isEmpty)
+        #expect(report.details.reportedWarnings.isEmpty)
     }
 
     @Test
@@ -130,10 +130,10 @@ struct VehicleCapabilityParsingTests {
         for field in 14...35 { payload.append(Protobuf.intField(field, 1)) }
         payload.append(Protobuf.intField(38, 1))
         let report = PolestarGRPC.parseHealth(payload)
-        XCTAssertTrue(report.details.tyres.allSatisfy { $0.warning == .unknown && $0.kilopascals == nil })
-        XCTAssertEqual(report.details.tyres.count, 4)
-        XCTAssertFalse(report.details.warnings.contains(.tyrePressure))
-        XCTAssertFalse(report.details.reportedWarnings.contains(.tyrePressure))
+        #expect(report.details.tyres.allSatisfy { $0.warning == .unknown && $0.kilopascals == nil })
+        #expect(report.details.tyres.count == 4)
+        #expect(!(report.details.warnings.contains(.tyrePressure)))
+        #expect(!(report.details.reportedWarnings.contains(.tyrePressure)))
     }
 
     @Test
@@ -150,12 +150,12 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.stringField(6, "P4.2.1"))
         payload.append(Protobuf.messageField(8, schedule))
         let software = PolestarGRPC.parseSoftware(payload)
-        XCTAssertEqual(software.version, "P4.2.1")
-        XCTAssertEqual(software.title, "Polestar OS")
-        XCTAssertEqual(software.state, .scheduled)
-        XCTAssertEqual(software.scheduledAt, Date(timeIntervalSince1970: 2_000_000_000))
-        XCTAssertEqual(software.latestAvailableVersion, "P4.2.1")
-        XCTAssertNil(software.installedVersion)
+        #expect(software.version == "P4.2.1")
+        #expect(software.title == "Polestar OS")
+        #expect(software.state == .scheduled)
+        #expect(software.scheduledAt == Date(timeIntervalSince1970: 2_000_000_000))
+        #expect(software.latestAvailableVersion == "P4.2.1")
+        #expect(software.installedVersion == nil)
     }
 
     @Test
@@ -165,9 +165,9 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(4, 9))
         payload.append(Protobuf.stringField(6, "P2.14.3"))
         let software = PolestarGRPC.parseSoftware(payload)
-        XCTAssertEqual(software.state, .completed)
-        XCTAssertEqual(software.installedVersion, "P2.14.3")
-        XCTAssertNil(software.latestAvailableVersion)
+        #expect(software.state == .completed)
+        #expect(software.installedVersion == "P2.14.3")
+        #expect(software.latestAvailableVersion == nil)
     }
 
     @Test
@@ -175,10 +175,10 @@ struct VehicleCapabilityParsingTests {
         var payload = Data()
         payload.append(Protobuf.intField(4, 9))
         let software = PolestarGRPC.parseSoftware(payload)
-        XCTAssertNil(software.version)
-        XCTAssertNil(software.title)
-        XCTAssertNil(software.installedVersion)
-        XCTAssertNil(software.latestAvailableVersion)
+        #expect(software.version == nil)
+        #expect(software.title == nil)
+        #expect(software.installedVersion == nil)
+        #expect(software.latestAvailableVersion == nil)
     }
 
     /// Decodes a real `GetSoftwareInfo` frame captured from a Polestar 2 (VIN redacted).
@@ -201,27 +201,25 @@ struct VehicleCapabilityParsingTests {
             bytes.append(UInt8(hex[index..<next], radix: 16)!)
             index = next
         }
-        let payload = try XCTUnwrap(
-            Protobuf.fields(bytes).first(where: { $0.number == 1 && $0.wire == 2 })?.data
-        )
+        let payload = try #require(Protobuf.fields(bytes).first(where: { $0.number == 1 && $0.wire == 2 })?.data)
         let software = PolestarGRPC.parseSoftware(payload)
-        XCTAssertEqual(software.state, .available)                       // field 4 == 15
-        XCTAssertEqual(software.latestAvailableVersion, "5.0.10")        // field 6
-        XCTAssertNil(software.installedVersion)
-        XCTAssertEqual(software.title, "Software update")                // field 2.1
-        XCTAssertNil(software.scheduledAt)                               // no field 8
-        XCTAssertNotNil(software.updatedAt)                              // field 10
+        #expect(software.state == .available)                       // field 4 == 15
+        #expect(software.latestAvailableVersion == "5.0.10")        // field 6
+        #expect(software.installedVersion == nil)
+        #expect(software.title == "Software update")                // field 2.1
+        #expect(software.scheduledAt == nil)                               // no field 8
+        #expect(software.updatedAt != nil)                              // field 10
     }
 
     /// The C3 scheduler answers `relativeTime should be between 2 to 10080!` — minutes, not
     /// seconds. Pins the unit and bounds so the `* 60` bug cannot come back.
     @Test
     func testOtaScheduleDelayIsExpressedInMinutesWithinBackendBounds() {
-        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.lowerBound, 2)
-        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.upperBound, 10_080)
-        XCTAssertEqual(PolestarGRPC.otaScheduleMinutes.upperBound, 7 * 24 * 60)
-        XCTAssertFalse(PolestarGRPC.otaScheduleMinutes.contains(1))
-        XCTAssertFalse(PolestarGRPC.otaScheduleMinutes.contains(10_081))
+        #expect(PolestarGRPC.otaScheduleMinutes.lowerBound == 2)
+        #expect(PolestarGRPC.otaScheduleMinutes.upperBound == 10_080)
+        #expect(PolestarGRPC.otaScheduleMinutes.upperBound == 7 * 24 * 60)
+        #expect(!(PolestarGRPC.otaScheduleMinutes.contains(1)))
+        #expect(!(PolestarGRPC.otaScheduleMinutes.contains(10_081)))
     }
 
     @Test
@@ -233,15 +231,15 @@ struct VehicleCapabilityParsingTests {
             12: .scheduled, 13: .installing, 14: .unknown, 15: .available, 99: .unknown
         ]
         for (raw, state) in expected {
-            XCTAssertEqual(PolestarGRPC.softwareState(raw), state)
+            #expect(PolestarGRPC.softwareState(raw) == state)
         }
         // A failed install still describes a target version, not what the car is running.
         var payload = Data()
         payload.append(Protobuf.intField(4, 8))
         payload.append(Protobuf.stringField(6, "P2.15.0"))
         let failed = PolestarGRPC.parseSoftware(payload)
-        XCTAssertNil(failed.installedVersion)
-        XCTAssertEqual(failed.latestAvailableVersion, "P2.15.0")
+        #expect(failed.installedVersion == nil)
+        #expect(failed.latestAvailableVersion == "P2.15.0")
     }
 
     @Test
@@ -255,15 +253,15 @@ struct VehicleCapabilityParsingTests {
             version: "P2.15.0", title: "P2.15.0", state: .available, latestAvailableVersion: "P2.15.0"
         )
         let merged = offered.mergingLastKnown(from: settled, features: .default)
-        XCTAssertEqual(merged.softwareInfo?.installedVersion, "P2.14.3")
-        XCTAssertEqual(merged.softwareInfo?.latestAvailableVersion, "P2.15.0")
-        XCTAssertEqual(merged.softwareInfo?.state, .available)
+        #expect(merged.softwareInfo?.installedVersion == "P2.14.3")
+        #expect(merged.softwareInfo?.latestAvailableVersion == "P2.15.0")
+        #expect(merged.softwareInfo?.state == .available)
 
         // A different car must not inherit the previous car's version.
         var otherCar = vehicle(vin: "YSMOTHER")
         otherCar.softwareInfo = offered.softwareInfo
-        XCTAssertNil(otherCar.mergingLastKnown(from: settled, features: .default)
-            .softwareInfo?.installedVersion)
+        #expect(otherCar.mergingLastKnown(from: settled, features: .default)
+            .softwareInfo?.installedVersion == nil)
     }
 
     @Test
@@ -274,9 +272,9 @@ struct VehicleCapabilityParsingTests {
         global.append(Protobuf.messageField(1, start))
         global.append(Protobuf.messageField(2, stop))
         global.append(Protobuf.intField(3, 1))
-        let globalSchedule = try XCTUnwrap(PolestarGRPC.parseGlobalChargeTimer(global))
-        XCTAssertEqual(globalSchedule.startHour, 22)
-        XCTAssertEqual(globalSchedule.endHour, 6)
+        let globalSchedule = try #require(PolestarGRPC.parseGlobalChargeTimer(global))
+        #expect(globalSchedule.startHour == 22)
+        #expect(globalSchedule.endHour == 6)
 
         var timer = Data()
         timer.append(Protobuf.intField(2, 1))
@@ -289,8 +287,8 @@ struct VehicleCapabilityParsingTests {
         location.append(Protobuf.messageField(10, timer))
         let response = Protobuf.messageField(3, location)
         let schedules = PolestarGRPC.parseChargeLocationSchedules(response)
-        XCTAssertEqual(schedules.count, 1)
-        XCTAssertEqual(schedules[0].weekdays, [.monday, .wednesday, .friday])
+        #expect(schedules.count == 1)
+        #expect(schedules[0].weekdays == [.monday, .wednesday, .friday])
     }
 
     @Test
@@ -306,9 +304,9 @@ struct VehicleCapabilityParsingTests {
         let status = PolestarGRPC.parseClimate(climate)
         // Field 6 is an unresolved activity enum (live-verified 2026-09-11: 2 during a real
         // heating session), so an active session with no temperature pair reports .active.
-        XCTAssertEqual(status.activity, .active)
-        XCTAssertEqual(status.timeRemainingMinutes, 18)
-        XCTAssertTrue(status.timerTriggered)
+        #expect(status.activity == .active)
+        #expect(status.timeRemainingMinutes == 18)
+        #expect(status.timerTriggered)
 
         var timer = Data()
         timer.append(Protobuf.stringField(1, "timer-1"))
@@ -316,8 +314,8 @@ struct VehicleCapabilityParsingTests {
         timer.append(Protobuf.intField(4, 1))
         timer.append(Protobuf.packedIntField(6, [1, 2, 3, 4, 5]))
         let timers = PolestarGRPC.parseClimateTimers(Protobuf.messageField(3, timer))
-        XCTAssertEqual(timers.first?.startHour, 7)
-        XCTAssertEqual(timers.first?.weekdays.count, 5)
+        #expect(timers.first?.startHour == 7)
+        #expect(timers.first?.weekdays.count == 5)
     }
 
     @Test
@@ -327,9 +325,9 @@ struct VehicleCapabilityParsingTests {
         odometer.append(Protobuf.doubleField(3, 42.5))
         odometer.append(Protobuf.doubleField(4, 18.25))
         let report = PolestarGRPC.parseOdometer(odometer)
-        XCTAssertEqual(report.odometerKm, 25_123)
-        XCTAssertEqual(report.manualTripKm, 42.5)
-        XCTAssertEqual(report.automaticTripKm, 18.25)
+        #expect(report.odometerKm == 25_123)
+        #expect(report.manualTripKm == 42.5)
+        #expect(report.automaticTripKm == 18.25)
 
         var battery = Data()
         battery.append(Protobuf.doubleField(3, 18.4))
@@ -338,9 +336,9 @@ struct VehicleCapabilityParsingTests {
         battery.append(Protobuf.doubleField(16, 12_400))
         battery.append(Protobuf.intField(26, 4))
         let diagnostics = PolestarGRPC.parseBattery(battery).diagnostics
-        XCTAssertEqual(diagnostics.chargerPowerState, .providingPower)
-        XCTAssertEqual(diagnostics.timeToTargetMinutes, 60)
-        XCTAssertEqual(diagnostics.energyUsedSinceChargeWh, 12_400)
+        #expect(diagnostics.chargerPowerState == .providingPower)
+        #expect(diagnostics.timeToTargetMinutes == 60)
+        #expect(diagnostics.energyUsedSinceChargeWh == 12_400)
     }
 
     /// `Odometer` fields 5/6 are `average_speed_km_per_hour` / `average_speed_km_per_hour_automatic`
@@ -354,21 +352,21 @@ struct VehicleCapabilityParsingTests {
         odometer.append(Protobuf.intField(5, 62))
         odometer.append(Protobuf.intField(6, 71))
         let report = PolestarGRPC.parseOdometer(odometer)
-        XCTAssertEqual(report.manualAverageSpeedKmH, 62)
-        XCTAssertEqual(report.automaticAverageSpeedKmH, 71)
-        XCTAssertEqual(report.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+        #expect(report.manualAverageSpeedKmH == 62)
+        #expect(report.automaticAverageSpeedKmH == 71)
+        #expect(report.reportedAt == Date(timeIntervalSince1970: 1_780_000_000))
         // Absent fields stay nil — omission is never a zero speed.
         let empty = PolestarGRPC.parseOdometer(Data())
-        XCTAssertNil(empty.manualAverageSpeedKmH)
-        XCTAssertNil(empty.automaticAverageSpeedKmH)
-        XCTAssertNil(empty.reportedAt)
+        #expect(empty.manualAverageSpeedKmH == nil)
+        #expect(empty.automaticAverageSpeedKmH == nil)
+        #expect(empty.reportedAt == nil)
     }
 
     @Test
     func testVehicleStateCacheDecodesBeforeCapabilityFieldsExisted() throws {
         let original = vehicle()
         let encoded = try JSONEncoder().encode(original)
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         for key in ["exteriorStatus", "healthDetails", "softwareInfo", "chargingSchedules",
                     "climateStatus", "climateTimers", "tripMeterManualKm", "tripMeterAutomaticKm",
                     "connectivity", "airQuality", "batteryDiagnostics", "unavailableFeatures"] {
@@ -376,9 +374,9 @@ struct VehicleCapabilityParsingTests {
         }
         let oldCache = try JSONSerialization.data(withJSONObject: object)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: oldCache)
-        XCTAssertEqual(decoded.identity.vin, original.identity.vin)
-        XCTAssertEqual(decoded.energy.schedules, [])
-        XCTAssertEqual(decoded.freshness.unavailableFeatures, [])
+        #expect(decoded.identity.vin == original.identity.vin)
+        #expect(decoded.energy.schedules == [])
+        #expect(decoded.freshness.unavailableFeatures == [])
     }
 
     @Test
@@ -390,7 +388,7 @@ struct VehicleCapabilityParsingTests {
         response.append(Protobuf.messageField(3, inner))
 
         let limit = PolestarGRPC.fetchAmpLimitResponse(response)
-        XCTAssertEqual(limit, 16)
+        #expect(limit == 16)
     }
 
     @Test
@@ -399,7 +397,7 @@ struct VehicleCapabilityParsingTests {
         inner.append(Protobuf.intField(1, 0))
         var response = Data()
         response.append(Protobuf.messageField(3, inner))
-        XCTAssertNil(PolestarGRPC.fetchAmpLimitResponse(response))
+        #expect(PolestarGRPC.fetchAmpLimitResponse(response) == nil)
     }
 
     @Test
@@ -408,10 +406,10 @@ struct VehicleCapabilityParsingTests {
         compact.append(Protobuf.doubleField(1, 12.5))
         compact.append(Protobuf.doubleField(2, 55.7))
         let location = PolestarGRPC.parseLocation(compact)
-        XCTAssertEqual(location?.longitude, 12.5)
-        XCTAssertEqual(location?.latitude, 55.7)
-        XCTAssertNil(location?.heading)
-        XCTAssertNil(location?.timestamp)
+        #expect(location?.longitude == 12.5)
+        #expect(location?.latitude == 55.7)
+        #expect(location?.heading == nil)
+        #expect(location?.timestamp == nil)
     }
 
     @Test
@@ -424,10 +422,10 @@ struct VehicleCapabilityParsingTests {
         compact.append(Protobuf.messageField(3, ts))
         compact.append(Protobuf.doubleField(4, 180.0))
         let location = PolestarGRPC.parseLocation(compact)
-        XCTAssertEqual(location?.longitude, 10.0)
-        XCTAssertEqual(location?.latitude, 60.0)
-        XCTAssertEqual(location?.heading, 180.0)
-        XCTAssertEqual(location?.timestamp, Date(timeIntervalSince1970: 2_000_000_000))
+        #expect(location?.longitude == 10.0)
+        #expect(location?.latitude == 60.0)
+        #expect(location?.heading == 180.0)
+        #expect(location?.timestamp == Date(timeIntervalSince1970: 2_000_000_000))
     }
 
     @Test
@@ -437,14 +435,14 @@ struct VehicleCapabilityParsingTests {
         report.append(Protobuf.intField(1, 2_000_000_000_000))
         report.append(Protobuf.doubleField(2, 15.5))
         let weather = PolestarGRPC.parseWeather(report)
-        XCTAssertEqual(weather?.temperatureCelsius, 15.5)
-        XCTAssertEqual(weather?.timestamp, Date(timeIntervalSince1970: 2_000_000_000))
+        #expect(weather?.temperatureCelsius == 15.5)
+        #expect(weather?.timestamp == Date(timeIntervalSince1970: 2_000_000_000))
     }
 
     @Test
     func testWeatherWithNoDataReturnsNil() {
         let empty = Data()
-        XCTAssertNil(PolestarGRPC.parseWeather(empty))
+        #expect(PolestarGRPC.parseWeather(empty) == nil)
     }
 
     @Test
@@ -458,9 +456,6 @@ struct VehicleCapabilityParsingTests {
         stream.append(Protobuf.grpcFrame(msg1))
         stream.append(Protobuf.grpcFrame(msg2))
 
-        let frames = stream.map { $0 }
-        XCTAssertEqual(frames.count, stream.count)
-
         var offset = 0
         let bytes = [UInt8](stream)
         var parsedFrames: [Data] = []
@@ -471,9 +466,9 @@ struct VehicleCapabilityParsingTests {
             parsedFrames.append(Data(bytes[offset..<offset + size]))
             offset += size
         }
-        XCTAssertEqual(parsedFrames.count, 2)
-        XCTAssertEqual(Protobuf.fields(parsedFrames[0]).first(where: { $0.number == 1 })?.varint, 42)
-        XCTAssertEqual(Protobuf.fields(parsedFrames[1]).first(where: { $0.number == 1 })?.varint, 99)
+        #expect(parsedFrames.count == 2)
+        #expect(Protobuf.fields(parsedFrames[0]).first(where: { $0.number == 1 })?.varint == 42)
+        #expect(Protobuf.fields(parsedFrames[1]).first(where: { $0.number == 1 })?.varint == 99)
     }
 
     @Test
@@ -486,12 +481,12 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(23, 2)) // Left high beam
         payload.append(Protobuf.intField(26, 2)) // Right low beam
         let report = PolestarGRPC.parseHealth(payload)
-        XCTAssertTrue(report.details.warnings.contains(.exteriorLight))
-        XCTAssertTrue(report.details.reportedWarnings.contains(.exteriorLight))
-        XCTAssertEqual(report.details.lightFailures.count, 3)
-        XCTAssertTrue(report.details.lightFailures.contains("Left brake light"))
-        XCTAssertTrue(report.details.lightFailures.contains("Left high beam"))
-        XCTAssertTrue(report.details.lightFailures.contains("Right low beam"))
+        #expect(report.details.warnings.contains(.exteriorLight))
+        #expect(report.details.reportedWarnings.contains(.exteriorLight))
+        #expect(report.details.lightFailures.count == 3)
+        #expect(report.details.lightFailures.contains("Left brake light"))
+        #expect(report.details.lightFailures.contains("Left high beam"))
+        #expect(report.details.lightFailures.contains("Right low beam"))
     }
 
     /// Health field 2 is `engine_hours_to_service` upstream, and the ServiceWarning enum
@@ -504,13 +499,13 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(3, 24))
         payload.append(Protobuf.intField(4, 2_400))
         let report = PolestarGRPC.parseHealth(payload)
-        XCTAssertEqual(report.engineHoursToService, 4_320)
-        XCTAssertEqual(report.daysToService, 24)
-        XCTAssertEqual(report.reportedAt, Date(timeIntervalSince1970: 1_780_000_000))
+        #expect(report.engineHoursToService == 4_320)
+        #expect(report.daysToService == 24)
+        #expect(report.reportedAt == Date(timeIntervalSince1970: 1_780_000_000))
         // Absent field 2 stays nil; an explicit 0 is not promoted either.
         let empty = PolestarGRPC.parseHealth(Protobuf.intField(3, 10))
-        XCTAssertNil(empty.engineHoursToService)
-        XCTAssertNil(empty.reportedAt)
+        #expect(empty.engineHoursToService == nil)
+        #expect(empty.reportedAt == nil)
     }
 
     @Test
@@ -547,16 +542,16 @@ struct VehicleCapabilityParsingTests {
         state.identity.pno34 = "PNO34-SPEC-2023"
         state.identity.accountMarket = "SE"
 
-        XCTAssertEqual(state.formattedBuildWeek, "2022 · W40")
+        #expect(state.formattedBuildWeek == "2022 · W40")
 
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
 
-        XCTAssertEqual(decoded.identity.structureWeek, "202240")
-        XCTAssertEqual(decoded.formattedBuildWeek, "2022 · W40")
-        XCTAssertEqual(decoded.identity.internalVehicleIdentifier, "UUID-POL-12345")
-        XCTAssertEqual(decoded.identity.pno34, "PNO34-SPEC-2023")
-        XCTAssertEqual(decoded.identity.accountMarket, "SE")
+        #expect(decoded.identity.structureWeek == "202240")
+        #expect(decoded.formattedBuildWeek == "2022 · W40")
+        #expect(decoded.identity.internalVehicleIdentifier == "UUID-POL-12345")
+        #expect(decoded.identity.pno34 == "PNO34-SPEC-2023")
+        #expect(decoded.identity.accountMarket == "SE")
     }
 
     @Test
@@ -574,11 +569,11 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.messageField(3, locationData))
 
         let schedules = PolestarGRPC.parseChargeLocationSchedules(payload)
-        XCTAssertEqual(schedules.count, 1)
-        XCTAssertEqual(schedules.first?.locationName, "Home Garage")
-        XCTAssertEqual(schedules.first?.startHour, 22)
-        XCTAssertEqual(schedules.first?.endHour, 6)
-        XCTAssertTrue(schedules.first?.isActive == true)
+        #expect(schedules.count == 1)
+        #expect(schedules.first?.locationName == "Home Garage")
+        #expect(schedules.first?.startHour == 22)
+        #expect(schedules.first?.endHour == 6)
+        #expect(schedules.first?.isActive == true)
     }
 
     @Test
@@ -591,10 +586,10 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(12, 1)) // steering wheel heating active
 
         let climate = PolestarGRPC.parseClimate(payload)
-        XCTAssertEqual(climate.activity, .heating)
-        XCTAssertEqual(climate.driverSeatHeatingLevel, 3)
-        XCTAssertEqual(climate.passengerSeatHeatingLevel, 2)
-        XCTAssertEqual(climate.steeringWheelHeatingLevel, 1)
+        #expect(climate.activity == .heating)
+        #expect(climate.driverSeatHeatingLevel == 3)
+        #expect(climate.passengerSeatHeatingLevel == 2)
+        #expect(climate.steeringWheelHeatingLevel == 1)
     }
 
     @Test
@@ -604,21 +599,21 @@ struct VehicleCapabilityParsingTests {
         probed.record(.windows, as: .unavailable)
         probed.record(.softwareInstallControl, as: .supported)
 
-        XCTAssertEqual(probed.support(for: .climateStartStop), .supported)
-        XCTAssertEqual(probed.support(for: .windows), .unavailable)
-        XCTAssertEqual(probed.allResults.count, 3)
-        XCTAssertEqual(probed.resultsMap[.softwareInstallControl], .supported)
+        #expect(probed.support(for: .climateStartStop) == .supported)
+        #expect(probed.support(for: .windows) == .unavailable)
+        #expect(probed.allResults.count == 3)
+        #expect(probed.resultsMap[.softwareInstallControl] == .supported)
     }
 
     @Test
     func testCarRenderAnglePreferences() {
-        XCTAssertEqual(CarRenderAngle.allCases.count, 6)
-        XCTAssertEqual(CarRenderAngle.sideProfile.rawValue, 0)
-        XCTAssertEqual(CarRenderAngle.frontThreeQuarter.rawValue, 1)
-        XCTAssertEqual(CarRenderAngle.frontDirect.rawValue, 2)
-        XCTAssertEqual(CarRenderAngle.rearThreeQuarter.rawValue, 3)
-        XCTAssertEqual(CarRenderAngle.rearProfile.rawValue, 4)
-        XCTAssertEqual(CarRenderAngle.overhead.rawValue, 5)
+        #expect(CarRenderAngle.allCases.count == 6)
+        #expect(CarRenderAngle.sideProfile.rawValue == 0)
+        #expect(CarRenderAngle.frontThreeQuarter.rawValue == 1)
+        #expect(CarRenderAngle.frontDirect.rawValue == 2)
+        #expect(CarRenderAngle.rearThreeQuarter.rawValue == 3)
+        #expect(CarRenderAngle.rearProfile.rawValue == 4)
+        #expect(CarRenderAngle.overhead.rawValue == 5)
     }
 
     @Test
@@ -634,15 +629,15 @@ struct VehicleCapabilityParsingTests {
         payload.append(Protobuf.intField(9, 4))          // gear D
 
         let loc = PolestarGRPC.parseLocation(payload)
-        XCTAssertNotNil(loc)
-        XCTAssertEqual(loc?.longitude, 11.9746)
-        XCTAssertEqual(loc?.latitude, 57.7089)
-        XCTAssertEqual(loc?.heading, 180.0)
-        XCTAssertEqual(loc?.speed, 45.0)
-        XCTAssertEqual(loc?.altitudeMeters, 142.5)
-        XCTAssertEqual(loc?.accuracyMeters, 3.2)
-        XCTAssertEqual(loc?.parkingBrakeEngaged, true)
-        XCTAssertEqual(loc?.gear, "D")
+        #expect(loc != nil)
+        #expect(loc?.longitude == 11.9746)
+        #expect(loc?.latitude == 57.7089)
+        #expect(loc?.heading == 180.0)
+        #expect(loc?.speed == 45.0)
+        #expect(loc?.altitudeMeters == 142.5)
+        #expect(loc?.accuracyMeters == 3.2)
+        #expect(loc?.parkingBrakeEngaged == true)
+        #expect(loc?.gear == "D")
     }
 
     @Test
@@ -680,8 +675,8 @@ struct VehicleCapabilityParsingTests {
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(VehicleState.self, from: encoded)
 
-        XCTAssertEqual(decoded.identity.externalColour, "Thunder")
-        XCTAssertEqual(decoded.identity.upholstery, "WeaveTech Slate")
+        #expect(decoded.identity.externalColour == "Thunder")
+        #expect(decoded.identity.upholstery == "WeaveTech Slate")
     }
 
     private func dailyTime(hour: Int, minute: Int) -> Data {
@@ -702,11 +697,11 @@ func testHealthDoesNotTreatReferencePressuresAsWheelReadings() {
     let payload = Protobuf.doubleField(43, 231) + Protobuf.doubleField(44, 229)
         + Protobuf.doubleField(45, 236) + Protobuf.doubleField(46, 234)
     let report = PolestarGRPC.parseHealth(payload)
-    XCTAssertTrue(report.details.tyres.allSatisfy { $0.kilopascals == nil })
+    #expect(report.details.tyres.allSatisfy { $0.kilopascals == nil })
 }
 
 @Test
 func testHealthPreservesPartialWheelPressureReadings() {
     let report = PolestarGRPC.parseHealth(Protobuf.doubleField(41, 250))
-    XCTAssertEqual(report.details.tyres.map { $0.kilopascals ?? 0 }, [0, 0, 250, 0])
+    #expect(report.details.tyres.map { $0.kilopascals ?? 0 } == [0, 0, 250, 0])
 }

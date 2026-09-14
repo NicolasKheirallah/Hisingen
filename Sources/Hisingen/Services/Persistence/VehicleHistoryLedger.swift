@@ -91,9 +91,14 @@ final class VehicleHistoryLedger: Sendable {
         snap.tripPurposes = tripPurposes(for: vin)
 
         let rawSessions = charging.recentChargingSessions(for: vin, limit: rowCap)
-        snap.chargingSessions = rawSessions.map {
+        let reconciledSessions = rawSessions.map {
             charging.reconciled($0, usableCapacityKwh: chargingCapacity)
-        }.filter { inRange($0.startedAt) }
+        }
+        // Month/YTD comparisons must cover their full calendar windows, so they run over the
+        // unfiltered trips/sessions below; the range selector only scopes the card lists.
+        // Comparing energy against the range-filtered sessions made a 7-day period report
+        // 7 days as "month to date" and could never surface a year-over-year chip.
+        snap.chargingSessions = reconciledSessions.filter { inRange($0.startedAt) }
         snap.anomalousSessionIDs = HistoryInsights.sessionPeakAnomalies(in: snap.chargingSessions)
 
         let rawCommands = recentCommandAudits(for: vin, limit: min(rowCap, 2_000))
@@ -119,12 +124,12 @@ final class VehicleHistoryLedger: Sendable {
 
         let calendar = Calendar.current
         if let month = HistoryInsights.monthToDateWindows(calendar: calendar) {
-            snap.thisMonth = Self.comparison(trips: rawTrips, sessions: snap.chargingSessions, in: month.current)
-            snap.lastMonth = Self.comparison(trips: rawTrips, sessions: snap.chargingSessions, in: month.previous)
+            snap.thisMonth = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: month.current)
+            snap.lastMonth = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: month.previous)
         }
         if let year = HistoryInsights.yearToDateWindows(calendar: calendar) {
-            snap.thisYear = Self.comparison(trips: rawTrips, sessions: snap.chargingSessions, in: year.current)
-            snap.lastYear = Self.comparison(trips: rawTrips, sessions: snap.chargingSessions, in: year.previous)
+            snap.thisYear = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: year.current)
+            snap.lastYear = Self.comparison(trips: rawTrips, sessions: reconciledSessions, in: year.previous)
         }
         return snap
     }

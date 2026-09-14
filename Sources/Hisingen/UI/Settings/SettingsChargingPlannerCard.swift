@@ -16,10 +16,24 @@ struct SettingsChargingPlannerCard: View {
     private var isEnabled: Bool { prefs.features.contains(.smartChargingPlanner) }
 
     private static let powerOptions: [Double] = [3.7, 7.4, 11.0, 22.0]
+    private static let leadOptions: [Int] = [0, 15, 30, 60]
 
     private var powerChoices: [Double] {
         let current = prefs.electricityChargerPowerKw
         return Self.powerOptions.contains(current) ? Self.powerOptions : (Self.powerOptions + [current]).sorted()
+    }
+
+    private var leadChoices: [Int] {
+        let current = prefs.plannerWindowLeadMinutes
+        return Self.leadOptions.contains(current) ? Self.leadOptions : (Self.leadOptions + [current]).sorted()
+    }
+
+    private func leadLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 0: return L10n.text("When the window opens")
+        case 60: return L10n.text("1 hour before")
+        default: return L10n.format("%d minutes before", minutes)
+        }
     }
 
     /// GPS-based zone suggestion, shown only when it is available and differs from the
@@ -77,7 +91,7 @@ struct SettingsChargingPlannerCard: View {
                                 prefs.electricityPriceZone = suggestedZone
                                 binder.bump()
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .controlSize(.small)
                             .accessibilityLabel(L10n.format("Use %@", suggestedZone.title))
                         }
@@ -116,6 +130,27 @@ struct SettingsChargingPlannerCard: View {
                         Toggle("", isOn: binder(\.notifyPlannerWindowStart))
                             .toggleStyle(.switch)
                             .controlSize(.small)
+                    }
+
+                    if prefs.notifyPlannerWindowStart {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(L10n.text("Lead Time"))
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(L10n.text("How long before the window opens the banner arrives"))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: binder(\.plannerWindowLeadMinutes)) {
+                                ForEach(leadChoices, id: \.self) { minutes in
+                                    Text(leadLabel(minutes)).tag(minutes)
+                                }
+                            }
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .frame(maxWidth: 200)
+                        }
                     }
 
                     HStack {

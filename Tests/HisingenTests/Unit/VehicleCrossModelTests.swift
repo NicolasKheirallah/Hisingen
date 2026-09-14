@@ -6,61 +6,61 @@ struct VehicleCrossModelTests {
 
     @Test
     func testModelFamilyIdentification() {
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 2"), .polestar2)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 2 Long Range Dual Motor"), .polestar2)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 2 BST edition 270"), .polestar2)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 3"), .polestar3)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 4"), .polestar4)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 4 Long Range"), .polestar4)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 1"), .polestar1)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 5"), .polestar5)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Polestar 6"), .polestar6)
-        XCTAssertEqual(VehicleModelFamily(modelName: "Unknown Prototype"), .unknown("Unknown Prototype"))
-        XCTAssertEqual(VehicleModelFamily(modelName: nil), .unknown(nil))
+        #expect(VehicleModelFamily(modelName: "Polestar 2") == .polestar2)
+        #expect(VehicleModelFamily(modelName: "Polestar 2 Long Range Dual Motor") == .polestar2)
+        #expect(VehicleModelFamily(modelName: "Polestar 2 BST edition 270") == .polestar2)
+        #expect(VehicleModelFamily(modelName: "Polestar 3") == .polestar3)
+        #expect(VehicleModelFamily(modelName: "Polestar 4") == .polestar4)
+        #expect(VehicleModelFamily(modelName: "Polestar 4 Long Range") == .polestar4)
+        #expect(VehicleModelFamily(modelName: "Polestar 1") == .polestar1)
+        #expect(VehicleModelFamily(modelName: "Polestar 5") == .polestar5)
+        #expect(VehicleModelFamily(modelName: "Polestar 6") == .polestar6)
+        #expect(VehicleModelFamily(modelName: "Unknown Prototype") == .unknown("Unknown Prototype"))
+        #expect(VehicleModelFamily(modelName: nil) == .unknown(nil))
     }
 
     @Test
     func testPolestar2CapabilityProfile() {
         let profile = VehicleCapabilityProfile(modelName: "Polestar 2")
-        XCTAssertFalse(profile.hasSelectableClimateTemperature)
-        XCTAssertFalse(profile.hasSelectableSeatHeating)
-        XCTAssertEqual(profile.support(for: .climateTemperature), .vehicleManaged)
-        XCTAssertEqual(profile.support(for: .seatHeating), .vehicleManaged)
-        XCTAssertEqual(profile.support(for: .steeringWheelHeating), .vehicleManaged)
-        XCTAssertEqual(profile.support(for: .chargingCurrentLimit), .supported)
-        XCTAssertEqual(profile.support(for: .preCleaning), .supported)
-        XCTAssertEqual(profile.support(for: .tyrePressureValues), .backendDependent)
-        XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
-        XCTAssertEqual(profile.support(for: .locks), .supported)
-        XCTAssertEqual(profile.support(for: .windows), .supported)
-        XCTAssertEqual(profile.support(for: .honkAndFlash), .unavailable)
+        #expect(!(profile.hasSelectableClimateTemperature))
+        #expect(!(profile.hasSelectableSeatHeating))
+        #expect(profile.support(for: .climateTemperature) == .vehicleManaged)
+        #expect(profile.support(for: .seatHeating) == .vehicleManaged)
+        #expect(profile.support(for: .steeringWheelHeating) == .vehicleManaged)
+        #expect(profile.support(for: .chargingCurrentLimit) == .supported)
+        #expect(profile.support(for: .preCleaning) == .supported)
+        #expect(profile.support(for: .tyrePressureValues) == .backendDependent)
+        #expect(profile.support(for: .climateStartStop) == .supported)
+        #expect(profile.support(for: .locks) == .supported)
+        #expect(profile.support(for: .windows) == .supported)
+        #expect(profile.support(for: .honkAndFlash) == .unavailable)
     }
 
     @Test
     func testPolestar4CapabilityProfile() {
         let profile = VehicleCapabilityProfile(modelName: "Polestar 4")
-        XCTAssertTrue(profile.hasSelectableClimateTemperature)
-        XCTAssertTrue(profile.hasSelectableSeatHeating)
-        XCTAssertEqual(profile.support(for: .climateTemperature), .supported)
-        XCTAssertEqual(profile.support(for: .seatHeating), .supported)
-        XCTAssertEqual(profile.support(for: .steeringWheelHeating), .supported)
-        XCTAssertEqual(profile.support(for: .chargingCurrentLimit), .unavailable)
-        XCTAssertEqual(profile.support(for: .preCleaning), .unavailable)
-        XCTAssertEqual(profile.support(for: .connectivity), .unavailable)
-        XCTAssertEqual(profile.support(for: .softwareInstallControl), .unavailable)
-        XCTAssertEqual(profile.support(for: .tyrePressureValues), .supported)
-        XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
-        XCTAssertEqual(profile.support(for: .locks), .supported)
+        #expect(profile.hasSelectableClimateTemperature)
+        #expect(profile.hasSelectableSeatHeating)
+        #expect(profile.support(for: .climateTemperature) == .supported)
+        #expect(profile.support(for: .seatHeating) == .supported)
+        #expect(profile.support(for: .steeringWheelHeating) == .supported)
+        #expect(profile.support(for: .chargingCurrentLimit) == .unavailable)
+        #expect(profile.support(for: .preCleaning) == .unavailable)
+        #expect(profile.support(for: .connectivity) == .unavailable)
+        #expect(profile.support(for: .softwareInstallControl) == .unavailable)
+        #expect(profile.support(for: .tyrePressureValues) == .supported)
+        #expect(profile.support(for: .climateStartStop) == .supported)
+        #expect(profile.support(for: .locks) == .supported)
     }
 
     @Test
     func testPolestar3CapabilityProfile() {
         let profile = VehicleCapabilityProfile(modelName: "Polestar 3")
-        XCTAssertTrue(profile.hasSelectableClimateTemperature)
-        XCTAssertTrue(profile.hasSelectableSeatHeating)
-        XCTAssertEqual(profile.support(for: .climateTemperature), .supported)
-        XCTAssertEqual(profile.support(for: .seatHeating), .supported)
-        XCTAssertEqual(profile.support(for: .climateStartStop), .supported)
+        #expect(profile.hasSelectableClimateTemperature)
+        #expect(profile.hasSelectableSeatHeating)
+        #expect(profile.support(for: .climateTemperature) == .supported)
+        #expect(profile.support(for: .seatHeating) == .supported)
+        #expect(profile.support(for: .climateStartStop) == .supported)
     }
 
     @Test
@@ -76,15 +76,16 @@ struct VehicleCrossModelTests {
         )
         let adapted = richCommand.adapted(to: profile)
         guard case .startClimate(let temp, let fl, let fr, let rl, let rr, let sw) = adapted else {
-            return XCTFail("Expected startClimate command")
+            Issue.record("Expected startClimate command")
+            return
         }
-        XCTAssertEqual(temp, 0.0)
-        XCTAssertEqual(fl, HeatingLevel.unspecified)
-        XCTAssertEqual(fr, HeatingLevel.unspecified)
-        XCTAssertEqual(rl, HeatingLevel.unspecified)
-        XCTAssertEqual(rr, HeatingLevel.unspecified)
-        XCTAssertEqual(sw, HeatingLevel.unspecified)
-        XCTAssertEqual(adapted.title, "Start climate (automatic)")
+        #expect(temp == 0.0)
+        #expect(fl == HeatingLevel.unspecified)
+        #expect(fr == HeatingLevel.unspecified)
+        #expect(rl == HeatingLevel.unspecified)
+        #expect(rr == HeatingLevel.unspecified)
+        #expect(sw == HeatingLevel.unspecified)
+        #expect(adapted.title == "Start climate (automatic)")
     }
 
     @Test
@@ -100,48 +101,43 @@ struct VehicleCrossModelTests {
         )
         let adapted = richCommand.adapted(to: profile)
         guard case .startClimate(let temp, let fl, let fr, let rl, let rr, let sw) = adapted else {
-            return XCTFail("Expected startClimate command")
+            Issue.record("Expected startClimate command")
+            return
         }
-        XCTAssertEqual(temp, 20.5)
-        XCTAssertEqual(fl, HeatingLevel.level3)
-        XCTAssertEqual(fr, HeatingLevel.level2)
-        XCTAssertEqual(rl, HeatingLevel.level1)
-        XCTAssertEqual(rr, HeatingLevel.off)
-        XCTAssertEqual(sw, HeatingLevel.level2)
-        XCTAssertEqual(adapted.title, L10n.format("Start climate at %.1f °C", 20.5))
+        #expect(temp == 20.5)
+        #expect(fl == HeatingLevel.level3)
+        #expect(fr == HeatingLevel.level2)
+        #expect(rl == HeatingLevel.level1)
+        #expect(rr == HeatingLevel.off)
+        #expect(sw == HeatingLevel.level2)
+        #expect(adapted.title == L10n.format("Start climate at %.1f °C", 20.5))
     }
 
     @Test
     func testCrossVehicleSwitchingIsolation() {
         let p4State = makeVehicleState(vin: "YS2P4000000000001", modelName: "Polestar 4", battery: 78.0)
-        XCTAssertTrue(p4State.capabilityProfile.hasSelectableClimateTemperature)
-        XCTAssertFalse(p4State.capabilityProfile.permits(VehicleCapability.chargingCurrentLimit))
+        #expect(p4State.capabilityProfile.hasSelectableClimateTemperature)
+        #expect(!(p4State.capabilityProfile.permits(VehicleCapability.chargingCurrentLimit)))
 
         let p2State = makeVehicleState(vin: "YS2P2000000000002", modelName: "Polestar 2", battery: 55.0)
-        XCTAssertFalse(p2State.capabilityProfile.hasSelectableClimateTemperature)
-        XCTAssertTrue(p2State.capabilityProfile.permits(VehicleCapability.chargingCurrentLimit))
+        #expect(!(p2State.capabilityProfile.hasSelectableClimateTemperature))
+        #expect(p2State.capabilityProfile.permits(VehicleCapability.chargingCurrentLimit))
 
 
         let merged = p2State.mergingLastKnown(from: p4State, features: FeatureSelection.default)
-        XCTAssertEqual(merged.identity.vin, "YS2P2000000000002")
-        XCTAssertEqual(merged.identity.modelName, "Polestar 2")
-        XCTAssertEqual(merged.energy.batteryPercentage, 55.0)
-        XCTAssertFalse(merged.capabilityProfile.hasSelectableClimateTemperature)
+        #expect(merged.identity.vin == "YS2P2000000000002")
+        #expect(merged.identity.modelName == "Polestar 2")
+        #expect(merged.energy.batteryPercentage == 55.0)
+        #expect(!(merged.capabilityProfile.hasSelectableClimateTemperature))
     }
 
     @Test
     func testVehicleBuildOptionsAndSpecs() {
         var state = makeVehicleState(vin: "YS2P2000000000001", modelName: "Polestar 2", battery: 78.0)
-        state.identity.externalColour = "Thunder Grey"
-        state.identity.upholstery = "WeaveTech Charcoal"
         state.identity.structureWeek = "202342"
-        state.identity.gearbox = "1-speed automatic"
-        state.energy.reportedBatteryCapacityKwh = 78.0
-
-        XCTAssertEqual(state.identity.externalColour, "Thunder Grey")
-        XCTAssertEqual(state.identity.upholstery, "WeaveTech Charcoal")
-        XCTAssertEqual(state.formattedBuildWeek, "2023 · W42")
-        XCTAssertEqual(state.energy.reportedBatteryCapacityKwh, 78.0)
+        // TESTS-14: set-then-read-back property echoes removed; keep the assertion that
+        // exercises real logic (build-week formatting).
+        #expect(state.formattedBuildWeek == "2023 · W42")
     }
 
     @Test
@@ -182,20 +178,12 @@ struct VehicleCrossModelTests {
             steeringWheelHeatingLevel: 1
         )
 
-        XCTAssertEqual(state.identity.externalColour, "Thunder")
-        XCTAssertEqual(state.identity.upholstery, "Charcoal Embossed Textile")
-        XCTAssertEqual(state.formattedBuildWeek, "2024 · W01")
-        XCTAssertEqual(state.identity.pno34, "P20412")
-        XCTAssertEqual(state.formattedSteeringOrientation, "Left_Hand_Drive")
-        XCTAssertEqual(state.airQuality?.airQualityIndex, 12)
-        XCTAssertEqual(state.airQuality?.particulateMatter25, 3)
-        XCTAssertEqual(state.airQuality?.externalParticulateMatter25, 18)
-        XCTAssertEqual(state.airQuality?.filterRemainingPercent, 94)
-        XCTAssertEqual(state.location?.parkingBrakeEngaged, true)
-        XCTAssertEqual(state.climateStatus?.requestedTemperatureCelsius, 21.0)
-        XCTAssertEqual(state.climateStatus?.driverSeatHeatingLevel, 2)
-        XCTAssertEqual(state.model.nominalWltpRangeKm, 480.0)
-        XCTAssertEqual(state.model.nominalBatteryCapacityKwh, 78.0)
+        // TESTS-14: the property echoes for the values assigned above are gone; the
+        // remaining assertions exercise computed/formatted properties.
+        #expect(state.formattedBuildWeek == "2024 · W01")
+        #expect(state.formattedSteeringOrientation == "Left_Hand_Drive")
+        #expect(state.model.nominalWltpRangeKm == 480.0)
+        #expect(state.model.nominalBatteryCapacityKwh == 78.0)
     }
 
     @Test
@@ -213,12 +201,12 @@ struct VehicleCrossModelTests {
         )
         my23State.identity.structureWeek = "202240"
 
-        XCTAssertEqual(my23State.factoryNominalBatteryCapacityKwh, 78.0)
-        XCTAssertEqual(my23State.factoryUsableBatteryCapacityKwh, 75.0)
-        XCTAssertTrue(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
-        XCTAssertNil(my23State.batteryDegradationPercent)
-        XCTAssertEqual(my23State.batteryHealthStatus, "Unavailable")
-        XCTAssertEqual(my23State.configuredUsableBatteryCapacityKwh, 75.0)
+        #expect(my23State.factoryNominalBatteryCapacityKwh == 78.0)
+        #expect(my23State.factoryUsableBatteryCapacityKwh == 75.0)
+        #expect(my23State.batteryPackDescription.contains("78.0 kWh Long Range"))
+        #expect(my23State.batteryDegradationPercent == nil)
+        #expect(my23State.batteryHealthStatus == "Unavailable")
+        #expect(my23State.configuredUsableBatteryCapacityKwh == 75.0)
     }
 
     @Test
@@ -235,10 +223,10 @@ struct VehicleCrossModelTests {
             imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        XCTAssertEqual(state.factoryNominalBatteryCapacityKwh, 11.6)
-        XCTAssertEqual(state.factoryUsableBatteryCapacityKwh, 9.1)
-        XCTAssertNil(state.batteryDegradationPercent)
-        XCTAssertEqual(state.configuredUsableBatteryCapacityKwh, 9.1)
+        #expect(state.factoryNominalBatteryCapacityKwh == 11.6)
+        #expect(state.factoryUsableBatteryCapacityKwh == 9.1)
+        #expect(state.batteryDegradationPercent == nil)
+        #expect(state.configuredUsableBatteryCapacityKwh == 9.1)
     }
 
     @Test
@@ -255,13 +243,13 @@ struct VehicleCrossModelTests {
             imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        XCTAssertEqual(state.factoryNominalBatteryCapacityKwh, 0.0)
-        XCTAssertEqual(state.configuredUsableBatteryCapacityKwh, 0.0)
+        #expect(state.factoryNominalBatteryCapacityKwh == 0.0)
+        #expect(state.configuredUsableBatteryCapacityKwh == 0.0)
     }
 
     @MainActor
     @Test
-    func testPartialChargeSoHDoesNotDisableTelemetryPersistence() {
+    func testPartialChargeSoHDoesNotDisableTelemetryPersistence() async {
         let defaults = UserDefaults(suiteName: "HisingenTests.VehicleStateStore.SoH")!
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
         let database = VehicleDatabase.inMemory()
@@ -279,9 +267,12 @@ struct VehicleCrossModelTests {
         )
 
         VehicleStateStore(defaults: defaults, database: database).save(state)
+        // Telemetry recording runs on a detached storage pass (PERSIST-06/07).
+        let stored = await awaitStored(timeout: 5) { database.recordCounts().telemetry == 1 }
+        #expect(stored, "telemetry row never reached the database after save")
         let counts = database.recordCounts()
-        XCTAssertEqual(counts.telemetry, 1)
-        XCTAssertEqual(counts.batteryHealth, 0)
+        #expect(counts.telemetry == 1)
+        #expect(counts.batteryHealth == 0)
         defaults.removePersistentDomain(forName: "HisingenTests.VehicleStateStore.SoH")
     }
 
@@ -309,12 +300,12 @@ struct VehicleCrossModelTests {
         )
 
         let session = ChargingSession.completed(previous: startState, current: endState, pricePerKwh: 2.50)
-        XCTAssertNotNil(session)
-        XCTAssertEqual(session?.startBatteryPercentage, 20.0)
-        XCTAssertEqual(session?.endBatteryPercentage, 80.0)
+        #expect(session != nil)
+        #expect(session?.startBatteryPercentage == 20.0)
+        #expect(session?.endBatteryPercentage == 80.0)
         // 60% of 75.0 kWh usable = 45.0 kWh
-        XCTAssertEqual(session?.kwhDelivered, 47.4)
-        XCTAssertEqual(session?.cost, 47.4 * 2.50)
+        #expect(session?.kwhDelivered == 47.4)
+        #expect(session?.cost == 47.4 * 2.50)
     }
 
     @Test
@@ -322,10 +313,10 @@ struct VehicleCrossModelTests {
         var state = makeVehicleState(vin: "YSMVSEDE6PL147228", modelName: "Polestar 2", battery: 35.0)
         state.maintenance.service.preferredWorkshopID = "SE-GOT-001"
         state.maintenance.service.preferredWorkshopName = "Bilia Sisjön"
-        XCTAssertEqual(state.maintenance.service.preferredWorkshopID, "SE-GOT-001")
-        XCTAssertEqual(state.maintenance.service.preferredWorkshopName, "Bilia Sisjön")
+        #expect(state.maintenance.service.preferredWorkshopID == "SE-GOT-001")
+        #expect(state.maintenance.service.preferredWorkshopName == "Bilia Sisjön")
 
-        XCTAssertTrue(Notifier.plugInReminderCondition(state))
+        #expect(Notifier.plugInReminderCondition(state))
 
         let pluggedIn = makeVehicleState(
             vin: "YSMVSEDE6PL147228",
@@ -333,7 +324,7 @@ struct VehicleCrossModelTests {
             battery: 35.0,
             chargerConnection: .connected
         )
-        XCTAssertFalse(Notifier.plugInReminderCondition(pluggedIn))
+        #expect(!(Notifier.plugInReminderCondition(pluggedIn)))
 
         let fullBattery = makeVehicleState(
             vin: "YSMVSEDE6PL147228",
@@ -341,7 +332,7 @@ struct VehicleCrossModelTests {
             battery: 75.0,
             chargerConnection: .disconnected
         )
-        XCTAssertFalse(Notifier.plugInReminderCondition(fullBattery))
+        #expect(!(Notifier.plugInReminderCondition(fullBattery)))
     }
 
     private func makeVehicleState(
@@ -352,34 +343,18 @@ struct VehicleCrossModelTests {
         chargerConnection: ChargerConnection = .disconnected,
         powerWatts: Int? = nil
     ) -> VehicleState {
-        VehicleState(
-            batteryPercentage: battery,
-            rangeKm: 350,
-            chargingState: chargingState,
-            estimatedChargingTimeToFullMinutes: nil,
-            chargeTargetPercentage: 80,
-            chargingPowerWatts: powerWatts,
-            chargingCurrentAmps: 16,
-            chargingVoltageVolts: nil,
+        // TESTS-12: thin wrapper over the shared TestSupport fixture builder.
+        vehicle(
+            vin: vin, battery: battery, rangeKm: 350,
+            state: chargingState,
+            connection: chargerConnection,
             chargingType: .none,
-            chargerConnection: chargerConnection,
-            availability: .available,
-            modelName: modelName,
-            modelYear: "2024",
-            registrationNo: "TEST123",
-            vin: vin,
-            ownerFirstName: "Nico",
-            odometerKm: 25000,
-            daysToService: 120,
-            distanceToServiceKm: 5000,
-            serviceWarning: false,
-            fluidWarnings: [],
-            powertrain: .bev,
-            reportedBatteryCapacityKwh: 75.0,
-            imageData: nil,
-            fetchedAt: Date(),
-            vehicleReportedAt: Date(),
-            dataWarnings: []
+            powerWatts: powerWatts,
+            currentAmps: 16,
+            modelName: modelName, modelYear: "2024",
+            registrationNo: "TEST123", ownerFirstName: "Nico",
+            odometerKm: 25_000, daysToService: 120, distanceToServiceKm: 5_000,
+            reportedBatteryCapacityKwh: 75.0
         )
     }
 }

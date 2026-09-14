@@ -5,19 +5,25 @@ import Testing
 struct PanelCloseBehaviorTests {
 
     @Test @MainActor
-    func defaultsToHistoricalKeepOpenBehavior() {
-        let store = PreferencesStore(defaults: UserDefaults(suiteName: "panel-close-behavior-tests")!, keychain: .app)
-        defer { UserDefaults(suiteName: "panel-close-behavior-tests")!.removePersistentDomain(forName: "panel-close-behavior-tests") }
+    func defaultsToHistoricalKeepOpenBehavior() throws {
+        // UUID-scoped domain + throwaway keychain service (TESTS-05): leftovers from an
+        // earlier run must not be able to flip the default, and the suite must never read
+        // the developer's real app keychain.
+        let suite = "HisingenTests.panel-close.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        let store = PreferencesStore(defaults: defaults, keychain: keychain)
 
         // Upgrades must not change panel behavior for existing installs.
-        XCTAssertEqual(store.panelCloseBehavior, .keepOpen)
-        XCTAssertEqual(store.panelCloseBehavior.popoverBehavior, .semitransient)
+        #expect(store.panelCloseBehavior == .keepOpen)
+        #expect(store.panelCloseBehavior.popoverBehavior == .semitransient)
     }
 
     @Test
     func focusLossOptionMapsToTransientPopoverBehavior() {
-        XCTAssertEqual(PanelCloseBehavior.closeOnFocusLoss.popoverBehavior, .transient)
-        XCTAssertEqual(PanelCloseBehavior(rawValue: "close-on-focus-loss"), .closeOnFocusLoss)
-        XCTAssertEqual(PanelCloseBehavior(rawValue: "keep-open"), .keepOpen)
+        #expect(PanelCloseBehavior.closeOnFocusLoss.popoverBehavior == .transient)
+        #expect(PanelCloseBehavior(rawValue: "close-on-focus-loss") == .closeOnFocusLoss)
+        #expect(PanelCloseBehavior(rawValue: "keep-open") == .keepOpen)
     }
 }

@@ -20,7 +20,11 @@ struct SpinningFanView: View {
                 if spinning {
                     startSpinning()
                 } else {
-                    withAnimation(Motion.interaction) { angle = 0 }
+                    // Snap to rest without re-animation: an animated reset
+                    // from a multi-turn angle visibly spins the fan backwards.
+                    var reset = Transaction()
+                    reset.animation = nil
+                    withTransaction(reset) { angle = 0 }
                 }
             }
             .accessibilityHidden(true)

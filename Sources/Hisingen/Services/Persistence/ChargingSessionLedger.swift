@@ -790,9 +790,12 @@ final class ChargingSessionLedger: Sendable {
     // MARK: - Exporters
 
     func exportChargingSessionsCSV(for vin: String? = nil) -> String {
+        // Export is uncapped: the file must be complete (tax/business records), unlike the
+        // dashboard's bounded, truncation-flagged views. Session rows are small summaries,
+        // so an unbounded read is acceptable for a user-initiated export.
         let sessions: [HistoricalChargingSession]
         if let vin {
-            sessions = recentChargingSessions(for: vin, limit: 1000)
+            sessions = recentChargingSessions(for: vin, limit: .max)
         } else {
             let query = """
             SELECT \(Self.chargingSessionColumns)
@@ -800,7 +803,7 @@ final class ChargingSessionLedger: Sendable {
             WHERE ended_at IS NOT NULL
               AND lifecycle_state IN ('completed', 'interrupted')
               AND (end_soc > start_soc OR energy_delivered_kwh > 0)
-            ORDER BY started_at DESC LIMIT 1000;
+            ORDER BY started_at DESC;
             """
             sessions = (try? sql.query(sql: query) { _ in } process: { stmt -> [HistoricalChargingSession] in
                 var list: [HistoricalChargingSession] = []

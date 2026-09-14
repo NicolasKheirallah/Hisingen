@@ -17,9 +17,9 @@ struct CommandBoundsAndSessionEnergyTests {
         let grpc = PolestarGRPC()
         do {
             _ = try await grpc.executeRemoteCommand(.setChargeTarget(30), vin: "VIN", accessToken: "t")
-            XCTFail("Expected local rejection")
+            Issue.record("Expected local rejection")
         } catch {
-            XCTAssertNotNil(rejectionMessage(of: error))
+            #expect(rejectionMessage(of: error) != nil)
         }
     }
 
@@ -32,12 +32,12 @@ struct CommandBoundsAndSessionEnergyTests {
         )
         do {
             _ = try await grpc.executeRemoteCommand(.setChargeTarget(45), vin: "VIN", accessToken: "t")
-            XCTFail("Expected local rejection below advertised minimum")
+            Issue.record("Expected local rejection below advertised minimum")
         } catch {
             let message = rejectionMessage(of: error)
-            XCTAssertNotNil(message)
+            #expect(message != nil)
             // The rejection must name the vehicle-specific bound, not a generic failure.
-            XCTAssertTrue(message?.contains("50") == true)
+            #expect(message?.contains("50") == true)
         }
     }
 
@@ -51,11 +51,11 @@ struct CommandBoundsAndSessionEnergyTests {
         for outOfRange in [5, 40] {
             do {
                 _ = try await grpc.executeRemoteCommand(.setAmpLimit(outOfRange), vin: "VIN", accessToken: "t")
-                XCTFail("Expected local rejection for \(outOfRange) A")
+                Issue.record("Expected local rejection for \(outOfRange) A")
             } catch {
                 let message = rejectionMessage(of: error)
-                XCTAssertNotNil(message)
-                XCTAssertTrue(message?.contains("6") == true && message?.contains("32") == true)
+                #expect(message != nil)
+                #expect(message?.contains("6") == true && message?.contains("32") == true)
             }
         }
     }
@@ -86,17 +86,17 @@ struct CommandBoundsAndSessionEnergyTests {
         current.freshness.fetchedAt = start.addingTimeInterval(3_600)
 
         // 50 % gained × 82 kWh override = 41 kWh — not the model-table default.
-        let session = try XCTUnwrap(ChargingSession.completed(
+        let session = try #require(ChargingSession.completed(
             previous: previous, current: current, pricePerKwh: 0,
             usableCapacityKwh: 82
         ))
-        XCTAssertEqual(session.kwhDelivered, 41.0, accuracy: 0.001)
+        #expect(abs(session.kwhDelivered - 41.0) <= 0.001)
 
         // Without an explicit capacity the nominal table still applies (75 kWh for a 2024
         // Polestar 2 is overridden by the year rule to 79 kWh).
-        let fallback = try XCTUnwrap(ChargingSession.completed(
+        let fallback = try #require(ChargingSession.completed(
             previous: previous, current: current, pricePerKwh: 0
         ))
-        XCTAssertEqual(fallback.kwhDelivered, 39.5, accuracy: 0.001)
+        #expect(abs(fallback.kwhDelivered - 39.5) <= 0.001)
     }
 }

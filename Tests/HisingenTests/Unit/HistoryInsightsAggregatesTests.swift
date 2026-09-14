@@ -386,15 +386,18 @@ struct HistoryInsightsAggregatesTests {
 
     @Test
     func testCommandStatisticsComputesSuccessRateAndMostUsed() {
+        // Only known-good outcomes count as success; a command the vehicle accepted but
+        // never confirmed ("accepted") must not inflate the rate.
         let commands = [
-            command("1", minutesAfterStart: 0, name: "lock", status: "success"),
-            command("2", minutesAfterStart: 1, name: "lock", status: "success"),
+            command("1", minutesAfterStart: 0, name: "lock", status: "completed"),
+            command("2", minutesAfterStart: 1, name: "lock", status: "confirmed"),
             command("3", minutesAfterStart: 2, name: "climate", status: "failed"),
+            command("4", minutesAfterStart: 3, name: "horn", status: "accepted"),
         ]
         let stats = HistoryInsights.commandStatistics(from: commands)
-        #expect(stats.totalCount == 3)
+        #expect(stats.totalCount == 4)
         #expect(stats.successCount == 2)
-        #expect(abs((stats.successRatePct ?? 0) - 66.66) <= 0.1)
+        #expect(abs((stats.successRatePct ?? 0) - 50) <= 0.1)
         #expect(stats.mostUsedCommand == "lock")
     }
 

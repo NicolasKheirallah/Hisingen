@@ -18,19 +18,20 @@ struct PolestarWebSignInTests {
         let api = await makeAPI()
 
         let (authURL, redirectURI) = try await api.beginWebAuthorization()
-        XCTAssertEqual(redirectURI.absoluteString, "https://www.polestar.com/sign-in-callback")
+        #expect(redirectURI.absoluteString == "https://www.polestar.com/sign-in-callback")
 
         guard let components = URLComponents(url: authURL, resolvingAgainstBaseURL: false) else {
-            return XCTFail("Invalid auth URL components")
+            Issue.record("Invalid auth URL components")
+            return
         }
         let items = components.queryItems ?? []
-        XCTAssertEqual(items.first(where: { $0.name == "client_id" })?.value, "l3oopkc_10")
-        XCTAssertEqual(items.first(where: { $0.name == "redirect_uri" })?.value, "https://www.polestar.com/sign-in-callback")
-        XCTAssertEqual(items.first(where: { $0.name == "response_type" })?.value, "code")
-        XCTAssertEqual(items.first(where: { $0.name == "response_mode" })?.value, "query")
-        XCTAssertEqual(items.first(where: { $0.name == "code_challenge_method" })?.value, "S256")
-        XCTAssertNotNil(items.first(where: { $0.name == "state" })?.value)
-        XCTAssertNotNil(items.first(where: { $0.name == "code_challenge" })?.value)
+        #expect(items.first(where: { $0.name == "client_id" })?.value == "l3oopkc_10")
+        #expect(items.first(where: { $0.name == "redirect_uri" })?.value == "https://www.polestar.com/sign-in-callback")
+        #expect(items.first(where: { $0.name == "response_type" })?.value == "code")
+        #expect(items.first(where: { $0.name == "response_mode" })?.value == "query")
+        #expect(items.first(where: { $0.name == "code_challenge_method" })?.value == "S256")
+        #expect(items.first(where: { $0.name == "state" })?.value != nil)
+        #expect(items.first(where: { $0.name == "code_challenge" })?.value != nil)
     }
 
     @Test
@@ -41,14 +42,15 @@ struct PolestarWebSignInTests {
         let forgedCallback = URL(string: "https://www.polestar.com/sign-in-callback?code=testcode&state=wrongstate")!
         do {
             try await api.completeWebAuthorization(callbackURL: forgedCallback)
-            XCTFail("Should have thrown authenticationRequired")
+            Issue.record("Should have thrown authenticationRequired")
         } catch let error as PolestarError {
             guard case .authenticationRequired(let reason) = error else {
-                return XCTFail("Unexpected PolestarError case: \(error)")
+                Issue.record("Unexpected PolestarError case: \(error)")
+                return
             }
-            XCTAssertEqual(reason, .callbackRejected)
+            #expect(reason == .callbackRejected)
         } catch {
-            XCTFail("Unexpected error type: \(error)")
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 
@@ -61,14 +63,15 @@ struct PolestarWebSignInTests {
         let errorCallback = URL(string: "https://www.polestar.com/sign-in-callback?error=access_denied&state=\(state)")!
         do {
             try await api.completeWebAuthorization(callbackURL: errorCallback)
-            XCTFail("Should have thrown permissionDenied")
+            Issue.record("Should have thrown permissionDenied")
         } catch let error as PolestarError {
             guard case .permissionDenied(let op) = error else {
-                return XCTFail("Unexpected error: \(error)")
+                Issue.record("Unexpected error: \(error)")
+                return
             }
-            XCTAssertEqual(op, "access_denied")
+            #expect(op == "access_denied")
         } catch {
-            XCTFail("Unexpected error type: \(error)")
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 }

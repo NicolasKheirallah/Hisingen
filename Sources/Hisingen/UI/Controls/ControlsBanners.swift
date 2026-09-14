@@ -11,6 +11,8 @@ struct ControlsBanners: View {
 
     @State private var dismissedFeedbackID: UUID?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var vehicleOffline: Bool {
         if case .unavailable = state.identity.availability { return true }
         return false
@@ -37,6 +39,11 @@ struct ControlsBanners: View {
                 restrictedNoticeBanner
             }
         }
+        // Keyed on each banner's driving identity so an insertion carries the
+        // entrance while the removal rides the dismissing transaction.
+        .animation(Motion.resolve(Motion.entrance), value: liveFeedback?.id)
+        .animation(Motion.resolve(Motion.entrance), value: vehicleOffline)
+        .animation(Motion.resolve(Motion.entrance), value: showRestrictedNotice)
     }
 
     private func feedbackBanner(_ feedback: RemoteCommandFeedback) -> some View {
@@ -44,6 +51,8 @@ struct ControlsBanners: View {
             Image(systemName: feedback.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.system(size: 15))
                 .foregroundStyle(feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .animation(Motion.resolveCrossfade(Motion.stateChange), value: feedback.success)
             VStack(alignment: .leading, spacing: 2) {
                 Text(feedback.title)
                     .font(.system(size: 11.5, weight: .semibold))
@@ -55,13 +64,13 @@ struct ControlsBanners: View {
             }
             Spacer(minLength: 4)
             Button {
-                withAnimation { dismissedFeedbackID = feedback.id }
+                withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .accessibilityLabel(L10n.text("Dismiss"))
         }
         .padding(10)
@@ -76,11 +85,12 @@ struct ControlsBanners: View {
                     lineWidth: 0.5
                 )
         )
+        .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .task(id: feedback.id) {
             guard feedback.success else { return }
             try? await Task.sleep(for: .seconds(6))
-            withAnimation { dismissedFeedbackID = feedback.id }
+            withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
         }
     }
 
@@ -100,6 +110,7 @@ struct ControlsBanners: View {
         }
         .padding(10)
         .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }
 
@@ -132,6 +143,7 @@ struct ControlsBanners: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
+        .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }
 }
@@ -155,6 +167,7 @@ struct ControlsReprobeButton: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .help(L10n.text("Refreshes telemetry and re-probes the vehicle's capability set."))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
@@ -174,14 +187,23 @@ extension ControlsCommandGate {
 
     @ViewBuilder
     func sendingOverlay(_ command: RemoteCommand) -> some View {
-        if isSending(command) {
-            HStack(spacing: 4) {
-                ProgressView().controlSize(.small).scaleEffect(0.7)
-                Text(L10n.text("Sending…")).font(.system(size: 9, weight: .medium))
+        // The animation lives on a container that survives the branch flip, so the
+        // capsule's insertion and removal both get the acknowledge-then-settle pace
+        // even though hosts toggle `isSending` outside any `withAnimation`.
+        ZStack {
+            if isSending(command) {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                    Text(L10n.text("Sending…")).font(.system(size: 9, weight: .medium))
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial, in: Capsule())
+                .transition(Motion.prefersReducedMotion
+                    ? .opacity
+                    : .opacity.combined(with: .scale(scale: 0.95)))
             }
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(.ultraThinMaterial, in: Capsule())
         }
+        .animation(Motion.resolveCrossfade(Motion.interaction), value: isSending(command))
     }
 }

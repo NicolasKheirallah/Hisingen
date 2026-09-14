@@ -11,6 +11,8 @@ struct PriceCurveView: View {
     let plan: ChargingPlan?
     var now: Date = Date()
 
+    @State private var appeared = false
+
     private var futurePoints: [ElectricityPricePoint] {
         points.filter { $0.endDate > now }.sorted { $0.startDate < $1.startDate }
     }
@@ -57,6 +59,9 @@ struct PriceCurveView: View {
                 }
             }
             .frame(height: 56)
+            .opacity(appeared ? 1 : 0)
+            .animation(Motion.resolve(Motion.entrance), value: appeared)
+            .onAppear { appeared = true }
             .accessibilityLabel(L10n.text("Electricity price outlook"))
             .accessibilityValue(accessibilitySummary(minimum: minimum, maximum: maximum))
         )

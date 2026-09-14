@@ -71,7 +71,7 @@ struct SettingsActionsCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.top, 2)

@@ -3,6 +3,8 @@ import SwiftUI
 @MainActor
 struct ControlsTabView: View {
     let state: VehicleState
+    /// The live session's brand — the gate authority shared with command dispatch.
+    let brand: VehicleBrand
     let remoteCommandInProgress: Bool
     var inFlightCommandID: String? = nil
     var feedback: RemoteCommandFeedback? = nil
@@ -15,11 +17,12 @@ struct ControlsTabView: View {
 
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { preferences.features.enabled }
-    private var isBrandVolvo: Bool { preferences.activeBrand == .volvo }
+    private var isBrandVolvo: Bool { brand == .volvo }
 
     private var commandGate: ControlsCommandGate {
         ControlsCommandGate(
             state: state,
+            brand: brand,
             preferences: preferences,
             remoteCommandInProgress: remoteCommandInProgress,
             inFlightCommandID: inFlightCommandID,
@@ -119,6 +122,11 @@ struct ControlsTabView: View {
                 noControlsEnabledCard
             }
         }
+        // CardEntry is Identifiable, so feature-flag flips animate insertion,
+        // removal and reorder of the stack instead of rebuilding it in place.
+        .animation(Motion.resolve(Motion.cardChange), value: visibleCards.map(\.id))
+        .animation(Motion.resolve(Motion.cardChange), value: anyCardDimmed)
+        .animation(Motion.resolve(Motion.cardChange), value: state.probedCapabilities == nil)
         .sheet(isPresented: $showScheduleEditor) {
             ScheduleEditorSheet(
                 state: state,

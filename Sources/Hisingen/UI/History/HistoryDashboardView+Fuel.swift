@@ -72,6 +72,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel("L/100km")
                     .frame(height: chartHeight * 0.8)
                     .accessibilityLabel(L10n.text("Fuel economy between fill-ups chart"))
+                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
                 }
                 if priceSeries.count >= 3 {
                     Chart(priceSeries) { entry in
@@ -85,6 +86,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(L10n.format("%@/L", preferences.currencySymbol))
                     .frame(height: chartHeight * 0.55)
                     .accessibilityLabel(L10n.text("Fuel price per litre trend chart"))
+                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
                 }
                 Text(L10n.text("Economy is measured tank-to-tank and needs an odometer reading on each fill-up."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
@@ -97,12 +99,6 @@ extension HistoryDashboardView {
         let totalSpend = fuelEntries.reduce(0) { $0 + $1.liters * $1.pricePerLiter }
         let totalLitres = fuelEntries.reduce(0) { $0 + $1.liters }
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
-        let pageSize = 8
-        let pageCount = HistoryPagination.pageCount(itemCount: fuelEntries.count, pageSize: pageSize)
-        // A delete can shrink the list under the current page without a state reset, so the
-        // displayed page is clamped rather than relying on `fuelPage` staying in range.
-        let page = HistoryPagination.clampedPage(fuelPage, pageCount: pageCount)
-        let visible = HistoryPagination.page(of: fuelEntries, index: page, pageSize: pageSize)
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: .mint)
@@ -113,25 +109,26 @@ extension HistoryDashboardView {
                         curveStat(L10n.text("Avg Price/L"), Format.currency(avgPrice, symbol: preferences.currencySymbol, decimals: 3))
                     }
                 }
-                ForEach(visible) { entry in
-                    HStack {
-                        Text(Format.dateFormatter.string(from: entry.date)).font(.system(size: 10.5)).foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(Format.fuelVolume(liters: entry.liters, unit: preferences.fuelVolumeUnit)) · \(Format.currency(entry.liters * entry.pricePerLiter, symbol: preferences.currencySymbol))")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        Button { fuelEntryPendingDeletion = entry } label: {
-                            Image(systemName: "trash").font(.system(size: 9)).foregroundStyle(.secondary)
+                PaginatedSection(items: fuelEntries, pageSize: 8) { visible, footer in
+                    ForEach(visible) { entry in
+                        HStack {
+                            Text(Format.dateFormatter.string(from: entry.date)).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Format.fuelVolume(liters: entry.liters, unit: preferences.fuelVolumeUnit)) · \(Format.currency(entry.liters * entry.pricePerLiter, symbol: preferences.currencySymbol))")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            Button { fuelEntryPendingDeletion = entry } label: {
+                                Image(systemName: "trash").font(.system(size: 9)).foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.pressable)
+                            .accessibilityLabel(L10n.text("Delete fill-up"))
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(L10n.text("Delete fill-up"))
+                        if entry.id != visible.last?.id { Divider().opacity(0.25) }
                     }
-                    if entry.id != visible.last?.id { Divider().opacity(0.25) }
+                    footer
                 }
-                if pageCount > 1 {
-                    HistoryPagerControls(page: page, pageCount: pageCount,
-                                         newerHelp: L10n.text("Show newer entries"),
-                                         olderHelp: L10n.text("Show older entries")) { fuelPage = $0 }
-                }
+                // A delete bumps the refresh token and reloads the lifetime snapshot, so
+                // this key changes when the removed row actually disappears.
+                .animation(Motion.resolve(Motion.cardChange), value: lifetimeDataKey)
             }
         })
     }

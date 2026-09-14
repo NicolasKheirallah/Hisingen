@@ -8,10 +8,10 @@ struct LocalizationTests {
     func testInterfaceLanguagesHaveValidCodes() {
         for lang in InterfaceLanguage.allCases {
             if lang == .system {
-                XCTAssertNil(lang.languageCode)
+                #expect(lang.languageCode == nil)
             } else {
-                XCTAssertNotNil(lang.languageCode)
-                XCTAssertFalse(lang.title.isEmpty)
+                #expect(lang.languageCode != nil)
+                #expect(!(lang.title.isEmpty))
             }
         }
     }
@@ -23,35 +23,32 @@ struct LocalizationTests {
 
     @Test
     func testL10nTextLookup() {
-        XCTAssertEqual(L10n.text("Dashboard", languageCode: "sv"), "Översikt")
-        XCTAssertEqual(L10n.text("Done", languageCode: "sv"), "Klar")
-        XCTAssertEqual(L10n.text("12V Battery", languageCode: "sv"), "12V-batteri")
+        #expect(L10n.text("Dashboard", languageCode: "sv") == "Översikt")
+        #expect(L10n.text("Done", languageCode: "sv") == "Klar")
+        #expect(L10n.text("12V Battery", languageCode: "sv") == "12V-batteri")
 
-        XCTAssertEqual(L10n.text("Dashboard", languageCode: "de"), "Übersicht")
-        XCTAssertEqual(L10n.text("Done", languageCode: "de"), "Fertig")
-        XCTAssertEqual(L10n.text("12V Battery", languageCode: "de"), "12V-Batterie")
+        #expect(L10n.text("Dashboard", languageCode: "de") == "Übersicht")
+        #expect(L10n.text("Done", languageCode: "de") == "Fertig")
+        #expect(L10n.text("12V Battery", languageCode: "de") == "12V-Batterie")
 
-        XCTAssertEqual(L10n.text("Dashboard", languageCode: "en"), "Dashboard")
-        XCTAssertEqual(L10n.text("Done", languageCode: "en"), "Done")
+        #expect(L10n.text("Dashboard", languageCode: "en") == "Dashboard")
+        #expect(L10n.text("Done", languageCode: "en") == "Done")
     }
 
     @Test
     func testL10nFormat() {
-        XCTAssertEqual(L10n.format("Active Vehicle: %@", languageCode: "sv", "Polestar 2"),
-                       "Aktivt fordon: Polestar 2")
-        XCTAssertEqual(L10n.text("Locked", languageCode: "sv"), "Låst")
-        XCTAssertEqual(L10n.text("Unlocked", languageCode: "sv"), "Olåst")
-        XCTAssertEqual(L10n.text("Clear", languageCode: "sv"), "Klart")
-        XCTAssertEqual(L10n.text("Rain", languageCode: "sv"), "Regn")
-        XCTAssertEqual(L10n.text("Snow", languageCode: "sv"), "Snö")
-        XCTAssertEqual(L10n.text("70% / 160,000 km (8 Years)", languageCode: "sv"),
-                       "70 % / 160 000 km (8 år)")
-        XCTAssertEqual(L10n.format("feels like %@", languageCode: "sv", "20 °C"), "känns som 20 °C")
-        XCTAssertEqual(L10n.format("%d hrs", languageCode: "sv", 5), "5 tim")
+        #expect(L10n.format("Active Vehicle: %@", languageCode: "sv", "Polestar 2") == "Aktivt fordon: Polestar 2")
+        #expect(L10n.text("Locked", languageCode: "sv") == "Låst")
+        #expect(L10n.text("Unlocked", languageCode: "sv") == "Olåst")
+        #expect(L10n.text("Clear", languageCode: "sv") == "Klart")
+        #expect(L10n.text("Rain", languageCode: "sv") == "Regn")
+        #expect(L10n.text("Snow", languageCode: "sv") == "Snö")
+        #expect(L10n.text("70% / 160,000 km (8 Years)", languageCode: "sv") == "70 % / 160 000 km (8 år)")
+        #expect(L10n.format("feels like %@", languageCode: "sv", "20 °C") == "känns som 20 °C")
+        #expect(L10n.format("%d hrs", languageCode: "sv", 5) == "5 tim")
 
-        XCTAssertEqual(L10n.format("Active Vehicle: %@", languageCode: "en", "Polestar 2"),
-                       "Active Vehicle: Polestar 2")
-        XCTAssertEqual(L10n.text("Locked", languageCode: "en"), "Locked")
-        XCTAssertEqual(L10n.text("Unlocked", languageCode: "en"), "Unlocked")
+        #expect(L10n.format("Active Vehicle: %@", languageCode: "en", "Polestar 2") == "Active Vehicle: Polestar 2")
+        #expect(L10n.text("Locked", languageCode: "en") == "Locked")
+        #expect(L10n.text("Unlocked", languageCode: "en") == "Unlocked")
     }
 }

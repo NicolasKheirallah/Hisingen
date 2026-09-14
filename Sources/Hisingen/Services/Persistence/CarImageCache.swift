@@ -12,7 +12,18 @@ final class CarImageCache: @unchecked Sendable {
     private let cacheDirectory: URL
     private let lock = NSLock()
     private let logger = AppLog.logger("image-cache")
+    // Raw source bytes are capped so a long session switching vehicles/angles cannot pin
+    // hundreds of MB (each entry is up to the 5 MB download cap); entries evict
+    // least-recently-used past the budget, mirroring VehicleArtworkStore's bounded tier.
+    private static let memoryCacheByteBudget = 32 * 1024 * 1024
     private var memoryCache: [String: Data] = [:]
+    private var memoryCacheRecency: [String] = []
+    private var memoryCacheBytes = 0
+
+    /// Sentinel SQLite angle for the bare primary image (no `_angle` suffix). Angle 0 is a
+    /// real `CarRenderAngle.sideProfile` row; aliasing it made SQLite fallback reads return
+    /// the wrong-angle render as the side profile. -1 is already the interior sentinel.
+    private static let primaryImageSQLiteAngle = -2
 
     init() {
         let paths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
@@ -66,20 +77,20 @@ final class CarImageCache: @unchecked Sendable {
     private func read(key: String) -> Data? {
         lock.lock()
         defer { lock.unlock() }
-        if let mem = memoryCache[key] {
+        if let mem = cachedBytes(forKey: key) {
             return mem
         }
 
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
         if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
-            memoryCache[key] = data
+            store(data, forKey: key)
             return data
         }
 
         // Try SQLite database storage
         if let parts = parseKey(key) {
             if let dbImage = VehicleDatabase.shared.loadVehicleImage(for: parts.vin, angle: parts.angle) {
-                memoryCache[key] = dbImage.data
+                store(dbImage.data, forKey: key)
                 return dbImage.data
             }
         }
@@ -91,8 +102,8 @@ final class CarImageCache: @unchecked Sendable {
         guard !data.isEmpty else { return }
 
         lock.lock()
-        defer { lock.unlock() }
-        memoryCache[key] = data
+        store(data, forKey: key)
+        lock.unlock()
 
         if let parts = parseKey(key) {
             VehicleDatabase.shared.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
@@ -103,6 +114,53 @@ final class CarImageCache: @unchecked Sendable {
             try data.write(to: fileURL, options: .atomic)
         } catch {
             logger.error("Could not write cached vehicle image: \(error, privacy: .public)")
+        }
+    }
+
+    /// Drops the in-memory bytes for one VIN (primary, all angles, interior); a nil VIN
+    /// clears the whole tier. Called from the sign-out/clear path so a signed-out vehicle's
+    /// renders stop pinning memory; the disk and SQLite tiers remain as the durable cache.
+    func dropMemoryCache(for vin: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let cleanVIN = vin?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+              !cleanVIN.isEmpty else {
+            memoryCache.removeAll()
+            memoryCacheRecency.removeAll()
+            memoryCacheBytes = 0
+            return
+        }
+        let stale = memoryCache.keys.filter { $0 == cleanVIN || $0.hasPrefix("\(cleanVIN)_") }
+        guard !stale.isEmpty else { return }
+        for key in stale {
+            memoryCacheBytes -= memoryCache[key]?.count ?? 0
+            memoryCache.removeValue(forKey: key)
+        }
+        memoryCacheRecency.removeAll { stale.contains($0) }
+    }
+
+    // Callers hold `lock`.
+    private func cachedBytes(forKey key: String) -> Data? {
+        guard let data = memoryCache[key] else { return nil }
+        memoryCacheRecency.removeAll { $0 == key }
+        memoryCacheRecency.append(key)
+        return data
+    }
+
+    // Callers hold `lock`. Evicts least-recently-used entries until the byte budget holds.
+    private func store(_ data: Data, forKey key: String) {
+        if let existing = memoryCache[key] {
+            memoryCacheBytes -= existing.count
+            memoryCacheRecency.removeAll { $0 == key }
+        }
+        memoryCache[key] = data
+        memoryCacheBytes += data.count
+        memoryCacheRecency.append(key)
+        while memoryCacheBytes > Self.memoryCacheByteBudget, let oldest = memoryCacheRecency.first {
+            memoryCacheRecency.removeFirst()
+            if let evicted = memoryCache.removeValue(forKey: oldest) {
+                memoryCacheBytes -= evicted.count
+            }
         }
     }
 
@@ -118,7 +176,7 @@ final class CarImageCache: @unchecked Sendable {
             }
             return (vin, 0)
         } else {
-            return (key, 0)
+            return (key, Self.primaryImageSQLiteAngle)
         }
     }
 

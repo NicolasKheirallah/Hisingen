@@ -30,7 +30,7 @@
   // Volvo redirects the browser here after sign-in with the OAuth
   // authorization code/state (or an error) in the query string. This page
   // exists only because Volvo's Developer Portal requires an http(s)
-  // redirect URI — no localhost, no custom URL schemes — while the actual
+  // redirect URI (no localhost, no custom URL schemes) while the actual
   // OAuth callback destination is Hisingen's own registered URL scheme.
   // This page's only job is to hand the query string straight through.
   var target = "hisingen://oauth/volvo/callback" + window.location.search;

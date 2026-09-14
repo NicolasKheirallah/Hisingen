@@ -15,13 +15,13 @@ struct VolvoKeychainIsolationTests {
         try store.saveSessionToken("polestar-refresh-token-value")
         try store.saveVolvoSessionToken("volvo-refresh-token-value")
 
-        try XCTAssertEqual(store.readSessionToken(), "polestar-refresh-token-value")
-        try XCTAssertEqual(store.readVolvoSessionToken(), "volvo-refresh-token-value")
+        try #expect(store.readSessionToken() == "polestar-refresh-token-value")
+        try #expect(store.readVolvoSessionToken() == "volvo-refresh-token-value")
 
         try store.deleteSessionToken()
 
-        try XCTAssertNil(store.readSessionToken())
-        try XCTAssertEqual(store.readVolvoSessionToken(), "volvo-refresh-token-value")
+        try #expect(store.readSessionToken() == nil)
+        try #expect(store.readVolvoSessionToken() == "volvo-refresh-token-value")
     }
 
     @Test
@@ -34,12 +34,12 @@ struct VolvoKeychainIsolationTests {
         try store.saveVolvoClientSecret("secret-value")
         try store.saveVolvoApiKey("api-key-value")
 
-        try XCTAssertEqual(store.readVolvoClientSecret(), "secret-value")
-        try XCTAssertEqual(store.readVolvoApiKey(), "api-key-value")
+        try #expect(store.readVolvoClientSecret() == "secret-value")
+        try #expect(store.readVolvoApiKey() == "api-key-value")
 
         try store.deleteVolvoClientSecret()
-        try XCTAssertNil(store.readVolvoClientSecret())
-        try XCTAssertEqual(store.readVolvoApiKey(), "api-key-value")
+        try #expect(store.readVolvoClientSecret() == nil)
+        try #expect(store.readVolvoApiKey() == "api-key-value")
     }
 }
 

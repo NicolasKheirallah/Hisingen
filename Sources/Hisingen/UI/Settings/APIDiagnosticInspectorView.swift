@@ -72,6 +72,7 @@ struct APIDiagnosticInspectorView: View {
     /// Keyed on the entry's own timestamp, not its position: `filtered` is rebuilt every
     /// second by `refreshLoop()`, so an index would re-point at a different request.
     @State private var expandedRows = Set<Date>()
+    @State private var showClearConfirmation = false
 
     init(store: APIDiagnosticLogStore = .shared) {
         self.store = store
@@ -115,10 +116,7 @@ struct APIDiagnosticInspectorView: View {
                 TextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
                     .textFieldStyle(.roundedBorder)
                 Button(role: .destructive) {
-                    Task {
-                        await store.clear()
-                        entries = []
-                    }
+                    showClearConfirmation = true
                 } label: {
                     Label(L10n.text("Clear"), systemImage: "trash")
                 }
@@ -131,13 +129,18 @@ struct APIDiagnosticInspectorView: View {
                     systemImage: "network.slash"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
             } else {
                 List(filtered, id: \.timestamp) { entry in
                     DisclosureGroup(isExpanded: Binding(
                         get: { expandedRows.contains(entry.timestamp) },
                         set: { expanded in
-                            if expanded { expandedRows.insert(entry.timestamp) }
-                            else { expandedRows.remove(entry.timestamp) }
+                            // Expansion animates the revealed detail block; the row
+                            // chevron follows without extra work.
+                            withAnimation(Motion.resolve(Motion.layout)) {
+                                if expanded { expandedRows.insert(entry.timestamp) }
+                                else { expandedRows.remove(entry.timestamp) }
+                            }
                         }
                     )) {
                         VStack(alignment: .leading, spacing: 6) {
@@ -186,10 +189,32 @@ struct APIDiagnosticInspectorView: View {
                     }
                 }
                 .listStyle(.inset)
+                .transition(.opacity)
             }
         }
         .padding(14)
         .frame(minWidth: 760, minHeight: 520)
+        // refreshLoop() rewrites `entries` every second from outside any transaction;
+        // keying on the count is what animates per-second row inserts and the
+        // list↔empty-state swap.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: entries.count)
+        .confirmationDialog(
+            L10n.text("Clear the redacted API request log?"),
+            isPresented: $showClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("Clear Log"), role: .destructive) {
+                Task {
+                    await store.clear()
+                    withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                        entries = []
+                    }
+                }
+            }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.text("All retained request entries will be discarded. New requests are recorded again as they happen."))
+        }
         .task { await refreshLoop() }
     }
 

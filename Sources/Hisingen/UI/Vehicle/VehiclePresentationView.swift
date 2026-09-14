@@ -252,9 +252,9 @@ extension VehicleEntranceMotion {
         KeyframeTrack(\VehicleEntranceFrame.opacity) {
             for value in steps { LinearKeyframe(value.opacity, duration: step) }
         }
-        KeyframeTrack(\VehicleEntranceFrame.travelled) {
-            for value in steps { LinearKeyframe(value.travelled, duration: step) }
-        }
+        // No travelled track: nothing reads VehicleEntranceFrame.travelled until a wheel
+        // layer exists, so animating it every entrance is pure overhead (UISHELL-08).
+        // The field and VehicleRollCurve.wheelRotation stay as the documented reservation.
     }
 }
 

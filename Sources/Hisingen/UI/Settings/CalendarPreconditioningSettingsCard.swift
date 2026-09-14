@@ -11,6 +11,7 @@ struct CalendarPreconditioningSettingsCard: View {
     @State private var permissionDenied = false
     @State private var requestingAccess = false
     @State private var nextPreview: String?
+    @State private var previewTask: Task<Void, Never>?
 
     private var preferences: PreferencesStore { binder.preferences }
 
@@ -35,7 +36,10 @@ struct CalendarPreconditioningSettingsCard: View {
                     CardHeader(symbol: "calendar.badge.clock",
                                title: L10n.text("Calendar Preconditioning"), color: .purple)
                     Spacer()
-                    if requestingAccess { ProgressView().controlSize(.small) }
+                    if requestingAccess {
+                        ProgressView().controlSize(.small)
+                            .transition(.opacity)
+                    }
                     Toggle("", isOn: enabledBinding)
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                         .accessibilityLabel(L10n.text("Calendar preconditioning"))
@@ -55,56 +59,67 @@ struct CalendarPreconditioningSettingsCard: View {
                     Label(L10n.text("Calendar access is denied. Allow Hisingen in System Settings → Privacy & Security → Calendars."),
                           systemImage: "lock.trianglebadge.exclamationmark")
                         .font(.system(size: 9.5)).foregroundStyle(.orange)
+                        .transition(.opacity)
                 }
 
                 if CalendarPreconditioningController.hasCalendarAccess {
-                    HStack {
-                        Text(L10n.text("Lead time")).font(.system(size: 10, weight: .medium))
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { preferences.calendarPreconditioningLeadTimeMinutes },
-                            set: { value in
-                                preferences.calendarPreconditioningLeadTimeMinutes = value
-                                binder.notify(.automation); binder.bump()
-                                refreshPreview()
-                            }
-                        )) {
-                            ForEach([5, 10, 15, 20, 30, 45, 60], id: \.self) { value in
-                                Text(L10n.format("%d minutes", value)).tag(value)
-                            }
-                        }
-                        .labelsHidden().controlSize(.small).frame(width: 120)
-                    }
-
-                    if preferences.calendarPreconditioningEnabled, let nextPreview {
-                        Label(nextPreview, systemImage: "clock.arrow.circlepath")
-                            .font(.system(size: 9)).foregroundStyle(HisingenTheme.accent)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Divider().opacity(0.35)
-                    Text(L10n.text("Selected calendars"))
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                    if calendars.isEmpty {
-                        Text(L10n.text("No event calendars are available."))
-                            .font(.system(size: 9.5)).foregroundStyle(.tertiary)
-                    } else {
-                        ForEach(calendars, id: \.calendarIdentifier) { calendar in
-                            Toggle(isOn: calendarBinding(calendar.calendarIdentifier)) {
-                                HStack(spacing: 7) {
-                                    Circle().fill(Color(nsColor: calendar.color))
-                                        .frame(width: 8, height: 8)
-                                    Text(calendar.title).font(.system(size: 10))
-                                    Spacer()
-                                    Text(calendar.source.title)
-                                        .font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                    Group {
+                        HStack {
+                            Text(L10n.text("Lead time")).font(.system(size: 10, weight: .medium))
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { preferences.calendarPreconditioningLeadTimeMinutes },
+                                set: { value in
+                                    preferences.calendarPreconditioningLeadTimeMinutes = value
+                                    binder.notify(.automation); binder.bump()
+                                    refreshPreview()
+                                }
+                            )) {
+                                ForEach([5, 10, 15, 20, 30, 45, 60], id: \.self) { value in
+                                    Text(L10n.format("%d minutes", value)).tag(value)
                                 }
                             }
-                            .toggleStyle(.checkbox)
+                            .labelsHidden().controlSize(.small).frame(width: 120)
+                        }
+
+                        if preferences.calendarPreconditioningEnabled, let nextPreview {
+                            Label(nextPreview, systemImage: "clock.arrow.circlepath")
+                                .font(.system(size: 9)).foregroundStyle(HisingenTheme.accent)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .transition(.opacity)
+                        }
+
+                        Divider().opacity(0.35)
+                        Text(L10n.text("Selected calendars"))
+                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                        if calendars.isEmpty {
+                            Text(L10n.text("No event calendars are available."))
+                                .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                        } else {
+                            ForEach(calendars, id: \.calendarIdentifier) { calendar in
+                                Toggle(isOn: calendarBinding(calendar.calendarIdentifier)) {
+                                    HStack(spacing: 7) {
+                                        Circle().fill(Color(nsColor: calendar.color))
+                                            .frame(width: 8, height: 8)
+                                        Text(calendar.title).font(.system(size: 10))
+                                        Spacer()
+                                        Text(calendar.source.title)
+                                            .font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .toggleStyle(.checkbox)
+                            }
                         }
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
+            // State writers here run from Task continuations and EventKit callbacks
+            // outside any transaction; these bindings power their reveals.
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: requestingAccess)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: permissionDenied)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: nextPreview)
+            .animation(Motion.resolve(Motion.cardChange), value: preferences.calendarPreconditioningEnabled)
         }
         .task { loadCalendars(); refreshPreview() }
     }
@@ -129,20 +144,27 @@ struct CalendarPreconditioningSettingsCard: View {
         let granted: Bool
         do { granted = try await eventStore.requestFullAccessToEvents() }
         catch { granted = false }
-        permissionDenied = !granted
+        withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+            permissionDenied = !granted
+        }
         guard granted else {
             preferences.calendarPreconditioningEnabled = false
             binder.bump()
             return
         }
-        calendars = eventStore.calendars(for: .event).sorted { $0.title < $1.title }
-        if preferences.calendarPreconditioningCalendarIDs.isEmpty,
-           let defaultCalendar = eventStore.defaultCalendarForNewEvents {
-            preferences.calendarPreconditioningCalendarIDs = [defaultCalendar.calendarIdentifier]
+        // The section's insert is driven by bump(); keeping it in the transaction
+        // (notify stays out — the app-level refresh must not inherit this motion)
+        // is what makes the calendar UI ease in after the grant.
+        withAnimation(Motion.resolve(Motion.cardChange)) {
+            calendars = eventStore.calendars(for: .event).sorted { $0.title < $1.title }
+            if preferences.calendarPreconditioningCalendarIDs.isEmpty,
+               let defaultCalendar = eventStore.defaultCalendarForNewEvents {
+                preferences.calendarPreconditioningCalendarIDs = [defaultCalendar.calendarIdentifier]
+            }
+            preferences.calendarPreconditioningEnabled = true
+            binder.bump()
         }
-        preferences.calendarPreconditioningEnabled = true
         binder.notify(.automation)
-        binder.bump()
         refreshPreview()
     }
 
@@ -152,15 +174,53 @@ struct CalendarPreconditioningSettingsCard: View {
         calendars = eventStore.calendars(for: .event).sorted { $0.title < $1.title }
     }
 
+    /// The blocking EventKit fetch must not run on the main thread. `nextTrigger` cannot
+    /// simply be detached (the controller is MainActor-isolated, so the call would hop
+    /// straight back to main), so the Sendable inputs are snapshotted here and the fetch is
+    /// mirrored off-main. EKEventStore is documented thread-safe for reads, hence the
+    /// `nonisolated(unsafe)` hand-off. Cancelling the previous task debounces the
+    /// per-toggle refreshes.
     private func refreshPreview() {
-        guard preferences.calendarPreconditioningEnabled,
-              let next = CalendarPreconditioningController.nextTrigger(
-                eventStore: eventStore, preferences: preferences) else {
+        previewTask?.cancel()
+        guard preferences.calendarPreconditioningEnabled else {
             nextPreview = nil
             return
         }
-        let eventTime = next.eventStart.formatted(date: .omitted, time: .shortened)
-        let climateTime = next.fireAt.formatted(date: .omitted, time: .shortened)
-        nextPreview = L10n.format("Next: %@ at %@ — climate starts %@", next.title, eventTime, climateTime)
+        let hasAccess = CalendarPreconditioningController.hasCalendarAccess
+        let calendarIDs = preferences.calendarPreconditioningCalendarIDs
+        let lead = TimeInterval(preferences.calendarPreconditioningLeadTimeMinutes * 60)
+        let fired = Set(preferences.calendarPreconditioningFiredOccurrences.keys)
+        let fallbackTitle = L10n.text("Calendar event")
+        nonisolated(unsafe) let store = eventStore
+        previewTask = Task {
+            let next = await Task.detached(priority: .userInitiated) { () -> (String, Date, Date)? in
+                guard hasAccess, !calendarIDs.isEmpty else { return nil }
+                let now = Date()
+                let calendars = store.calendars(for: .event).filter {
+                    calendarIDs.contains($0.calendarIdentifier)
+                }
+                guard !calendars.isEmpty else { return nil }
+                // Matches CalendarPreconditioningController's private 72 h lookahead window.
+                let lookahead = TimeInterval(3 * 24 * 3_600)
+                let predicate = store.predicateForEvents(
+                    withStart: now, end: now.addingTimeInterval(lookahead), calendars: calendars)
+                return store.events(matching: predicate)
+                    .filter { !$0.isAllDay && $0.startDate > now }
+                    .compactMap { event -> (String, Date, Date)? in
+                        let key = "\(event.calendarItemIdentifier)|\(Int(event.startDate.timeIntervalSince1970))"
+                        guard !fired.contains(key) else { return nil }
+                        let fireAt = max(event.startDate.addingTimeInterval(-lead), now)
+                        return (event.title ?? fallbackTitle, event.startDate, fireAt)
+                    }
+                    .min { $0.1 < $1.1 }
+            }.value
+            guard !Task.isCancelled else { return }
+            nextPreview = next.map { title, eventStart, fireAt in
+                L10n.format("Next: %@ at %@ — climate starts %@",
+                            title,
+                            eventStart.formatted(date: .omitted, time: .shortened),
+                            fireAt.formatted(date: .omitted, time: .shortened))
+            }
+        }
     }
 }

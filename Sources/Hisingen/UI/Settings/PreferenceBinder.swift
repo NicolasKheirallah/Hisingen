@@ -19,6 +19,9 @@ enum SettingsChange {
     case switchToBrand(VehicleBrand)
     case selectVehicle(String)
     case closeSettings
+    /// Builds the redacted diagnostic report and offers a save panel — reachable directly
+    /// from sign-in failure surfaces so a broken login can be attached to a bug report.
+    case exportDiagnosticLogs
 }
 
 /// Shared plumbing so a card extracted into its own `View` keeps the `binder(\.key, .change)`

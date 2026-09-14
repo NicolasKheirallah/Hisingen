@@ -43,7 +43,13 @@ struct FlexibleInt: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(Int.self) { self.value = value; return }
-        if let value = try? container.decode(Double.self) { self.value = Int(value); return }
+        // Double-to-Int conversion traps outside Int's representable range (or on NaN/inf);
+        // an out-of-range number falls through to the string branch and throws instead.
+        if let value = try? container.decode(Double.self), value.isFinite,
+           let converted = Int(exactly: value.rounded(.towardZero)) {
+            self.value = converted
+            return
+        }
         if let value = try? container.decode(String.self), let parsed = Int(value) {
             self.value = parsed
             return

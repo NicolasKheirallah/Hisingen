@@ -4,7 +4,7 @@ Seven GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
 `security.yml`, `dependency-review.yml`, `pages.yml`, `live-integration.yml`,
 `tag-release.yml`, and `release.yml`. All actions used
 across them are pinned to commit SHAs with a version comment (e.g.
-`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`) —
+`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`);
 preserve that pinning style when bumping any of them. This document covers
 `ci.yml` and `security.yml`; see [releases.md](./releases.md) for
 `release.yml` and `live-integration.yml`.
@@ -41,8 +41,8 @@ flowchart LR
 ### Job `lint-workflows-and-scripts` (ubuntu-latest, ~2 min)
 
 Validates the automation itself before spending macOS runner time: `actionlint`
-(installed via `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`
-— the Go module proxy checksum-verifies this against sum.golang.org, so it
+(installed via `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`;
+the Go module proxy checksum-verifies this against sum.golang.org, so it
 doesn't need its own pinned third-party Action) against every workflow file,
 and `shellcheck` against `Scripts/*.sh`.
 
@@ -50,8 +50,8 @@ and `shellcheck` against `Scripts/*.sh`.
 
 Runs `Scripts/check-localization.py` against every `*.lproj/Localizable.strings`
 file. **Fails on duplicate keys** within a single locale file (whichever line
-wins is unspecified — a real bug). **Reports, but does not fail on**,
-translation coverage relative to the base `en` locale — `L10n.swift` falls
+wins is unspecified, which is a real bug). **Reports, but does not fail on**,
+translation coverage relative to the base `en` locale; `L10n.swift` falls
 back to English for any key missing from the active locale, so an
 incomplete/stub locale is expected, not a defect.
 
@@ -59,10 +59,10 @@ incomplete/stub locale is expected, not a defect.
 
 `TERMS.md`, and everything under `docs/`. Fails on a relative Markdown link
 that doesn't resolve to a real file, or an unterminated code fence
-(``` ``` ```) — the two cheapest, highest-signal documentation defects to
+(``` ``` ```): the two cheapest, highest-signal documentation defects to
 catch automatically. Does not check external `http(s)` links (no network
 access in this job) or Mermaid diagram *syntax* (only that fences are
-balanced) — Mermaid syntax errors are still visible whenever the page
+balanced); Mermaid syntax errors are still visible whenever the page
 actually renders on GitHub.
 
 ### Job `build-and-test` (matrix: `macos-15`, `fail-fast: false`, 25-minute timeout)
@@ -79,27 +79,27 @@ builds and verifies an ad-hoc DMG and uploads it as a validation artifact.
 
 `--skip Live` is defense-in-depth, not the only safeguard: the live
 integration suites already gate themselves on credential env vars via Swift
-Testing's `.disabled(if:)` trait, and CI never sets those secrets — but one
+Testing's `.disabled(if:)` trait, and CI never sets those secrets; but one
 of those suites (`LivePolestarRemoteCommandIntegrationTests`) dispatches a
 real `startClimate` command, so a second, independent guard (skip anything
 named `Live` outright) means that stays true even if those credentials were
 ever accidentally added as repository-level rather than
 environment-scoped secrets.
 
-**No Swift linting step exists** — no SwiftLint/SwiftFormat configuration
+**No Swift linting step exists**: no SwiftLint/SwiftFormat configuration
 anywhere in the repo (workflow/shell-script linting now does exist, via
 `lint-workflows-and-scripts` above). The Swift 6 language mode and complete
 concurrency checking (declared in `Package.swift`) are the closest thing to
 automated Swift style/correctness enforcement beyond the test suite itself.
 
-**No production signing/notarization** — CI uses ad-hoc signing (`IDENTITY=-`).
+**No production signing/notarization**: CI uses ad-hoc signing (`IDENTITY=-`).
 
 **Artifacts:** the `macos-15` leg uploads `Hisingen.dmg` and its SHA-256 file.
 
 **Fails on:** a bad toolchain (`make doctor`), a build or test failure, an
 actionlint/shellcheck finding, a duplicate localization key, a broken docs
 link/unterminated fence, or any bundle-validation assertion failing
-(including the `LSUIElement` check — a regression there would silently turn
+(including the `LSUIElement` check; a regression there would silently turn
 Hisingen into a Dock-visible app, which this check exists specifically to
 catch).
 
@@ -137,7 +137,7 @@ workflows are part of that graph; Hisingen has zero external SwiftPM
 dependencies today). Fails on `high`/`critical` severity findings only.
 
 Neither security workflow is currently wired into required branch checks
-(see the branch protection recommendation in [releases.md](./releases.md)) —
+(see the branch protection recommendation in [releases.md](./releases.md));
 treat them as advisory signal to triage unless you decide otherwise.
 
 The repository currently allows all GitHub Actions and does not enforce SHA
@@ -162,7 +162,7 @@ checkout credentials are not persisted.
 
 ## Running ci.yml locally
 
-`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac — the ubuntu lint job (`actionlint` + `shellcheck` + the localization and docs-link checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths — CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
+`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac: the ubuntu lint job (`actionlint` + `shellcheck` + the localization and docs-link checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths; CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
 
 ## Troubleshooting
 
@@ -172,5 +172,5 @@ checkout credentials are not persisted.
   exact file/line; most failures are invalid `${{ }}` expressions or
   step-output typos.
 - **CodeQL fails to build**: check the "Build (same command as CI)" step
-  logs first — if `swift build` fails there, it's a real build break, not a
+  logs first; if `swift build` fails there, it's a real build break, not a
   CodeQL-specific issue.

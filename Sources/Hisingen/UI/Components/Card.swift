@@ -90,7 +90,7 @@ struct CardHeader: View {
                 .scaleEffect(isPulsing && pulse ? 1.06 : 1.0)
                 .shadow(color: isPulsing && pulse ? color.opacity(0.45) : .clear, radius: 3)
                 .animation(
-                    isPulsing && !reduceMotion ? Motion.breath : .default,
+                    Motion.resolve(isPulsing ? Motion.breath : nil),
                     value: pulse
                 )
                 .onAppear {

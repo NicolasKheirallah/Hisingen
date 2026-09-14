@@ -12,20 +12,22 @@ enum NotificationPermission: Sendable {
 /// The production conformant is the shared center; tests inject an in-memory fake.
 @MainActor
 protocol NotificationDispatching: AnyObject {
-    func add(_ request: UNNotificationRequest)
+    /// Throws on delivery rejection (permission revoked mid-session, oversized payload,
+    /// system limits) so callers can log rather than silently drop an alert.
+    func add(_ request: UNNotificationRequest) async throws
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
     func removeAllDeliveredNotifications()
     func removeAllPendingNotificationRequests()
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>)
 }
 
-/// Wraps the shared center. Deliberately synchronous from the caller's perspective:
-/// `UNUserNotificationCenter.add(_:)`'s completion variant is deprecated, so the add
-/// hop wraps the async API in a task.
+/// Wraps the shared center. Posting goes through the async `add(_:)` API; the completion-
+/// handler variant it replaces is deprecated on this deployment target (macOS 15) and, when
+/// passed a nil handler, swallowed every rejection.
 @MainActor
 final class SystemNotificationDispatcher: NotificationDispatching {
-    func add(_ request: UNNotificationRequest) {
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    func add(_ request: UNNotificationRequest) async throws {
+        try await UNUserNotificationCenter.current().add(request)
     }
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
@@ -46,6 +48,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Instance wired to live telemetry, for settings surfaces (test notification).
     private(set) static var shared: Notifier?
 
+    private let logger = AppLog.logger("notifier")
     private let available: Bool
     private let detector = ChargingTransitionDetector()
     private let stateStore: VehicleStateStore
@@ -118,6 +121,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.sustainedConditionStartedAt = starts.mapValues(Date.init(timeIntervalSince1970:))
         self.sustainedNotificationsDelivered = Set(defaults.stringArray(forKey: "notifier_sustained_delivered_v1") ?? [])
         self.serviceDueByVIN = (defaults.dictionary(forKey: "notifier_service_due_v1") as? [String: Bool]) ?? [:]
+        // One-time cleanup: builds before the bounded latch below leaked one persistent
+        // "anomaly_<session id>" defaults key per charging session, forever.
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("anomaly_") {
+            defaults.removeObject(forKey: key)
+        }
         super.init()
         guard available else { return }
         if configuresSystemIntegration {
@@ -770,14 +778,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
               last.locationName?.isEmpty == false,
               let ended = last.endedAt,
               Date().timeIntervalSince(ended) < 600 else { return }
-        let key = "anomaly_\(last.id)"
-        guard !defaults.bool(forKey: key) else { return }
+        // One bounded key instead of one permanent key per session: the check only ever
+        // considers the newest session, so "last considered id" keeps it one-shot per
+        // session without accumulating a defaults key per charge.
+        let lastCheckedKey = "notifier_anomaly_last_checked_session_v1"
+        guard defaults.string(forKey: lastCheckedKey) != last.id else { return }
+        defaults.set(last.id, forKey: lastCheckedKey)
         let priors = ledger.priorSessionPeaks(
             vin: state.identity.vin, locationName: last.locationName ?? "",
             excludingSessionID: last.id)
         guard HistoryInsights.sessionPeakAnomaly(currentPeakKw: last.peakPowerKw,
                                                  priorPeaksKwAtSameLocation: priors) else { return }
-        defaults.set(true, forKey: key)
         notifyChargingAnomaly(locationName: last.locationName ?? "", vin: state.identity.vin)
     }
 
@@ -829,9 +840,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         } else {
             trigger = nil
         }
-        dispatcher().add(
-            UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-        )
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        // The add hop is async in the system API; failures are logged rather than dropped
+        // silently — notification delivery is the primary anomaly channel.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await self.dispatcher().add(request) }
+            catch {
+                self.logger.error("Notification \(identifier, privacy: .public) rejected: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     nonisolated func userNotificationCenter(

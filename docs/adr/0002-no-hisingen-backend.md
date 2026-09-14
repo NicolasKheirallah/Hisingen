@@ -18,7 +18,7 @@ to the vendor's own servers.
 
 ## Alternatives considered
 
-- **Hisingen-operated backend/proxy** — would let the client stay simpler and
+- **Hisingen-operated backend/proxy**: would let the client stay simpler and
   allow server-side caching, but makes Hisingen a new custodian of vehicle
   credentials and tokens for every user, creates an ongoing hosting cost and
   availability dependency, and turns a single-developer open-source project
@@ -29,9 +29,9 @@ to the vendor's own servers.
 
 No server-side attack surface, no hosting cost, and no outage dependency for
 Hisingen as a project. Credentials and vehicle data are exposed only to the
-vendor whose account they belong to and to the user's own machine — see
+vendor whose account they belong to and to the user's own machine; see
 [security/threat-model.md](../security/threat-model.md). The tradeoff: any
 change to a vendor's undocumented auth flow or API shape (Polestar in
-particular — see [api/polestar.md](../api/polestar.md)) requires an app
+particular; see [api/polestar.md](../api/polestar.md)) requires an app
 update rather than a server-side fix, and there is no server-side
 cross-device sync or aggregation.

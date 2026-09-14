@@ -379,9 +379,15 @@ final class VehicleDatabase: @unchecked Sendable {
     /// in-place `UPDATE`s. A migration must never `DROP` or recreate a table that can hold
     /// user history — `VehicleDatabaseMigrationTests` guards that rows survive an upgrade.
     private func runMigrations(from currentVersion: Int) {
+        // Local version cursor: a block only advances it after its statements succeeded, and
+        // each block only runs when the previous one completed, so a failed migration can
+        // never be skipped by a later block bumping `user_version` past it — it retries on
+        // the next launch instead.
+        var version = currentVersion
+
         // v1: quarantine legacy battery-health rows + add the disambiguation columns the
         // baseline now creates for new installs. Idempotent per table.
-        if currentVersion < 1 {
+        if version < 1 {
             if !columnExists(table: "battery_health_history", column: "measurement_source") {
                 try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
             }
@@ -400,17 +406,22 @@ final class VehicleDatabase: @unchecked Sendable {
                 // stops at the first error) never lets `user_version` advance past the
                 // quarantine. Previously the bump ran unconditionally and a transient failure
                 // skipped the quarantine forever. Mirrors the v2 block below.
-                try? db.execute(sql: """
-                    UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';
-                    PRAGMA user_version = 1;
-                    """)
+                do {
+                    try db.execute(sql: """
+                        UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';
+                        PRAGMA user_version = 1;
+                        """)
+                    version = 1
+                } catch {
+                    logger.error("Battery-health quarantine migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
             } else {
                 logger.error("Battery-health schema migration remains incomplete; it will retry next launch")
             }
         }
 
         // v2: explicit charging-session lifecycle and versioned summary provenance.
-        if currentVersion < 2 {
+        if version == 1 {
             let additions: [(String, String)] = [
                 ("lifecycle_state", "TEXT NOT NULL DEFAULT 'active'"),
                 ("completion_reason", "TEXT"),
@@ -434,23 +445,28 @@ final class VehicleDatabase: @unchecked Sendable {
                 try? db.execute(sql: "ALTER TABLE charging_sessions ADD COLUMN \(column) \(declaration);")
             }
             if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0.0) }) {
-                try? db.execute(sql: """
-                    UPDATE charging_sessions SET
-                        lifecycle_state = CASE WHEN ended_at IS NULL THEN 'active' ELSE 'completed' END,
-                        completion_reason = CASE WHEN ended_at IS NULL THEN NULL ELSE 'legacy' END,
-                        energy_source = 'legacy_estimate', confidence = 'low', summary_version = 1,
-                        last_observed_at = COALESCE(ended_at, started_at);
-                    CREATE INDEX IF NOT EXISTS idx_charging_sessions_active
-                        ON charging_sessions(vin, lifecycle_state, ended_at);
-                    PRAGMA user_version = 2;
-                    """)
+                do {
+                    try db.execute(sql: """
+                        UPDATE charging_sessions SET
+                            lifecycle_state = CASE WHEN ended_at IS NULL THEN 'active' ELSE 'completed' END,
+                            completion_reason = CASE WHEN ended_at IS NULL THEN NULL ELSE 'legacy' END,
+                            energy_source = 'legacy_estimate', confidence = 'low', summary_version = 1,
+                            last_observed_at = COALESCE(ended_at, started_at);
+                        CREATE INDEX IF NOT EXISTS idx_charging_sessions_active
+                            ON charging_sessions(vin, lifecycle_state, ended_at);
+                        PRAGMA user_version = 2;
+                        """)
+                    version = 2
+                } catch {
+                    logger.error("Charging-session data migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
             } else {
                 logger.error("Charging-session schema migration remains incomplete; it will retry next launch")
             }
         }
 
         // v3: durable business/private classification for locally-derived trips.
-        if currentVersion < 3 {
+        if version == 2 {
             do {
                 try db.execute(sql: """
                     CREATE TABLE IF NOT EXISTS trip_tags (
@@ -464,11 +480,12 @@ final class VehicleDatabase: @unchecked Sendable {
                         ON trip_tags(vin, updated_at DESC);
                     PRAGMA user_version = 3;
                     """)
+                version = 3
             } catch {
                 logger.error("Trip-classification schema migration remains incomplete: \(error, privacy: .public)")
             }
         }
-        if schemaVersion() == 3 {
+        if version == 3 {
             do {
                 try db.withTransaction {
                     try db.execute(sql: """
@@ -481,18 +498,21 @@ final class VehicleDatabase: @unchecked Sendable {
                         PRAGMA user_version = 4;
                         """)
                 }
+                version = 4
             } catch {
                 logger.error("Vehicle activity migration remains incomplete: \(error, privacy: .public)")
             }
         }
 
         // v5: market-price charging cost per session, backfilled from recorded samples.
-        if currentVersion < 5 {
+        if version == 4 {
             do {
-                try db.execute(sql: """
-                    ALTER TABLE charging_sessions ADD COLUMN spot_estimated_cost REAL;
-                    PRAGMA user_version = 5;
-                    """)
+                // A previous launch may have applied the ALTER but failed before the version
+                // bump; guard the ALTER so the retry completes instead of erroring forever.
+                if !columnExists(table: "charging_sessions", column: "spot_estimated_cost") {
+                    try db.execute(sql: "ALTER TABLE charging_sessions ADD COLUMN spot_estimated_cost REAL;")
+                }
+                try db.execute(sql: "PRAGMA user_version = 5;")
             } catch {
                 logger.error("Spot-cost schema migration remains incomplete: \(error, privacy: .public)")
             }
@@ -659,7 +679,7 @@ final class VehicleDatabase: @unchecked Sendable {
         INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source)
         VALUES (?, ?, ?, ?, ?, ?, ?);
         """
-        try? db.query(sql: sql) { stmt in
+        return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindDate(Date(), at: 2)
             try stmt.bindDouble(odometerKm, at: 3)
@@ -667,9 +687,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(degPct, at: 5)
             try stmt.bindDouble(usableKwh, at: 6)
             try stmt.bindText(measurementSource, at: 7)
-            try stmt.executeUpdate()
-        } process: { _ in }
-        return true
+        }
     }
 
 
@@ -711,16 +729,14 @@ final class VehicleDatabase: @unchecked Sendable {
         INSERT INTO air_quality_history (vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent)
         VALUES (?, ?, ?, ?, ?, ?);
         """
-        try? db.query(sql: sql) { stmt in
+        return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindDate(Date(), at: 2)
             try stmt.bindDouble(airQualityIndex, at: 3)
             try stmt.bindDouble(particulateMatter25, at: 4)
             try stmt.bindDouble(particulateMatter10, at: 5)
             try stmt.bindDouble(filterRemainingPercent, at: 6)
-            try stmt.executeUpdate()
-        } process: { _ in }
-        return true
+        }
     }
 
 
@@ -774,7 +790,7 @@ final class VehicleDatabase: @unchecked Sendable {
         INSERT INTO telemetry_logs (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
-        try? db.query(sql: sql) { stmt in
+        return executeInsert(sql) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindDate(Date(), at: 2)
             try stmt.bindDouble(odometerKm, at: 3)
@@ -785,9 +801,7 @@ final class VehicleDatabase: @unchecked Sendable {
             try stmt.bindDouble(latitude, at: 8)
             try stmt.bindDouble(longitude, at: 9)
             try stmt.bindText(consumptionUnit, at: 10)
-            try stmt.executeUpdate()
-        } process: { _ in }
-        return true
+        }
     }
 
 
@@ -942,6 +956,29 @@ final class VehicleDatabase: @unchecked Sendable {
         vehicleImagesOlderThanDays: Int = 120,
         vehicleImagesHardCap: Int = 24
     ) {
+        try? pruneAgedHistoryOrThrow(
+            chargingSessionsOlderThanDays: chargingSessionsOlderThanDays,
+            batteryHealthOlderThanDays: batteryHealthOlderThanDays,
+            commandAuditsOlderThanDays: commandAuditsOlderThanDays,
+            airQualityOlderThanDays: airQualityOlderThanDays,
+            connectivityOlderThanDays: connectivityOlderThanDays,
+            cabinClimateOlderThanDays: cabinClimateOlderThanDays,
+            vehicleImagesOlderThanDays: vehicleImagesOlderThanDays,
+            vehicleImagesHardCap: vehicleImagesHardCap)
+    }
+
+    /// Error-reporting variant used by the automatic retention pass, so a failed prune is
+    /// not recorded as run (which would skip retention for another week).
+    func pruneAgedHistoryOrThrow(
+        chargingSessionsOlderThanDays: Int = 730,
+        batteryHealthOlderThanDays: Int = 730,
+        commandAuditsOlderThanDays: Int = 180,
+        airQualityOlderThanDays: Int = 365,
+        connectivityOlderThanDays: Int = 180,
+        cabinClimateOlderThanDays: Int = 180,
+        vehicleImagesOlderThanDays: Int = 120,
+        vehicleImagesHardCap: Int = 24
+    ) throws {
         let cutoffs: [(sql: String, column: String, days: Int)] = [
             ("DELETE FROM charging_sessions WHERE started_at < ?;", "started_at", chargingSessionsOlderThanDays),
             ("DELETE FROM battery_health_history WHERE timestamp < ?;", "timestamp", batteryHealthOlderThanDays),
@@ -955,7 +992,7 @@ final class VehicleDatabase: @unchecked Sendable {
             // multi-megabyte database on accounts that have tried several render angles.
             ("DELETE FROM vehicle_images WHERE updated_at < ?;", "updated_at", vehicleImagesOlderThanDays)
         ]
-        try? db.withTransaction {
+        try db.withTransaction {
             for (sql, _, days) in cutoffs {
                 let cutoff = Date().addingTimeInterval(-Double(days * 86400))
                 try db.query(sql: sql) { stmt in
@@ -971,7 +1008,7 @@ final class VehicleDatabase: @unchecked Sendable {
                 try stmt.executeUpdate()
             } process: { _ in }
         }
-        vacuum()
+        try vacuumOrThrow()
     }
 
     func clearStoredLocations(for vin: String? = nil) {

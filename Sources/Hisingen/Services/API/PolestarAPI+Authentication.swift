@@ -62,7 +62,11 @@ extension PolestarAPI {
     /// wins, orphaning the other).
     func commandClientAuthorization() async -> CommandClientAuthorization {
         guard !commandAuthorization.isInProgress else { return .notAuthorized }
-        if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 300,
+        // Polestar commonly issues five-minute command tokens, so the reuse margin must fit
+        // inside a fresh 300 s grant. A flat five-minute margin could never be met and forced
+        // a refresh grant plus account verification on every command; 30 s matches the
+        // web-client margin `tokenRenewalMargin` computes for that lifetime.
+        if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 30,
            let token = commandAccessToken { return .authorized(token) }
         if let existing = commandRefreshTask {
             return await existing.value

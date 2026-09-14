@@ -520,6 +520,17 @@ enum ClimateActivity: String, Codable, Sendable {
     case cooling
     case ventilating
 
+    /// The backend keeps a session in `STARTING` from command acceptance until the HVAC
+    /// actually ramps, which can outlast the optimistic-command overlay. Every surface that
+    /// decides "a session is running" (button verb, fan animation, menu-bar icon, refresh
+    /// cadence) must treat it as running or the UI visibly reverts to idle mid-session.
+    var isActiveSession: Bool {
+        switch self {
+        case .active, .starting, .heating, .cooling, .ventilating: return true
+        case .unknown, .idle: return false
+        }
+    }
+
     var displayName: String {
         switch self {
         case .unknown: return L10n.text("Unknown")
@@ -1097,7 +1108,7 @@ struct ChargingSample: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        timestamp = try c.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
         batteryPercentage = try c.decode(Double.self, forKey: .batteryPercentage)
         powerWatts = try c.decodeIfPresent(Int.self, forKey: .powerWatts)
         // Absent key = sample recorded before this field existed.

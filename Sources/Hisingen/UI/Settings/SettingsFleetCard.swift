@@ -9,6 +9,8 @@ struct SettingsFleetCard: View {
     let imageCache: CarImageCache
     let binder: PreferenceBinder
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var prefs: PreferencesStore { binder.preferences }
 
     private func moveGarageVehicle(_ vin: String, offset: Int, current: [String]) {
@@ -17,8 +19,12 @@ struct SettingsFleetCard: View {
         guard current.indices.contains(target) else { return }
         var updated = current
         updated.swapAt(index, target)
-        prefs.garageVehicleOrder = updated
-        binder.bump()
+        // The order write lands in preferences (a class) and re-renders via bump();
+        // without this transaction the ForEach rows teleport instead of sliding.
+        withAnimation(reduceMotion ? nil : Motion.layout) {
+            prefs.garageVehicleOrder = updated
+            binder.bump()
+        }
         binder.notify(.presentation)
     }
 
@@ -69,7 +75,7 @@ struct SettingsFleetCard: View {
                                 .disabled(index == allVins.count - 1)
                                 .accessibilityLabel(L10n.format("Move %@ down", vin))
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .controlSize(.mini)
                         }
                     }
@@ -170,6 +176,7 @@ struct SettingsFleetThumbnailView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 44, height: 26)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+                    .transition(.opacity)
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5)
@@ -179,6 +186,7 @@ struct SettingsFleetThumbnailView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
                 }
+                .transition(.opacity)
             }
         }
         .task(id: vin) {
@@ -187,10 +195,13 @@ struct SettingsFleetThumbnailView: View {
             let budget = 128
             let source = VehicleArtworkStore.source(vin: vin, angle: 0)
             if let data = imageCache.image(for: vin) {
+                // Decode finishes outside any transaction; wrapping the assignment
+                // here is what lets the placeholder→artwork crossfade play.
                 if let cached = store.cached(source: source, data: data, pixelBudget: budget) {
-                    artwork = cached
+                    withAnimation(Motion.resolveCrossfade(Motion.theme)) { artwork = cached }
                 } else {
-                    artwork = await store.artwork(source: source, data: data, pixelBudget: budget)
+                    let decoded = await store.artwork(source: source, data: data, pixelBudget: budget)
+                    withAnimation(Motion.resolveCrossfade(Motion.theme)) { artwork = decoded }
                 }
             }
         }
@@ -234,12 +245,16 @@ struct FleetVehicleCardRow: View {
                                 .padding(.vertical, 1.5)
                                 .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
                                 .foregroundStyle(HisingenTheme.accent)
+                                .transition(.opacity.combined(with: .scale(scale: 0.98)))
                         }
                     }
                     HStack(spacing: 4) {
-                        Text("VIN: \(vin)")
+                        Text(preferences.privacyRedactionEnabled
+                             ? "VIN •••·\(vin.suffix(4))" // Screenshot Privacy Mode: only the last 4 characters.
+                             : "VIN: \(vin)")
                             .font(.system(size: 9.5, design: .monospaced))
                             .foregroundStyle(.secondary)
+                            .privacySensitive(preferences.privacyRedactionEnabled)
                         if let vehicleState {
                             Text("· " + vehicleState.freshnessDescription)
                                 .font(.system(size: 9))
@@ -258,6 +273,7 @@ struct FleetVehicleCardRow: View {
                             .font(.system(size: 10, weight: .medium))
                     }
                     .controlSize(.small)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
             }
             .contentShape(Rectangle())
@@ -377,6 +393,10 @@ struct FleetVehicleCardRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : (isHovered && !isActive ? HisingenTheme.accent.opacity(0.25) : Color.clear), lineWidth: 1)
         )
+        // isActive flips from an app-level SettingsChange with no transaction of
+        // its own; this binding drives the badge/button swap and hover tint.
+        .animation(Motion.resolve(Motion.interaction), value: isHovered)
+        .animation(Motion.resolve(Motion.stateChange), value: isActive)
         .onHover { hovering in
             if !isActive {
                 isHovered = hovering

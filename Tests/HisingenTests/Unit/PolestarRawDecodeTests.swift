@@ -200,14 +200,28 @@ struct PolestarRawDecodeTests {
 
     // MARK: - Availability
 
-    @Test func availabilityUnknownReasonSevenHasText() throws {
-        // Reason 7 (observed in live captures) must not disappear.
-        var availability = Data()
-        availability += Protobuf.intField(3, 2)
-        availability += Protobuf.intField(4, 7)
-        let fields = Protobuf.fields(availability)
-        let reason = try #require(fields.first(where: { $0.number == 4 && $0.wire == 0 })?.varint)
-        #expect(reason == 7)
+    @Test func availabilityReasonSevenDecodesWithTransportErrorText() async throws {
+        // Reason 7 (observed in live captures) must not disappear. TESTS-01: drive the real
+        // decode path — fetchAvailabilityReport over a stubbed gRPC transport — instead of
+        // echoing the test's own encoder output through Protobuf.fields.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AvailabilityReasonTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "io.kheirallah.hisingen.tests.availability-reason-7.\(UUID().uuidString)"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session)
+
+        let report = try await grpc.fetchAvailabilityReport(vin: "VIN-A", accessToken: "token")
+        guard case .unavailable(let reason) = report.availability else {
+            Issue.record("status 2 with reason 7 must decode as .unavailable, got \(report.availability)")
+            return
+        }
+        #expect(reason == L10n.text("Transport error"),
+                "reason 7 must keep its 'Transport error' label")
+        #expect(report.reportedAt == nil)
+        #expect(report.unknownFields.isEmpty,
+                "fields 1/3/4 are decoded and must not resurface as unknown wire fields")
     }
 
     // MARK: - Token response
@@ -425,5 +439,30 @@ struct PolestarRawDecodeTests {
         let data = try JSONEncoder().encode(status)
         let decoded = try JSONDecoder().decode(VehicleClimateStatus.self, from: data)
         #expect(decoded == status)
+    }
+}
+
+/// Serves the C3 discovery document, then a gRPC availability payload carrying
+/// status 2 (unavailable) with transport-level reason 7.
+private final class AvailabilityReasonTransport: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let isGRPC = request.value(forHTTPHeaderField: "Content-Type")?.contains("grpc") == true
+        let data: Data
+        if isGRPC {
+            var availability = Data()
+            availability += Protobuf.intField(3, 2)
+            availability += Protobuf.intField(4, 7)
+            data = Protobuf.grpcFrame(Protobuf.messageField(3, availability))
+        } else {
+            data = Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8)
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
     }
 }

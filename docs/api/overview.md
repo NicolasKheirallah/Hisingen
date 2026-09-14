@@ -1,6 +1,6 @@
 # API Overview
 
-Hisingen integrates with two vehicle providers — Polestar and Volvo — through different API models.
+Hisingen integrates with two vehicle providers, Polestar and Volvo, through different API models.
 
 The most important distinction is:
 

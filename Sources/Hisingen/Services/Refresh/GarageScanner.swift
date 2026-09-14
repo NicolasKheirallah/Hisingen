@@ -81,8 +81,11 @@ final class GarageScanner {
         let initialDelay = self.initialDelay
         let loopInterval = self.loopInterval
         loopTask = Task { @MainActor [weak self] in
+            // The lead delay applies once, before the loop; sleeping it inside the body
+            // re-applied it every pass and made the steady-state cadence
+            // initialDelay + loopInterval instead of loopInterval.
+            do { try await Task.sleep(for: .seconds(initialDelay)) } catch { return }
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(initialDelay)) } catch { return }
                 guard let self else { return }
                 await self.scanNow()
                 do { try await Task.sleep(for: .seconds(loopInterval)) } catch { return }

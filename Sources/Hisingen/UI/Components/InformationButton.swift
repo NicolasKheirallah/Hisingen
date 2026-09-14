@@ -14,7 +14,7 @@ struct InformationButton: View {
                 .frame(width: 16, height: 16)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .help(message)
         .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
             Text(message)

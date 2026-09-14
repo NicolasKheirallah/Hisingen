@@ -31,6 +31,7 @@ struct VehicleReadinessCard: View {
                             Text(state.chargingEstimateDestination).font(.caption2).foregroundStyle(.secondary)
                         }.padding(.top, 6)
                     }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }
             }
         }

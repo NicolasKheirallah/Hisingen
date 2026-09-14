@@ -2,7 +2,6 @@ import AppIntents
 import AppKit
 import Foundation
 
-@available(macOS 13.0, *)
 @MainActor
 enum AutomationHandoff {
     /// Installed by `AppDelegate` once composition is complete. Shortcuts intents await
@@ -10,6 +9,12 @@ enum AutomationHandoff {
     /// as the shell is wired — no URL round-trip, no polling the command audit table.
     private static var waiters: [UUID: CheckedContinuation<any RemoteCommandDispatching, Never>] = [:]
     private(set) static var context: (any RemoteCommandDispatching)?
+
+    /// One store shared by every Shortcuts entry point. `VehicleStateStore.init` runs the
+    /// launch-only legacy-summary reconciliation, so the per-invocation instances used
+    /// before re-ran a charging-history table scan (and its repair UPDATEs) on the main
+    /// actor before each intent could answer.
+    static let sharedStateStore = VehicleStateStore(database: VehicleDatabase.shared)
 
     static func install(_ context: any RemoteCommandDispatching) {
         self.context = context
@@ -25,13 +30,23 @@ enum AutomationHandoff {
         }
     }
 
-#if DEBUG
+    /// Installed by `AppDelegate` next to the dispatch context. A refresh is not a remote
+    /// command, so it rides its own action; a shortcut firing before composition reports
+    /// that instead of awaiting a handler that would never arrive.
+    static var refreshAction: (() -> Void)?
+
+    static func installRefreshAction(_ action: @escaping () -> Void) {
+        refreshAction = action
+    }
+
+    #if DEBUG
     /// Test isolation for the process-wide hub.
     static func resetForTesting() {
         context = nil
         waiters = [:]
+        refreshAction = nil
     }
-#endif
+    #endif
 
     /// The one Remote Command path the Shortcuts surface uses: resolve the target vehicle,
     /// resolve it through the shell's awaited target-selection boundary, and describe the
@@ -61,7 +76,7 @@ enum AutomationHandoff {
             return preferences.vin
         }
         let upper = input.uppercased()
-        let store = VehicleStateStore(database: VehicleDatabase.shared)
+        let store = AutomationHandoff.sharedStateStore
         if store.snapshot(for: upper) != nil {
             return upper
         }
@@ -81,13 +96,12 @@ enum AutomationHandoff {
         let preferences = PreferencesStore.shared
         let vin = resolveVIN(from: input)
         guard !vin.isEmpty,
-              let state = VehicleStateStore(database: VehicleDatabase.shared).snapshot(for: vin)
+              let state = sharedStateStore.snapshot(for: vin)
         else { return nil }
         return (state, preferences)
     }
 }
 
-@available(macOS 13.0, *)
 struct GetVehicleBatteryIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Vehicle Battery"
     static let description = IntentDescription("Returns the battery level, range, and charging status of a vehicle.")
@@ -100,35 +114,34 @@ struct GetVehicleBatteryIntent: AppIntent {
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         let preferences = PreferencesStore.shared
         let vin = AutomationHandoff.resolveVIN(from: vehicle)
-        let store = VehicleStateStore(database: VehicleDatabase.shared)
+        let store = AutomationHandoff.sharedStateStore
         guard let state = store.snapshot(for: vin) else {
-            return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
         }
         var parts: [String] = []
         if let battery = state.energy.batteryPercentage {
-            parts.append(String(format: "%.0f%% battery", battery))
+            parts.append(L10n.format("%.0f%% battery", battery))
         } else if let fuel = state.fuelSystem.levelPercent {
-            parts.append(String(format: "%.0f%% fuel", fuel))
+            parts.append(L10n.format("%.0f%% fuel", fuel))
         }
         if let range = state.primaryRangeKm {
-            parts.append(String(format: "%d %@ range", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
+            parts.append(L10n.format("%d %@ range", preferences.distanceUnit.convert(km: range), preferences.distanceUnit.suffix))
         }
         if state.isCharging {
             if let power = state.energy.powerWatts, power > 0 {
-                parts.append("charging at \(Format.kilowatts(watts: power))")
+                parts.append(L10n.format("charging at %@", Format.kilowatts(watts: power)))
             } else {
-                parts.append("currently charging")
+                parts.append(L10n.text("currently charging"))
             }
         }
         let summary = parts.joined(separator: ", ")
         let nick = preferences.vehicleNickname(for: vin)
-        let model = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
-        let response = "\(model): \(summary)."
+        let model = nick.isEmpty ? (state.identity.modelName ?? L10n.text("Vehicle")) : nick
+        let response = L10n.format("%@: %@.", model, summary)
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
 struct GetGarageStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Garage Status"
     static let description = IntentDescription("Returns the status of all vehicles in your garage.")
@@ -137,7 +150,7 @@ struct GetGarageStatusIntent: AppIntent {
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         let preferences = PreferencesStore.shared
-        let store = VehicleStateStore(database: VehicleDatabase.shared)
+        let store = AutomationHandoff.sharedStateStore
         var knownVINs: [String] = []
         for brand in VehicleBrand.allCases {
             let vin = preferences.vin(for: brand)
@@ -152,27 +165,26 @@ struct GetGarageStatusIntent: AppIntent {
             let name = nick.isEmpty ? (state.identity.modelName ?? state.model.brand.displayName) : nick
             var parts: [String] = []
             if let battery = state.energy.batteryPercentage {
-                parts.append(String(format: "%.0f%%", battery))
+                parts.append(L10n.format("%.0f%%", battery))
             } else if let fuel = state.fuelSystem.levelPercent {
-                parts.append(String(format: "%.0f%% fuel", fuel))
+                parts.append(L10n.format("%.0f%% fuel", fuel))
             }
             if let range = state.primaryRangeKm {
                 parts.append(Format.distance(km: range, unit: preferences.distanceUnit))
             }
-            if state.isCharging { parts.append("⚡ charging") }
-            if let locked = state.exteriorStatus?.isLocked { parts.append(locked ? "locked" : "unlocked") }
-            lines.append("\(name): \(parts.joined(separator: ", "))")
+            if state.isCharging { parts.append(L10n.text("⚡ charging")) }
+            if let locked = state.exteriorStatus?.isLocked { parts.append(locked ? L10n.text("locked") : L10n.text("unlocked")) }
+            lines.append(L10n.format("%@: %@.", name, parts.joined(separator: ", ")))
         }
 
         if lines.isEmpty {
-            return .result(value: "--", dialog: "No vehicles or telemetry found in your garage.")
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicles or telemetry found in your garage.")))
         }
-        let response = lines.joined(separator: ". ") + "."
+        let response = L10n.format("%@.", lines.joined(separator: ". "))
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
 struct LockVehicleIntent: AppIntent {
     static let title: LocalizedStringResource = "Lock Vehicle"
     static let description = IntentDescription("Locks the vehicle doors.")
@@ -188,7 +200,6 @@ struct LockVehicleIntent: AppIntent {
     }
 }
 
-@available(macOS 13.0, *)
 struct UnlockVehicleIntent: AppIntent {
     static let title: LocalizedStringResource = "Unlock Vehicle"
     static let description = IntentDescription("Unlocks the vehicle doors.")
@@ -204,7 +215,6 @@ struct UnlockVehicleIntent: AppIntent {
     }
 }
 
-@available(macOS 13.0, *)
 struct StartClimateIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Cabin Climate"
     static let description = IntentDescription("Starts cabin climate preconditioning.")
@@ -215,17 +225,22 @@ struct StartClimateIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some ProvidesDialog {
+        // Seat levels mirror the in-app and calendar-automation climate paths, which all
+        // start from the user's saved remote-seat-heating preferences.
+        let preferences = PreferencesStore.shared
         let result = await AutomationHandoff.send(
             .startClimate(
-                temperatureCelsius: Float(PreferencesStore.shared.remoteClimateTemperature),
-                frontLeftSeat: .off, frontRightSeat: .off,
-                rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+                temperatureCelsius: Float(preferences.remoteClimateTemperature),
+                frontLeftSeat: preferences.remoteDriverSeatHeating,
+                frontRightSeat: preferences.remoteFrontRightSeatHeating,
+                rearLeftSeat: preferences.remoteRearLeftSeatHeating,
+                rearRightSeat: preferences.remoteRearRightSeatHeating,
+                steeringWheel: preferences.remoteSteeringWheelHeating),
             vehicle: vehicle)
         return .result(dialog: IntentDialog(stringLiteral: result))
     }
 }
 
-@available(macOS 13.0, *)
 struct StopClimateIntent: AppIntent {
     static let title: LocalizedStringResource = "Stop Cabin Climate"
     static let description = IntentDescription("Stops cabin climate preconditioning.")
@@ -241,7 +256,6 @@ struct StopClimateIntent: AppIntent {
     }
 }
 
-@available(macOS 13.0, *)
 struct GetVehicleStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Vehicle Status"
     static let description = IntentDescription("Returns lock, opening, and attention status from the latest Hisingen snapshot.")
@@ -253,22 +267,21 @@ struct GetVehicleStatusIntent: AppIntent {
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle) else {
-            return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
         }
         var details: [String] = []
-        if let locked = state.exteriorStatus?.isLocked { details.append(locked ? "locked" : "unlocked") }
+        if let locked = state.exteriorStatus?.isLocked { details.append(locked ? L10n.text("locked") : L10n.text("unlocked")) }
         if let exterior = state.exteriorStatus, !exterior.itemsNeedingAttention.isEmpty {
             details.append(exterior.itemsNeedingAttention.map(\.displayName).joined(separator: ", "))
         }
         details.append(state.stateSummary.message)
         let nick = preferences.vehicleNickname(for: state.identity.vin)
-        let name = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
-        let response = "\(name): \(details.joined(separator: "; ")). Data \(Format.relativeAge(since: state.dataTimestamp))."
+        let name = nick.isEmpty ? (state.identity.modelName ?? L10n.text("Vehicle")) : nick
+        let response = L10n.format("%@: %@. Data %@.", name, details.joined(separator: "; "), Format.relativeAge(since: state.dataTimestamp))
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
 struct GetChargingStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Charging Status"
     static let description = IntentDescription("Returns charging state, power, target, and time remaining.")
@@ -280,20 +293,19 @@ struct GetChargingStatusIntent: AppIntent {
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         guard let (state, _) = AutomationHandoff.snapshot(for: vehicle) else {
-            return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
         }
         var parts = [state.energy.chargingState.displayName]
         if let power = state.energy.powerWatts, power > 0 { parts.append(Format.kilowatts(watts: power)) }
-        if let target = state.energy.targetPercentage { parts.append("target \(target)%") }
+        if let target = state.energy.targetPercentage { parts.append(L10n.format("target %d%%", target)) }
         if let minutes = state.energy.estimatedTimeToFullMinutes, minutes > 0 {
-            parts.append("\(Format.shortDuration(minutes: minutes)) remaining")
+            parts.append(L10n.format("%@ remaining", Format.shortDuration(minutes: minutes)))
         }
-        let response = "\(state.identity.modelName ?? "Vehicle"): \(parts.joined(separator: ", "))."
+        let response = L10n.format("%@: %@.", state.identity.modelName ?? L10n.text("Vehicle"), parts.joined(separator: ", "))
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
 struct GetRecentTripsIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Recent Trip Summary"
     static let description = IntentDescription("Returns locally derived trip distance and driving time for the last seven days.")
@@ -305,19 +317,21 @@ struct GetRecentTripsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle) else {
-            return .result(value: "--", dialog: "No vehicle telemetry available in Hisingen.")
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
         }
         // Push the 7-day bound into SQL instead of decoding up to 20k telemetry rows per run.
         let cutoff = Date().addingTimeInterval(-7 * 86_400)
         let trips = VehicleDatabase.shared.history.derivedTrips(for: state.identity.vin, limit: 1_000, since: cutoff)
         let distance = trips.reduce(0) { $0 + $1.distanceKm }
         let minutes = Int(trips.reduce(0) { $0 + $1.duration } / 60)
-        let response = "Last 7 days: \(trips.count) inferred trips, \(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit)), \(Format.shortDuration(minutes: minutes)) driving."
+        let response = L10n.format("Last 7 days: %d inferred trips, %@, %@ driving.",
+                                   trips.count,
+                                   Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit),
+                                   Format.shortDuration(minutes: minutes))
         return .result(value: response, dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
 struct FlashLightsIntent: AppIntent {
     static let title: LocalizedStringResource = "Flash Vehicle Lights"
     static let openAppWhenRun = false
@@ -331,7 +345,6 @@ struct FlashLightsIntent: AppIntent {
     }
 }
 
-@available(macOS 13.0, *)
 struct HonkAndFlashIntent: AppIntent {
     static let title: LocalizedStringResource = "Honk and Flash Vehicle"
     static let openAppWhenRun = false
@@ -348,7 +361,6 @@ struct HonkAndFlashIntent: AppIntent {
 /// Sets the active vehicle's target charge level through Hisingen's normal command path.
 /// The parameter is validated by the same capability/bounds logic as the in-app slider,
 /// so an out-of-range request surfaces the vehicle's own limits instead of failing blindly.
-@available(macOS 13.0, *)
 struct SetChargeTargetIntent: AppIntent {
     static let title: LocalizedStringResource = "Set Charge Target"
     static let description = IntentDescription("Sets the vehicle's target charge level percentage.")
@@ -370,7 +382,6 @@ struct SetChargeTargetIntent: AppIntent {
 /// Returns where the vehicle was last reported, with a one-tap map link in Shortcuts output.
 /// Uses only the locally cached snapshot; it never wakes the car or hits the location API,
 /// so running it repeatedly costs nothing and reveals nothing fresher than Hisingen holds.
-@available(macOS 13.0, *)
 struct WhereIsMyCarIntent: AppIntent {
     static let title: LocalizedStringResource = "Where Is My Car"
     static let description = IntentDescription("Returns the last reported parking position of the active vehicle.")
@@ -383,20 +394,160 @@ struct WhereIsMyCarIntent: AppIntent {
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         guard let (state, preferences) = AutomationHandoff.snapshot(for: vehicle),
               let lat = state.location?.latitude, let lon = state.location?.longitude else {
-            return .result(value: "unknown",
-                           dialog: "No location has been reported for this vehicle yet.")
+            return .result(value: L10n.text("unknown"),
+                           dialog: IntentDialog(stringLiteral: L10n.text("No location has been reported for this vehicle yet.")))
         }
-        let when = state.location?.timestamp.map { Format.relativeAge(since: $0) } ?? "unknown time"
+        let when = state.location?.timestamp.map { Format.relativeAge(since: $0) } ?? L10n.text("unknown time")
         let nick = preferences.vehicleNickname(for: state.identity.vin)
-        let name = nick.isEmpty ? (state.identity.modelName ?? "Vehicle") : nick
-        let response = "\(name): \(String(format: "%.5f, %.5f", lat, lon)), reported \(when)."
+        let name = nick.isEmpty ? (state.identity.modelName ?? L10n.text("Vehicle")) : nick
+        // Coordinates stay String(format:)-formatted: a localized decimal separator inside
+        // a lat/lon pair would break paste-into-maps.
+        let response = L10n.format("%@: %@, reported %@.",
+                                   name,
+                                   String(format: "%.5f, %.5f", lat, lon),
+                                   when)
         let mapsURL = MapLinks.appleMapsPin(latitude: lat, longitude: lon)?.absoluteString ?? ""
-        return .result(value: "\(response) Map: \(mapsURL)",
+        return .result(value: L10n.format("%@ Map: %@", response, mapsURL),
                        dialog: IntentDialog(stringLiteral: response))
     }
 }
 
-@available(macOS 13.0, *)
+/// Pre-cleaning purifies the cabin air before departure. Dispatch runs through the normal
+/// command path, so a vehicle without the pre-cleaning capability answers with the same
+/// refusal the in-app control gets.
+struct StartPreCleaningIntent: AppIntent {
+    static let title: LocalizedStringResource = "Start Cabin Pre-Cleaning"
+    static let description = IntentDescription("Starts the cabin pre-cleaning cycle that purifies the interior air before departure.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.startPreCleaning, vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+struct StopPreCleaningIntent: AppIntent {
+    static let title: LocalizedStringResource = "Stop Cabin Pre-Cleaning"
+    static let description = IntentDescription("Stops a running cabin pre-cleaning cycle.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.stopPreCleaning, vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+/// The provider-side charging control is a schedule override: "start" charges now despite
+/// an active schedule, and "stop" hands control back to the schedule. Without a schedule
+/// active there is nothing to override, and the provider answer says so.
+struct StartChargingOverrideIntent: AppIntent {
+    static let title: LocalizedStringResource = "Charge Now"
+    static let description = IntentDescription("Overrides the active charging schedule so the vehicle charges immediately.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.startChargingOverride, vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+struct StopChargingOverrideIntent: AppIntent {
+    static let title: LocalizedStringResource = "Resume Charging Schedule"
+    static let description = IntentDescription("Ends a charging override so the vehicle returns to its charging schedule.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.stopChargingOverride, vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+/// The range matches `VehicleChargeBounds.fallbackAmperageRange`; a vehicle with narrower
+/// capabilities validates the request at dispatch and answers with its own limits.
+struct SetAmpLimitIntent: AppIntent {
+    static let title: LocalizedStringResource = "Set Charging Current"
+    static let description = IntentDescription("Sets the vehicle's charging current limit in amperes.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Current (A)", default: 16, inclusiveRange: (6, 32))
+    var amps: Int
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.setAmpLimit(amps), vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+/// Remote engine start is the one command family only combustion and hybrid Volvos offer;
+/// the runtime choices mirror the Controls tab picker.
+struct StartEngineIntent: AppIntent {
+    static let title: LocalizedStringResource = "Start Engine"
+    static let description = IntentDescription("Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support).")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Runtime (minutes)", default: 15, inclusiveRange: (5, 15))
+    var minutes: Int
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.startEngine(runtimeMinutes: minutes), vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+struct StopEngineIntent: AppIntent {
+    static let title: LocalizedStringResource = "Stop Engine"
+    static let description = IntentDescription("Stops a remotely started combustion engine.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        let result = await AutomationHandoff.send(.stopEngine, vehicle: vehicle)
+        return .result(dialog: IntentDialog(stringLiteral: result))
+    }
+}
+
+struct RefreshTelemetryIntent: AppIntent {
+    static let title: LocalizedStringResource = "Refresh Vehicle Data"
+    static let description = IntentDescription("Asks Hisingen to fetch fresh vehicle data from the provider now.")
+    static let openAppWhenRun = false
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog {
+        guard let refresh = AutomationHandoff.refreshAction else {
+            return .result(dialog: IntentDialog(stringLiteral: L10n.text("Hisingen is still launching. Try again in a moment.")))
+        }
+        refresh()
+        return .result(dialog: IntentDialog(stringLiteral: L10n.text("Refresh requested — Hisingen is fetching the latest vehicle data.")))
+    }
+}
+
 struct HisingenShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

@@ -4,14 +4,12 @@ import Testing
 
 struct VehicleActivityTests {
     private func state(at date: Date, odometer: Int = 1000) -> VehicleState {
-        VehicleState(batteryPercentage: 60, rangeKm: 250, chargingState: .idle,
-                     estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 80,
-                     chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
-                     chargingType: .unknown, chargerConnection: .disconnected, availability: .available,
-                     modelName: "Polestar 2", modelYear: "2023", registrationNo: nil, vin: "TEST-VIN",
-                     ownerFirstName: nil, odometerKm: odometer, daysToService: nil, distanceToServiceKm: nil,
-                     serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: date,
-                     vehicleReportedAt: date, dataWarnings: [])
+        // TESTS-12: thin wrapper over the shared TestSupport fixture builder.
+        vehicle(
+            vin: "TEST-VIN", battery: 60, rangeKm: 250,
+            odometerKm: odometer,
+            fetchedAt: date, reportedAt: date
+        )
     }
 
     @Test func readingFreshnessDoesNotBorrowAnotherSensorsTimestamp() throws {

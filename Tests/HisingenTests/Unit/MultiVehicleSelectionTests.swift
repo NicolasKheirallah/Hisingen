@@ -17,7 +17,7 @@ struct MultiVehicleSelectionTests {
 
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (defaults, suiteName)
     }
 
@@ -107,31 +107,31 @@ struct MultiVehicleSelectionTests {
 
         coordinator.start(preferredVIN: Self.vinA)
         _ = await awaitState(coordinator, vin: Self.vinA)
-        XCTAssertEqual(preferences.vin, Self.vinA)
+        #expect(preferences.vin == Self.vinA)
 
         // Forward switch.
         coordinator.selectCar(vin: Self.vinB)
         let stateB = await awaitState(coordinator, vin: Self.vinB)
-        XCTAssertEqual(stateB.identity.vin, Self.vinB)
-        XCTAssertEqual(preferences.vin, Self.vinB)
+        #expect(stateB.identity.vin == Self.vinB)
+        #expect(preferences.vin == Self.vinB)
 
         // Switch back — this was the direction permanently blocked before the fix.
         coordinator.selectCar(vin: Self.vinA)
         let stateA = await awaitState(coordinator, vin: Self.vinA)
-        XCTAssertEqual(stateA.identity.vin, Self.vinA)
-        XCTAssertEqual(preferences.vin, Self.vinA)
+        #expect(stateA.identity.vin == Self.vinA)
+        #expect(preferences.vin == Self.vinA)
 
         let orderRoundTrip = await provider.selectionOrder
-        XCTAssertEqual(orderRoundTrip, [Self.vinB, Self.vinA])
-        XCTAssertTrue(selections.contains(Self.vinB))
-        XCTAssertTrue(selections.contains(Self.vinA))
+        #expect(orderRoundTrip == [Self.vinB, Self.vinA])
+        #expect(selections.contains(Self.vinB))
+        #expect(selections.contains(Self.vinA))
 
         // Diagnostics must expose an unresolved switch (support-bundle visibility for
         // exactly the state where the original lockup lived) and settle to false once
         // the last selection resolves.
-        XCTAssertTrue(switchPendingFlags.contains(true), "Switch-in-progress must be visible in diagnostics")
+        #expect(switchPendingFlags.contains(true), "Switch-in-progress must be visible in diagnostics")
         if let lastFlag = switchPendingFlags.last {
-            XCTAssertFalse(lastFlag, "Diagnostics must report the switch as resolved afterwards")
+            #expect(!(lastFlag), "Diagnostics must report the switch as resolved afterwards")
         }
         coordinator.stop()
     }
@@ -158,9 +158,9 @@ struct MultiVehicleSelectionTests {
             Issue.record("Expected terminal notConfigured error, got \(error)")
             return
         }
-        XCTAssertEqual(preferences.vin, Self.vinB, "Selection is recorded optimistically")
+        #expect(preferences.vin == Self.vinB, "Selection is recorded optimistically")
         let attemptsBeforeRetry = await provider.selectCount
-        XCTAssertTrue(attemptsBeforeRetry > 1, "The coordinator retried the raced selection before surfacing the error")
+        #expect(attemptsBeforeRetry > 1, "The coordinator retried the raced selection before surfacing the error")
 
         // The user clicks the same car again: the retry must run, not be swallowed.
         // (Under the old guard this click was a silent no-op because the optimistic
@@ -168,9 +168,9 @@ struct MultiVehicleSelectionTests {
         await provider.setFailingVIN(nil)
         coordinator.selectCar(vin: Self.vinB)
         _ = await awaitState(coordinator, vin: Self.vinB)
-        XCTAssertEqual(preferences.vin, Self.vinB)
+        #expect(preferences.vin == Self.vinB)
         let attemptsAfterRetry = await provider.selectCount
-        XCTAssertEqual(attemptsAfterRetry, attemptsBeforeRetry + 1, "Exactly one more provider attempt")
+        #expect(attemptsAfterRetry == attemptsBeforeRetry + 1, "Exactly one more provider attempt")
         coordinator.stop()
     }
 
@@ -199,11 +199,11 @@ struct MultiVehicleSelectionTests {
         // must retry on its own instead of dead-ending the refresh loop.
         coordinator.selectCar(vin: Self.vinB)
         let stateB = await awaitState(coordinator, vin: Self.vinB)
-        XCTAssertEqual(stateB.identity.vin, Self.vinB)
-        XCTAssertEqual(preferences.vin, Self.vinB)
+        #expect(stateB.identity.vin == Self.vinB)
+        #expect(preferences.vin == Self.vinB)
         let attemptsRaced = await provider.selectCount
-        XCTAssertEqual(attemptsRaced, 2, "Expected exactly one automatic retry after the raced failure")
-        XCTAssertTrue(surfacedErrors.isEmpty, "Transient race must not surface as an error")
+        #expect(attemptsRaced == 2, "Expected exactly one automatic retry after the raced failure")
+        #expect(surfacedErrors.isEmpty, "Transient race must not surface as an error")
         coordinator.stop()
     }
 
@@ -222,13 +222,16 @@ struct MultiVehicleSelectionTests {
         let fetchesBefore = await provider.fetchCount
 
         coordinator.selectCar(vin: Self.vinA)
-        try await Task.sleep(for: .milliseconds(120))
+        // TESTS-11: no fixed sleep. Wait until the provider counters have been stable for
+        // several consecutive polls so any stray selection/fetch a regression introduces
+        // has ample time to land before the negative assertion reads them.
+        await awaitStable { (await provider.selectCount) + (await provider.fetchCount) }
 
         let selectsAfter = await provider.selectCount
         let fetchesAfter = await provider.fetchCount
-        XCTAssertEqual(selectsAfter, selectsBefore, "Settled re-selection must not hit the provider")
-        XCTAssertEqual(fetchesAfter, fetchesBefore)
-        XCTAssertEqual(preferences.vin, Self.vinA)
+        #expect(selectsAfter == selectsBefore, "Settled re-selection must not hit the provider")
+        #expect(fetchesAfter == fetchesBefore)
+        #expect(preferences.vin == Self.vinA)
         coordinator.stop()
     }
 }

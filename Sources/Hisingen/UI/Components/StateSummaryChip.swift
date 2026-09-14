@@ -5,6 +5,8 @@ struct StateSummaryChip: View {
     let message: String
     let severity: VehicleStateSeverity
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var color: Color {
         switch severity {
         case .neutral: return .secondary
@@ -29,6 +31,7 @@ struct StateSummaryChip: View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: HisingenTheme.headingWeight))
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .accessibilityHidden(true)
             Text(message)
                 .font(.system(size: 12, weight: HisingenTheme.valueWeight))
@@ -42,6 +45,8 @@ struct StateSummaryChip: View {
             RoundedRectangle(cornerRadius: chipRadius, style: .continuous)
                 .stroke(color.opacity(0.22), lineWidth: 0.5)
         )
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: severity)
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: message)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(message)
     }

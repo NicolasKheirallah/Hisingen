@@ -6,41 +6,41 @@ struct CombustionAndHybridVehicleTests {
 
     @Test
     func testPowertrainClassification() {
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL"), .ice)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "DIESEL"), .ice)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "GASOLINE"), .ice)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "ELECTRIC"), .bev)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL_PLUG_IN_HYBRID"), .phev)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "DIESEL_PLUG_IN_HYBRID"), .phev)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL_MHEV"), .mildHybrid)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL_HYBRID"), .mildHybrid)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "RECHARGE_PLUG_IN"), .phev)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL") == .ice)
+        #expect(VolvoPowertrain.classify(fuelType: "DIESEL") == .ice)
+        #expect(VolvoPowertrain.classify(fuelType: "GASOLINE") == .ice)
+        #expect(VolvoPowertrain.classify(fuelType: "ELECTRIC") == .bev)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL_PLUG_IN_HYBRID") == .phev)
+        #expect(VolvoPowertrain.classify(fuelType: "DIESEL_PLUG_IN_HYBRID") == .phev)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL_MHEV") == .mildHybrid)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL_HYBRID") == .mildHybrid)
+        #expect(VolvoPowertrain.classify(fuelType: "RECHARGE_PLUG_IN") == .phev)
     }
 
     @Test
     func testPowertrainProperties() {
         let ice = PowertrainType.ice
-        XCTAssertTrue(ice.hasFuelRange)
-        XCTAssertFalse(ice.hasElectricRange)
-        XCTAssertTrue(ice.isCombustionOnly)
-        XCTAssertFalse(ice.isHybrid)
+        #expect(ice.hasFuelRange)
+        #expect(!(ice.hasElectricRange))
+        #expect(ice.isCombustionOnly)
+        #expect(!(ice.isHybrid))
 
         let phev = PowertrainType.phev
-        XCTAssertTrue(phev.hasFuelRange)
-        XCTAssertTrue(phev.hasElectricRange)
-        XCTAssertFalse(phev.isCombustionOnly)
-        XCTAssertTrue(phev.isHybrid)
+        #expect(phev.hasFuelRange)
+        #expect(phev.hasElectricRange)
+        #expect(!(phev.isCombustionOnly))
+        #expect(phev.isHybrid)
 
         let mhev = PowertrainType.mildHybrid
-        XCTAssertTrue(mhev.hasFuelRange)
-        XCTAssertTrue(mhev.hasElectricRange)
-        XCTAssertTrue(mhev.isHybrid)
+        #expect(mhev.hasFuelRange)
+        #expect(mhev.hasElectricRange)
+        #expect(mhev.isHybrid)
 
         let bev = PowertrainType.bev
-        XCTAssertFalse(bev.hasFuelRange)
-        XCTAssertTrue(bev.hasElectricRange)
-        XCTAssertTrue(bev.isElectricOnly)
-        XCTAssertFalse(bev.isHybrid)
+        #expect(!(bev.hasFuelRange))
+        #expect(bev.hasElectricRange)
+        #expect(bev.isElectricOnly)
+        #expect(!(bev.isHybrid))
     }
 
     @Test
@@ -79,8 +79,8 @@ struct CombustionAndHybridVehicleTests {
         hybridState.fuelSystem.averageConsumptionLPer100Km = 5.2
         hybridState.fuelSystem.isEngineRunning = false
 
-        XCTAssertEqual(hybridState.totalCombinedRangeKm, 600)
-        XCTAssertEqual(hybridState.primaryRangeKm, 600)
+        #expect(hybridState.totalCombinedRangeKm == 600)
+        #expect(hybridState.primaryRangeKm == 600)
 
         var iceState = VehicleState(
             batteryPercentage: nil,
@@ -116,9 +116,9 @@ struct CombustionAndHybridVehicleTests {
         iceState.fuelSystem.averageConsumptionLPer100Km = 7.4
         iceState.fuelSystem.isEngineRunning = true
 
-        XCTAssertEqual(iceState.totalCombinedRangeKm, 620)
-        XCTAssertEqual(iceState.primaryRangeKm, 620)
-        XCTAssertEqual(iceState.stateSummary.message, "Engine running")
+        #expect(iceState.totalCombinedRangeKm == 620)
+        #expect(iceState.primaryRangeKm == 620)
+        #expect(iceState.stateSummary.message == "Engine running")
     }
 
     @Test
@@ -154,9 +154,9 @@ struct CombustionAndHybridVehicleTests {
             dataWarnings: []
         )
 
-        XCTAssertEqual(Format.icon(for: iceState), "fuelpump.fill")
-        XCTAssertEqual(Format.barTitle(for: iceState, style: .battery, unit: .kilometers), "74%")
-        XCTAssertEqual(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers), "74% · 650km")
+        #expect(Format.icon(for: iceState) == "fuelpump.fill")
+        #expect(Format.barTitle(for: iceState, style: .battery, unit: .kilometers) == "74%")
+        #expect(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers) == "74% · 650km")
 
         let phevState = VehicleState(
             batteryPercentage: 85.0,
@@ -189,8 +189,8 @@ struct CombustionAndHybridVehicleTests {
             dataWarnings: []
         )
 
-        XCTAssertEqual(Format.icon(for: phevState), "bolt.car.fill")
-        XCTAssertEqual(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers), "85% · 545km")
+        #expect(Format.icon(for: phevState) == "bolt.car.fill")
+        #expect(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers) == "85% · 545km")
     }
 
     @Test
@@ -207,9 +207,9 @@ struct CombustionAndHybridVehicleTests {
 
         let decoded = try JSONDecoder().decode(VolvoEnvelope<VolvoFuelDTO>.self, from: json)
         let fuel = decoded.data
-        XCTAssertEqual(fuel?.liters, 52.5)
-        XCTAssertEqual(fuel?.percentage, 78.0)
-        XCTAssertEqual(fuel?.rangeKm, 710)
+        #expect(fuel?.liters == 52.5)
+        #expect(fuel?.percentage == 78.0)
+        #expect(fuel?.rangeKm == 710)
     }
 
     @Test
@@ -231,9 +231,9 @@ struct CombustionAndHybridVehicleTests {
 
         let decodedStats = try JSONDecoder().decode(VolvoEnvelope<VolvoStatisticsDTO>.self, from: statsJson)
         let stats = decodedStats.data
-        XCTAssertEqual(stats?.electricDistance?.value, 25600.0)
-        XCTAssertEqual(stats?.fuelDistance?.value, 12600.0)
-        XCTAssertEqual(stats?.regeneratedEnergy?.value, 3.42)
+        #expect(stats?.electricDistance?.value == 25600.0)
+        #expect(stats?.fuelDistance?.value == 12600.0)
+        #expect(stats?.regeneratedEnergy?.value == 3.42)
 
         let brakesJson = """
         {
@@ -248,8 +248,8 @@ struct CombustionAndHybridVehicleTests {
 
         let decodedBrakes = try JSONDecoder().decode(VolvoEnvelope<VolvoBrakesDTO>.self, from: brakesJson)
         let brakes = decodedBrakes.data
-        XCTAssertEqual(brakes?.frontBrakePadStatus?.value, "NORMAL")
-        XCTAssertEqual(brakes?.rearBrakePadStatus?.value, "NORMAL")
-        XCTAssertEqual(brakes?.parkingBrakeStatus?.value, "ENGAGED")
+        #expect(brakes?.frontBrakePadStatus?.value == "NORMAL")
+        #expect(brakes?.rearBrakePadStatus?.value == "NORMAL")
+        #expect(brakes?.parkingBrakeStatus?.value == "ENGAGED")
     }
 }

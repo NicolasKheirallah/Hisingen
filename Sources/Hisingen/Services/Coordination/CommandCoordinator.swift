@@ -78,7 +78,6 @@ final class CommandCoordinator {
     private let database: VehicleDatabase
     private let authorizer: any RemoteActionAuthorizing
     private let now: () -> Date
-    private let gate = CapabilityGate()
     private weak var context: (any CommandExecutionContext)?
 
     private(set) var isInProgress = false
@@ -129,10 +128,10 @@ final class CommandCoordinator {
             return stillLoading ? .deferred(reason: message) : .refused(reason: message)
         }
         let executor = context.currentCommandExecutor()
-        let availability = gate.availability(
+        let availability = CapabilityGate.availability(
             for: command,
             state: state,
-            commandCatalog: executor.commandCatalog,
+            brand: executor.brand,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
@@ -320,73 +319,7 @@ final class CommandCoordinator {
         guard outcome == .accepted || outcome == .delivered || outcome == .completed else { return nil }
         guard let context, var current = context.vehicleState else { return nil }
         let optimisticAt = now()
-        switch command {
-        case .startClimate(let temperature, _, _, _, _, _):
-            current.climateStatus = VehicleClimateStatus(
-                activity: .heating,
-                timeRemainingMinutes: 30,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: Double(temperature > 0 ? temperature : 22.0)
-            )
-        case .stopClimate:
-            current.climateStatus = VehicleClimateStatus(
-                activity: .idle,
-                timeRemainingMinutes: nil,
-                timerTriggered: false,
-                interiorTemperatureCelsius: current.climateStatus?.interiorTemperatureCelsius,
-                requestedTemperatureCelsius: current.climateStatus?.requestedTemperatureCelsius
-            )
-        case .startPreCleaning, .stopPreCleaning:
-            // Patch `airQuality`, not `climateStatus`; a synthesized climate session would
-            // surface a "Stop Climate" button that does not target pre-cleaning.
-            guard var air = current.airQuality else { break }
-            air = VehicleAirQuality(
-                cleaningState: command == .startPreCleaning ? .on : .off,
-                airQualityIndex: air.airQualityIndex,
-                particulateMatter25: air.particulateMatter25,
-                particulateMatter10: air.particulateMatter10,
-                externalParticulateMatter25: air.externalParticulateMatter25,
-                filterRemainingPercent: air.filterRemainingPercent,
-                runtimeRemainingMinutes: air.runtimeRemainingMinutes,
-                hasError: air.hasError,
-                reportedAt: air.reportedAt,
-                startedAt: command == .startPreCleaning ? (air.startedAt ?? optimisticAt) : air.startedAt,
-                endingAt: air.endingAt,
-                startReason: air.startReason,
-                lastCycleValid: air.lastCycleValid,
-                errorKind: air.errorKind
-            )
-            current.airQuality = air
-        case .lock, .lockReducedGuard:
-            guard var exterior = current.exteriorStatus else { break }
-            exterior.isLocked = true
-            current.exteriorStatus = exterior
-        case .unlock:
-            guard var exterior = current.exteriorStatus else { break }
-            // Volvo unlock does not patch exterior; the official app behaves the same way.
-            if providerBrand == .volvo { break }
-            exterior.isLocked = false
-            current.exteriorStatus = exterior
-        case .unlockTrunk:
-            // Trunk-only unlock leaves central locking engaged.
-            break
-        case .openTailgate, .closeTailgate:
-            guard var exterior = current.exteriorStatus else { break }
-            let patchedState: OpeningState = command == .openTailgate ? .open : .closed
-            if let index = exterior.openings.firstIndex(where: { $0.opening == .tailgate }) {
-                exterior.openings[index] = OpeningReading(opening: .tailgate, state: patchedState)
-            } else {
-                exterior.openings.append(OpeningReading(opening: .tailgate, state: patchedState))
-            }
-            current.exteriorStatus = exterior
-        case .setChargeTarget(let target):
-            current.energy.targetPercentage = target
-        case .setAmpLimit(let amps):
-            current.energy.currentLimitAmps = amps
-        default:
-            break
-        }
+        command.descriptor.optimisticPatch(&current, optimisticAt, providerBrand)
         current.freshness.fetchedAt = optimisticAt
         current.commandState.optimisticLockUntil = optimisticAt.addingTimeInterval(90)
         current.commandState.receipts = []

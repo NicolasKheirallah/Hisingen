@@ -543,7 +543,3 @@ extension PolestarGRPC {
         return String(data: value, encoding: .utf8) ?? ""
     }
 }
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
-}

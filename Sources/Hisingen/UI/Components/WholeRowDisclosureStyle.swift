@@ -7,7 +7,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                withAnimation(reduceMotion ? nil : Motion.interaction) {
                     configuration.isExpanded.toggle()
                 }
             } label: {
@@ -22,7 +22,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .withoutFocusRing()
 
             if configuration.isExpanded {

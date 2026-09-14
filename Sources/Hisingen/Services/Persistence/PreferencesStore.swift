@@ -169,6 +169,7 @@ final class PreferencesStore {
             return value
         }
         set {
+            let previous = cachedEmail
             cachedEmail = newValue
             cachedHasResumableSession[.polestar] = nil
             if newValue.isEmpty {
@@ -179,7 +180,11 @@ final class PreferencesStore {
                     try keychain.saveEmail(newValue)
                     d.removeObject(forKey: "polestar_email")
                 } catch {
-                    // Never write a new account identifier to UserDefaults.
+                    // Never write a new account identifier to UserDefaults. Revert the cached
+                    // value too, so in-session consumers don't rely on an email that will not
+                    // survive relaunch.
+                    cachedEmail = previous
+                    logger.error("Saving the account email to the Keychain failed; it will not persist across launches: \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -314,7 +319,10 @@ final class PreferencesStore {
         get { PanelCloseBehavior(rawValue: d.string(forKey: "panel_close_behavior") ?? "") ?? .keepOpen }
         set { d.set(newValue.rawValue, forKey: "panel_close_behavior") }
     }
-    var carRenderAngle: CarRenderAngle { get { CarRenderAngle(rawValue: d.object(forKey: "car_render_angle") as? Int ?? 0) ?? .frontThreeQuarter } set { d.set(newValue.rawValue, forKey: "car_render_angle") } }
+    // The unset key must fall back to .frontThreeQuarter explicitly: a bare `?? 0` resolves to
+    // CarRenderAngle.sideProfile (rawValue 0), making the written fallback unreachable and
+    // rendering new installs in a view the Settings card never selects.
+    var carRenderAngle: CarRenderAngle { get { CarRenderAngle(rawValue: d.object(forKey: "car_render_angle") as? Int ?? CarRenderAngle.frontThreeQuarter.rawValue) ?? .frontThreeQuarter } set { d.set(newValue.rawValue, forKey: "car_render_angle") } }
     var vehicleModelBadgePosition: VehicleModelBadgePosition { get { VehicleModelBadgePosition(rawValue: d.string(forKey: "vehicle_model_badge_position") ?? "") ?? .inlineHeader } set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") } }
     var registrationBadgePosition: RegistrationNumberBadgePosition { get { RegistrationNumberBadgePosition(rawValue: d.string(forKey: "registration_badge_position") ?? "") ?? .belowGreeting } set { d.set(newValue.rawValue, forKey: "registration_badge_position") } }
     var vehicleLabelFormat: VehicleLabelFormat { get { VehicleLabelFormat(rawValue: d.string(forKey: "vehicle_label_format") ?? "") ?? .modelAndYear } set { d.set(newValue.rawValue, forKey: "vehicle_label_format") } }
@@ -331,6 +339,33 @@ final class PreferencesStore {
         set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
     }
     var persistLocationHistory: Bool { get { d.bool(forKey: "persist_location_history") } set { d.set(newValue, forKey: "persist_location_history") } }
+    /// Set once the first successful sign-in's setup pass is finished (or skipped). The key
+    /// deliberately stays out of the transferable settings set: an imported archive on a new
+    /// Mac is a first run there and should see the pass.
+    var hasCompletedSetupPass: Bool { get { d.bool(forKey: "setup_pass_completed") } set { d.set(newValue, forKey: "setup_pass_completed") } }
+
+    /// Set once the first-launch "lives in your menu bar" card has had its moment — the user
+    /// dismissed it or the first panel session ended. Also stays out of settings transfer.
+    var hasSeenFirstLaunchWelcome: Bool { get { d.bool(forKey: "first_launch_welcome_seen") } set { d.set(newValue, forKey: "first_launch_welcome_seen") } }
+
+    func markFirstLaunchWelcomeSeen() {
+        guard !hasSeenFirstLaunchWelcome else { return }
+        hasSeenFirstLaunchWelcome = true
+    }
+
+    /// An install that upgrades with session material already on the Keychain has been used
+    /// before, so it counts as past the setup pass even though the flag was only introduced
+    /// after that install's first sign-in. A fresh install has no session material and keeps
+    /// the flag unset until its first sign-in's pass completes. The detection closure is
+    /// injectable because the presence bits it reads by default are process-global, which
+    /// makes the default untestable under Swift Testing's parallel execution.
+    func seedSetupPassForExistingInstall(hasSessionMaterial: ((VehicleBrand) -> Bool)? = nil) {
+        guard d.object(forKey: "setup_pass_completed") == nil else { return }
+        let detect = hasSessionMaterial ?? { [self] in hasResumableSession(for: $0) }
+        if VehicleBrand.allCases.contains(where: detect) {
+            hasCompletedSetupPass = true
+        }
+    }
     var historySampleRetentionDays: Int { get { let value = d.integer(forKey: "history_sample_retention_days"); return [30, 90, 180, 365].contains(value) ? value : 90 } set { d.set([30, 90, 180, 365].contains(newValue) ? newValue : 90, forKey: "history_sample_retention_days") } }
     /// When enabled, signing out — or switching to a different account — also erases the
     /// local SQLite history (charging sessions, telemetry, battery health, fuel entries…)
@@ -379,6 +414,9 @@ final class PreferencesStore {
     /// Banner when the planned cheap-charging window opens. Respects quiet hours like
     /// every other alert, so an overnight window arrives in the morning list.
     var notifyPlannerWindowStart: Bool { get { boolDefaultTrue("notify_planner_window_start") } set { d.set(newValue, forKey: "notify_planner_window_start") } }
+    /// How long before the cheap window opens the banner is posted; zero posts it as the
+    /// window opens.
+    var plannerWindowLeadMinutes: Int { get { let value = d.object(forKey: "planner_window_lead_minutes") as? Int; return min(max(value ?? 15, 0), 1_440) } set { d.set(min(max(newValue, 0), 1_440), forKey: "planner_window_lead_minutes") } }
     /// Banner after the daily fetch once tomorrow's prices have landed. Off by default —
     /// the information is rarely urgent enough to justify a daily ping.
     var notifyPlannerPricesPublished: Bool { get { d.bool(forKey: "notify_planner_prices_published") } set { d.set(newValue, forKey: "notify_planner_prices_published") } }
@@ -386,20 +424,23 @@ final class PreferencesStore {
     /// planned window opens and the vehicle is plugged in. Deliberately not transferable
     /// through settings archives and not part of any bulk-enable action.
     var plannerAutoStartEnabled: Bool { get { d.bool(forKey: "planner_auto_start_enabled") } set { d.set(newValue, forKey: "planner_auto_start_enabled") } }
-    /// Window-start notification dedupe: per-VIN record of the last plan start a banner
-    /// was posted for, so a relaunch inside the same window never replays it.
-    func plannerNotifiedWindowStart(for vin: String) -> Date? {
+    /// Window-start notification dedupe: per-VIN record of when the last announced window
+    /// *ends*. Keyed on the end because the plan is recomputed every tick and its start
+    /// drifts while "charge now" is cheapest; a new banner is due only once a plan begins
+    /// at or after the announced end. Key `…_v2`: v1 stored plan starts, which would be
+    /// misread under the new semantics.
+    func plannerNotifiedWindowEnd(for vin: String) -> Date? {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !key.isEmpty,
-              let all = d.dictionary(forKey: "planner_notified_windows_v1") as? [String: Double] else { return nil }
+              let all = d.dictionary(forKey: "planner_notified_window_ends_v2") as? [String: Double] else { return nil }
         return all[key].map(Date.init(timeIntervalSince1970:))
     }
-    func setPlannerNotifiedWindowStart(_ date: Date?, for vin: String) {
+    func setPlannerNotifiedWindowEnd(_ date: Date?, for vin: String) {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !key.isEmpty else { return }
-        var all = d.dictionary(forKey: "planner_notified_windows_v1") as? [String: Double] ?? [:]
+        var all = d.dictionary(forKey: "planner_notified_window_ends_v2") as? [String: Double] ?? [:]
         if let date { all[key] = date.timeIntervalSince1970 } else { all.removeValue(forKey: key) }
-        d.set(all, forKey: "planner_notified_windows_v1")
+        d.set(all, forKey: "planner_notified_window_ends_v2")
     }
     /// Prices-published notification dedupe: zone → publication-day epoch day. One banner
     /// per zone per day, even across relaunches.

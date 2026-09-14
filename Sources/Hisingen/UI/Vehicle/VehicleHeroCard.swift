@@ -12,6 +12,17 @@ struct VehicleHeroCard: View {
 
     private var features: FeatureSelection { preferences.features }
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+    /// Reduce Motion keeps the fade and drops the movement.
+    private var cardTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
+    }
+    /// Inputs that decide which hero surfaces exist (image, overlay badges,
+    /// inline/below badges, energy layout). The keyed animation lives on the
+    /// card's persistent VStack — a conditionally inserted view cannot animate
+    /// its own removal.
+    private var heroLayoutIdentity: String {
+        "\(features.contains(.vehicleImage))|\(heroImageData != nil)|\(preferences.vehicleModelBadgePosition.rawValue)|\(preferences.registrationBadgePosition.rawValue)|\(state.identity.modelName ?? "")|\(state.identity.modelYear ?? "")|\(state.identity.registrationNo ?? "")|\(state.powertrain.isCombustionOnly)|\(state.powertrain.isHybrid)"
+    }
 
     private var pillSignature: String {
         let locked = state.exteriorStatus?.isLocked
@@ -62,6 +73,7 @@ struct VehicleHeroCard: View {
                             startRadius: 40,
                             endRadius: 170
                         )
+                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.isCharging)
 
                         VehiclePresentationView(
                             identity: VehiclePresentationIdentity(
@@ -108,6 +120,7 @@ struct VehicleHeroCard: View {
                                 .padding(.top, HisingenTheme.cardPadding + 8)
                                 Spacer()
                             }
+                            .transition(cardTransition)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -115,6 +128,7 @@ struct VehicleHeroCard: View {
                     .padding(.horizontal, -HisingenTheme.cardPadding)
                     .padding(.top, -HisingenTheme.cardPadding)
                     .clipped()
+                    .transition(cardTransition)
                 }
 
                 let nickname = preferences.vehicleNickname(for: state.identity.vin)
@@ -182,6 +196,7 @@ struct VehicleHeroCard: View {
                                     .foregroundStyle(HisingenTheme.inkMuted)
                             }
                         }
+                        .transition(cardTransition)
                     }
                 }
 
@@ -196,10 +211,13 @@ struct VehicleHeroCard: View {
                 .animation(cardChangeAnimation, value: displayedStateSummary.severity)
 
                 energySummary
+                    .id("\(state.powertrain.isCombustionOnly)|\(state.powertrain.isHybrid)")
+                    .transition(cardTransition)
 
                 HStack {
                     Image(systemName: state.isStale() ? "moon.stars.fill" : "clock.arrow.circlepath")
                         .font(.system(size: 10))
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .foregroundStyle(
                             state.isStale()
                                 ? HisingenTheme.semanticWarning
@@ -216,6 +234,7 @@ struct VehicleHeroCard: View {
                 }
                 .animation(cardChangeAnimation, value: state.isStale())
             }
+            .animation(cardChangeAnimation, value: heroLayoutIdentity)
         }
     }
 
@@ -246,6 +265,10 @@ struct VehicleHeroCard: View {
                     color: HisingenTheme.statusColor(state: state.energy.chargingState),
                     symbol: state.isCharging ? "bolt.fill" : nil
                 )
+                // The pill persists across Charging → Complete; only its
+                // contents swap, so the morph rides a content transition.
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.energy.chargingState)
                 .scaleEffect(chargingJustStarted ? 1.08 : 1)
                 .animation(reduceMotion ? nil : Motion.stateChange, value: chargingJustStarted)
             } else if state.powertrain.isCombustionOnly {

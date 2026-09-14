@@ -3,6 +3,21 @@ import Charts
 import SwiftUI
 
 extension InfoTabView {
+    /// Data identity for the recent-telemetry chart: counts plus boundary timestamps change
+    /// exactly when a refresh lands new rows, so the chart animates on the data, not per render.
+    var recentTelemetryChartKey: String {
+        let telemetry = asyncData.recentTelemetry
+        return "\(telemetry.count)_\(telemetry.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_\(telemetry.last?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
+    /// Data identity for the stored air-quality history chart.
+    var airQualityHistoryChartKey: String {
+        let history = asyncData.airQualityHistory
+        return "\(history.count)_\(history.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_\(history.last?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
     // MARK: - Activity history
 
     var activityHistoryCard: some View {
@@ -28,7 +43,7 @@ extension InfoTabView {
                         }
                         .font(.system(size: 10, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
                 }
 
@@ -67,6 +82,7 @@ extension InfoTabView {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(L10n.text("Odometer history chart"))
                         .accessibilityValue(chartAccessibilityValue(points: values))
+                        .animation(Motion.resolve(Motion.progress), value: recentTelemetryChartKey)
                     }
                 }
 
@@ -215,6 +231,8 @@ extension InfoTabView {
                             .lineLimit(2)
                             .multilineTextAlignment(.trailing)
                             .privacySensitive()
+                            .contentTransition(reduceMotion ? .identity : .opacity)
+                            .animation(Motion.resolveCrossfade(Motion.theme), value: addressText)
                     }
                     .padding(.vertical, 1)
                     KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
@@ -349,9 +367,11 @@ extension InfoTabView {
                                     .progressViewStyle(.linear)
                                     .frame(width: 60)
                                     .tint(filterLife > 20 ? .teal : .orange)
+                                    .animation(Motion.resolve(Motion.progress), value: filterLife)
                                 Text("\(filterLife)%")
                                     .font(.system(size: 11, weight: .bold))
                                     .foregroundStyle(filterLife > 20 ? Color.primary : Color.orange)
+                                    .hisTelemetryValue(filterLife, reduceMotion: reduceMotion)
                             }
                         }
                         .padding(.vertical, 2)
@@ -424,6 +444,7 @@ extension InfoTabView {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(L10n.text("Air quality index history chart"))
                 .accessibilityValue(chartAccessibilityValue(points: values))
+                .animation(Motion.resolve(Motion.progress), value: airQualityHistoryChartKey)
             }
         }
     }

@@ -22,8 +22,8 @@ struct RemoteCommandDispatchTests {
             let context = RouterContextMock(activeBrand: brand)
             let router = URLCommandRouter(context: context)
             router.route(URL(string: "hisingen://lock")!)
-            XCTAssertEqual(context.commands, [.lock])
-            XCTAssertTrue(context.notices.isEmpty)
+            #expect(context.commands == [.lock])
+            #expect(context.notices.isEmpty)
         }
     }
 
@@ -32,13 +32,13 @@ struct RemoteCommandDispatchTests {
     func deepLinkChargeTargetStaysPolestarOnly() {
         let polestar = RouterContextMock(activeBrand: .polestar)
         URLCommandRouter(context: polestar).route(URL(string: "hisingen://charge-target?percent=70")!)
-        XCTAssertEqual(polestar.commands, [.setChargeTarget(70)])
+        #expect(polestar.commands == [.setChargeTarget(70)])
 
         // Volvo's official API exposes no charging writes — a capability fact, not policy.
         let volvo = RouterContextMock(activeBrand: .volvo)
         URLCommandRouter(context: volvo).route(URL(string: "hisingen://charge-target?percent=70")!)
-        XCTAssertTrue(volvo.commands.isEmpty)
-        XCTAssertTrue(volvo.notices.count == 1)
+        #expect(volvo.commands.isEmpty)
+        #expect(volvo.notices.count == 1)
     }
 
     @Test
@@ -47,9 +47,9 @@ struct RemoteCommandDispatchTests {
         let context = RouterContextMock(activeBrand: .volvo)
         let router = URLCommandRouter(context: context)
         router.route(URL(string: "hisingen://lock?vin=YSMZTEST01")!)
-        XCTAssertTrue(context.selectedVINs.isEmpty)
-        XCTAssertEqual(context.commandTargets, ["YSMZTEST01"])
-        XCTAssertEqual(context.commands, [.lock])
+        #expect(context.selectedVINs.isEmpty)
+        #expect(context.commandTargets == ["YSMZTEST01"])
+        #expect(context.commands == [.lock])
     }
 
     @Test func calendarConsumesOnlySentOrTerminalOutcomes() {
@@ -68,7 +68,7 @@ struct RemoteCommandDispatchTests {
         let context = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
         AutomationHandoff.install(context)
         let awaited = await AutomationHandoff.waitForContext()
-        XCTAssertTrue(awaited === context)
+        #expect(awaited === context)
     }
 
     /// Wait-before-install: a shortcut that fires while the app is still launching waits
@@ -82,7 +82,7 @@ struct RemoteCommandDispatchTests {
         let late = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
         AutomationHandoff.install(late)
         let resolved = await awaited
-        XCTAssertTrue(resolved === late)
+        #expect(resolved === late)
     }
 
     /// The intents' full path: resolve → select → dispatch → dialog copy.
@@ -90,16 +90,17 @@ struct RemoteCommandDispatchTests {
     @MainActor
     func sendSelectsTheVehicleAndDescribesTheOutcome() async {
         AutomationHandoff.resetForTesting()
-        let preferences = PreferencesStore(defaults: UserDefaults(suiteName: "RemoteCommandDispatchTests.send")!)
+        let scoped = ScopedPreferences(label: "remote-command-dispatch-send")
+        let preferences = scoped.store
         preferences.vin = vin
         preferences.setVehicleNickname("My Volvo", for: vin)
 
         let context = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
         AutomationHandoff.install(context)
         let dialog = await AutomationHandoff.send(.lock, vehicle: "My Volvo", preferences: preferences)
-        XCTAssertEqual(context.selectedVINs, [vin])
-        XCTAssertEqual(context.provider.executedCommands, [.lock])
-        XCTAssertEqual(dialog, L10n.text("Command accepted; waiting for the vehicle to report the result."))
+        #expect(context.selectedVINs == [vin])
+        #expect(context.provider.executedCommands == [.lock])
+        #expect(dialog == L10n.text("Command accepted; waiting for the vehicle to report the result."))
     }
 
     /// Gate refusals surface as dialog text without a provider round-trip.
@@ -107,13 +108,14 @@ struct RemoteCommandDispatchTests {
     @MainActor
     func sendSurfacesGateRefusalReasons() async {
         AutomationHandoff.resetForTesting()
-        let preferences = PreferencesStore(defaults: UserDefaults(suiteName: "RemoteCommandDispatchTests.refusal")!)
+        let scoped = ScopedPreferences(label: "remote-command-dispatch-refusal")
+        let preferences = scoped.store
 
         let context = DispatchMock(enabledFeatures: [], vin: vin)
         AutomationHandoff.install(context)
         let dialog = await AutomationHandoff.send(.honkAndFlash, vehicle: nil, preferences: preferences)
-        XCTAssertFalse(dialog.isEmpty)
-        XCTAssertEqual(context.provider.executedCommands, [])
+        #expect(!(dialog.isEmpty))
+        #expect(context.provider.executedCommands == [])
     }
 
     /// Volvo lock without the Approved scope tier is refused by the shared gate — the same
@@ -122,17 +124,16 @@ struct RemoteCommandDispatchTests {
     @MainActor
     func volvoLockWithoutApprovedScopesIsRefused() async {
         AutomationHandoff.resetForTesting()
-        let preferences = PreferencesStore(defaults: UserDefaults(suiteName: "RemoteCommandDispatchTests.scopes")!)
+        let scoped = ScopedPreferences(label: "remote-command-dispatch-scopes")
+        let preferences = scoped.store
 
         let context = DispatchMock(
             enabledFeatures: [.remoteLocks], vin: vin, brand: .volvo,
             restrictedScopesEnabled: false)
         AutomationHandoff.install(context)
         let dialog = await AutomationHandoff.send(.lock, vehicle: nil, preferences: preferences)
-        XCTAssertEqual(context.provider.executedCommands, [])
-        XCTAssertEqual(
-            dialog,
-            CommandAvailability.requiresAccountApproval.shortReason)
+        #expect(context.provider.executedCommands == [])
+        #expect(dialog == CommandAvailability.requiresAccountApproval.shortReason)
     }
 
     // MARK: - Optimistic state patch
@@ -161,19 +162,18 @@ struct RemoteCommandDispatchTests {
                           rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
             origin: .userInitiated)
 
-        guard case .sent = outcome else { return XCTFail("Expected the command to be sent") }
+        guard case .sent = outcome else { Issue.record("Expected the command to be sent"); return }
         // The patched temperature matches what was executed; cars without selectable
         // temperature fall back to 22 °C.
         guard case .startClimate(let executedTemperature, _, _, _, _, _) =
                 context.provider.executedCommands.first else {
-            return XCTFail("Expected a start-climate execution")
+            Issue.record("Expected a start-climate execution")
+            return
         }
-        XCTAssertEqual(context.vehicleState?.climateStatus?.activity, .heating)
-        XCTAssertEqual(
-            context.vehicleState?.climateStatus?.requestedTemperatureCelsius,
-            Double(executedTemperature > 0 ? executedTemperature : 22))
-        XCTAssertNotNil(context.vehicleState?.commandState.optimisticLockUntil)
-        XCTAssertEqual(context.vehicleState?.commandState.receipt?.commandIdentifier, "start-climate")
+        #expect(context.vehicleState?.climateStatus?.activity == .heating)
+        #expect(context.vehicleState?.climateStatus?.requestedTemperatureCelsius == Double(executedTemperature > 0 ? executedTemperature : 22))
+        #expect(context.vehicleState?.commandState.optimisticLockUntil != nil)
+        #expect(context.vehicleState?.commandState.receipt?.commandIdentifier == "start-climate")
     }
 
     @Test
@@ -185,9 +185,9 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.stopClimate, origin: .userInitiated)
 
-        XCTAssertEqual(context.vehicleState?.climateStatus?.activity, .idle)
-        XCTAssertEqual(context.vehicleState?.climateStatus?.timeRemainingMinutes, nil)
-        XCTAssertNotNil(context.vehicleState?.commandState.optimisticLockUntil)
+        #expect(context.vehicleState?.climateStatus?.activity == .idle)
+        #expect(context.vehicleState?.climateStatus?.timeRemainingMinutes == nil)
+        #expect(context.vehicleState?.commandState.optimisticLockUntil != nil)
     }
 
     @Test
@@ -204,11 +204,13 @@ struct RemoteCommandDispatchTests {
         )
 
         guard case .sent = await context.perform(command, origin: .userInitiated) else {
-            return XCTFail("Expected provider acknowledgement")
+            Issue.record("Expected provider acknowledgement")
+            return
         }
         #expect(context.vehicleState?.climateStatus == nil)
         guard case .acknowledged = context.vehicleState?.commandState.receipt?.status else {
-            return XCTFail("Expected an acknowledged terminal receipt")
+            Issue.record("Expected an acknowledged terminal receipt")
+            return
         }
     }
 
@@ -221,10 +223,10 @@ struct RemoteCommandDispatchTests {
             isLocked: false, alarmTriggered: false)
 
         _ = await context.perform(.lock, origin: .userInitiated)
-        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+        #expect(context.vehicleState?.exteriorStatus?.isLocked == true)
 
         _ = await context.perform(.unlock, origin: .userInitiated)
-        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
+        #expect(context.vehicleState?.exteriorStatus?.isLocked == false)
     }
 
     @Test
@@ -250,14 +252,15 @@ struct RemoteCommandDispatchTests {
         let outcome = await task.value
 
         guard case .sent(.completed) = outcome else {
-            return XCTFail("Expected the original command to complete")
+            Issue.record("Expected the original command to complete")
+            return
         }
-        XCTAssertEqual(context.vehicleState?.identity.vin, "YSMSECOND02")
-        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, false)
-        XCTAssertNil(context.vehicleState?.commandState.receipt)
-        XCTAssertEqual(context.confirmationCount, 1)
-        XCTAssertEqual(context.presentations.last?.target?.vin, vin)
-        XCTAssertTrue(context.presentations.last?.message.contains("Polestar 2") == true)
+        #expect(context.vehicleState?.identity.vin == "YSMSECOND02")
+        #expect(context.vehicleState?.exteriorStatus?.isLocked == false)
+        #expect(context.vehicleState?.commandState.receipt == nil)
+        #expect(context.confirmationCount == 1)
+        #expect(context.presentations.last?.target?.vin == vin)
+        #expect(context.presentations.last?.message.contains("Polestar 2") == true)
     }
 
     @Test
@@ -270,13 +273,10 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.lock, origin: .userInitiated)
 
-        let issuedAt = try XCTUnwrap(context.vehicleState?.commandState.receipt?.issuedAt)
-        XCTAssertEqual(issuedAt, fixedNow)
-        XCTAssertEqual(context.vehicleState?.freshness.fetchedAt, fixedNow)
-        XCTAssertEqual(
-            context.vehicleState?.commandState.optimisticLockUntil,
-            fixedNow.addingTimeInterval(90)
-        )
+        let issuedAt = try #require(context.vehicleState?.commandState.receipt?.issuedAt)
+        #expect(issuedAt == fixedNow)
+        #expect(context.vehicleState?.freshness.fetchedAt == fixedNow)
+        #expect(context.vehicleState?.commandState.optimisticLockUntil == fixedNow.addingTimeInterval(90))
     }
 
     @Test
@@ -288,7 +288,7 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.unlock, origin: .userInitiated)
 
-        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+        #expect(context.vehicleState?.exteriorStatus?.isLocked == true)
     }
 
     @Test
@@ -301,7 +301,7 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.unlockTrunk, origin: .userInitiated)
 
-        XCTAssertEqual(context.vehicleState?.exteriorStatus?.isLocked, true)
+        #expect(context.vehicleState?.exteriorStatus?.isLocked == true)
     }
 
     @Test
@@ -312,12 +312,12 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.startPreCleaning, origin: .userInitiated)
 
-        XCTAssertEqual(context.vehicleState?.airQuality?.cleaningState, .on)
-        XCTAssertNil(context.vehicleState?.climateStatus)
-        XCTAssertNotNil(context.vehicleState?.commandState.optimisticLockUntil)
+        #expect(context.vehicleState?.airQuality?.cleaningState == .on)
+        #expect(context.vehicleState?.climateStatus == nil)
+        #expect(context.vehicleState?.commandState.optimisticLockUntil != nil)
 
         _ = await context.perform(.stopPreCleaning, origin: .userInitiated)
-        XCTAssertEqual(context.vehicleState?.airQuality?.cleaningState, .off)
+        #expect(context.vehicleState?.airQuality?.cleaningState == .off)
     }
 
     @Test
@@ -328,8 +328,8 @@ struct RemoteCommandDispatchTests {
 
         _ = await context.perform(.setChargeTarget(80), origin: .userInitiated)
 
-        XCTAssertEqual(context.vehicleState?.energy.targetPercentage, 80)
-        XCTAssertNotNil(context.vehicleState?.commandState.optimisticLockUntil)
+        #expect(context.vehicleState?.energy.targetPercentage == 80)
+        #expect(context.vehicleState?.commandState.optimisticLockUntil != nil)
     }
 
     @Test
@@ -341,10 +341,10 @@ struct RemoteCommandDispatchTests {
 
         let outcome = await context.perform(.setChargeTarget(80), origin: .userInitiated)
 
-        guard case .refused = outcome else { return XCTFail("Expected refusal") }
-        XCTAssertEqual(context.vehicleState?.energy.targetPercentage, 70)
-        XCTAssertNil(context.vehicleState?.commandState.optimisticLockUntil)
-        XCTAssertNil(context.vehicleState?.commandState.receipt)
+        guard case .refused = outcome else { Issue.record("Expected refusal"); return }
+        #expect(context.vehicleState?.energy.targetPercentage == 70)
+        #expect(context.vehicleState?.commandState.optimisticLockUntil == nil)
+        #expect(context.vehicleState?.commandState.receipt == nil)
     }
 }
 
@@ -429,16 +429,21 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         title: String, message: String, success: Bool, target: RemoteCommandTarget?
     )] = []
     private let now: () -> Date
+    // `removePersistentDomain` is thread-safe; nonisolated(unsafe) exists only so `deinit`
+    // can perform the guaranteed cleanup.
+    nonisolated(unsafe) private let scopedSuite: String
+    nonisolated(unsafe) private let scopedDefaults: UserDefaults
 
-    /// Each instance gets its own isolated defaults suite, so parallel tests never share
-    /// feature selections or brand state.
+    /// Each instance gets its own isolated defaults suite (removed on deinit), so parallel
+    /// tests never share feature selections or brand state and runs leak no plists.
     init(enabledFeatures: Set<AppFeature>, vin: String,
          brand: VehicleBrand = .polestar, restrictedScopesEnabled: Bool = true,
          now: @escaping () -> Date = Date.init) {
         self.provider = RecordingProvider(brand: brand)
         self.now = now
-        self.preferences = PreferencesStore(defaults: UserDefaults(
-            suiteName: "RemoteCommandDispatchTests.mock.\(UUID().uuidString)")!)
+        scopedSuite = "RemoteCommandDispatchTests.mock.\(UUID().uuidString)"
+        scopedDefaults = UserDefaults(suiteName: scopedSuite)!
+        self.preferences = PreferencesStore(defaults: scopedDefaults)
         preferences.features = {
             var selection = FeatureSelection.default
             for feature in enabledFeatures { selection.set(feature, enabled: true) }
@@ -454,6 +459,10 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
             registrationNo: nil, vin: vin,
             ownerFirstName: nil, odometerKm: nil, imageData: nil,
             fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: [])
+    }
+
+    deinit {
+        scopedDefaults.removePersistentDomain(forName: scopedSuite)
     }
 
     func selectVehicle(vin: String) { selectedVINs.append(vin) }

@@ -1,6 +1,6 @@
 # Contributing to Hisingen
 
-Thank you for wanting to help! Bug reports, pull requests and — especially — real-world vehicle testing are all welcome.
+Thank you for wanting to help! Bug reports, pull requests and, especially, real-world vehicle testing are all welcome.
 
 ## Ways to contribute
 
@@ -9,7 +9,7 @@ Thank you for wanting to help! Bug reports, pull requests and — especially —
 * **Propose features** with the [feature request template](https://github.com/NicolasKheirallah/Hisingen/issues/new?template=feature_request.md).
 * **Improve code or documentation** through pull requests.
 
-Security vulnerabilities must be reported privately via [SECURITY.md](SECURITY.md) — never as a public issue.
+Security vulnerabilities must be reported privately via [SECURITY.md](SECURITY.md), never as a public issue.
 
 ## Development setup
 
@@ -43,7 +43,7 @@ Before submitting a change:
 ## Code style notes
 
 * Follow the conventions of surrounding code; when adding UI, mirror existing SwiftUI patterns.
-* Never render missing vehicle data as a positive state (e.g. "locked" or "closed") — keep it explicitly unknown/unavailable.
+* Never render missing vehicle data as a positive state (e.g. "locked" or "closed"); keep it explicitly unknown/unavailable.
 * Remote commands must go through the same capability and authentication gates as in-app controls.
 
 ## License

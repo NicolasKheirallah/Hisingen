@@ -44,15 +44,29 @@ final class ChargingMiniPanelController {
         // Match the SwiftUI width so the frame never clips the density-scaled content.
         let scaledWidth = 190 * HisingenTheme.contentScale
         if !panel.isVisible {
+            panel.alphaValue = 0
             panel.setFrame(NSRect(origin: topRightPosition(for: NSSize(width: scaledWidth, height: panel.frame.height)),
                                   size: NSSize(width: scaledWidth, height: panel.frame.height)),
                            display: true)
             panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Motion.standard
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 0.72, 0.20, 1.0)
+                panel.animator().alphaValue = 1
+            }
         }
     }
 
     func close() {
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = Motion.fast
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+        })
     }
 
     private func makePanel() {
@@ -108,13 +122,16 @@ private struct ChargingMiniPanelView: View {
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
+                        .transition(.opacity)
                 } else if let battery = batteryPercentage {
                     Text(String(format: "%.0f%%", battery))
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
+                        .transition(.opacity)
                 }
             }
+            .animation(Motion.resolveCrossfade(Motion.telemetry), value: targetPercent)
             HStack(spacing: 10) {
                 if let watts = powerWatts, watts > 0 {
                     Label(Format.kilowatts(watts: watts), systemImage: "bolt.fill")

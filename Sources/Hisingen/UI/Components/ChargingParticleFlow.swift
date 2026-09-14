@@ -114,7 +114,13 @@ final class ChargingParticleHostView: NSView {
         lastIsActive = isActive
         ensureSetup()
         if tintChanged, isConfigured {
+            // Same pace as the SwiftUI fill crossfade above the emitter, so
+            // particles and bar change colour as one surface.
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(Motion.standard)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
             cell.color = Self.particleColor(for: tint)
+            CATransaction.commit()
         }
         guard isActive != wasActive else { return }
         applyActivity(animated: true)

@@ -26,9 +26,8 @@ struct AccessControlsCard: View {
                 }
                 gate.dimReason(gate.cardAvailability([.lock, .unlock]))
 
+                let isLocked = state.exteriorStatus?.isLocked == true
                 HStack(spacing: 8) {
-                    let isLocked = state.exteriorStatus?.isLocked == true
-
                     if profile.permits(.locks) && features.contains(.remoteLocks) {
                         Button {
                             gate.send(isLocked ? .unlock : .lock)
@@ -46,6 +45,7 @@ struct AccessControlsCard: View {
                         .buttonStyle(.bordered)
                         .tint(isLocked ? .blue : .green)
                         .disabled(gate.isDisabled(isLocked ? .unlock : .lock))
+                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: isLocked)
                     }
 
                     if state.model.brand == .volvo,
@@ -65,6 +65,7 @@ struct AccessControlsCard: View {
                         .buttonStyle(.bordered)
                         .disabled(gate.isDisabled(.lockReducedGuard))
                         .help(L10n.text("Locks the vehicle with reduced alarm guard sensitivity, when supported."))
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
 
                     if features.contains(.remoteLocks) {
@@ -86,6 +87,7 @@ struct AccessControlsCard: View {
                             }
                             .buttonStyle(.bordered)
                             .disabled(gate.isDisabled(.unlockTrunk))
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         }
 
                         if showTailgateControl {
@@ -97,6 +99,7 @@ struct AccessControlsCard: View {
                                     Image(systemName: tailgateIsOpen
                                           ? "car.side.rear.open.fill" : "car.side.rear.fill")
                                         .font(.system(size: 15))
+                                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                                     Text(tailgateIsOpen
                                          ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"))
                                         .font(.system(size: 11, weight: .medium))
@@ -107,11 +110,23 @@ struct AccessControlsCard: View {
                             .buttonStyle(.bordered)
                             .tint(tailgateIsOpen ? .orange : nil)
                             .disabled(gate.isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
+                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: tailgateIsOpen)
                         }
                     }
                 }
+                // Keyed on every condition that adds/removes a button so the row
+                // reflows instead of popping (Reduced Guard, trunk, tailgate).
+                .animation(Motion.resolve(Motion.cardChange), value: [
+                    state.model.brand == .volvo,
+                    isLocked,
+                    profile.permits(.reducedGuardLock),
+                    features.contains(.remoteLocks)
+                ])
+                .animation(Motion.resolve(Motion.cardChange), value: state.otaCapabilities?.supportsTrunkControl)
+                .animation(Motion.resolve(Motion.cardChange), value: state.otaCapabilities?.supportsTrunkUnlock)
             }
         }
         .opacity(gate.cardOpacity([.lock, .unlock]))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([.lock, .unlock]))
     }
 }

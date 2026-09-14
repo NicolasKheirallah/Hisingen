@@ -28,6 +28,7 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(L10n.text("Trips"))
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(L10n.text("Departures by hour of day chart"))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Weekday / day"),
                               Format.distance(km: split.weekdayKmPerDay, decimals: 1, unit: preferences.distanceUnit))
@@ -89,16 +90,27 @@ extension HistoryDashboardView {
                             .font(.system(size: 9.5))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button {
-                            exportCSV(
-                                MonthlyMileageReport.csv(reports: mileageReports, vin: state.identity.vin),
-                                name: "monthly-mileage"
-                            )
+                        Menu {
+                            if let report = selectedMileageReport {
+                                Button(L10n.text("Export Selected Month")) {
+                                    exportCSV(
+                                        MonthlyMileageReport.csv(reports: [report], vin: state.identity.vin),
+                                        name: "mileage-\(report.monthStart.formatted(.dateTime.year().month(.twoDigits)))"
+                                    )
+                                }
+                            }
+                            Button(L10n.text("Export All Months")) {
+                                exportCSV(
+                                    MonthlyMileageReport.csv(reports: mileageReports, vin: state.identity.vin),
+                                    name: "monthly-mileage"
+                                )
+                            }
                         } label: {
                             Label(L10n.text("Export report"), systemImage: "square.and.arrow.up")
                                 .font(.system(size: 9))
                         }
-                        .buttonStyle(.borderless)
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
                     }
                 }
             }
@@ -156,6 +168,7 @@ extension HistoryDashboardView {
                     yLabel: preferences.distanceUnit.suffix,
                     points: daily.map { ($0.day, preferences.distanceUnit.convert(km: $0.distanceKm)) }
                 ))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 if weekly.count >= 3 {
                     Chart(weekly) { bucket in
                         BarMark(
@@ -168,6 +181,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(preferences.distanceUnit.suffix)
                     .frame(height: chartHeight * 0.62)
                     .accessibilityLabel(L10n.text("Weekly distance chart"))
+                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 }
                 if let longest {
                     HStack(spacing: 12) {
@@ -180,7 +194,13 @@ extension HistoryDashboardView {
                         }
                     }
                 }
-                if let correlation, correlation < -0.2 {
+                if let slope = HistoryInsights.temperatureConsumptionSlope(from: trips) {
+                    Text(L10n.format("Cold raises consumption by about %@ per 10 °C, across %d trips.",
+                                     Format.percent(slope.percentPer10DegreesColder, decimals: 0),
+                                     slope.observationCount))
+                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let correlation, correlation < -0.2 {
                     Text(L10n.text("Colder trips consume more: consumption rises as ambient temperature drops."))
                         .font(.system(size: 9)).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -211,22 +231,106 @@ extension HistoryDashboardView {
                     searchField(L10n.text("Search trips by date"), text: $tripSearchText,
                                 count: trips.count, total: snapshot.trips.count)
                 }
-                ForEach(visibleTrips) { trip in
-                    tripRow(trip)
-                    if trip.id != visibleTrips.last?.id { Divider().opacity(0.25) }
+                PaginatedSection(items: trips, pageSize: HistoryPagination.tripsPerPage,
+                                 resetKeys: [tripFilterText, periodLoadKey],
+                                 newerHelp: L10n.text("Show newer trips"),
+                                 olderHelp: L10n.text("Show older trips")) { visible, footer in
+                    ForEach(visible) { trip in
+                        tripRow(trip)
+                        if trip.id != visible.last?.id { Divider().opacity(0.25) }
+                    }
+                    footer
                 }
-                if tripPageCount > 1 {
-                    HistoryPagerControls(page: HistoryPagination.clampedPage(tripPage, pageCount: tripPageCount),
-                                         pageCount: tripPageCount,
-                                         newerHelp: L10n.text("Show newer trips"),
-                                         olderHelp: L10n.text("Show older trips")) { tripPage = $0 }
-                }
+                .animation(Motion.resolve(Motion.cardChange), value: tripListKey)
+                hiddenTripsSection
                 Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onChange(of: tripFilterText) { _, _ in tripPage = 0 }
+    }
+
+    /// Hidden trips stay in the local ledger — hiding only filters them from the detected
+    /// list, so every hide stays reversible here.
+    var hiddenTrips: [TripHistoryEntry] {
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
+        return hiddenTripRows.filter { hidden.contains($0.id) }
+    }
+
+    /// Identity of the filtered + sorted trip list: a sort switch or filter edit reorders
+    /// rows, so the list animates the shuffle instead of snapping. Count + endpoints keep
+    /// the key cheap on capped (≤3 000 row) lists.
+    var tripListKey: String {
+        "\(tripSort.rawValue)_\(trips.count)_\(trips.first?.id ?? "")_\(trips.last?.id ?? "")"
+    }
+
+    /// Identity of the hidden-trip rows: a restore removes one, so the section animates
+    /// the row removal.
+    var hiddenTripsKey: String {
+        let trips = hiddenTrips
+        return "\(trips.count)_\(trips.first?.id ?? "")_\(trips.last?.id ?? "")"
+    }
+
+    /// `derivedTrips` fans each trip out to ~20 telemetry rows, so the query runs off the
+    /// main actor once per `hiddenTripsLoadKey` change; rendering only filters the cache.
+    func loadHiddenTrips() async {
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
+        guard !hidden.isEmpty else {
+            hiddenTripRows = []
+            return
+        }
+        let vin = state.identity.vin
+        let db = database
+        let loaded = await Task.detached(priority: .userInitiated) { () -> [TripHistoryEntry] in
+            db.history.derivedTrips(for: vin, limit: 2_000)
+                .filter { hidden.contains($0.id) }
+                .sorted { $0.endedAt > $1.endedAt }
+        }.value
+        guard !Task.isCancelled else { return }
+        hiddenTripRows = loaded
+    }
+
+    @ViewBuilder
+    var hiddenTripsSection: some View {
+        let trips = hiddenTrips
+        if !trips.isEmpty {
+            DisclosureGroup(isExpanded: $showHiddenTrips) {
+                ForEach(trips) { trip in
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.slash")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                        Text(Format.dateTimeFormatter.string(from: trip.endedAt))
+                            .font(.system(size: 10))
+                        Spacer()
+                        Text(Format.distance(km: trip.distanceKm, decimals: 1, unit: preferences.distanceUnit))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                        Button {
+                            preferences.setTripHidden(false, id: trip.id, for: state.identity.vin)
+                            restoredTripIDs.insert(trip.id)
+                            expandedTripIDs.remove(trip.id)
+                        } label: {
+                            Label(L10n.text("Restore"), systemImage: "arrow.uturn.backward")
+                                .font(.system(size: 9))
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityLabel(L10n.text("Restore this hidden trip to the detected list."))
+                        .help(L10n.text("Restore this hidden trip to the detected list."))
+                    }
+                    .padding(.vertical, 2)
+                }
+            } label: {
+                Label(L10n.format("Hidden trips (%d)", trips.count),
+                      systemImage: "eye.slash")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .disclosureGroupStyle(WholeRowDisclosureStyle())
+            .animation(Motion.resolve(Motion.cardChange), value: hiddenTripsKey)
+            .accessibilityHint(L10n.text("Trips you hid from the detected list. Restoring puts them back."))
+        }
     }
 
     @ViewBuilder
@@ -237,8 +341,12 @@ extension HistoryDashboardView {
                 if expanded { expandedTripIDs.remove(trip.id) } else { expandedTripIDs.insert(trip.id) }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    // Rotating glyph (WholeRowDisclosureStyle treatment) instead of a
+                    // hard swap between chevron.right / chevron.down.
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .semibold)).foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .animation(Motion.resolve(Motion.interaction), value: expanded)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(Format.dateTimeFormatter.string(from: trip.endedAt))
                             .font(.system(size: 10.5, weight: .semibold))
@@ -263,7 +371,7 @@ extension HistoryDashboardView {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(tripRowAccessibilityLabel(trip))
             .accessibilityHint(expanded ? L10n.text("Collapse trip details") : L10n.text("Expand trip details"))
@@ -281,7 +389,7 @@ extension HistoryDashboardView {
                             } label: {
                                 Image(systemName: "xmark.circle")
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .help(L10n.text("Clear trip classification"))
                         }
                         if let lat = trip.startLatitude, let lon = trip.startLongitude {
@@ -289,7 +397,7 @@ extension HistoryDashboardView {
                                 Label(L10n.text("Start"), systemImage: "mappin")
                                     .font(.system(size: 9))
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open trip start in Apple Maps"))
                         }
                         if let lat = trip.endLatitude, let lon = trip.endLongitude {
@@ -297,7 +405,7 @@ extension HistoryDashboardView {
                                 Label(L10n.text("End"), systemImage: "mappin.circle.fill")
                                     .font(.system(size: 9))
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open trip endpoint in Apple Maps"))
                         }
                         if let sLat = trip.startLatitude, let sLon = trip.startLongitude,
@@ -306,7 +414,7 @@ extension HistoryDashboardView {
                                 Label(L10n.text("Route"), systemImage: "arrow.triangle.turn.up.right.diamond")
                                     .font(.system(size: 9))
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open the trip route in Apple Maps"))
                         }
                         Spacer()
@@ -316,14 +424,16 @@ extension HistoryDashboardView {
                         } label: {
                             Label(L10n.text("Hide"), systemImage: "eye.slash").font(.system(size: 9))
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.pressable)
                         .help(L10n.text("Hide this trip if segmentation combined or invented it"))
                     }
                 }
                 .padding(.leading, 16)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(.vertical, 1)
+        .animation(Motion.resolve(Motion.layout), value: expanded)
     }
 
     func tripPurposeButton(_ purpose: TripPurpose, trip: TripHistoryEntry) -> some View {
@@ -338,6 +448,7 @@ extension HistoryDashboardView {
         .buttonStyle(.bordered)
         .controlSize(.mini)
         .tint(selected ? (purpose == .business ? .blue : .green) : .gray)
+        .animation(Motion.resolve(Motion.selection), value: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

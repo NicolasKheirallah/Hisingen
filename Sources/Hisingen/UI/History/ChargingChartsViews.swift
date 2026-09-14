@@ -33,6 +33,17 @@ struct ChargingCurveView: View {
     @State private var hoverLocation: CGPoint? = nil
     @State private var curveMode: CurveMode = .soc
 
+    /// Sample-derived geometry that does not depend on the hover position — rebuilt when the
+    /// samples, live wattage, target or chart size change, not on every mouse move.
+    private struct CurveGeometry {
+        var sortedSamples: [ChargingSample] = []
+        var socPointSegments: [[CGPoint]] = []
+        var powerPointSegments: [[CGPoint]] = []
+        var observationGaps: [ChargingCharts.SampleGap] = []
+    }
+
+    @State private var geometry = CurveGeometry()
+
     private var hasPowerData: Bool {
         samples.contains { ($0.powerWatts ?? 0) > 0 } || (currentPowerWatts ?? 0) > 0
     }
@@ -79,7 +90,7 @@ struct ChargingCurveView: View {
     }
 
     private var observationGaps: [ChargingCharts.SampleGap] {
-        ChargingCharts.gaps(in: samples)
+        geometry.observationGaps
     }
 
     private func xCoord(_ date: Date, horizontalInset: CGFloat, chartWidth: CGFloat, timeStart: Date, totalSpan: TimeInterval) -> CGFloat {
@@ -90,6 +101,63 @@ struct ChargingCurveView: View {
     private func yCoord(_ pct: Double, verticalInset: CGFloat, chartHeight: CGFloat, domainLow: Double, domainHigh: Double) -> CGFloat {
         let fraction = CGFloat((pct - domainLow) / (domainHigh - domainLow))
         return verticalInset + (1.0 - min(max(fraction, 0), 1)) * chartHeight
+    }
+
+    /// Recomputes everything the curve needs except the hover marker, so per-mouse-move body
+    /// evaluations never re-sort samples or rebuild point arrays.
+    private func refreshGeometry(width: CGFloat, height: CGFloat) {
+        let horizontalInset: CGFloat = 8
+        let verticalInset: CGFloat = 7
+        let chartWidth = max(1, width - horizontalInset * 2)
+        let chartHeight = max(1, height - verticalInset * 2)
+        let (domainLow, domainHigh) = socDomain
+        let (pwrLow, pwrHigh) = powerDomain
+        let (timeStart, _) = timeSpan
+        let totalSpan = max(60, timeSpan.end.timeIntervalSince(timeStart))
+
+        func point(_ sample: ChargingSample, value: Double, low: Double, high: Double) -> CGPoint {
+            CGPoint(
+                x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
+                y: yCoord(value, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: low, domainHigh: high)
+            )
+        }
+
+        let powerSamples = samples.enumerated().compactMap { index, sample -> ChargingSample? in
+            let watts = sample.powerWatts ?? (index == samples.count - 1 ? currentPowerWatts : nil)
+            guard let watts, watts > 0 else { return nil }
+            return ChargingSample(
+                timestamp: sample.timestamp, batteryPercentage: sample.batteryPercentage,
+                powerWatts: watts, chargingType: sample.chargingType
+            )
+        }
+
+        geometry = CurveGeometry(
+            sortedSamples: samples.sorted { $0.timestamp < $1.timestamp },
+            socPointSegments: ChargingCharts.contiguousSegments(samples).map {
+                $0.map { point($0, value: $0.batteryPercentage, low: domainLow, high: domainHigh) }
+            },
+            powerPointSegments: ChargingCharts.contiguousSegments(powerSamples).map {
+                $0.map { point($0, value: Double($0.powerWatts ?? 0) / 1000.0, low: pwrLow, high: pwrHigh) }
+            },
+            observationGaps: ChargingCharts.gaps(in: samples)
+        )
+    }
+
+    /// Binary search over the cached chronological samples — O(log n) per hover move.
+    private func nearestSample(to date: Date) -> ChargingSample? {
+        let sorted = geometry.sortedSamples
+        guard !sorted.isEmpty else { return nil }
+        var low = 0
+        var high = sorted.count - 1
+        while low < high {
+            let mid = (low + high) / 2
+            if sorted[mid].timestamp < date { low = mid + 1 } else { high = mid }
+        }
+        if low > 0,
+           abs(sorted[low - 1].timestamp.timeIntervalSince(date)) < abs(sorted[low].timestamp.timeIntervalSince(date)) {
+            return sorted[low - 1]
+        }
+        return sorted[low]
     }
 
     private var summaryText: String {
@@ -138,7 +206,7 @@ struct ChargingCurveView: View {
                             .fill(HisingenTheme.semanticGood)
                             .frame(width: 5, height: 5)
                             .opacity(pulse ? 1.0 : 0.45)
-                            .animation(reduceMotion ? nil : Motion.livePulse, value: pulse)
+                            .animation(Motion.resolve(Motion.livePulse), value: pulse)
                         Text(L10n.text("Live").uppercased())
                             .font(.system(size: 8, weight: .bold))
                             .tracking(0.3)
@@ -161,6 +229,7 @@ struct ChargingCurveView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(curveMode == .power ? Color.green : HisingenTheme.accent)
+                        .hisTelemetryValue(summaryText, reduceMotion: reduceMotion)
                 }
 
                 if let energySource, let confidence {
@@ -191,32 +260,11 @@ struct ChargingCurveView: View {
                     let chartHeight = max(1, height - verticalInset * 2)
                     let bottomY = verticalInset + chartHeight
 
-                    let socPointSegments = ChargingCharts.contiguousSegments(samples).map { segment in
-                        segment.map { sample in
-                            CGPoint(
-                                x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
-                                y: yCoord(sample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
-                            )
-                        }
-                    }
+                    // Cached, hover-independent geometry — see refreshGeometry.
+                    let socPointSegments = geometry.socPointSegments
                     let socPoints = socPointSegments.flatMap { $0 }
 
-                    let powerSamples = samples.enumerated().compactMap { index, sample -> ChargingSample? in
-                        let watts = sample.powerWatts ?? (index == samples.count - 1 ? currentPowerWatts : nil)
-                        guard let watts, watts > 0 else { return nil }
-                        return ChargingSample(
-                            timestamp: sample.timestamp, batteryPercentage: sample.batteryPercentage,
-                            powerWatts: watts, chargingType: sample.chargingType
-                        )
-                    }
-                    let powerPointSegments = ChargingCharts.contiguousSegments(powerSamples).map { segment in
-                        segment.map { sample in
-                            CGPoint(
-                                x: xCoord(sample.timestamp, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan),
-                                y: yCoord(Double(sample.powerWatts ?? 0) / 1000.0, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
-                            )
-                        }
-                    }
+                    let powerPointSegments = geometry.powerPointSegments
                     let powerPoints = powerPointSegments.flatMap { $0 }
 
                     let firstSocPoint = socPoints.first ?? CGPoint(x: horizontalInset, y: yCoord(startSample.batteryPercentage, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh))
@@ -239,7 +287,7 @@ struct ChargingCurveView: View {
                         let hoveredDate = timeStart.addingTimeInterval(timeFrac * totalSpan)
 
                         if hoveredDate <= lastSample.timestamp || projectedEnd == nil {
-                            let closest = samples.min(by: { abs($0.timestamp.timeIntervalSince(hoveredDate)) < abs($1.timestamp.timeIntervalSince(hoveredDate)) }) ?? lastSample
+                            let closest = nearestSample(to: hoveredDate) ?? lastSample
                             let resolvedWatts = closest.powerWatts
                                 ?? (closest.timestamp == lastSample.timestamp ? currentPowerWatts : nil)
                             let kw = Double(resolvedWatts ?? 0) / 1000.0
@@ -274,186 +322,37 @@ struct ChargingCurveView: View {
                                 .position(x: (startX + endX) / 2, y: verticalInset + chartHeight / 2)
                         }
 
-                        if curveMode != .power, let effectiveTargetPct {
-                            let guideY = yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
-                            Path { path in
-                                path.move(to: CGPoint(x: horizontalInset, y: guideY))
-                                path.addLine(to: CGPoint(x: width - horizontalInset, y: guideY))
-                            }
-                            .stroke(Color.secondary.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-
-                            Text(L10n.format("Target %d%%", Int(effectiveTargetPct)))
-                                .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1.5)
-                                .background(.regularMaterial, in: Capsule())
-                                .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
-                        }
-
-                        if (curveMode == .power || curveMode == .dual) && averageWatts > 0 {
-                            let avgKw = Double(averageWatts) / 1000.0
-                            let avgY = yCoord(avgKw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
-                            Path { path in
-                                path.move(to: CGPoint(x: horizontalInset, y: avgY))
-                                path.addLine(to: CGPoint(x: width - horizontalInset, y: avgY))
-                            }
-                            .stroke(Color.green.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                        }
+                        guideLayers(width: width, horizontalInset: horizontalInset, verticalInset: verticalInset,
+                                    chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh,
+                                    pwrLow: pwrLow, pwrHigh: pwrHigh)
 
                         if curveMode == .soc || curveMode == .dual {
-                            if let projectedEnd {
-                                Path { path in
-                                    path.move(to: lastSocPoint)
-                                    path.addLine(to: projectedEnd)
-                                    path.addLine(to: CGPoint(x: projectedEnd.x, y: bottomY))
-                                    path.addLine(to: CGPoint(x: lastSocPoint.x, y: bottomY))
-                                    path.closeSubpath()
-                                }
-                                .fill(
-                                    LinearGradient(
-                                        colors: [HisingenTheme.accent.opacity(0.10), HisingenTheme.accent.opacity(0.01)],
-                                        startPoint: .top, endPoint: .bottom
-                                    )
-                                )
+                            Group {
+                                socLayers(socPointSegments: socPointSegments, bottomY: bottomY,
+                                          lastSocPoint: lastSocPoint, projectedEnd: projectedEnd)
                             }
-
-                            ForEach(socPointSegments.indices, id: \.self) { index in
-                                let points = socPointSegments[index]
-                                if points.count >= 2, let first = points.first, let last = points.last {
-                                    ChargingCharts.stepPath(points)
-                                        .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
-                                                startPoint: .top, endPoint: .bottom
-                                            )
-                                        )
-                                }
-                            }
-
-                            if let projectedEnd {
-                                Path { path in
-                                    path.move(to: lastSocPoint)
-                                    path.addLine(to: projectedEnd)
-                                }
-                                .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, dash: [4, 4]))
-
-                                Circle()
-                                    .strokeBorder(HisingenTheme.accent.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
-                                    .background(Circle().fill(HisingenTheme.accent.opacity(0.18)))
-                                    .frame(width: 8, height: 8)
-                                    .position(projectedEnd)
-                            }
-
-                            ForEach(socPointSegments.indices, id: \.self) { index in
-                                let points = socPointSegments[index]
-                                if points.count >= 2 {
-                                    ChargingCharts.stepPath(points)
-                                        .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                                        .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
-                                }
-                            }
+                            .transition(.opacity)
                         }
 
                         if curveMode == .power || curveMode == .dual {
-                            ForEach(powerPointSegments.indices, id: \.self) { index in
-                                let points = powerPointSegments[index]
-                                if points.count >= 2, let first = points.first, let last = points.last {
-                                    if curveMode == .power {
-                                        smoothPath(points)
-                                            .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
-                                            .fill(
-                                                LinearGradient(
-                                                    colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
-                                                    startPoint: .top, endPoint: .bottom
-                                                )
-                                            )
-                                    }
-
-                                    smoothPath(points)
-                                        .stroke(
-                                            Color.green,
-                                            style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
-                                        )
-                                        .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
-                                }
+                            Group {
+                                powerLayers(powerPointSegments: powerPointSegments, bottomY: bottomY)
                             }
+                            .transition(.opacity)
                         }
 
-                        if curveMode != .power {
-                            Circle()
-                                .fill(HisingenTheme.accent.opacity(0.75))
-                                .frame(width: 5, height: 5)
-                                .position(firstSocPoint)
-
-                            ZStack {
-                                if isLive && !reduceMotion {
-                                    Circle()
-                                        .stroke(HisingenTheme.accent.opacity(pulse ? 0.0 : 0.65), lineWidth: 1.5)
-                                        .frame(width: 16, height: 16)
-                                        .scaleEffect(pulse ? 1.65 : 0.85)
-                                }
-                                Circle()
-                                    .fill(HisingenTheme.accent)
-                                    .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
-                                    .frame(width: 7.5, height: 7.5)
-                                    .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
-                            }
-                            .position(lastSocPoint)
-                        } else {
-                            Circle()
-                                .fill(Color.green)
-                                .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
-                                .frame(width: 7.5, height: 7.5)
-                                .position(lastPowerPoint)
-                        }
+                        endpointDots(firstSocPoint: firstSocPoint, lastSocPoint: lastSocPoint,
+                                     lastPowerPoint: lastPowerPoint)
 
                         if let info = hoverInfo {
-                            Path { path in
-                                path.move(to: CGPoint(x: info.point.x, y: verticalInset))
-                                path.addLine(to: CGPoint(x: info.point.x, y: bottomY))
+                            Group {
+                                hoverLayer(info: info, verticalInset: verticalInset, bottomY: bottomY, width: width)
                             }
-                            .stroke(Color.primary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-
-                            Circle()
-                                .fill(curveMode == .power ? Color.green : HisingenTheme.accent)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
-                                .frame(width: 9, height: 9)
-                                .shadow(color: (curveMode == .power ? Color.green : HisingenTheme.accent).opacity(0.6), radius: 4)
-                                .position(info.point)
-
-                            HStack(spacing: 4) {
-                                Text(String(format: "%.0f%%", info.pct))
-                                    .font(.system(size: 9, weight: .bold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(HisingenTheme.accent)
-                                if let watts = info.powerWatts, watts > 0 {
-                                    Text("· \(Format.kilowatts(watts: watts))")
-                                        .font(.system(size: 8.5, weight: .semibold))
-                                        .foregroundStyle(.green)
-                                }
-                                Text("· " + Format.shortTime(date: info.date))
-                                    .font(.system(size: 8.5))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.tertiary)
-                                if info.isProjected {
-                                    Text("(\(L10n.text("Projected")))")
-                                        .font(.system(size: 8, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(.regularMaterial, in: Capsule())
-                            .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
-                            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
-                            .position(
-                                x: min(max(info.point.x, 60), width - 60),
-                                y: max(verticalInset + 10, info.point.y - 18)
-                            )
+                            .transition(.opacity)
+                            .animation(Motion.resolveCrossfade(Motion.interaction), value: isHovering)
                         }
                     }
+                    .animation(Motion.resolve(Motion.entrance), value: curveMode)
                     .contentShape(Rectangle())
                     .onContinuousHover { phase in
                         switch phase {
@@ -465,6 +364,13 @@ struct ChargingCurveView: View {
                             hoverLocation = nil
                         }
                     }
+                    // Hover moves never touch these inputs, so the geometry cache rebuilds
+                    // only when the underlying data or layout actually changes.
+                    .onChange(of: samples, initial: true) { _, _ in refreshGeometry(width: width, height: height) }
+                    .onChange(of: geo.size, initial: true) { _, _ in refreshGeometry(width: width, height: height) }
+                    .onChange(of: currentPowerWatts) { _, _ in refreshGeometry(width: width, height: height) }
+                    .onChange(of: effectiveTargetPct) { _, _ in refreshGeometry(width: width, height: height) }
+                    .onChange(of: readyDate) { _, _ in refreshGeometry(width: width, height: height) }
                     .onAppear {
                         guard isLive, !reduceMotion else { return }
                         withAnimation(Motion.livePulse) { pulse = true }
@@ -485,6 +391,7 @@ struct ChargingCurveView: View {
                             Text(Format.kilowatts(watts: peakWatts))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.green)
+                                .hisTelemetryValue(peakWatts, reduceMotion: reduceMotion)
                         }
                         Spacer()
                     }
@@ -534,6 +441,7 @@ struct ChargingCurveView: View {
                 .font(.system(size: 12, weight: emphasized ? .bold : .semibold))
                 .monospacedDigit()
                 .foregroundStyle(emphasized ? HisingenTheme.accent : .primary)
+                .hisTelemetryValue(pct, reduceMotion: reduceMotion)
             if let date {
                 Text(Format.shortTime(date: date))
                     .font(.system(size: 9))
@@ -545,6 +453,221 @@ struct ChargingCurveView: View {
 
     private func smoothPath(_ points: [CGPoint]) -> Path {
         ChargingCharts.smoothPath(points)
+    }
+
+    // The chart layers below are extracted methods: keeping them inline made the chart
+    // body exceed the type-checker's expression-size limit.
+
+    /// Dashed target and average guide lines plus the target capsule; both fade when the
+    /// mode switch makes them appear or disappear.
+    @ViewBuilder
+    private func guideLayers(width: CGFloat, horizontalInset: CGFloat, verticalInset: CGFloat,
+                             chartHeight: CGFloat, domainLow: Double, domainHigh: Double,
+                             pwrLow: Double, pwrHigh: Double) -> some View {
+        if curveMode != .power, let effectiveTargetPct {
+            Group {
+                let guideY = yCoord(effectiveTargetPct, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: domainLow, domainHigh: domainHigh)
+                Path { path in
+                    path.move(to: CGPoint(x: horizontalInset, y: guideY))
+                    path.addLine(to: CGPoint(x: width - horizontalInset, y: guideY))
+                }
+                .stroke(Color.secondary.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+                Text(L10n.format("Target %d%%", Int(effectiveTargetPct)))
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1.5)
+                    .background(.regularMaterial, in: Capsule())
+                    .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
+            }
+            .transition(.opacity)
+        }
+
+        if (curveMode == .power || curveMode == .dual) && averageWatts > 0 {
+            Group {
+                let avgKw = Double(averageWatts) / 1000.0
+                let avgY = yCoord(avgKw, verticalInset: verticalInset, chartHeight: chartHeight, domainLow: pwrLow, domainHigh: pwrHigh)
+                Path { path in
+                    path.move(to: CGPoint(x: horizontalInset, y: avgY))
+                    path.addLine(to: CGPoint(x: width - horizontalInset, y: avgY))
+                }
+                .stroke(Color.green.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+            }
+            .transition(.opacity)
+        }
+    }
+
+    /// Start / end point dots: the live ripple pair on SoC modes, a plain dot on power.
+    @ViewBuilder
+    private func endpointDots(firstSocPoint: CGPoint, lastSocPoint: CGPoint, lastPowerPoint: CGPoint) -> some View {
+        if curveMode != .power {
+            Group {
+                Circle()
+                    .fill(HisingenTheme.accent.opacity(0.75))
+                    .frame(width: 5, height: 5)
+                    .position(firstSocPoint)
+
+                ZStack {
+                    if isLive && !reduceMotion {
+                        Circle()
+                            .stroke(HisingenTheme.accent.opacity(pulse ? 0.0 : 0.65), lineWidth: 1.5)
+                            .frame(width: 16, height: 16)
+                            .scaleEffect(pulse ? 1.65 : 0.85)
+                    }
+                    Circle()
+                        .fill(HisingenTheme.accent)
+                        .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                        .frame(width: 7.5, height: 7.5)
+                        .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
+                }
+                .position(lastSocPoint)
+            }
+            .transition(.opacity)
+        } else {
+            Circle()
+                .fill(Color.green)
+                .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                .frame(width: 7.5, height: 7.5)
+                .position(lastPowerPoint)
+                .transition(.opacity)
+        }
+    }
+
+    /// SoC fill, projection and stroke layers (`soc` / `dual` modes).
+    @ViewBuilder
+    private func socLayers(socPointSegments: [[CGPoint]], bottomY: CGFloat,
+                           lastSocPoint: CGPoint, projectedEnd: CGPoint?) -> some View {
+        if let projectedEnd {
+            Path { path in
+                path.move(to: lastSocPoint)
+                path.addLine(to: projectedEnd)
+                path.addLine(to: CGPoint(x: projectedEnd.x, y: bottomY))
+                path.addLine(to: CGPoint(x: lastSocPoint.x, y: bottomY))
+                path.closeSubpath()
+            }
+            .fill(
+                LinearGradient(
+                    colors: [HisingenTheme.accent.opacity(0.10), HisingenTheme.accent.opacity(0.01)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+        }
+
+        ForEach(socPointSegments.indices, id: \.self) { index in
+            let points = socPointSegments[index]
+            if points.count >= 2, let first = points.first, let last = points.last {
+                ChargingCharts.stepPath(points)
+                    .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
+                    .fill(
+                        LinearGradient(
+                            colors: [HisingenTheme.accent.opacity(0.25), HisingenTheme.accent.opacity(0.02)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+            }
+        }
+
+        if let projectedEnd {
+            Path { path in
+                path.move(to: lastSocPoint)
+                path.addLine(to: projectedEnd)
+            }
+            .stroke(HisingenTheme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, dash: [4, 4]))
+
+            Circle()
+                .strokeBorder(HisingenTheme.accent.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
+                .background(Circle().fill(HisingenTheme.accent.opacity(0.18)))
+                .frame(width: 8, height: 8)
+                .position(projectedEnd)
+        }
+
+        ForEach(socPointSegments.indices, id: \.self) { index in
+            let points = socPointSegments[index]
+            if points.count >= 2 {
+                ChargingCharts.stepPath(points)
+                    .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .shadow(color: HisingenTheme.accent.opacity(0.35), radius: 3, y: 1)
+            }
+        }
+    }
+
+    /// Power fill and stroke layers (`power` / `dual` modes).
+    @ViewBuilder
+    private func powerLayers(powerPointSegments: [[CGPoint]], bottomY: CGFloat) -> some View {
+        ForEach(powerPointSegments.indices, id: \.self) { index in
+            let points = powerPointSegments[index]
+            if points.count >= 2, let first = points.first, let last = points.last {
+                if curveMode == .power {
+                    smoothPath(points)
+                        .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        )
+                }
+
+                smoothPath(points)
+                    .stroke(
+                        Color.green,
+                        style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
+                    )
+                    .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
+            }
+        }
+    }
+
+    /// Hover rule line, marker and readout capsule. Only the marker animates its position
+    /// (Motion.fast follow); the rule and capsule track the cursor unanimated so the
+    /// readout stays glued to the pointer.
+    @ViewBuilder
+    private func hoverLayer(info: (point: CGPoint, pct: Double, date: Date, powerWatts: Int?, isProjected: Bool),
+                            verticalInset: CGFloat, bottomY: CGFloat, width: CGFloat) -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: info.point.x, y: verticalInset))
+            path.addLine(to: CGPoint(x: info.point.x, y: bottomY))
+        }
+        .stroke(Color.primary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+
+        Circle()
+            .fill(curveMode == .power ? Color.green : HisingenTheme.accent)
+            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+            .frame(width: 9, height: 9)
+            .shadow(color: (curveMode == .power ? Color.green : HisingenTheme.accent).opacity(0.6), radius: 4)
+            .position(info.point)
+            .animation(Motion.resolve(Motion.interaction), value: info.point)
+
+        HStack(spacing: 4) {
+            Text(String(format: "%.0f%%", info.pct))
+                .font(.system(size: 9, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(HisingenTheme.accent)
+            if let watts = info.powerWatts, watts > 0 {
+                Text("· \(Format.kilowatts(watts: watts))")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(.green)
+            }
+            Text("· " + Format.shortTime(date: info.date))
+                .font(.system(size: 8.5))
+                .monospacedDigit()
+                .foregroundStyle(.tertiary)
+            if info.isProjected {
+                Text("(\(L10n.text("Projected")))")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+        .position(
+            x: min(max(info.point.x, 60), width - 60),
+            y: max(verticalInset + 10, info.point.y - 18)
+        )
     }
 }
 
@@ -626,33 +749,26 @@ enum ChargingCharts {
     }
 
     /// Splits observations before rendering so the UI never invents a continuous line across
-    /// a period that was too sparse to support energy integration.
+    /// a period that was too sparse to support energy integration. Delegates to
+    /// `HistoryInsights.segments` so the gap rule lives in exactly one place.
     static func contiguousSegments(
         _ samples: [ChargingSample], maximumGap: TimeInterval = maximumConnectedGap
     ) -> [[ChargingSample]] {
+        // `HistoryInsights.segments` expects chronologically-sorted input.
         let ordered = samples.sorted { $0.timestamp < $1.timestamp }
-        guard let first = ordered.first else { return [] }
-        var result: [[ChargingSample]] = []
-        var current = [first]
-        for sample in ordered.dropFirst() {
-            if sample.timestamp.timeIntervalSince(current[current.count - 1].timestamp) > maximumGap {
-                result.append(current)
-                current = [sample]
-            } else {
-                current.append(sample)
-            }
-        }
-        result.append(current)
-        return result
+        return HistoryInsights.segments(of: ordered, maxGap: maximumGap, timestamp: \.timestamp)
     }
 
+    /// Gaps are exactly the boundaries between consecutive runs, derived from the same
+    /// segmentation instead of a parallel threshold comparison.
     static func gaps(
         in samples: [ChargingSample], maximumGap: TimeInterval = maximumConnectedGap
     ) -> [SampleGap] {
-        let ordered = samples.sorted { $0.timestamp < $1.timestamp }
-        return zip(ordered, ordered.dropFirst()).compactMap { first, second in
-            guard second.timestamp.timeIntervalSince(first.timestamp) > maximumGap else { return nil }
-            return SampleGap(startedAt: first.timestamp, endedAt: second.timestamp)
+        let segments = contiguousSegments(samples, maximumGap: maximumGap)
+        guard segments.count > 1 else { return [] }
+        return zip(segments, segments.dropFirst()).compactMap { run, next in
+            guard let last = run.last, let first = next.first else { return nil }
+            return SampleGap(startedAt: last.timestamp, endedAt: first.timestamp)
         }
     }
 

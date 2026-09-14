@@ -5,6 +5,8 @@ struct CommandReceiptChip: View {
     let receipt: CommandReceipt
     let onDismiss: (UUID) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var appearance: (symbol: String, color: Color) {
         switch receipt.status {
         case .confirmed, .acknowledged:
@@ -33,6 +35,7 @@ struct CommandReceiptChip: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: appearance.symbol)
                 .foregroundStyle(appearance.color)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(confirmationLabel)
@@ -48,7 +51,7 @@ struct CommandReceiptChip: View {
             } label: {
                 Image(systemName: "xmark")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .accessibilityLabel(L10n.text("Dismiss command status"))
         }
         .padding(9)
@@ -57,5 +60,9 @@ struct CommandReceiptChip: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(appearance.color.opacity(0.25), lineWidth: 0.5)
         )
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: receipt.status)
+        // Declared here so any host stack that animates insertions gets the
+        // same drop-in the other vehicle cards use.
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

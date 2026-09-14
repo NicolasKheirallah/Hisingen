@@ -11,6 +11,7 @@ struct WindowsLocateCard: View {
     var body: some View {
         let showWindows = profile.permits(.windows) && features.contains(.remoteWindows)
         let showLocate = profile.permits(.honkAndFlash) && features.contains(.remoteHonkFlash)
+        let mode = state.otaCapabilities?.honkFlashMode
         let headerTitle = showWindows && showLocate
             ? L10n.text("Windows & Locate Vehicle")
             : (showWindows ? L10n.text("Windows Control") : L10n.text("Locate Vehicle"))
@@ -36,7 +37,6 @@ struct WindowsLocateCard: View {
                     }
 
                     if showLocate {
-                        let mode = state.otaCapabilities?.honkFlashMode
                         if mode?.permits(.flashLights) ?? true {
                             windowButton(
                                 command: .flashLights,
@@ -61,8 +61,18 @@ struct WindowsLocateCard: View {
                     }
                 }
             }
+            // Keyed on every condition that adds/removes a button so the row
+            // reflows when feature flags or honk/flash permissions change.
+            .animation(Motion.resolve(Motion.cardChange), value: [
+                showWindows,
+                showLocate,
+                mode?.permits(.flashLights) ?? true,
+                mode?.permits(.honkAndFlash) ?? true,
+                mode?.permits(.honkHorn) ?? true
+            ])
         }
         .opacity(gate.cardOpacity([.closeWindows, .honkAndFlash, .flashLights]))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([.closeWindows, .honkAndFlash, .flashLights]))
     }
 
     private func windowButton(command: RemoteCommand, symbol: String, title: String) -> some View {
@@ -78,5 +88,6 @@ struct WindowsLocateCard: View {
         }
         .buttonStyle(.bordered)
         .disabled(gate.isDisabled(command))
+        .transition(.opacity)
     }
 }

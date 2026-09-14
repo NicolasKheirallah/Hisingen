@@ -22,21 +22,21 @@ struct VehiclePresentationAnimationTests {
         // stage only animates when the request changes.
         let first = VehiclePresentationRequest(identity: identity, data: bytes)
         let refresh = VehiclePresentationRequest(identity: identity, data: bytes)
-        XCTAssertEqual(first, refresh)
+        #expect(first == refresh)
 
         // A newly downloaded render for the same angle is a real change.
         let redownloaded = VehiclePresentationRequest(
             identity: identity,
             data: Data(repeating: 0xAB, count: 3_037_500)
         )
-        XCTAssertNotEqual(first, redownloaded)
+        #expect(first != redownloaded)
 
         // So is a different angle, and a different car.
-        XCTAssertNotEqual(first, VehiclePresentationRequest(
+        #expect(first != VehiclePresentationRequest(
             identity: VehiclePresentationIdentity(vin: identity.vin, angle: 4),
             data: bytes
         ))
-        XCTAssertNotEqual(first, VehiclePresentationRequest(
+        #expect(first != VehiclePresentationRequest(
             identity: VehiclePresentationIdentity(vin: "YV1XZEHR2R2371256", angle: 1),
             data: bytes
         ))
@@ -48,25 +48,22 @@ struct VehiclePresentationAnimationTests {
         let identity = VehiclePresentationIdentity(vin: "YSMVSEDE6PL147228", angle: 1)
         let opened = Date(timeIntervalSince1970: 1_000_000)
 
-        XCTAssertEqual(ledger.style(for: identity, now: opened), .full)
+        #expect(ledger.style(for: identity, now: opened) == .full)
 
         // Only presenting the car counts. Telemetry never reaches the ledger, so
         // asking again without presenting still says "full".
-        XCTAssertEqual(ledger.style(for: identity, now: opened + 1), .full)
+        #expect(ledger.style(for: identity, now: opened + 1) == .full)
 
         ledger.markPresented(identity, at: opened)
 
         // Popover toggled shut and straight back open: no animation at all.
-        XCTAssertEqual(ledger.style(for: identity, now: opened + 1), .instant)
+        #expect(ledger.style(for: identity, now: opened + 1) == .instant)
         // Later in the same sitting, or the other tab: shorter entrance.
-        XCTAssertEqual(ledger.style(for: identity, now: opened + 30), .abbreviated)
+        #expect(ledger.style(for: identity, now: opened + 30) == .abbreviated)
         // A fresh visit earns the full roll-in again.
-        XCTAssertEqual(ledger.style(for: identity, now: opened + 11 * 60), .full)
+        #expect(ledger.style(for: identity, now: opened + 11 * 60) == .full)
         // Another car has never been seen, whatever this one did.
-        XCTAssertEqual(
-            ledger.style(for: VehiclePresentationIdentity(vin: "YV1XZEHR2R2371256", angle: 1), now: opened + 30),
-            .full
-        )
+        #expect(ledger.style(for: VehiclePresentationIdentity(vin: "YV1XZEHR2R2371256", angle: 1), now: opened + 30) == .full)
     }
 
     // MARK: - Direction
@@ -81,73 +78,70 @@ struct VehiclePresentationAnimationTests {
         }
 
         // Strip order is 3/4 front (1), front (2), side (0), 3/4 rear (3), rear (4), top (5).
-        XCTAssertEqual(direction(1, 2), .towardRear)
-        XCTAssertEqual(direction(1, 0), .towardRear)
-        XCTAssertEqual(direction(0, 4), .towardRear)
-        XCTAssertEqual(direction(4, 2), .towardFront)
-        XCTAssertEqual(direction(3, 1), .towardFront)
-        XCTAssertEqual(direction(5, 0), .towardFront)
+        #expect(direction(1, 2) == .towardRear)
+        #expect(direction(1, 0) == .towardRear)
+        #expect(direction(0, 4) == .towardRear)
+        #expect(direction(4, 2) == .towardFront)
+        #expect(direction(3, 1) == .towardFront)
+        #expect(direction(5, 0) == .towardFront)
 
         // The old picture leaves in the direction of travel; the new one arrives
         // from the other side.
-        XCTAssertEqual(VehicleTransitionDirection.towardRear.outgoingSign, -1)
-        XCTAssertEqual(VehicleTransitionDirection.towardFront.outgoingSign, 1)
+        #expect(VehicleTransitionDirection.towardRear.outgoingSign == -1)
+        #expect(VehicleTransitionDirection.towardFront.outgoingSign == 1)
 
         // No spatial relationship to express.
-        XCTAssertEqual(direction(0, 0), .none)
-        XCTAssertEqual(direction(0, VehiclePresentationIdentity.cabinAngle), .none)
-        XCTAssertEqual(direction(VehiclePresentationIdentity.cabinAngle, 0), .none)
-        XCTAssertEqual(direction(0, 99), .none)
-        XCTAssertEqual(
-            VehicleTransitionDirection.between(
+        #expect(direction(0, 0) == .none)
+        #expect(direction(0, VehiclePresentationIdentity.cabinAngle) == .none)
+        #expect(direction(VehiclePresentationIdentity.cabinAngle, 0) == .none)
+        #expect(direction(0, 99) == .none)
+        #expect(VehicleTransitionDirection.between(
                 VehiclePresentationIdentity(vin: "YSMVSEDE6PL147228", angle: 0),
                 VehiclePresentationIdentity(vin: "YV1XZEHR2R2371256", angle: 4)
-            ),
-            .none
-        )
-        XCTAssertEqual(VehicleTransitionDirection.none.outgoingSign, 0)
+            ) == .none)
+        #expect(VehicleTransitionDirection.none.outgoingSign == 0)
     }
 
     // MARK: - Curves
 
     @Test
     func brakingCurveCoversTheDistanceAndStopsDead() {
-        XCTAssertEqual(VehicleRollCurve.distance(at: 0), 0)
-        XCTAssertEqual(VehicleRollCurve.distance(at: 1), 1)
+        #expect(VehicleRollCurve.distance(at: 0) == 0)
+        #expect(VehicleRollCurve.distance(at: 1) == 1)
 
         // Monotonic: the car never backs up mid-arrival.
         var previous = 0.0
         for step in 1...400 {
             let value = VehicleRollCurve.distance(at: Double(step) / 400)
-            XCTAssertTrue(value >= previous)
+            #expect(value >= previous)
             previous = value
         }
 
         // Half the distance is behind it in the first third of the time.
-        XCTAssertTrue(VehicleRollCurve.distance(at: VehicleRollCurve.speedHoldFraction) > 0.49)
+        #expect(VehicleRollCurve.distance(at: VehicleRollCurve.speedHoldFraction) > 0.49)
 
         // And it arrives at a crawl rather than a stop: the last slice of travel
         // is a fraction of a mid-flight slice.
         let tail = VehicleRollCurve.distance(at: 1) - VehicleRollCurve.distance(at: 0.98)
         let middle = VehicleRollCurve.distance(at: 0.5) - VehicleRollCurve.distance(at: 0.48)
-        XCTAssertTrue(tail < middle / 10)
+        #expect(tail < middle / 10)
     }
 
     @Test
     func suspensionSettleDipsOnceAndReturnsToRest() {
-        XCTAssertEqual(VehicleRollCurve.settle(at: 0), 0)
-        XCTAssertEqual(VehicleRollCurve.settle(at: 1), 0)
+        #expect(VehicleRollCurve.settle(at: 0) == 0)
+        #expect(VehicleRollCurve.settle(at: 1) == 0)
 
         // Compression first — negative is downwards — then a much smaller rebound.
         let compression = VehicleRollCurve.settle(at: 0.18)
         let rebound = VehicleRollCurve.settle(at: 0.68)
-        XCTAssertTrue(compression < -0.99)
-        XCTAssertTrue(rebound > 0)
-        XCTAssertTrue(rebound < abs(compression) / 3)
+        #expect(compression < -0.99)
+        #expect(rebound > 0)
+        #expect(rebound < abs(compression) / 3)
 
         // Normalised, so the amplitude in the motion is the compression in points.
         for step in 0...1000 {
-            XCTAssertTrue(abs(VehicleRollCurve.settle(at: Double(step) / 1000)) <= 1.0001)
+            #expect(abs(VehicleRollCurve.settle(at: Double(step) / 1000)) <= 1.0001)
         }
     }
 
@@ -155,17 +149,17 @@ struct VehiclePresentationAnimationTests {
     func entranceStartsOffstageAndLandsOnCanonicalValues() {
         for motion in [VehicleEntranceMotion.full, .abbreviated, .cabin, .reduced] {
             let samples = motion.samples()
-            XCTAssertTrue(samples.count > 1)
+            #expect(samples.count > 1)
 
             guard let first = samples.first, let last = samples.last else { return }
-            XCTAssertEqual(first.translation.x, motion.travel)
-            XCTAssertEqual(first.scale, motion.startScale)
-            XCTAssertEqual(first.opacity, 0)
+            #expect(first.translation.x == motion.travel)
+            #expect(first.scale == motion.startScale)
+            #expect(first.opacity == 0)
 
             // Whatever the tuning, the last frame is the resting state exactly.
-            XCTAssertEqual(last.translation, .zero)
-            XCTAssertTrue(isClose(last.scale, 1))
-            XCTAssertTrue(isClose(last.opacity, 1))
+            #expect(last.translation == .zero)
+            #expect(isClose(last.scale, 1))
+            #expect(isClose(last.opacity, 1))
         }
     }
 
@@ -177,12 +171,12 @@ struct VehiclePresentationAnimationTests {
             for sample in motion.samples() {
                 // Restrained, not bouncy: it approaches from one side and stops,
                 // never crossing its resting place.
-                XCTAssertTrue(abs(sample.translation.x) <= abs(motion.travel) + 0.0001)
-                XCTAssertTrue(sample.translation.x * entrySide >= -0.0001)
-                XCTAssertTrue(sample.scale <= 1.0001)
-                XCTAssertTrue(sample.scale >= motion.startScale - 0.0001)
+                #expect(abs(sample.translation.x) <= abs(motion.travel) + 0.0001)
+                #expect(sample.translation.x * entrySide >= -0.0001)
+                #expect(sample.scale <= 1.0001)
+                #expect(sample.scale >= motion.startScale - 0.0001)
                 // Vertical movement stays in the "barely noticeable" range.
-                XCTAssertTrue(abs(sample.translation.y) <= max(motion.sway, motion.settle) + 0.0001)
+                #expect(abs(sample.translation.y) <= max(motion.sway, motion.settle) + 0.0001)
             }
         }
     }
@@ -203,31 +197,31 @@ struct VehiclePresentationAnimationTests {
         // and the overhead frame, so the car has to come from the left to be
         // driving forwards rather than reversing into place.
         for angle in [0, 1, 5] {
-            XCTAssertEqual(VehiclePresentationIdentity(vin: "V", angle: angle).facing, .right)
-            XCTAssertTrue((entrance(angle)?.travel ?? 0) < 0)
+            #expect(VehiclePresentationIdentity(vin: "V", angle: angle).facing == .right)
+            #expect((entrance(angle)?.travel ?? 0) < 0)
         }
 
         // The rear three-quarter points away to the left, so it comes from the right.
-        XCTAssertEqual(VehiclePresentationIdentity(vin: "V", angle: 3).facing, .left)
-        XCTAssertTrue((entrance(3)?.travel ?? 0) > 0)
+        #expect(VehiclePresentationIdentity(vin: "V", angle: 3).facing == .left)
+        #expect((entrance(3)?.travel ?? 0) > 0)
 
         // Dead-on front and rear have no forward axis on screen; they keep the
         // conventional trailing-edge entry.
         for angle in [2, 4] {
-            XCTAssertEqual(VehiclePresentationIdentity(vin: "V", angle: angle).facing, .square)
-            XCTAssertTrue((entrance(angle)?.travel ?? 0) > 0)
+            #expect(VehiclePresentationIdentity(vin: "V", angle: angle).facing == .square)
+            #expect((entrance(angle)?.travel ?? 0) > 0)
         }
 
         // Whichever side it starts on, it travels the same distance and lands in
         // exactly the same place.
-        XCTAssertEqual(abs(entrance(0)?.travel ?? 0), abs(entrance(3)?.travel ?? 0))
+        #expect(abs(entrance(0)?.travel ?? 0) == abs(entrance(3)?.travel ?? 0))
         for angle in [0, 1, 2, 3, 4, 5] {
             guard let last = entrance(angle)?.samples().last else { return }
-            XCTAssertEqual(last.translation, .zero)
+            #expect(last.translation == .zero)
         }
 
         // An unknown angle has nothing to reason about and stays conventional.
-        XCTAssertEqual(VehiclePresentationIdentity(vin: "V", angle: 99).facing, .square)
+        #expect(VehiclePresentationIdentity(vin: "V", angle: 99).facing == .square)
     }
 
     @Test
@@ -235,11 +229,11 @@ struct VehiclePresentationAnimationTests {
         let radius: CGFloat = 26
 
         // Rolling without slipping: one circumference of travel is one turn.
-        XCTAssertTrue(isClose(
+        #expect(isClose(
             VehicleRollCurve.wheelRotation(travelled: 2 * .pi * radius, radius: radius),
             2 * .pi
         ))
-        XCTAssertEqual(VehicleRollCurve.wheelRotation(travelled: 100, radius: 0), 0)
+        #expect(VehicleRollCurve.wheelRotation(travelled: 100, radius: 0) == 0)
 
         // Driven off the body's own travel samples, so it can only ever turn
         // forwards, and it is already still before the suspension finishes.
@@ -247,12 +241,12 @@ struct VehiclePresentationAnimationTests {
         var previous: CGFloat = -1
         for sample in samples {
             let angle = VehicleRollCurve.wheelRotation(travelled: sample.travelled, radius: radius)
-            XCTAssertTrue(angle >= previous)
+            #expect(angle >= previous)
             previous = angle
         }
         let last = VehicleRollCurve.wheelRotation(travelled: samples[samples.count - 1].travelled, radius: radius)
         let penultimate = VehicleRollCurve.wheelRotation(travelled: samples[samples.count - 2].travelled, radius: radius)
-        XCTAssertTrue(abs(last - penultimate) < 0.001)
+        #expect(abs(last - penultimate) < 0.001)
     }
 
     // MARK: - Reduce Motion
@@ -262,25 +256,25 @@ struct VehiclePresentationAnimationTests {
         let exterior = VehiclePresentationIdentity(vin: "YSMVSEDE6PL147228", angle: 1)
         let cabin = VehiclePresentationIdentity(vin: "YSMVSEDE6PL147228", angle: VehiclePresentationIdentity.cabinAngle)
         let reduced = VehicleEntranceMotion.resolve(style: .full, identity: exterior, reduceMotion: true)
-        XCTAssertEqual(reduced?.travel, 0)
-        XCTAssertEqual(reduced?.startScale, 1)
-        XCTAssertEqual(reduced?.sway, 0)
-        XCTAssertEqual(reduced?.settle, 0)
-        XCTAssertTrue((reduced?.duration ?? 1) <= 0.2)
+        #expect(reduced?.travel == 0)
+        #expect(reduced?.startScale == 1)
+        #expect(reduced?.sway == 0)
+        #expect(reduced?.settle == 0)
+        #expect((reduced?.duration ?? 1) <= 0.2)
 
         let rolling = VehicleEntranceMotion.resolve(style: .full, identity: exterior, reduceMotion: false)
-        XCTAssertTrue(abs(rolling?.travel ?? 0) >= 100)
+        #expect(abs(rolling?.travel ?? 0) >= 100)
 
         let transition = VehicleTransitionMotion.resolve(direction: .towardRear, reduceMotion: true)
-        XCTAssertEqual(transition.offset, 0)
-        XCTAssertEqual(transition.outgoingScale, 1)
-        XCTAssertEqual(transition.incomingScale, 1)
-        XCTAssertTrue(transition.duration <= 0.2)
+        #expect(transition.offset == 0)
+        #expect(transition.outgoingScale == 1)
+        #expect(transition.incomingScale == 1)
+        #expect(transition.duration <= 0.2)
 
         // Instant stays instant either way, and the cabin photo never rolls.
-        XCTAssertNil(VehicleEntranceMotion.resolve(style: .instant, identity: exterior, reduceMotion: false))
-        XCTAssertNil(VehicleEntranceMotion.resolve(style: .instant, identity: cabin, reduceMotion: true))
-        XCTAssertEqual(VehicleEntranceMotion.resolve(style: .full, identity: cabin, reduceMotion: false)?.travel, 0)
+        #expect(VehicleEntranceMotion.resolve(style: .instant, identity: exterior, reduceMotion: false) == nil)
+        #expect(VehicleEntranceMotion.resolve(style: .instant, identity: cabin, reduceMotion: true) == nil)
+        #expect(VehicleEntranceMotion.resolve(style: .full, identity: cabin, reduceMotion: false)?.travel == 0)
     }
 
     @Test
@@ -289,9 +283,9 @@ struct VehiclePresentationAnimationTests {
         defer { VehicleMotionPreference.reduceMotionOverride = original }
 
         VehicleMotionPreference.reduceMotionOverride = true
-        XCTAssertTrue(VehicleMotionPreference.prefersReducedMotion)
+        #expect(VehicleMotionPreference.prefersReducedMotion)
         VehicleMotionPreference.reduceMotionOverride = false
-        XCTAssertFalse(VehicleMotionPreference.prefersReducedMotion)
+        #expect(!(VehicleMotionPreference.prefersReducedMotion))
     }
 
     // MARK: - Final state
@@ -304,14 +298,14 @@ struct VehiclePresentationAnimationTests {
         // animation has to be careful about.
         for motion in [VehicleEntranceMotion.full, .abbreviated, .cabin, .reduced] {
             guard let last = motion.frames().last else { return }
-            XCTAssertEqual(last.x, VehicleEntranceFrame.rest.x)
-            XCTAssertEqual(last.y, VehicleEntranceFrame.rest.y)
-            XCTAssertTrue(isClose(last.scale, VehicleEntranceFrame.rest.scale))
-            XCTAssertTrue(isClose(last.opacity, VehicleEntranceFrame.rest.opacity))
+            #expect(last.x == VehicleEntranceFrame.rest.x)
+            #expect(last.y == VehicleEntranceFrame.rest.y)
+            #expect(isClose(last.scale, VehicleEntranceFrame.rest.scale))
+            #expect(isClose(last.opacity, VehicleEntranceFrame.rest.opacity))
             // Ground covered is the one thing that does not return to zero: a
             // wheel that has rolled stays rolled, so wheel layers added later
             // hold their final angle instead of snapping back.
-            XCTAssertEqual(last.travelled, motion.travel)
+            #expect(last.travelled == motion.travel)
         }
     }
 
@@ -324,13 +318,13 @@ struct VehiclePresentationAnimationTests {
         let motion = VehicleEntranceMotion.full
         let samples = motion.samples()
         let frames = motion.frames()
-        XCTAssertEqual(samples.count, frames.count)
+        #expect(samples.count == frames.count)
 
         guard let riseIndex = samples.indices.max(by: { samples[$0].translation.y < samples[$1].translation.y })
         else { return }
-        XCTAssertTrue(samples[riseIndex].translation.y > 0)
-        XCTAssertTrue(frames[riseIndex].y < 0)
-        XCTAssertEqual(frames[riseIndex].y, -samples[riseIndex].translation.y)
+        #expect(samples[riseIndex].translation.y > 0)
+        #expect(frames[riseIndex].y < 0)
+        #expect(frames[riseIndex].y == -samples[riseIndex].translation.y)
     }
 
     @Test
@@ -348,11 +342,11 @@ struct VehiclePresentationAnimationTests {
             current = next
         }
 
-        XCTAssertEqual(directions, [.none, .towardRear, .towardRear, .towardFront])
-        XCTAssertEqual(current.angle, 2)
+        #expect(directions == [.none, .towardRear, .towardRear, .towardFront])
+        #expect(current.angle == 2)
         // And whichever way each step went, the entrance plan is untouched: only
         // the first picture on an empty view rolls in.
-        XCTAssertEqual(VehicleTransitionMotion.resolve(direction: .none, reduceMotion: false).offset, 0)
+        #expect(VehicleTransitionMotion.resolve(direction: .none, reduceMotion: false).offset == 0)
     }
 
     // MARK: - Resting geometry
@@ -364,23 +358,23 @@ struct VehiclePresentationAnimationTests {
         // container, zoomed 1.33 so it overflows and is clipped. The view applies
         // them directly, so the resting state is not reproduced — it is the same
         // layout — and these constants are the only thing that could drift.
-        XCTAssertEqual(VehicleRenderLayout.horizontalInset, 8)
-        XCTAssertEqual(VehicleRenderLayout.contentHeight, 205)
-        XCTAssertEqual(VehicleRenderLayout.containerHeight, 220)
-        XCTAssertEqual(VehicleRenderLayout.zoom, 1.33)
+        #expect(VehicleRenderLayout.horizontalInset == 8)
+        #expect(VehicleRenderLayout.contentHeight == 205)
+        #expect(VehicleRenderLayout.containerHeight == 220)
+        #expect(VehicleRenderLayout.zoom == 1.33)
 
         // The decode is sized from the drawn size, which follows from the source
         // aspect and the content height without waiting for layout: a 16:9 render
         // is height-limited at 205 pt, so 272.65 pt tall and 484.5 pt wide.
         let drawn = VehicleRenderLayout.drawnSize(sourcePixelSize: CGSize(width: 4898, height: 2756))
-        XCTAssertTrue(isClose(drawn.height, 205 * 1.33, tolerance: 0.01))
-        XCTAssertTrue(isClose(drawn.width, 205 * 1.33 * (4898.0 / 2756.0), tolerance: 0.01))
+        #expect(isClose(drawn.height, 205 * 1.33, tolerance: 0.01))
+        #expect(isClose(drawn.width, 205 * 1.33 * (4898.0 / 2756.0), tolerance: 0.01))
 
         // A picture with no dimensions has nothing to size a decode from.
-        XCTAssertEqual(VehicleRenderLayout.drawnSize(sourcePixelSize: .zero), .zero)
+        #expect(VehicleRenderLayout.drawnSize(sourcePixelSize: .zero) == .zero)
         // And a freak aspect ratio cannot ask for an enormous decode.
         let absurd = VehicleRenderLayout.drawnSize(sourcePixelSize: CGSize(width: 40000, height: 100))
-        XCTAssertTrue(absurd.width <= 900)
+        #expect(absurd.width <= 900)
     }
 
     // MARK: - Artwork
@@ -394,23 +388,23 @@ struct VehiclePresentationAnimationTests {
         // for nothing, because the compositor would downscale it a second time.
         let drawnDevicePixels = 519.0 * 2
         let budget = VehicleArtworkStore.pixelBudget(pointSize: CGSize(width: 519, height: 273), scale: 2)
-        XCTAssertTrue(Double(budget) >= drawnDevicePixels)
-        XCTAssertTrue(Double(budget) < drawnDevicePixels + 64)
+        #expect(Double(budget) >= drawnDevicePixels)
+        #expect(Double(budget) < drawnDevicePixels + 64)
 
-        XCTAssertNil(store.cached(source: "artwork#1", data: png, pixelBudget: budget))
+        #expect(store.cached(source: "artwork#1", data: png, pixelBudget: budget) == nil)
 
         let artwork: VehicleArtworkStore.Artwork? = await withCheckedContinuation { continuation in
             store.load(source: "artwork#1", data: png, pixelBudget: budget) { continuation.resume(returning: $0) }
         }
-        XCTAssertNotNil(artwork)
+        #expect(artwork != nil)
         // Kept at what the screen needs rather than at source resolution.
-        XCTAssertTrue((artwork?.image.width ?? 0) <= budget)
-        XCTAssertTrue((artwork?.image.width ?? 0) > budget / 2)
+        #expect((artwork?.image.width ?? 0) <= budget)
+        #expect((artwork?.image.width ?? 0) > budget / 2)
         // Aspect ratio comes from the true source dimensions, not the rounded
         // thumbnail, so the resting frame is unaffected by the budget.
-        XCTAssertEqual(artwork?.sourcePixelSize, CGSize(width: 2000, height: 1125))
+        #expect(artwork?.sourcePixelSize == CGSize(width: 2000, height: 1125))
         // Asking again is a cache hit, not a second 65 ms decode.
-        XCTAssertNotNil(store.cached(source: "artwork#1", data: png, pixelBudget: budget))
+        #expect(store.cached(source: "artwork#1", data: png, pixelBudget: budget) != nil)
     }
 
     // MARK: - Helpers

@@ -16,7 +16,7 @@ its own opinion about which commands a vehicle accepts:
   private copy of the Volvo restricted-scopes precondition, and dispatched by
   round-tripping through `NSWorkspace.open` + the URL router, then polling the
   command audit table for up to 45–60 s to learn the outcome.
-- The router had no tests at all — and it is the security boundary for
+- The router had no tests at all, and it is the security boundary for
   `hisingen://lock`.
 - The Volvo "Approved permissions" (`volvoRestrictedScopesEnabled`)
   precondition was enforced only by the intents' pre-flight; the Controls tab
@@ -30,7 +30,7 @@ presentation still flowing through `presentResult`. The URL router and
 Shortcuts intents are thin adapters over it:
 
 - The router's brand ban is deleted; brand policy lives in `CapabilityGate`
-  and `ProviderCommandCatalog` — the same single answer every surface gets.
+  and `ProviderCommandCatalog`: the same single answer every surface gets.
   The one remaining per-brand notice (Volvo charge-target) is a capability
   fact, not policy.
 - Shortcuts intents await the shell's readiness (`AutomationHandoff.install`,
@@ -54,7 +54,7 @@ Shortcuts intents are thin adapters over it:
 
 ## Consequences
 
-- `hisingen://lock` (and the other write deep links) now work on Polestar — a
+- `hisingen://lock` (and the other write deep links) now work on Polestar, a
   deliberate behavior change; users get the same gate refusals the Controls
   tab shows.
 - Shortcuts get instant results (the awaited provider outcome) instead of a

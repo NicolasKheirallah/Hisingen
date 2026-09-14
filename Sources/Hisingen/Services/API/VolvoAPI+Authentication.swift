@@ -15,9 +15,11 @@ extension VolvoAPI {
         refreshTaskID = nil
         let verifier = try PKCE.randomURLSafeString()
         let state = try PKCE.randomURLSafeString()
-        pendingVerifier = verifier
-        pendingState = state
-        var components = URLComponents(url: identityURL(path: authorizationPath), resolvingAgainstBaseURL: false)!
+        authorizationFlow.begin(verifier: verifier, state: state)
+        guard var components = URLComponents(url: try identityURL(path: authorizationPath),
+                                             resolvingAgainstBaseURL: false) else {
+            throw VolvoError.incompatibleAPI(operation: "authorization request")
+        }
         let restrictedScopesWanted = await MainActor.run { preferences.volvoRestrictedScopesEnabled }
         let scopes: [String]
         switch tier {
@@ -43,25 +45,10 @@ extension VolvoAPI {
     }
 
     func completeSignIn(callbackURL: URL, preferredVIN: String?) async throws {
-        guard let verifier = pendingVerifier, let expectedState = pendingState else {
-            throw VolvoError.authenticationRequired(.callbackRejected)
-        }
-        pendingVerifier = nil
-        pendingState = nil
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
-            throw VolvoError.authenticationRequired(.callbackRejected)
-        }
-        if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
-            let desc = components.queryItems?.first(where: { $0.name == "error_description" })?.value ?? error
-            // Keep the raw OAuth code recoverable so the caller can retry `invalid_scope`
-            // read-only, while still carrying the human description for anything else.
-            throw VolvoError.permissionDenied(operation: error == "invalid_scope" ? "invalid_scope" : desc)
-        }
-        guard components.queryItems?.first(where: { $0.name == "state" })?.value == expectedState,
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-            throw VolvoError.authenticationRequired(.callbackRejected)
-        }
-        try await exchangeCodeForToken(code, verifier: verifier)
+        // The flow validates scheme, host, path, and state against the pending values and only
+        // then consumes them, so a stray or forged callback cannot break the genuine sign-in.
+        let completion = try authorizationFlow.consume(callbackURL: callbackURL, redirectURL: redirectURI)
+        try await exchangeCodeForToken(completion.code, verifier: completion.verifier)
         try await discoverVehicles(preferredVIN: preferredVIN)
     }
 
@@ -100,13 +87,14 @@ extension VolvoAPI {
         refreshTask?.cancel()
         refreshTask = nil
         refreshTaskID = nil
-        pendingVerifier = nil
-        pendingState = nil
+        authorizationFlow.invalidate()
         cars = []
         selectedVIN = nil
         vehicleDetailsCache = [:]
         capabilityCache = [:]
         optionalTelemetryCache = [:]
+        carImageData = [:]
+        interiorImageData = [:]
         // Preserve persisted permission/market back-offs across a session reset. Re-signing
         // does not make an unapproved provider scope available and must not trigger a probe storm.
         remoteCommandsInFlight = []

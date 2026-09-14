@@ -1797,7 +1797,6 @@
 "Hide" = "Hide";
 "Hide this trip if segmentation combined or invented it" = "Hide this trip if segmentation combined or invented it";
 "Hour" = "Hour";
-"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure with the \u{201C}grid_carbon_intensity_g_per_kwh\u{201D} preference." = "Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure with the “grid_carbon_intensity_g_per_kwh” preference.";
 "Loading history" = "Loading history";
 "Loading history…" = "Loading history…";
 "Minutes" = "Minutes";
@@ -1903,7 +1902,7 @@
 "Database optimization completed." = "Database optimization completed.";
 "Old historical samples were pruned." = "Old historical samples were pruned.";
 "Database maintenance failed: %@" = "Database maintenance failed: %@";
-"The backup could not be created." = "The backup could not be created.";
+"The backup could not be created." = "t";
 "The diagnostic report could not be created." = "The diagnostic report could not be created.";
 "Export saved." = "Export saved.";
 "Export failed: %@" = "Export failed: %@";
@@ -2379,8 +2378,6 @@
 "Command acknowledged by the vehicle service" = "Command acknowledged by the vehicle service";
 "Command accepted; waiting for the vehicle to report the result." = "Command accepted; waiting for the vehicle to report the result.";
 "The target vehicle could not be loaded." = "The target vehicle could not be loaded.";
-
-// English fallback values pending translation
 "Charging Planner" = "Charging Planner";
 "Smart Charging Planner" = "Smart Charging Planner";
 "Show the cheapest charging window to your charge limit, from Swedish spot prices" = "Show the cheapest charging window to your charge limit, from Swedish spot prices";
@@ -2402,24 +2399,16 @@
 "Charge %@ over %d h to reach %d%% — average %@, now %@" = "Charge %@ over %d h to reach %d%% — average %@, now %@";
 "Saves %@" = "Saves %@";
 "Charging now is cheapest" = "Charging now is cheapest";
-
-// English fallback values pending translation
 "A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
-
-// English fallback values pending translation
 "Undecoded Backend Fields (%d)" = "Niet-gedecodeerde backend-velden (%d)";
 "Factory Content Codes" = "Fabrieksuitrustingscodes";
 "Field %@" = "Veld %@";
 "Field %@ (raw)" = "Veld %@ (rauw)";
 "The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check." = "De status komt uit de API van het voertuig en verandert alleen wanneer een probleem wordt gemeld. Een band zonder markering betekent dat het systeem bij de laatste controle geen probleem heeft gedetecteerd.";
 "When the cabin air was last measured. The sensor also samples when the vehicle wakes up, not only during purification." = "Wanneer de lucht in het interieur voor het laatst is gemeten. De sensor meet ook wanneer het voertuig wakker wordt, niet alleen tijdens het zuiveren.";
-
-// English fallback values pending translation
 "Estimated from the recorded charging power and the hourly market price for your price zone." = "Estimated from the recorded charging power and the hourly market price for your price zone.";
 "Session Started" = "Session Started";
 "Spot Cost" = "Spot Cost";
-
-// English fallback values pending translation
 "Electricity price outlook" = "Electricity price outlook";
 "Planned window from %@" = "Planned window from %@";
 "Between %@ and %@ kr per kWh. %@" = "Between %@ and %@ kr per kWh. %@";
@@ -2441,11 +2430,39 @@
 "Tomorrow's electricity prices are in" = "Tomorrow's electricity prices are in";
 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
 "Tomorrow's spot prices have arrived." = "Tomorrow's spot prices have arrived.";
-
-// English fallback values pending translation
 "Use" = "Use";
-
-// English fallback values pending translation
 "Show newer entries" = "Show newer entries";
 "Show older entries" = "Show older entries";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded.";
+"Set up Hisingen" = "Hisingen instellen";
+"Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features." = "Je voertuig is verbonden. Kies een startpunt — alles kan later worden gewijzigd in Instellingen → Features.";
+"Quick setup" = "Snelle installatie";
+"Remote commands" = "Afstandsopdrachten";
+"Polestar remote controls run through a separate one-time browser authorization." = "Polestar-afstandsbediening vereist een eenmalige autorisatie in de browser.";
+"You can change this later in Settings → Features." = "Je kunt dit later wijzigen in Instellingen → Features.";
+"Hisingen lives in your menu bar" = "Hisingen woont in je menubalk";
+"Click the car icon in the menu bar any time to open this panel." = "Klik op het auto-icoon in de menubalk om dit paneel op elk moment te openen.";
+"Connect your vehicle account below to get started." = "Verbind hieronder je voertuigaccount om te beginnen.";
+"Still failing?" = "A";
+"Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added." = "l";
+"Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update." = "l";
+"Hidden trips (%d)" = "e";
+"Restore" = "e";
+"Restore this hidden trip to the detected list." = "n";
+"Trips you hid from the detected list. Restoring puts them back." = " ";
+"Grid Carbon Intensity" = "i";
+"For the emissions comparison in History" = "n";
+"g CO₂/kWh" = "d";
+"Enter an intensity between 1 and 1,200 g CO₂/kWh." = "i";
+"Cold raises consumption by about %@ per 10 °C, across %d trips." = "Cold raises consumption by about %@ per 10 °C, across %d trips.";
+"Full Backup (JSON)" = "a";
+"Export Selected Month" = "i";
+"Export All Months" = "e";
+"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Alleen indicatief — gaat uit van %@ g CO₂/kWh netintensiteit en een %@ g CO₂/km benzineauto, well-to-wheel. Stel de netwaarde in via Instellingen → Algemeen → Grid Carbon Intensity.";
+
+// English fallback values pending translation
+"Lead Time" = "Lead Time";
+"How long before the window opens the banner arrives" = "How long before the window opens the banner arrives";
+"When the window opens" = "When the window opens";
+"1 hour before" = "1 hour before";
+"%d minutes before" = "%d minutes before";

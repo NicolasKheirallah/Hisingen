@@ -1,6 +1,6 @@
 # Capability Matrix
 
-The static per-model fallback table from `VehicleCapabilityProfile.support(for:)`, plus what's actually verified vs. assumed. This is the fallback used when no live runtime probe exists yet — see [architecture/capabilities.md](../architecture/capabilities.md) for how a live probe overrides it. States: **Verified** (confirmed correct across multiple real vehicles/reports), **Expected** (the static default, plausible but not exhaustively confirmed), **Runtime detected** (only ever known via a live probe, no static default), **Best effort** (`.backendDependent` — deliberately "ask, don't assume"), **Unsupported** (static negative — `.unavailable`), **Unknown** (no claim made either way).
+The static per-model fallback table from `VehicleCapabilityProfile.support(for:)`, plus what's actually verified vs. assumed. This is the fallback used when no live runtime probe exists yet; see [architecture/capabilities.md](../architecture/capabilities.md) for how a live probe overrides it. States: **Verified** (confirmed correct across multiple real vehicles/reports), **Expected** (the static default, plausible but not exhaustively confirmed), **Runtime detected** (only ever known via a live probe, no static default), **Best effort** (`.backendDependent`, deliberately "ask, don't assume"), **Unsupported** (static negative, `.unavailable`), **Unknown** (no claim made either way).
 
 ## Polestar
 
@@ -16,7 +16,7 @@ The static per-model fallback table from `VehicleCapabilityProfile.support(for:)
 | Charging schedule / override | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Locks / trunk / windows / honk-flash | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
 | Exterior status (doors/windows/lock) | Best effort | Expected (supported) | Expected (supported) | Expected (supported) | Best effort |
-| Direct tyre-pressure values | Best effort | **Best effort** (backend-dependent — see note) | Expected (supported) | Expected (supported) | Best effort |
+| Direct tyre-pressure values | Best effort | **Best effort** (backend-dependent; see note) | Expected (supported) | Expected (supported) | Best effort |
 | Saved charge locations (CRUD) | n/a | **Expected** (implemented; live verification per model outstanding) | **Expected** | **Best effort** (unverified on SEA platform) | n/a |
 | Service / vehicle warnings | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
 | Trip meters | Best effort | **Verified** (live decoded) | Expected (supported) | Expected (supported) | Best effort |
@@ -37,7 +37,7 @@ Per Hisingen's own README: Polestar 1 needs "broad live verification"; Polestar 
 
 ## Volvo
 
-All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) share one static profile — Hisingen does not currently differentiate Volvo capability defaults by model, only by live probe result:
+All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) share one static profile; Hisingen does not currently differentiate Volvo capability defaults by model, only by live probe result:
 
 | Capability | Static default | Notes |
 |---|---|---|
@@ -46,13 +46,13 @@ All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) s
 | Exterior status | Expected (supported) | |
 | Climate start/stop | Expected (supported) | |
 | Service warnings | Expected (supported) | |
-| Software install control | **Unsupported** | No Volvo OTA endpoint is used — see the comment in `VehicleCapabilityProfile.support(for:)` (`Sources/Hisingen/Domain/VehicleCapabilities.swift`) |
-| Direct tyre-pressure values | **Unsupported** | Volvo's `tyres` endpoint is indirect TPMS (inferred from wheel-speed-sensor imbalance, not a per-wheel pressure sensor) and returns a warning enum only — there is no numeric kPa/PSI field on any Volvo model, so this is a static negative rather than `.backendDependent`. Tyre *warning* status itself (OK/low/very low/high) is still fully supported and displayed; only the numeric-value capability is unavailable. |
+| Software install control | **Unsupported** | No Volvo OTA endpoint is used; see the comment in `VehicleCapabilityProfile.support(for:)` (`Sources/Hisingen/Domain/VehicleCapabilities.swift`) |
+| Direct tyre-pressure values | **Unsupported** | Volvo's `tyres` endpoint is indirect TPMS (inferred from wheel-speed-sensor imbalance, not a per-wheel pressure sensor) and returns a warning enum only; there is no numeric kPa/PSI field on any Volvo model, so this is a static negative rather than `.backendDependent`. Tyre *warning* status itself (OK/low/very low/high) is still fully supported and displayed; only the numeric-value capability is unavailable. |
 | Charge target | Runtime detected | Only ever `.supported`/`.unavailable` once the Energy Capabilities endpoint has been probed; `.backendDependent` before that |
 | Charging current limit | Runtime detected | Same as above |
-| Everything else (windows, trunk, seat/steering heating, climate temperature, schedules, trip meters, connectivity, climate timers) | Best effort | `.backendDependent` — no static claim either way |
-| Remote command execution | Runtime-implemented for 6 of ~20 commands | Lock, unlock, climate start/stop, honk-flash, flash-lights work; everything else returns `RemoteCommandError.unsupported` regardless of capability state — see [api/volvo.md](../api/volvo.md#remote-commands) |
+| Everything else (windows, trunk, seat/steering heating, climate temperature, schedules, trip meters, connectivity, climate timers) | Best effort | `.backendDependent`, no static claim either way |
+| Remote command execution | Runtime-implemented for 6 of ~20 commands | Lock, unlock, climate start/stop, honk-flash, flash-lights work; everything else returns `RemoteCommandError.unsupported` regardless of capability state; see [api/volvo.md](../api/volvo.md#remote-commands) |
 
 ## What this table doesn't claim
 
-Nothing here asserts that a given model *works end-to-end* in Hisingen — it asserts what the static fallback table says about that model's capability set when no live observation exists yet. A specific vehicle's actual behavior always wins once observed (a live probe overriding a "Best effort" default to "Verified-equivalent" for that VIN, cached for up to 6 hours — see [architecture/capabilities.md](../architecture/capabilities.md)). Do not extend this table with new "Verified" claims without a live report backing them; add "Expected" or "Best effort" instead and let runtime probing do the confirming.
+Nothing here asserts that a given model *works end-to-end* in Hisingen; it asserts what the static fallback table says about that model's capability set when no live observation exists yet. A specific vehicle's actual behavior always wins once observed (a live probe overriding a "Best effort" default to "Verified-equivalent" for that VIN, cached for up to 6 hours; see [architecture/capabilities.md](../architecture/capabilities.md)). Do not extend this table with new "Verified" claims without a live report backing them; add "Expected" or "Best effort" instead and let runtime probing do the confirming.

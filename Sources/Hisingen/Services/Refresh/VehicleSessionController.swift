@@ -282,11 +282,15 @@ final class VehicleSessionController {
     }
 
     private func handleDiagnostics(_ diagnostics: DiagnosticsSnapshot) {
-        let hasStored = preferences.hasResumableSession(for: preferences.activeBrand)
-        sessionValid = diagnostics.sessionValid || hasStored
+        // sessionValid follows the coordinator's own session-ready signal only. Keychain
+        // presence (`hasResumableSession`) survives an expired token, so OR-ing it in here
+        // resurrected a dead session on the next diagnostics tick and instantly cleared the
+        // just-posted sign-in-required banner. Stored credentials remain only the pre-first-
+        // diagnostics display default (see primeDisplayState).
+        sessionValid = diagnostics.sessionValid
         lastDiagnostics = diagnostics
         Task { await LatestDiagnosticsStore.shared.update(diagnostics) }
-        if (diagnostics.sessionValid || hasStored) && preferences.features.contains(.notifications) {
+        if diagnostics.sessionValid, preferences.features.contains(.notifications) {
             context?.authenticationSucceeded()
         }
         context?.sessionStateDidChange()

@@ -53,7 +53,7 @@ final class CalendarPreconditioningController {
     private let preferences: PreferencesStore
     private let eventStore: EKEventStore
     private let sendClimateStart: () async -> RemoteCommandDispatchOutcome
-    private var timer: Timer?
+    private let scheduler = AsyncTimerLoop()
     private var observers: [NSObjectProtocol] = []
     private var evaluationInProgress = false
     private var retryNotBefore: Date?
@@ -87,8 +87,7 @@ final class CalendarPreconditioningController {
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        scheduler.cancel()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         for observer in observers {
             workspaceCenter.removeObserver(observer)
@@ -99,8 +98,7 @@ final class CalendarPreconditioningController {
 
     /// Called when the feature toggle, lead time, or selected calendars change.
     func reload() {
-        timer?.invalidate()
-        timer = nil
+        scheduler.cancel()
         guard preferences.calendarPreconditioningEnabled else { return }
         Task { await evaluate() }
     }
@@ -204,20 +202,17 @@ final class CalendarPreconditioningController {
         preferences.calendarPreconditioningFiredOccurrences = fired
     }
 
-    /// Arms a single one-shot timer for the next lead-time moment (or the idle ceiling).
+    /// Arms a single one-shot tick for the next lead-time moment (or the idle ceiling).
     private func scheduleNext(now: Date) {
-        timer?.invalidate()
-        timer = nil
+        scheduler.cancel()
         guard preferences.calendarPreconditioningEnabled else { return }
         let fallback = now.addingTimeInterval(Self.maxIdleInterval)
         let fireAt = nextTrigger(now: now).map { max($0.fireAt, now.addingTimeInterval(1)) }
         let target = min(max(fireAt ?? fallback, retryNotBefore ?? .distantPast), fallback)
         let delay = max(1, target.timeIntervalSince(now))
-        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
-            Task { @MainActor in await self?.evaluate() }
+        scheduler.scheduleOnce(after: delay) { [weak self] in
+            await self?.evaluate()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     static var hasCalendarAccess: Bool {

@@ -6,7 +6,7 @@ future work requiring live verification)
 ## Context
 
 Hisingen authenticates against Polestar ID with two OAuth clients, and the two are not
-interchangeable — verified live against a real account:
+interchangeable, verified live against a real account:
 
 | Client | ID | Redirect URI | Reads (`mystar-v2` GraphQL) | Commands (C3 invocation) |
 |---|---|---|---|---|
@@ -17,14 +17,14 @@ Consequences:
 
 1. **Vehicle discovery and telemetry require the web client**, whose redirect lands on an
    HTTPS page on `polestar.com`. `ASWebAuthenticationSession` can only hand back redirects to
-   a custom scheme (or an associated domain Hisingen controls) — Polestar's domain is neither,
+   a custom scheme (or an associated domain Hisingen controls); Polestar's domain is neither,
    so a standards-compliant browser handoff is impossible for this client today.
 2. Hisingen therefore scripts the PingFederate login form itself inside its own URLSession
    (`PolestarAPI.performLogin`, form fields `pf.username`/`pf.pass`), capturing the
    authorization code from the redirect before it leaves the session.
 3. **Remote commands require the mobile client.** Its custom-scheme redirect works with the OS
    and is already browser-based via `ASWebAuthenticationSession`
-   (`PolestarCommandSignInPresenter`) — Hisingen never sees that password.
+   (`PolestarCommandSignInPresenter`); Hisingen never sees that password.
 
 The scripted form-fill means the primary session's password must persist in Keychain so a dead
 refresh token can be replayed into a fresh login without user interaction.

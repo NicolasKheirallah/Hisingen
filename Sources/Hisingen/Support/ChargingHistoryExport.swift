@@ -43,7 +43,22 @@ enum ChargingHistoryExport {
         panel.nameFieldStringValue = filename
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            try? data.write(to: url, options: .atomic)
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                // Only Sendable values cross back to the main actor to show the alert.
+                let title = L10n.text("Export Failed")
+                let message = L10n.text("The charging history could not be written.")
+                let detail = error.localizedDescription
+                Task { @MainActor in
+                    let alert = NSAlert()
+                    alert.alertStyle = .critical
+                    alert.messageText = title
+                    alert.informativeText = "\(message)\n\n\(detail)"
+                    alert.addButton(withTitle: L10n.text("OK"))
+                    alert.runModal()
+                }
+            }
         }
     }
 }

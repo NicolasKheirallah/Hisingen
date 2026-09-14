@@ -28,11 +28,7 @@ struct ClimateControlCard: View {
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { gate.features }
 
-    private var climateActive: Bool {
-        guard let status = state.climateStatus else { return false }
-        return status.activity == .active || status.activity == .heating
-            || status.activity == .cooling || status.activity == .ventilating
-    }
+    private var climateActive: Bool { state.isClimateActive }
 
     var body: some View {
         let climateCommands = [Self.probe, RemoteCommand.startPreCleaning]
@@ -56,12 +52,11 @@ struct ClimateControlCard: View {
                             color: .orange,
                             symbol: "fan.fill"
                         )
-                    } else if let status = state.climateStatus,
-                              status.activity != .unknown,
-                              status.activity != .idle {
-                        Pill(text: status.activity.displayName, color: .secondary, symbol: nil)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
+                .animation(Motion.resolve(Motion.entrance), value: climateActive)
+                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.activity)
 
                 gate.dimReason(gate.cardAvailability(climateCommands))
 
@@ -70,6 +65,8 @@ struct ClimateControlCard: View {
                         temperatureControls
                     } else {
                         climateAutomaticInfo
+                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: climateActive)
+                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.timeRemainingMinutes)
                     }
 
                     if profile.hasSelectableSeatHeating || profile.hasSelectableSteeringWheelHeating {
@@ -116,6 +113,7 @@ struct ClimateControlCard: View {
             }
         }
         .opacity(gate.cardOpacity(climateCommands))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability(climateCommands))
         .onAppear {
             targetTemperature = min(
                 climateTemperatureRange.upperBound,
@@ -196,8 +194,11 @@ struct ClimateControlCard: View {
                         Text(L10n.format("%d min remaining", remaining))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(HisingenTheme.polestarAmber)
+                            .transition(.opacity)
                     }
                 }
+                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.timeRemainingMinutes)
+                .animation(Motion.resolve(Motion.entrance), value: climateActive)
                 Spacer()
                 Text(Format.temperature(celsius: targetTemperature, unit: preferences.temperatureUnit))
                     .font(.system(size: 22, weight: .bold))
@@ -229,11 +230,16 @@ struct ClimateControlCard: View {
                         } label: {
                             Text(Format.temperature(celsius: Double(temp), unit: preferences.temperatureUnit, decimals: 0))
                                 .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                .padding(.vertical, 3)
                                 .frame(maxWidth: .infinity)
+                                .background(
+                                    isSelected ? Color.orange.opacity(0.18) : Color.primary.opacity(0.05),
+                                    in: RoundedRectangle(cornerRadius: 6)
+                                )
+                                .foregroundStyle(isSelected ? Color.orange : .secondary)
+                                .animation(reduceMotion ? nil : Motion.selection, value: isSelected)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(isSelected ? Color.orange : nil)
-                        .controlSize(.small)
+                        .buttonStyle(.pressable)
                         .accessibilityLabel(L10n.format(
                             "Set target to %@",
                             Format.temperature(celsius: Double(temp), unit: preferences.temperatureUnit, decimals: 0)
@@ -288,6 +294,7 @@ struct ClimateControlCard: View {
             }
             .padding(9)
             .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {
             HStack {
                 Text(L10n.text("Preconditions the cabin to comfortable temperature using in-car climate settings."))
@@ -301,6 +308,7 @@ struct ClimateControlCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .transition(.opacity)
         }
     }
 
@@ -343,16 +351,17 @@ struct ClimateControlCard: View {
                         .disabled(gate.isDisabled(Self.probe))
                         Spacer(minLength: 0)
                     }
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 } else {
                     Button {
-                        withAnimation { showRearSeats = true }
+                        withAnimation(Motion.resolve(Motion.layout)) { showRearSeats = true }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.down")
                             Text(L10n.text("Rear seat heating")).font(.system(size: 10, weight: .medium))
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -376,36 +385,33 @@ struct ClimateControlCard: View {
     }
 
     private var climateStartStopButtons: some View {
-        HStack(spacing: 8) {
-            if climateActive {
-                Button {
-                    gate.send(.stopClimate)
-                } label: {
-                    HStack(spacing: 6) {
+        // One stable Button identity across start/stop: the icon and label
+        // crossfade in place (spinner→fan morph) instead of the whole control
+        // snapping to a new view.
+        Button {
+            gate.send(climateActive ? .stopClimate : startClimateCommand)
+        } label: {
+            HStack(spacing: 6) {
+                ZStack {
+                    if climateActive {
                         SpinningFanView(isSpinning: !reduceMotion, size: 13, color: .white)
-                        Text(L10n.text("Stop Climate")).font(.system(size: 12, weight: .semibold))
-                        gate.sendingOverlay(.stopClimate)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 34)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.red)
-                .disabled(gate.isDisabled(.stopClimate))
-            } else {
-                Button {
-                    gate.send(startClimateCommand)
-                } label: {
-                    HStack(spacing: 6) {
+                            .transition(.opacity)
+                    } else {
                         Image(systemName: "fan.fill")
-                        Text(L10n.text("Start Climate")).font(.system(size: 12, weight: .semibold))
-                        gate.sendingOverlay(Self.probe)
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                            .transition(.opacity)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 34)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.polestarAmber)
-                .disabled(gate.isDisabled(Self.probe))
+                Text(climateActive ? L10n.text("Stop Climate") : L10n.text("Start Climate"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .contentTransition(reduceMotion ? .identity : .opacity)
+                gate.sendingOverlay(climateActive ? .stopClimate : Self.probe)
             }
+            .frame(maxWidth: .infinity, minHeight: 34)
         }
+        .buttonStyle(.borderedProminent)
+        .tint(climateActive ? Color.red : HisingenTheme.polestarAmber)
+        .disabled(gate.isDisabled(climateActive ? .stopClimate : Self.probe))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: climateActive)
     }
 }

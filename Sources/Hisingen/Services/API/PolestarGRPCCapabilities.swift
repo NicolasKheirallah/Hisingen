@@ -310,8 +310,8 @@ extension PolestarGRPC {
         }
         return VehicleConnectivity(
             state: status,
-            networkType: Self.varint(fields, 3).flatMap { network[Int($0)] },
-            signalStrength: signalRaw.flatMap { signal[Int($0)] },
+            networkType: Self.positiveInt(Self.varint(fields, 3)).flatMap { network[$0] },
+            signalStrength: Self.positiveInt(signalRaw).flatMap { signal[$0] },
             updatedAt: Self.timestamp(Self.message(fields, field: 2)),
             signalBars: bars,
             wakeReason: wake
@@ -458,7 +458,8 @@ extension PolestarGRPC {
         if let location = try await fetchLocation(vin: vin, accessToken: accessToken),
            let lat = location.latitude, let lon = location.longitude,
            abs(lat) > 0.001, abs(lon) > 0.001 {
-            if let weather = await fetchOpenMeteoWeather(latitude: lat, longitude: lon) {
+            if let weather = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
+                .weather(latitude: lat, longitude: lon) {
                 return weather
             }
         }
@@ -493,66 +494,6 @@ extension PolestarGRPC {
         }
         return nil
     }
-
-    private func fetchOpenMeteoWeather(latitude: Double, longitude: Double) async -> VehicleWeather? {
-        guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude) else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        guard let (data, response) = try? await HTTPExchange.data(
-            for: request, using: session, limit: 256_000,
-            operation: "Open-Meteo vehicle weather", provider: .polestar,
-            diagnosticLog: diagnosticLog
-        ), response.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let current = json["current"] as? [String: Any] else { return nil }
-
-        let temp = current["temperature_2m"] as? Double
-        let feelsLike = current["apparent_temperature"] as? Double
-        let humidity = current["relative_humidity_2m"] as? Int
-        let code = current["weather_code"] as? Int
-        let condition = code.map(Self.wmoWeatherDescription)
-
-        return VehicleWeather(
-            temperatureCelsius: temp,
-            condition: condition,
-            apparentTemperatureCelsius: feelsLike,
-            relativeHumidity: humidity,
-            timestamp: Date()
-        )
-    }
-
-    static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "api.open-meteo.com"
-        components.path = "/v1/forecast"
-        components.queryItems = [
-            URLQueryItem(name: "latitude", value: String(latitude)),
-            URLQueryItem(name: "longitude", value: String(longitude)),
-            URLQueryItem(name: "current", value: "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature")
-        ]
-        return components.url
-    }
-
-    private static func wmoWeatherDescription(for code: Int) -> String {
-        switch code {
-        case 0: return "Clear"
-        case 1, 2: return "Partly Cloudy"
-        case 3: return "Overcast"
-        case 45, 48: return "Fog"
-        case 51, 53, 55: return "Drizzle"
-        case 56, 57: return "Freezing Drizzle"
-        case 61, 63, 65: return "Rain"
-        case 66, 67: return "Freezing Rain"
-        case 71, 73, 75: return "Snow"
-        case 77: return "Snow Grains"
-        case 80, 81, 82: return "Rain Showers"
-        case 85, 86: return "Snow Showers"
-        case 95, 96, 99: return "Thunderstorm"
-        default: return "Partly Cloudy"
-        }
-    }
-
 
     static func parseExterior(_ data: Data) -> ExteriorSnapshot? {
         let fields = Protobuf.fields(data)
@@ -768,7 +709,7 @@ extension PolestarGRPC {
         let fields = Protobuf.fields(data)
         let description = message(fields, field: 2).map(Protobuf.fields)
         let rawStateValue = varint(fields, 4) ?? 0
-        let rawState = SoftwareStateRaw(rawValue: Int(rawStateValue)) ?? .unknown
+        let rawState = Int(exactly: rawStateValue).flatMap { SoftwareStateRaw(rawValue: $0) } ?? .unknown
         let state = rawState.coarseState
         let schedule = message(fields, field: 8).flatMap { message($0, field: 2) }
         let advertisedVersion = string(fields, 6).nilIfEmpty
@@ -1329,7 +1270,7 @@ extension PolestarGRPC {
         let timestamp = millis.map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000) }
         let temp = numeric(subFields, 2)
         let code = varint(subFields, 3).map(Int.init)
-        let condition = code.map(Self.wmoWeatherDescription)
+        let condition = code.map(OpenMeteoWeatherClient.wmoDescription)
 
         guard timestamp != nil || temp != nil else { return nil }
         return VehicleWeather(temperatureCelsius: temp, condition: condition, timestamp: timestamp)
@@ -1344,15 +1285,6 @@ extension PolestarGRPC {
     }
 
     private static func healthRequest(_ vin: String) -> Data { Protobuf.stringField(2, vin) }
-
-    private static func chronosRequest(_ vin: String) -> Data {
-        var chronos = Data()
-        chronos.append(Protobuf.stringField(1, UUID().uuidString))
-        chronos.append(Protobuf.stringField(2, vin))
-        chronos.append(Protobuf.stringField(3, "RCS"))
-        chronos.append(Protobuf.messageField(4, Protobuf.intField(1, TimeZone.current.secondsFromGMT() / 60)))
-        return Protobuf.messageField(1, chronos)
-    }
 
     private static func message(_ data: Data, field: Int) -> Data? { message(Protobuf.fields(data), field: field) }
     private static func message(_ fields: [Protobuf.Field], field: Int) -> Data? {
@@ -1409,25 +1341,7 @@ extension PolestarGRPC {
     }
     private static func weekdays(_ data: Data?) -> [VehicleWeekday] {
         guard let data else { return [] }
-        return packedVarints(data).compactMap { VehicleWeekday(rawValue: Int($0)) }
+        return Protobuf.packedVarints(data)?.compactMap { Int(exactly: $0) }
+            .compactMap { VehicleWeekday(rawValue: $0) } ?? []
     }
-    private static func packedVarints(_ data: Data) -> [UInt64] {
-        var result: [UInt64] = []
-        let bytes = [UInt8](data)
-        var index = 0
-        while index < bytes.count {
-            var value: UInt64 = 0, shift: UInt64 = 0
-            while index < bytes.count, shift < 64 {
-                let byte = bytes[index]; index += 1
-                value |= UInt64(byte & 0x7f) << shift
-                if byte & 0x80 == 0 { result.append(value); break }
-                shift += 7
-            }
-        }
-        return result
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

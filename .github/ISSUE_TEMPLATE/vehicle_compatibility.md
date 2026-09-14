@@ -29,4 +29,4 @@ payload, describe the shape of the issue instead of pasting raw JSON.
 -->
 
 Never post VINs, tokens, registration numbers, addresses, or account
-information here — this tracker is public.
+information here; this tracker is public.

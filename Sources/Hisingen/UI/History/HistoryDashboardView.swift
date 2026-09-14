@@ -1,60 +1,5 @@
 import SwiftUI
 
-enum HistoryPagination {
-    static let tripsPerPage = 5
-
-    static func pageCount(itemCount: Int, pageSize: Int = tripsPerPage) -> Int {
-        guard itemCount > 0, pageSize > 0 else { return 0 }
-        return (itemCount + pageSize - 1) / pageSize
-    }
-
-    static func page<Element>(of items: [Element], index: Int,
-                              pageSize: Int = tripsPerPage) -> ArraySlice<Element> {
-        guard !items.isEmpty, pageSize > 0 else { return [] }
-        let safeIndex = min(max(0, index), max(0, pageCount(itemCount: items.count, pageSize: pageSize) - 1))
-        let start = safeIndex * pageSize
-        return items[start..<min(items.count, start + pageSize)]
-    }
-
-    /// Display-safe page index: a delete or a period switch can shrink the list under the
-    /// current page, and every pager must render a page that actually exists.
-    static func clampedPage(_ index: Int, pageCount: Int) -> Int {
-        guard pageCount > 0 else { return 0 }
-        return min(max(0, index), pageCount - 1)
-    }
-}
-
-/// The "Newer · Page X of Y · Older" footer shared by every paginated history list.
-struct HistoryPagerControls: View {
-    let page: Int
-    let pageCount: Int
-    let newerHelp: String
-    let olderHelp: String
-    let goTo: (Int) -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Button { goTo(max(0, page - 1)) } label: {
-                Label(L10n.text("Newer"), systemImage: "chevron.left").labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless).disabled(page == 0)
-            .help(newerHelp)
-            .accessibilityLabel(newerHelp)
-            Spacer()
-            Text(L10n.format("Page %d of %d", page + 1, pageCount))
-                .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
-            Spacer()
-            Button { goTo(min(pageCount - 1, page + 1)) } label: {
-                Label(L10n.text("Older"), systemImage: "chevron.right").labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderless).disabled(page >= pageCount - 1)
-            .help(olderHelp)
-            .accessibilityLabel(olderHelp)
-        }
-        .padding(.top, 2)
-    }
-}
-
 @MainActor
 struct HistoryDashboardView: View {
     let state: VehicleState
@@ -63,19 +8,24 @@ struct HistoryDashboardView: View {
 
     @Environment(\.preferencesStore) var preferences
 
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+
     @State var period: HistoryPeriod = .month
 
     @State var selectedSessionID: String?
 
     @State var sessionSearchText: String = ""
 
-    @State var tripPage = 0
-
     @State var tripSearchText: String = ""
 
     @State var tripSort: TripSort = .newest
 
     @State var expandedTripIDs: Set<String> = []
+
+    @State var showHiddenTrips = false
+    /// Restores applied this session; keeps the hidden list in sync without waiting for
+    /// the next refresh to observe the preference change.
+    @State var restoredTripIDs: Set<String> = []
 
     @State var mileageReportMonthStart: Date?
 
@@ -89,12 +39,16 @@ struct HistoryDashboardView: View {
     @State var didInitialLoad = false
 
     // Starts true so the first paint shows the skeleton instead of a flash of empty cards;
-    // the load task's `defer` always clears it.
+    // the first successful load clears it.
     @State var isLoading = true
 
     @State var exportScope: ExportScope = .fullHistory
 
     @State var overlayPreviousSession = false
+
+    /// Drives the selected-session curve card's live dot (same treatment as the live
+    /// curve in ChargingCurveView).
+    @State var curveLivePulse = false
 
     // Chart scrub cursors (one per interactive time-series chart).
     @State var scrubDistance: Date?
@@ -159,22 +113,23 @@ struct HistoryDashboardView: View {
 
     @State var showCustomRangeEditor = false
 
-    @State var fuelPage = 0
-
-    @State var activityPage = 0
-
-    @State var sessionPage = 0
-
-    @State var commandPage = 0
-
-    @State var airCleaningPage = 0
-
     typealias HistoryDataSnapshot = VehicleHistoryLedger.DashboardSnapshot
     typealias LifetimeSnapshot = VehicleHistoryLedger.LifetimeSnapshot
 
     @State var snapshot = HistoryDataSnapshot()
 
     @State var lifetime = LifetimeSnapshot()
+
+    /// Hidden-trip rows, loaded off the main actor when the hidden set changes so
+    /// `hiddenTripsSection` only filters this cache instead of re-running `derivedTrips`
+    /// on every render.
+    @State var hiddenTripRows: [TripHistoryEntry] = []
+
+    /// Per-entry search strings, rebuilt once per snapshot so the trip/session filters never
+    /// re-format a date per row on every keystroke or scrub.
+    @State var tripDateStrings: [String: String] = [:]
+
+    @State var sessionLabelStrings: [String: String] = [:]
 
     @State var selectedSessionSamples: [HistoricalChargingSample] = []
 
@@ -203,7 +158,10 @@ struct HistoryDashboardView: View {
         let base = hidden.isEmpty ? snapshot.trips : snapshot.trips.filter { !hidden.contains($0.id) }
         let searched = tripFilterText.isEmpty
             ? base
-            : base.filter { Format.dateTimeFormatter.string(from: $0.endedAt).localizedCaseInsensitiveContains(tripFilterText) }
+            : base.filter {
+                (tripDateStrings[$0.id] ?? Format.dateTimeFormatter.string(from: $0.endedAt))
+                    .localizedCaseInsensitiveContains(tripFilterText)
+            }
         switch tripSort {
         case .newest: return searched
         case .distance: return searched.sorted { $0.distanceKm > $1.distanceKm }
@@ -212,10 +170,6 @@ struct HistoryDashboardView: View {
     }
 
     var tripFilterText: String { tripSearchText.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    var tripPageCount: Int { HistoryPagination.pageCount(itemCount: trips.count) }
-
-    var visibleTrips: ArraySlice<TripHistoryEntry> { HistoryPagination.page(of: trips, index: tripPage) }
 
     var chargingSessions: [HistoricalChargingSession] { snapshot.chargingSessions }
 
@@ -263,7 +217,9 @@ struct HistoryDashboardView: View {
     var filteredSessionsForPicker: [HistoricalChargingSession] {
         let trimmed = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return chargingSessions }
-        return chargingSessions.filter { sessionLabel($0).localizedCaseInsensitiveContains(trimmed) }
+        return chargingSessions.filter {
+            (sessionLabelStrings[$0.id] ?? sessionLabel($0)).localizedCaseInsensitiveContains(trimmed)
+        }
     }
 
     var commandStatistics: HistoryInsights.CommandStatistics {
@@ -289,21 +245,70 @@ struct HistoryDashboardView: View {
     }
 
     var observedChangesCard: some View {
-        let pageSize = 15
-        let pageCount = HistoryPagination.pageCount(itemCount: snapshot.activities.count, pageSize: pageSize)
-        let page = HistoryPagination.clampedPage(activityPage, pageCount: pageCount)
-        let visible = HistoryPagination.page(of: snapshot.activities, index: page, pageSize: pageSize)
-        return Card {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: .indigo)
-                VehicleActivityList(events: Array(visible))
-                if pageCount > 1 {
-                    HistoryPagerControls(page: page, pageCount: pageCount,
-                                         newerHelp: L10n.text("Show newer entries"),
-                                         olderHelp: L10n.text("Show older entries")) { activityPage = $0 }
+                PaginatedSection(items: snapshot.activities, pageSize: 15, resetKeys: [periodLoadKey]) { visible, footer in
+                    VehicleActivityList(events: Array(visible))
+                    footer
                 }
             }
         }
+    }
+
+    /// The post-skeleton card stack. The stack keys on `periodDataKey` so a refresh or
+    /// period change animates the cards when the loaded snapshot lands, not when the load
+    /// key flips (that precedes the async query).
+    var dashboardContent: some View {
+        VStack(spacing: HisingenTheme.sectionSpacing) {
+            overviewCard
+            if !snapshot.activities.isEmpty {
+                observedChangesCard
+            }
+            monthComparisonCard
+            if snapshot.activities.contains(where: { $0.kind == .airCleaning }) {
+                airCleaningCyclesCard
+            }
+            emissionsCard
+            if !trips.isEmpty {
+                drivingPatternsCard
+                distanceChartCard
+                monthlyMileageReportCard
+                tripListCard
+            }
+            if !chargingSessions.isEmpty {
+                Group {
+                    chargingSessionsCard
+                    if selectedSession != nil && !selectedSessionCurve.isEmpty {
+                        chargingCurveCard
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    monthlyChargingCard
+                    locationBreakdownCard
+                    chargingHistoryCard
+                }
+                .animation(Motion.resolve(Motion.layout), value: sessionCurveKey)
+            }
+            if !fuelEntries.isEmpty {
+                fuelEconomyCard
+                recentFillsCard
+            }
+            if efficiencyPoints.count >= 3 { efficiencyChartCard }
+            if combustionConsumptionPoints.count >= 3 { combustionConsumptionCard }
+            if odometerPoints.count >= 3 { odometerChartCard }
+            if !batteryHealthRecords.isEmpty { batteryHealthCard }
+            if airQualityRecords.count >= 2 { airQualityCard }
+            if cabinClimateRecords.count >= 2 { cabinClimateCard }
+            if !commands.isEmpty { automationHistoryCard }
+            if !hasAnyDataAtAll {
+                emptyCard
+                    .transition(.opacity)
+            } else if !hasAnyDataInRange {
+                nothingInRangeCard
+                    .transition(.opacity)
+            }
+        }
+        .animation(Motion.resolve(Motion.cardChange), value: periodDataKey)
     }
 
     var body: some View {
@@ -312,47 +317,13 @@ struct HistoryDashboardView: View {
 
             if isLoading && !didInitialLoad {
                 loadingSkeleton
+                    .transition(.opacity)
             } else {
-                overviewCard
-                if !snapshot.activities.isEmpty {
-                    observedChangesCard
-                }
-                monthComparisonCard
-                if snapshot.activities.contains(where: { $0.kind == .airCleaning }) {
-                    airCleaningCyclesCard
-                }
-                emissionsCard
-                if !trips.isEmpty {
-                    drivingPatternsCard
-                    distanceChartCard
-                    monthlyMileageReportCard
-                    tripListCard
-                }
-                if !chargingSessions.isEmpty {
-                    chargingSessionsCard
-                    if selectedSession != nil && !selectedSessionCurve.isEmpty { chargingCurveCard }
-                    monthlyChargingCard
-                    locationBreakdownCard
-                    chargingHistoryCard
-                }
-                if !fuelEntries.isEmpty {
-                    fuelEconomyCard
-                    recentFillsCard
-                }
-                if efficiencyPoints.count >= 3 { efficiencyChartCard }
-                if combustionConsumptionPoints.count >= 3 { combustionConsumptionCard }
-                if odometerPoints.count >= 3 { odometerChartCard }
-                if !batteryHealthRecords.isEmpty { batteryHealthCard }
-                if airQualityRecords.count >= 2 { airQualityCard }
-                if cabinClimateRecords.count >= 2 { cabinClimateCard }
-                if !commands.isEmpty { automationHistoryCard }
-                if !hasAnyDataAtAll {
-                    emptyCard
-                } else if !hasAnyDataInRange {
-                    nothingInRangeCard
-                }
+                dashboardContent
+                    .transition(.opacity)
             }
         }
+        .animation(Motion.resolveCrossfade(Motion.entrance), value: didInitialLoad)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .sheet(isPresented: $showFuelSheet) { fuelEntrySheet }
         .alert(L10n.text("Export failed"), isPresented: Binding(
@@ -382,6 +353,7 @@ struct HistoryDashboardView: View {
         }
         .task(id: periodLoadKey) { await loadPeriodScopedData() }
         .task(id: lifetimeLoadKey) { await loadLifetimeData() }
+        .task(id: hiddenTripsLoadKey) { await loadHiddenTrips() }
         .task(id: selectedSession?.id) { await loadSelectedSessionSamples() }
         .task(id: "\(selectedSession?.id ?? "")_\(overlayPreviousSession)") { await loadPreviousSessionCurve() }
         .onChange(of: state.dataTimestamp) { _, _ in bumpDataToken() }
@@ -410,6 +382,42 @@ struct HistoryDashboardView: View {
 
     var lifetimeLoadKey: String { "\(state.identity.vin)_\(refreshToken)" }
 
+    // MARK: - Data identities for chart animation
+
+    /// Identity of the period-scoped snapshot: counts plus the newest row timestamps change
+    /// exactly when a reload delivers different data, so charts animate when the data lands
+    /// rather than on the load key (which flips before the async query returns).
+    var periodDataKey: String {
+        let air = snapshot.airQualityRecords
+        return "t\(snapshot.trips.count).\(snapshot.trips.first?.endedAt.timeIntervalSince1970 ?? 0)" +
+            "_s\(snapshot.chargingSessions.count).\(snapshot.chargingSessions.first?.startedAt.timeIntervalSince1970 ?? 0)" +
+            "_r\(snapshot.telemetryRecords.count).\(snapshot.telemetryRecords.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_a\(air.count).\(air.last?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
+    /// Identity of the lifetime series (battery health, all-time odometer, fuel, cabin
+    /// climate) that only reload on `lifetimeLoadKey`.
+    var lifetimeDataKey: String {
+        "b\(batteryHealthRecords.count).\(batteryHealthRecords.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_o\(allTimeTelemetryRecords.count).\(allTimeTelemetryRecords.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_f\(fuelEntries.count).\(fuelEntries.first?.date.timeIntervalSince1970 ?? 0)" +
+            "_c\(cabinClimateRecords.count).\(cabinClimateRecords.last?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
+    /// Identity of the selected session's loaded samples — covers both the session switch
+    /// and the async sample load landing.
+    var sessionCurveKey: String {
+        "\(selectedSessionID ?? "")_\(selectedSessionSamples.count)" +
+            "_\(selectedSessionSamples.first?.timestamp.timeIntervalSince1970 ?? 0)"
+    }
+
+    /// Folds the hidden ids (minus session restores) into the task key so hiding/restoring a
+    /// trip reloads the hidden-trip cache, while typing or scrubbing never does.
+    var hiddenTripsLoadKey: String {
+        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
+        return "\(state.identity.vin)_\(refreshToken)_\(hidden.sorted().joined(separator: ","))"
+    }
+
     /// Full reload (manual refresh, fuel edits).
     func bumpRefresh() { refreshToken &+= 1 }
 
@@ -426,7 +434,6 @@ struct HistoryDashboardView: View {
 
     func loadPeriodScopedData() async {
         isLoading = true
-        defer { isLoading = false; didInitialLoad = true }
 
         let vin = state.identity.vin
         let db = database
@@ -441,14 +448,19 @@ struct HistoryDashboardView: View {
                                  tripLimit: tripLimit, chargingCapacity: chargingCapacity)
         }.value
 
+        // A load cancelled by a newer key must not clear the loading flag the replacement
+        // already set, so the flags reset only on the success path.
         guard !Task.isCancelled else { return }
+        isLoading = false
+        didInitialLoad = true
         snapshot = loaded
-        tripPage = 0
         expandedTripIDs = []
-        activityPage = 0
-        sessionPage = 0
-        commandPage = 0
-        airCleaningPage = 0
+        tripDateStrings = Dictionary(
+            loaded.trips.map { ($0.id, Format.dateTimeFormatter.string(from: $0.endedAt)) },
+            uniquingKeysWith: { first, _ in first })
+        sessionLabelStrings = Dictionary(
+            loaded.chargingSessions.map { ($0.id, sessionLabel($0)) },
+            uniquingKeysWith: { first, _ in first })
         // `selectedSession` resolves to nil on its own when the remembered id isn't in the
         // current range, so the curve card just hides; the saved preference is kept so the
         // curve reappears if the range later includes that session again.
@@ -582,7 +594,7 @@ struct HistoryDashboardView: View {
             if !text.wrappedValue.isEmpty {
                 Text("\(count)/\(total)").font(.system(size: 8.5)).foregroundStyle(.tertiary)
                 Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 9)) }
-                    .buttonStyle(.borderless).accessibilityLabel(L10n.text("Clear search"))
+                    .buttonStyle(.pressable).accessibilityLabel(L10n.text("Clear search"))
             }
         }
         .padding(5)

@@ -6,7 +6,7 @@ import Testing
 struct GarageScannerTests {
     private func makeDefaults() throws -> (UserDefaults, String) {
         let suiteName = "HisingenGarageScannerTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         return (defaults, suiteName)
     }
 
@@ -44,19 +44,15 @@ struct GarageScannerTests {
 
         await scanner.scanNow()
 
-        XCTAssertEqual(context.capturedStates.count, 1,
-                       "only the car scanned before the interruption should be captured")
-        XCTAssertEqual(context.completePassCount, 0,
-                       "an aborted pass must not fire the closing re-render")
+        #expect(context.capturedStates.count == 1, "only the car scanned before the interruption should be captured")
+        #expect(context.completePassCount == 0, "an aborted pass must not fire the closing re-render")
         let restores = await volvoRestores.count
-        XCTAssertEqual(restores, 0,
-                       "the pass must not advance to the dormant brand after aborting")
+        #expect(restores == 0, "the pass must not advance to the dormant brand after aborting")
         let scanStats = await diagnostics.current()
-        XCTAssertEqual(scanStats.passesStarted, 1)
-        XCTAssertEqual(scanStats.passesCompleted, 0)
-        XCTAssertTrue(scanStats.lastPassWasPartial,
-                      "an interrupted pass must be explicit in exported diagnostics")
-        XCTAssertEqual(scanStats.vehiclesScannedTotal, 1)
+        #expect(scanStats.passesStarted == 1)
+        #expect(scanStats.passesCompleted == 0)
+        #expect(scanStats.lastPassWasPartial, "an interrupted pass must be explicit in exported diagnostics")
+        #expect(scanStats.vehiclesScannedTotal == 1)
     }
 
     /// The clean path: with nothing interrupting, every non-selected car of every resumable
@@ -85,8 +81,8 @@ struct GarageScannerTests {
         await scanner.scanNow()
 
         // P1 skipped (active selection); P2 + V1 + V2 scanned.
-        XCTAssertEqual(context.capturedStates.count, 3)
-        XCTAssertEqual(context.completePassCount, 1)
+        #expect(context.capturedStates.count == 3)
+        #expect(context.completePassCount == 1)
     }
 
     /// A dormant brand whose provider is still warm is scanned without a restore round trip.
@@ -115,9 +111,9 @@ struct GarageScannerTests {
         await scanner.scanNow()
 
         let restores = await volvoRestores.count
-        XCTAssertEqual(restores, 0, "a warm dormant provider must not be re-restored")
-        XCTAssertEqual(context.capturedStates.count, 2, "P2 + V1 still scanned")
-        XCTAssertEqual(context.completePassCount, 1)
+        #expect(restores == 0, "a warm dormant provider must not be re-restored")
+        #expect(context.capturedStates.count == 2, "P2 + V1 still scanned")
+        #expect(context.completePassCount == 1)
     }
 
     /// A cold dormant brand is still restored before its vehicles are scanned.
@@ -146,8 +142,8 @@ struct GarageScannerTests {
         await scanner.scanNow()
 
         let restores = await volvoRestores.count
-        XCTAssertEqual(restores, 1, "a cold dormant provider is restored once")
-        XCTAssertEqual(context.capturedStates.count, 2)
+        #expect(restores == 1, "a cold dormant provider is restored once")
+        #expect(context.capturedStates.count == 2)
     }
 
     /// A scan started while a command is already in progress never begins.
@@ -172,8 +168,8 @@ struct GarageScannerTests {
 
         await scanner.scanNow()
 
-        XCTAssertEqual(context.capturedStates.count, 0)
-        XCTAssertEqual(context.completePassCount, 0)
+        #expect(context.capturedStates.count == 0)
+        #expect(context.completePassCount == 0)
     }
 }
 

@@ -79,7 +79,7 @@ struct ChargeHistoryRegressionTests {
 
     @Test("Finalization uses the last charging sample when the stop snapshot SoC is stale")
     @MainActor
-    func staleStopSnapshotDoesNotEraseCharge() throws {
+    func staleStopSnapshotDoesNotEraseCharge() async throws {
         let database = VehicleDatabase.inMemory()
         let suite = "ChargeHistoryRegressionTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -90,24 +90,32 @@ struct ChargeHistoryRegressionTests {
             defaults: defaults, database: database, preferences: preferences
         )
         let vin = "STALE-STOP-VIN"
-        let startedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        // `loadSnapshot` expires rows older than 7 days on read, so the timeline must sit
+        // near "now": a fixed 2026 epoch made every snapshot expire before the assertion.
+        // Whole seconds only: the SQLite date roundtrip truncates sub-second precision.
+        let startedAt = Date(timeIntervalSince1970: Double(Int(Date().timeIntervalSince1970) - 7_200))
 
-        store.save(state(vin: vin, soc: 40, charging: true, powerWatts: nil, at: startedAt))
-        store.save(state(
-            vin: vin, soc: 55, charging: true, powerWatts: 4_000,
-            at: startedAt.addingTimeInterval(3_600)
-        ))
-        // The provider can return an older SoC in the first non-charging snapshot.
-        store.save(state(
-            vin: vin, soc: 40, charging: false, powerWatts: nil,
-            at: startedAt.addingTimeInterval(3_660)
-        ))
-        // A second idle observation confirms that this is a real stop rather than a
-        // one-poll provider glitch.
-        store.save(state(
-            vin: vin, soc: 40, charging: false, powerWatts: nil,
-            at: startedAt.addingTimeInterval(3_720)
-        ))
+        // Each save hands its storage pass to a detached task (PERSIST-06/07). Await the
+        // snapshot after every save so the observations reach the ledger in timeline order.
+        let timeline: [(soc: Double, charging: Bool, powerWatts: Int?, at: Date)] = [
+            (40, true, nil, startedAt),
+            (55, true, 4_000, startedAt.addingTimeInterval(3_600)),
+            // The provider can return an older SoC in the first non-charging snapshot.
+            (40, false, nil, startedAt.addingTimeInterval(3_660)),
+            // A second idle observation confirms that this is a real stop rather than a
+            // one-poll provider glitch.
+            (40, false, nil, startedAt.addingTimeInterval(3_720))
+        ]
+        for observation in timeline {
+            store.save(state(
+                vin: vin, soc: observation.soc, charging: observation.charging,
+                powerWatts: observation.powerWatts, at: observation.at
+            ))
+            let landed = await awaitStored(timeout: 5) {
+                database.loadSnapshot(for: vin)?.freshness.fetchedAt == observation.at
+            }
+            #expect(landed, "observation at \(observation.at) never reached the database")
+        }
 
         let session = try #require(database.charging.recentChargingSessions(for: vin).first)
         #expect(session.startSoc == 40)
@@ -123,28 +131,15 @@ struct ChargeHistoryRegressionTests {
     private func state(
         vin: String, soc: Double, charging: Bool, powerWatts: Int?, at date: Date
     ) -> VehicleState {
-        VehicleState(
-            batteryPercentage: soc,
-            rangeKm: nil,
-            chargingState: charging ? .charging : .idle,
-            estimatedChargingTimeToFullMinutes: nil,
-            chargeTargetPercentage: 80,
-            chargingPowerWatts: powerWatts,
-            chargingCurrentAmps: nil,
-            chargingVoltageVolts: nil,
+        // TESTS-12: thin wrapper over the shared TestSupport fixture builder.
+        vehicle(
+            vin: vin, battery: soc, rangeKm: nil,
+            state: charging ? .charging : .idle,
+            connection: charging ? .connected : .disconnected,
             chargingType: charging ? .ac : .none,
-            chargerConnection: charging ? .connected : .disconnected,
-            availability: .available,
-            modelName: "Polestar 2",
+            powerWatts: powerWatts,
             modelYear: "2024",
-            registrationNo: nil,
-            vin: vin,
-            ownerFirstName: nil,
-            odometerKm: nil,
-            imageData: nil,
-            fetchedAt: date,
-            vehicleReportedAt: date,
-            dataWarnings: []
+            fetchedAt: date, reportedAt: date
         )
     }
 }

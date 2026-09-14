@@ -31,12 +31,25 @@ enum Motion {
     /// Deliberate, meant-to-be-noticed: the manual refresh sweep.
     static let deliberate: TimeInterval = 0.66
 
+    // MARK: - One-shot pulses
+
+    /// Completion acknowledgement on the battery gauge: a brief brightness
+    /// lift (``pulseIn``), a short dwell (``pulseDwell``), then a slower
+    /// settle (``pulseOut``). Asymmetric on purpose — arrive quick, leave calm.
+    static var pulseIn: Animation { .easeInOut(duration: 0.22) }
+    static let pulseDwell: TimeInterval = 0.26
+    static var pulseOut: Animation { .easeOut(duration: 0.34) }
+
     // MARK: - Interaction animations
 
     /// A control reacting to the pointer or a click. Quick, no overshoot.
     static var interaction: Animation { .easeOut(duration: fast) }
     /// Selection indicators that slide rather than teleport (tab underline, chips).
     static var selection: Animation { .spring(response: 0.30, dampingFraction: 0.86) }
+    /// Theme / appearance cross-fades: colors and materials soften, nothing moves.
+    static var theme: Animation { .easeInOut(duration: fast) }
+    /// The manual refresh sweep (the 360° icon rotation).
+    static var refreshSweep: Animation { .easeInOut(duration: deliberate) }
 
     // MARK: - State-change animations
 
@@ -103,6 +116,11 @@ enum Motion {
     /// Frames the menu-bar breath is sampled into. 18 frames over 3.6 s is a
     /// 5 fps redraw of a 16-pt glyph — visually smooth, effectively free.
     static let menuBarBreathFrames = 18
+    /// The remote-operation shimmer: quicker than the charging breath because
+    /// it answers a command the user just issued, and it only ever lives for
+    /// the seconds until the receipt resolves.
+    static let menuBarRemoteOpCycle: TimeInterval = 1.2
+    static let menuBarRemoteOpFrames = 12
     /// How long the icon dwells on its "charge complete" acknowledgement before
     /// settling back to the resting plugged-in glyph.
     static let menuBarCompletionDwell: TimeInterval = 4.0

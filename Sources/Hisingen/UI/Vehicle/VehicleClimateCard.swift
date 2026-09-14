@@ -6,15 +6,17 @@ struct VehicleClimateCard: View {
     let features: FeatureSelection
     let preferences: PreferencesStore
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+
     static func make(state: VehicleState, features: FeatureSelection, preferences: PreferencesStore) -> AnyView? {
         let card = Self(state: state, features: features, preferences: preferences)
         guard !card.rows.isEmpty || card.climateUnavailable else { return nil }
         return AnyView(card)
     }
 
-    private var climateActive: Bool {
-        [.active, .heating, .cooling, .ventilating].contains(state.climateStatus?.activity)
-    }
+    private var climateActive: Bool { state.isClimateActive }
 
     private var climateUnavailable: Bool {
         features.contains(.climateStatus) && state.climateStatus == nil && !features.contains(.remoteClimate)
@@ -78,8 +80,12 @@ struct VehicleClimateCard: View {
                         Text(L10n.text("Climate & Timers")).font(.system(size: 12, weight: .bold)).foregroundStyle(HisingenTheme.ink)
                     }
                     Spacer()
-                    if climateActive { Pill(text: state.climateStatus?.activity.displayName ?? L10n.text("Active"), color: .orange, symbol: "fan.fill") }
+                    if climateActive {
+                        Pill(text: state.climateStatus?.activity.displayName ?? L10n.text("Active"), color: .orange, symbol: "fan.fill")
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                    }
                 }
+                .animation(cardChangeAnimation, value: climateActive)
                 if climateUnavailable { CapabilityBadge(title: L10n.text("Climate status"), state: .unavailable) }
                 if !rows.isEmpty { VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } } }
             }

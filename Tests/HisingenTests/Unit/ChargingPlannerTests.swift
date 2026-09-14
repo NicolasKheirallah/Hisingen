@@ -345,13 +345,45 @@ struct ChargingPlannerDecisionsTests {
     func windowNotificationFiresOncePerWindowInsideLeadAndSpan() {
         let now = fixtureDate(2026, 2, 10, 12)
         let plan = Self.plan(startOffsetHours: 0.1, hours: 2, from: now)
-        #expect(ChargingPlannerDecisions.shouldNotifyWindowStart(plan: plan, now: now, lastNotifiedStart: nil))
-        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: plan, now: now, lastNotifiedStart: plan.start))
+        #expect(ChargingPlannerDecisions.shouldNotifyWindowStart(plan: plan, now: now, leadMinutes: 15, announcedWindowEnd: nil))
+        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: plan, now: now, leadMinutes: 15, announcedWindowEnd: plan.end))
         // Outside the window entirely: before the lead time and after it ends.
         let earlyPlan = Self.plan(startOffsetHours: 1, hours: 2, from: now)
-        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: earlyPlan, now: now, lastNotifiedStart: nil))
+        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: earlyPlan, now: now, leadMinutes: 15, announcedWindowEnd: nil))
         let latePlan = Self.plan(startOffsetHours: -3, hours: 2, from: now)
-        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: latePlan, now: now, lastNotifiedStart: nil))
+        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: latePlan, now: now, leadMinutes: 15, announcedWindowEnd: nil))
+        // The lead is honored: with a 30-minute lead, a window 15 minutes out is still
+        // quiet and earns its banner exactly at the half hour.
+        #expect(!ChargingPlannerDecisions.shouldNotifyWindowStart(plan: earlyPlan, now: now, leadMinutes: 30, announcedWindowEnd: nil))
+        #expect(ChargingPlannerDecisions.shouldNotifyWindowStart(
+            plan: earlyPlan, now: now.addingTimeInterval(30 * 60), leadMinutes: 30, announcedWindowEnd: nil))
+        // A plan that begins at or after the announced end is a genuinely later window
+        // and earns a fresh banner even though one was already sent.
+        let announcedPlan = Self.plan(startOffsetHours: -3, hours: 2, from: now)
+        let nextPlan = Self.plan(startOffsetHours: 0.25, hours: 2, from: now)
+        #expect(ChargingPlannerDecisions.shouldNotifyWindowStart(
+            plan: nextPlan, now: now, leadMinutes: 15, announcedWindowEnd: announcedPlan.end))
+    }
+
+    /// Regression: while "charge now" is cheapest, the recomputed plan starts at `now`
+    /// and slides a minute forward on every planner tick. The previous start-keyed
+    /// dedupe compared the stored start against each new start, never matched, and
+    /// re-announced the window every minute; the end-keyed rule must stay quiet until
+    /// the announced window has run its course.
+    @Test
+    func slidingNowWindowNotifiesOnceNotEveryMinute() {
+        let windowStart = fixtureDate(2026, 2, 10, 1, 45)
+        var announcedEnd: Date?
+        var notifiedCount = 0
+        for minute in 0..<120 {
+            let now = windowStart.addingTimeInterval(TimeInterval(minute * 60))
+            let plan = Self.plan(startOffsetHours: 0, hours: 2, from: now)
+            if ChargingPlannerDecisions.shouldNotifyWindowStart(plan: plan, now: now, leadMinutes: 0, announcedWindowEnd: announcedEnd) {
+                notifiedCount += 1
+                announcedEnd = plan.end
+            }
+        }
+        #expect(notifiedCount == 1)
     }
 
     @Test

@@ -71,8 +71,7 @@ extension VehicleState {
     var isCharging: Bool { chargingState.isActivelyCharging }
 
     var isClimateActive: Bool {
-        guard let activity = climateStatus?.activity else { return false }
-        return activity == .active || activity == .heating || activity == .cooling || activity == .ventilating || activity == .starting
+        climateStatus?.activity.isActiveSession == true
     }
 
     /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
@@ -276,7 +275,7 @@ extension VehicleState {
         return batteryPercentage >= 99.5
     }
 
-    var model: VehicleModel { VehicleModel(modelName: modelName) }
+    var model: VehicleModel { VehicleModel(modelName: modelName, vin: vin) }
 
     var isVolvo: Bool {
         vin.uppercased().hasPrefix("YV")

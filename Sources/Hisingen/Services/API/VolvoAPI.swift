@@ -68,8 +68,16 @@ actor VolvoAPI {
     var tokenExpiry: Date?
     var refreshTask: Task<VolvoTokenResponseDTO, Error>?
     var refreshTaskID: UUID?
-    var pendingVerifier: String?
-    var pendingState: String?
+    /// PKCE sign-in flow state. The flow validates the redirect callback against the pending
+    /// values before consuming them, so a stray or forged callback cannot kill the genuine
+    /// sign-in; `invalid_scope` stays retryable at a narrower scope tier.
+    var authorizationFlow = AuthorizationFlow<VolvoError>(
+        rejected: .authenticationRequired(.callbackRejected),
+        oauthError: { code, description in
+            VolvoError.permissionDenied(
+                operation: code == "invalid_scope" ? "invalid_scope" : (description ?? code))
+        }
+    )
     let keychain: KeychainStore
     let imageCache: CarImageCache
     let preferences: PreferencesStore
@@ -183,7 +191,7 @@ actor VolvoAPI {
 
         try await throttleCommandDispatch()
 
-        var request = URLRequest(url: apiURL(
+        var request = URLRequest(url: try apiURL(
             path: "/connected-vehicle/v2/vehicles/\(vin)/commands/\(commandName)"
         ))
         request.httpMethod = "POST"
@@ -195,7 +203,16 @@ actor VolvoAPI {
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: commandName) {
             if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
                let text = detail.text {
-                throw VolvoError.permissionDenied(operation: "\(commandName) (\(text))")
+                // Only a genuine 403 becomes permissionDenied. Letting the body's detail text
+                // replace the typed failure reclassified a 401 (needs re-authentication) and
+                // a 429 (rate limit, Retry-After) as account-permission problems.
+                if case .permissionDenied = failure {
+                    throw VolvoError.permissionDenied(operation: "\(commandName) (\(text))")
+                }
+                logger.error("""
+                    Volvo command \(commandName, privacy: .public) failed \
+                    (HTTP \(response.statusCode, privacy: .public)): \(text, privacy: .public)
+                    """)
             }
             throw failure
         }
@@ -237,14 +254,22 @@ actor VolvoAPI {
         try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
     }
 
-    private func apiURL(path: String) -> URL {
+    /// The path embeds server-supplied data (the VIN), so a malformed value must fail the
+    /// request instead of trapping at a force-unwrap.
+    private func apiURL(path: String) throws -> URL {
         let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        return URL(string: clean, relativeTo: apiBaseURL)!.absoluteURL
+        guard let url = URL(string: clean, relativeTo: apiBaseURL) else {
+            throw VolvoError.invalidResponse(operation: path)
+        }
+        return url.absoluteURL
     }
 
-    func identityURL(path: String) -> URL {
+    func identityURL(path: String) throws -> URL {
         let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        return URL(string: clean, relativeTo: identityHost)!.absoluteURL
+        guard let url = URL(string: clean, relativeTo: identityHost) else {
+            throw VolvoError.invalidResponse(operation: path)
+        }
+        return url.absoluteURL
     }
 
     func discoverVehicles(preferredVIN: String?) async throws {
@@ -307,8 +332,9 @@ actor VolvoAPI {
     }
 
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
+        let epoch = sessionEpoch
         guard let clientID, let clientSecret else { throw VolvoError.appNotConfigured }
-        var request = URLRequest(url: identityURL(path: tokenPath))
+        var request = URLRequest(url: try identityURL(path: tokenPath))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -319,6 +345,9 @@ actor VolvoAPI {
             "code_verifier": verifier
         ])
         let token = try await requestToken(request)
+        // A sign-out or restarted sign-in during the exchange must not repopulate the tokens
+        // it just cleared (same guard as the Polestar grant paths).
+        guard epoch == sessionEpoch else { throw CancellationError() }
         try apply(token)
     }
 
@@ -350,7 +379,7 @@ actor VolvoAPI {
         guard let clientID, let clientSecret, let refreshToken, !refreshToken.isEmpty else {
             throw VolvoError.authenticationRequired(.noStoredSession)
         }
-        var request = URLRequest(url: identityURL(path: tokenPath))
+        var request = URLRequest(url: try identityURL(path: tokenPath))
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -468,7 +497,7 @@ actor VolvoAPI {
             throw VolvoError.authenticationRequired(.expiredSession)
         }
         for attempt in 0...1 {
-            var request = URLRequest(url: apiURL(path: path))
+            var request = URLRequest(url: try apiURL(path: path))
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
             request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")

@@ -74,6 +74,7 @@ extension HistoryDashboardView {
                     yLabel: "kWh/100km",
                     points: points.map { ($0.timestamp, $0.kwhPer100Km) }
                 ))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 if !smoothed.isEmpty {
                     HStack(spacing: 10) {
                         legendSwatch(HisingenTheme.chartInfo, L10n.text("Reading"))
@@ -177,6 +178,7 @@ extension HistoryDashboardView {
                     yLabel: "L/100km",
                     points: points.map { ($0.timestamp, $0.kwhPer100Km) }
                 ))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 Text(L10n.text("Vehicle-reported litres per 100 km between fill-ups. Short, cold trips raise it."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                 dataConfidenceNote(for: points.map(\.timestamp))
@@ -230,6 +232,7 @@ extension HistoryDashboardView {
                     points: odometerPoints.map { ($0.timestamp, preferences.distanceUnit.convert(km: $0.odometerKm)) },
                     valueFormat: { String(format: "%.0f", $0) }
                 ))
+                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 if monthly.count >= 2 {
                     Chart(monthly) { bucket in
                         BarMark(
@@ -242,6 +245,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(preferences.distanceUnit.suffix)
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Monthly mileage chart"))
+                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
                 }
                 if let kmPerDay {
                     curveStat(L10n.text("Average Daily Distance"),
@@ -307,6 +311,7 @@ extension HistoryDashboardView {
                         yLabel: "%",
                         points: records.map { ($0.timestamp, $0.stateOfHealthPct) }
                     ))
+                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
                 }
                 if let latest {
                     KVRow(L10n.text("Degradation"),
@@ -391,6 +396,7 @@ extension HistoryDashboardView {
                         yLabel: L10n.text("AQI"),
                         points: aqiPoints.map { ($0.record.timestamp, $0.aqi) }
                     ))
+                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                 }
                 if pm25Points.count >= 2 || pm10Points.count >= 2 {
                     Chart {
@@ -418,6 +424,7 @@ extension HistoryDashboardView {
                     .chartYAxisLabel("µg/m³")
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
+                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
                     if !pm10Points.isEmpty {
                         HStack(spacing: 10) {
                             legendSwatch(HisingenTheme.chartInfo, "PM2.5")
@@ -453,10 +460,6 @@ extension HistoryDashboardView {
             .map { (command: $0.key, total: $0.value.count, failed: $0.value.filter { $0.status == "failed" }.count) }
             .sorted { $0.total > $1.total }
         let failures = commands.filter { $0.status == "failed" && ($0.errorMessage?.isEmpty == false) }.prefix(3)
-        let logPageSize = 12
-        let logPageCount = HistoryPagination.pageCount(itemCount: commands.count, pageSize: logPageSize)
-        let logPage = HistoryPagination.clampedPage(commandPage, pageCount: logPageCount)
-        let visibleCommands = HistoryPagination.page(of: commands, index: logPage, pageSize: logPageSize)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -494,24 +497,22 @@ extension HistoryDashboardView {
                     }
                     .padding(.vertical, 2)
                 }
-                ForEach(visibleCommands) { record in
-                    HStack {
-                        Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
-                            .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
-                        Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                            .font(.system(size: 10.5, weight: .medium))
-                        if let ms = record.durationMs {
-                            Text(L10n.format("%d ms", ms)).font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                PaginatedSection(items: commands, pageSize: 12, resetKeys: [periodLoadKey]) { visibleCommands, footer in
+                    ForEach(visibleCommands) { record in
+                        HStack {
+                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
+                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
+                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
+                                .font(.system(size: 10.5, weight: .medium))
+                            if let ms = record.durationMs {
+                                Text(L10n.format("%d ms", ms)).font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                            Text(record.executedAt, style: .relative).font(.system(size: 9)).foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Text(record.executedAt, style: .relative).font(.system(size: 9)).foregroundStyle(.secondary)
+                        .help(record.errorMessage ?? record.status.capitalized)
                     }
-                    .help(record.errorMessage ?? record.status.capitalized)
-                }
-                if logPageCount > 1 {
-                    HistoryPagerControls(page: logPage, pageCount: logPageCount,
-                                         newerHelp: L10n.text("Show newer entries"),
-                                         olderHelp: L10n.text("Show older entries")) { commandPage = $0 }
+                    footer
                 }
                 if !failures.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
@@ -531,7 +532,8 @@ extension HistoryDashboardView {
     /// vehicles that never report interior temperature.
     var cabinClimateCard: AnyView {
         let chronological = cabinClimateRecords.sorted { $0.timestamp < $1.timestamp }
-        guard let latest = chronological.last?.interiorCelsius else { return AnyView(EmptyView()) }
+        let plotted = chronological.filter { $0.interiorCelsius != nil }
+        guard let latest = plotted.last?.interiorCelsius else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -540,7 +542,7 @@ extension HistoryDashboardView {
                     Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
                         .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
                 }
-                Chart(chronological) { record in
+                Chart(plotted) { record in
                     LineMark(
                         x: .value(L10n.text("Date"), record.timestamp),
                         y: .value(L10n.text("Interior"), preferences.temperatureUnit.convert(celsius: record.interiorCelsius ?? 0))
@@ -560,6 +562,7 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(preferences.temperatureUnit.suffix)
                 .frame(height: chartHeight * 0.9)
                 .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
+                .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
                 Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)

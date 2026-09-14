@@ -1,9 +1,27 @@
 import Foundation
 
+/// Shared OAuth redirect-callback helpers. One normalizer/extractor for both provider stacks,
+/// so a URI one flow accepts and the other rejects cannot diverge silently.
+enum OAuthCallback {
+    /// The app-scheme callback carries no path, which URL reports as "" here and "/" in some
+    /// redirect forms — treat those as equal; longer paths compare without a trailing slash.
+    static func normalizedPath(_ url: URL) -> String {
+        let path = url.path
+        guard path.count > 1 else { return path == "/" ? "" : path }
+        return path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
+
+    static func queryValue(_ name: String, from url: URL?) -> String? {
+        guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        return components.queryItems?.first(where: { $0.name == name })?.value
+    }
+}
+
 /// Owns the security-sensitive lifetime of one PKCE authorization attempt. Verifier, state,
 /// timeout, and invalidation generation move together so callers cannot clear only part of a
-/// flow or accept a callback left behind by an earlier attempt.
-struct PolestarAuthorizationFlow {
+/// flow or accept a callback left behind by an earlier attempt. The rejection and OAuth-error
+/// mappings are supplied per provider so both stacks share the validation sequence.
+struct AuthorizationFlow<Failure: Error> {
     struct Completion {
         let verifier: String
         let code: String
@@ -14,6 +32,17 @@ struct PolestarAuthorizationFlow {
         let verifier: String
         let state: String
         let startedAt: Date
+    }
+
+    let rejected: Failure
+    /// Maps the callback's `error`/`error_description` pair onto the provider's error type.
+    let oauthError: @Sendable (_ code: String, _ description: String?) -> Failure
+
+    /// Explicit designated init: the synthesized memberwise init is private (private
+    /// `pending`), so provider stacks in other files could not construct with arguments.
+    init(rejected: Failure, oauthError: @escaping @Sendable (String, String?) -> Failure) {
+        self.rejected = rejected
+        self.oauthError = oauthError
     }
 
     private(set) var generation: UInt = 0
@@ -43,16 +72,17 @@ struct PolestarAuthorizationFlow {
         }
         guard callbackURL.scheme == redirectURL.scheme,
               callbackURL.host == redirectURL.host,
-              Self.normalizedPath(callbackURL) == Self.normalizedPath(redirectURL),
-              Self.queryValue("state", from: callbackURL) == pending.state else {
+              OAuthCallback.normalizedPath(callbackURL) == OAuthCallback.normalizedPath(redirectURL),
+              OAuthCallback.queryValue("state", from: callbackURL) == pending.state else {
             throw rejected
         }
         self.pending = nil
-        if let error = Self.queryValue("error", from: callbackURL) {
+        if let error = OAuthCallback.queryValue("error", from: callbackURL) {
             isInProgress = false
-            throw PolestarError.permissionDenied(operation: error)
+            throw oauthError(
+                error, OAuthCallback.queryValue("error_description", from: callbackURL))
         }
-        guard let code = Self.queryValue("code", from: callbackURL) else {
+        guard let code = OAuthCallback.queryValue("code", from: callbackURL) else {
             isInProgress = false
             throw rejected
         }
@@ -71,16 +101,15 @@ struct PolestarAuthorizationFlow {
     }
 
     func isCurrent(_ generation: UInt) -> Bool { self.generation == generation }
+}
 
-    private var rejected: PolestarError { .authenticationRequired(.callbackRejected) }
+typealias PolestarAuthorizationFlow = AuthorizationFlow<PolestarError>
 
-    private static func normalizedPath(_ url: URL) -> String {
-        let path = url.path
-        return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
-    }
-
-    private static func queryValue(_ name: String, from url: URL) -> String? {
-        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
-            .first(where: { $0.name == name })?.value
+extension AuthorizationFlow where Failure == PolestarError {
+    init() {
+        self.init(
+            rejected: .authenticationRequired(.callbackRejected),
+            oauthError: { code, _ in PolestarError.permissionDenied(operation: code) }
+        )
     }
 }

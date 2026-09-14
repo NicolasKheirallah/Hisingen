@@ -201,42 +201,35 @@ extension PolestarAPI {
         if response?.errors?.isEmpty == false { warnings.append(L10n.text("Some API fields were unavailable")) }
         if battery == nil && extras == nil { warnings.append(L10n.text("Battery data was unavailable")) }
 
-        var optionalResults: [(AppFeature, Bool)] = [
-            (.tyreAndWarnings, features.contains(.tyreAndWarnings) && c3Health.unavailable),
-
-
-            (.vehicleHealth, features.contains(.vehicleHealth) && health == nil && c3Health.unavailable),
-            (.tripMeters, trips.unavailable), (.connectivityDiagnostics, connectivity.unavailable),
-            (.batteryDiagnostics, features.contains(.batteryDiagnostics) && extras == nil)
-        ]
+        var unavailable = SnapshotAssembly.UnavailableFeatures()
+        unavailable.mark(.tyreAndWarnings, when: features.contains(.tyreAndWarnings) && c3Health.unavailable)
+        unavailable.mark(.vehicleHealth, when: features.contains(.vehicleHealth) && health == nil && c3Health.unavailable)
+        unavailable.mark(.tripMeters, when: trips.unavailable)
+        unavailable.mark(.connectivityDiagnostics, when: connectivity.unavailable)
+        unavailable.mark(.batteryDiagnostics, when: features.contains(.batteryDiagnostics) && extras == nil)
         if needsExterior {
-            if features.contains(.exteriorStatus) { optionalResults.append((.exteriorStatus, exterior.unavailable)) }
-            if features.contains(.remoteLocks) { optionalResults.append((.remoteLocks, exterior.unavailable)) }
-            if features.contains(.remoteWindows) { optionalResults.append((.remoteWindows, exterior.unavailable)) }
+            unavailable.mark(.exteriorStatus, when: features.contains(.exteriorStatus) && exterior.unavailable)
+            unavailable.mark(.remoteLocks, when: features.contains(.remoteLocks) && exterior.unavailable)
+            unavailable.mark(.remoteWindows, when: features.contains(.remoteWindows) && exterior.unavailable)
         }
         if needsSoftware {
             let hasInstalledVersion = otaCapabilities.value?.installedSoftwareVersion?.isEmpty == false
-            if features.contains(.softwareUpdates) { optionalResults.append((.softwareUpdates, software.unavailable && !hasInstalledVersion)) }
-            if features.contains(.remoteOTA) { optionalResults.append((.remoteOTA, software.unavailable)) }
+            unavailable.mark(.softwareUpdates,
+                             when: features.contains(.softwareUpdates) && software.unavailable && !hasInstalledVersion)
+            unavailable.mark(.remoteOTA, when: features.contains(.remoteOTA) && software.unavailable)
         }
         if needsSchedules {
-            if features.contains(.chargingSchedule) { optionalResults.append((.chargingSchedule, schedules.unavailable)) }
-            if features.contains(.remoteSchedules) { optionalResults.append((.remoteSchedules, schedules.unavailable)) }
+            unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule) && schedules.unavailable)
+            unavailable.mark(.remoteSchedules, when: features.contains(.remoteSchedules) && schedules.unavailable)
         }
-        if features.contains(.climateStatus) {
-            optionalResults.append((.climateStatus, climate.unavailable && climateTimers.unavailable))
-        }
-        if features.contains(.remoteClimate) { optionalResults.append((.remoteClimate, climate.unavailable)) }
-        if features.contains(.remoteSchedules) { optionalResults.append((.remoteSchedules, climateTimers.unavailable)) }
+        unavailable.mark(.climateStatus, when: features.contains(.climateStatus) && climate.unavailable && climateTimers.unavailable)
+        unavailable.mark(.remoteClimate, when: features.contains(.remoteClimate) && climate.unavailable)
+        unavailable.mark(.remoteSchedules, when: features.contains(.remoteSchedules) && climateTimers.unavailable)
         if needsAirQuality {
-            if features.contains(.airQuality) { optionalResults.append((.airQuality, air.unavailable)) }
-            if features.contains(.remotePreCleaning) { optionalResults.append((.remotePreCleaning, air.unavailable)) }
+            unavailable.mark(.airQuality, when: features.contains(.airQuality) && air.unavailable)
+            unavailable.mark(.remotePreCleaning, when: features.contains(.remotePreCleaning) && air.unavailable)
         }
-        if features.contains(.vehicleWeather) { optionalResults.append((.vehicleWeather, weather.unavailable)) }
-        var seenUnavailable = Set<AppFeature>()
-        let unavailable = optionalResults.compactMap { feature, failed in
-            failed && seenUnavailable.insert(feature).inserted ? feature : nil
-        }
+        unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather) && weather.unavailable)
         let c3ServiceHealth = features.contains(.vehicleHealth) ? c3Health.value : nil
         var probes = VehicleProbedCapabilities()
         if exterior.value != nil { probes.record(.exteriorStatus, as: .supported) }
@@ -336,7 +329,7 @@ extension PolestarAPI {
                 fetchedAt: Date(),
                 vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
                 dataWarnings: warnings,
-                unavailableFeatures: unavailable
+                unavailableFeatures: unavailable.features
             ),
             exteriorStatus: exterior.value,
             softwareInfo: software.value,
@@ -394,7 +387,6 @@ extension PolestarAPI {
         state.identity.accountMarket = market
         state.energy.currentLimitAmps = ampLimit.value
         state.energy.locations = chargeLocations.value ?? []
-        state.identity.interiorImageData = features.contains(.vehicleImage) ? imageCache.interiorImage(for: vin) : nil
         try requireSession(epoch)
         return state
     }

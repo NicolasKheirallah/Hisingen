@@ -38,8 +38,8 @@ struct LivePolestarStreamSoakTests {
     @Test(.disabled(if: !soakCredentialsConfigured, "Live Polestar credentials are not configured"))
     func sustainedSoakHoldsOneStreamWithoutTokenOrPollingAmplification() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let email = try XCTUnwrap(environment["HISINGEN_TEST_EMAIL"])
-        let password = try XCTUnwrap(environment["HISINGEN_TEST_PASSWORD"])
+        let email = try #require(environment["HISINGEN_TEST_EMAIL"])
+        let password = try #require(environment["HISINGEN_TEST_PASSWORD"])
         let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
 
         let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-soak.\(UUID())")
@@ -54,7 +54,7 @@ struct LivePolestarStreamSoakTests {
             let counters = SoakStreamCounters()
             let provider = SoakCountingProvider(api: api, counters: counters)
             let suiteName = "hisingen-soak.\(UUID())"
-            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            let defaults = try #require(UserDefaults(suiteName: suiteName))
             defer { defaults.removePersistentDomain(forName: suiteName) }
             let preferences = PreferencesStore(defaults: defaults)
             var features = FeatureSelection.default

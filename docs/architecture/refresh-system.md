@@ -16,19 +16,19 @@ Normal scheduled refreshes add jitter: `maxJitter = min(15, max(1, interval * 0.
 `RefreshPolicy.retryDelay(failureCount:retryAfter:)`:
 
 - If the failure carried a server-supplied `Retry-After` value, use it, clamped to **30–3600 seconds**.
-- Otherwise, exponential: `30 × 2^(failureCount − 1)` seconds, with `failureCount` clamped to `0...5` internally — so the sequence is 30, 60, 120, 240, 480, 900, and it plateaus at **900 seconds (15 minutes)** after the 6th consecutive failure. No further growth beyond that.
+- Otherwise, exponential: `30 × 2^(failureCount − 1)` seconds, with `failureCount` clamped to `0...5` internally, so the sequence is 30, 60, 120, 240, 480, 900, and it plateaus at **900 seconds (15 minutes)** after the 6th consecutive failure. No further growth beyond that.
 
-There is no separate rate-limit-specific state machine beyond this — a `.rateLimited` error just supplies its `retryAfter` value into the same `retryDelay` function, and `RefreshCoordinator.rateLimitedUntil` short-circuits any new refresh attempt (manual or timer) until that time passes, republishing diagnostics with the pending `nextRefresh` instead of issuing a request.
+There is no separate rate-limit-specific state machine beyond this: a `.rateLimited` error just supplies its `retryAfter` value into the same `retryDelay` function, and `RefreshCoordinator.rateLimitedUntil` short-circuits any new refresh attempt (manual or timer) until that time passes, republishing diagnostics with the pending `nextRefresh` instead of issuing a request.
 
-## Coalescing — how duplicate API calls are avoided
+## Coalescing: how duplicate API calls are avoided
 
 One `task: Task<Void, Never>?` plus a `generation: UInt64` counter. Every entry point (`refresh(trigger:)`, `selectCar`, `reloadVehicleMetadata`) does:
 
 ```swift
-guard task == nil else { return }   // an equivalent refresh is already in flight — drop this trigger
+guard task == nil else { return }   // an equivalent refresh is already in flight: drop this trigger
 ```
 
-Callers that arrive while a refresh is already running simply don't get a second network call — they'll receive the in-flight refresh's result through the single typed `onEvent` channel. Every async completion additionally checks `requestGeneration == generation && !Task.isCancelled` before committing its result, so if `selectCar`/`credentialsChanged`/`signOut` bumped the generation while a fetch was in flight (superseding it), that stale result is silently discarded rather than overwriting newer state.
+Callers that arrive while a refresh is already running simply don't get a second network call; they'll receive the in-flight refresh's result through the single typed `onEvent` channel. Every async completion additionally checks `requestGeneration == generation && !Task.isCancelled` before committing its result, so if `selectCar`/`credentialsChanged`/`signOut` bumped the generation while a fetch was in flight (superseding it), that stale result is silently discarded rather than overwriting newer state.
 
 ```mermaid
 sequenceDiagram
@@ -38,10 +38,10 @@ sequenceDiagram
     participant RC as RefreshCoordinator
     participant API as Provider actor
 
-    T->>RC: refresh(.timer) — task == nil, proceeds, generation = 7
+    T->>RC: refresh(.timer): task == nil, proceeds, generation = 7
     RC->>API: fetchVehicleState()
-    M->>RC: refresh(.manual) — task != nil, dropped
-    W->>RC: refresh(.wake) — task != nil, dropped
+    M->>RC: refresh(.manual): task != nil, dropped
+    W->>RC: refresh(.wake): task != nil, dropped
     API-->>RC: VehicleState
     RC->>RC: generation check passes (still 7) → apply(state)
     RC-->>T: onEvent(.state(state))
@@ -60,7 +60,7 @@ All three triggers converge on exactly one network call.
 | `.wake` | `NSWorkspace.didWakeNotification` |
 | `.networkRestored` | `NWPathMonitor` flipping from unavailable to available |
 
-`refreshIfStale()` — called from `applicationDidBecomeActive` — is a sixth, softer path: it only issues a refresh when the coordinator's current time is at least the applicable `RefreshPolicy` interval after `latest.fetchedAt`, i.e. bringing the app to the foreground doesn't force a network call if the current data isn't old enough to need one yet.
+`refreshIfStale()`, called from `applicationDidBecomeActive`, is a sixth, softer path: it only issues a refresh when the coordinator's current time is at least the applicable `RefreshPolicy` interval after `latest.fetchedAt`, i.e. bringing the app to the foreground doesn't force a network call if the current data isn't old enough to need one yet.
 
 ## Vehicle switching
 
@@ -77,11 +77,11 @@ The app calls `VehicleSessionController.credentialsDidChange(for:)` once. That o
 - **Sleep** (`NSWorkspace.willSleepNotification`): `cancelCurrentWork(preservingCommandConfirmation: true)` bumps the generation, cancels network work and timers, pauses any active confirmation deadline, and sets `sleeping = true`. No refresh attempts happen while asleep.
 - **Wake** (`NSWorkspace.didWakeNotification`): clears `sleeping`, issues `refresh(trigger: .wake)` (or `beginSession` if the session isn't ready yet).
 - **Network loss**: `NWPathMonitor.pathUpdateHandler` sets `networkAvailable = false`; `networkDidChange(false)` cancels current work while retaining the command receipt and remaining confirmation window.
-- **Network restoration**: `networkDidChange(true)` issues `refresh(trigger: .networkRestored)` (or `beginSession` if not yet authenticated) — but only if the app isn't currently `sleeping`.
+- **Network restoration**: `networkDidChange(true)` issues `refresh(trigger: .networkRestored)` (or `beginSession` if not yet authenticated); but only if the app isn't currently `sleeping`.
 
 ## Stale-on-activation
 
-Distinct from staleness on the *data* (see [data-flow.md](data-flow.md#freshness)): `refreshIfStale()` is stale-on-*activation* — it's the mechanism that makes bringing Hisingen back to focus after a while trigger a refresh without waiting for the next timer tick, but without forcing one if the last fetch is still fresh enough per the current cadence.
+Distinct from staleness on the *data* (see [data-flow.md](data-flow.md#freshness)): `refreshIfStale()` is stale-on-*activation*: it's the mechanism that makes bringing Hisingen back to focus after a while trigger a refresh without waiting for the next timer tick, but without forcing one if the last fetch is still fresh enough per the current cadence.
 
 ## Cancellation
 
@@ -101,7 +101,7 @@ these events into shell updates.
 
 `RefreshPolicy.interval` combines the activity cadence (120 s charging/climate, 600 s idle)
 with availability: when the vehicle reports `.unavailable` (asleep, power saving, service),
-the interval stretches to a **1,800 s floor** — a deep-sleeping car answers every poll with the
+the interval stretches to a **1,800 s floor**: a deep-sleeping car answers every poll with the
 same stale snapshot, so faster polling only burns the provider's rate budget. `.unknown`
 availability keeps the base cadence. Normal polling resumes on the first fetch where the
 vehicle reports available.
@@ -113,7 +113,7 @@ lock/window confirmation). `RefreshCoordinator` owns exactly **one stream task p
 vehicle**; the purpose (`VehicleLiveStreamPurpose`) selects which endpoint that task consumes.
 
 **The honesty gate.** `LiveStreamPolicy.shouldStream` streams only for an *available vehicle
-that is charging*. The Polestar stream carries battery/charging state only — keeping it open
+that is charging*. The Polestar stream carries battery/charging state only; keeping it open
 because climate is running would consume a connection without improving climate freshness, so
 climate stays on the 120 s poll. A `.unavailable` (asleep) vehicle never streams: its frames
 are stale on arrival.
@@ -128,11 +128,11 @@ are stale on arrival.
 | Observable command pending | Confirmation stream when a suitable endpoint exists, plus a 2 s first fetch and 5 s targeted polls until confirmed |
 
 **Reconnect rules.** The stream reconnects only when the server closes it, the network
-changes, the user changes vehicle, or authentication actually expires — never on a timer.
+changes, the user changes vehicle, or authentication actually expires, never on a timer.
 The per-request idle timeout is 20 minutes, because a parked car legitimately pushes no
 frames. Backoff is exponential with jitter (5 s → 15 s → 30 s → 1 m → 2 m → 5 m cap) and
 respects server `Retry-After` values (floored at 5 s, capped at 1 h). Failure counters
-reset only after a connection has held for `stabilityInterval` (10 minutes) — opening a
+reset only after a connection has held for `stabilityInterval` (10 minutes); opening a
 socket is not stability.
 
 **Circuit breakers.** Authorization failures recover through the shared single-flight token
@@ -185,7 +185,7 @@ or signing out clears the affected collection.
 
 **Identity-safe cleanup.** The stream task carries a UUID. Cleanup code that stops the
 stream nils the ID first, so an expired task's `defer` block can only reclaim coordinator
-state when it is still the registered owner — an expired confirmation stream can never
+state when it is still the registered owner; an expired confirmation stream can never
 clobber a newer stream's state or fake liveness.
 
 **Token reuse.** Starting a stream never acquires a token; it reuses the shared access

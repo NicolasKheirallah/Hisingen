@@ -7,7 +7,7 @@ How Hisingen logs, what is kept where, and how the diagnostic bundle export work
 All unified-log output goes through one subsystem and one factory:
 
 - Subsystem: `io.kheirallah.hisingen`, defined exactly once in `Support/AppLog.swift`.
-- Every logger is created with `AppLog.logger("category")` — never `Logger(subsystem:)`
+- Every logger is created with `AppLog.logger("category")`, never `Logger(subsystem:)`
   directly. The diagnostic bundle filters the log store on this exact string, so a
   drifted literal would silently drop that file's entries from exports.
   `DiagnosticSourceGuardrailTests` enforces this at CI time.
@@ -25,20 +25,20 @@ All unified-log output goes through one subsystem and one factory:
 | `sqlite` | low-level `SQLiteDatabase` |
 | `state-store` | persisted vehicle snapshots |
 | `keychain` | credential storage |
-| `image-cache` | vehicle image CDN cache (not recorded in the API store — see below) |
+| `image-cache` | vehicle image CDN cache (not recorded in the API store; see below) |
 | `geocoder` | reverse geocoding (Apple services; no request metadata exists to record) |
 | `spotlight` | Spotlight publication |
 | `updates` | update checks (recorded as provider `.hisingen`) |
 
 ### Level policy
 
-- `.debug` — internal state transitions; safe to lose.
-- `.info` — notable successful operations (command sent, session restored).
-- `.warning` — degraded-but-recovered paths (stream drops, discovery degradation).
-- `.error` — operation failed; carries `String(describing: error)` so enum payloads
+- `.debug`: internal state transitions; safe to lose.
+- `.info`: notable successful operations (command sent, session restored).
+- `.warning`: degraded-but-recovered paths (stream drops, discovery degradation).
+- `.error`: operation failed; carries `String(describing: error)` so enum payloads
   (`server(statusCode: 503)`) and NSError codes survive. `localizedDescription` is
   reserved for user-facing strings.
-- `.fault` — unrecoverable degradation (database open/schema failure) where the app
+- `.fault`: unrecoverable degradation (database open/schema failure) where the app
   keeps running but a subsystem is effectively dead.
 
 ### Privacy rules
@@ -47,12 +47,12 @@ All unified-log output goes through one subsystem and one factory:
 2. Server-supplied strings (GraphQL error summaries, provider error descriptions) are
    passed through `DiagnosticRedaction.redact(_:)` *before* being logged `.public`.
 3. `DiagnosticRedaction` replaces VIN-shaped tokens (17 alphanumerics containing ≥ 2
-   digits — the digit requirement keeps ordinary 17-letter words intact), UUID-shaped
+   digits; the digit requirement keeps ordinary 17-letter words intact), UUID-shaped
    identifiers, and credential-bearing substrings (`token=…`, `Bearer …`).
 
 ## API diagnostic store
 
-`Services/Persistence/APIDiagnosticLog.swift` — an actor holding redacted request
+`Services/Persistence/APIDiagnosticLog.swift`: an actor holding redacted request
 metadata for every vehicle-API call plus update checks:
 
 - Recorded by both HTTP transports and the gRPC layer. gRPC records include
@@ -61,7 +61,7 @@ metadata for every vehicle-API call plus update checks:
 - Redaction happens **at record time**: URLs lose query/fragment, payloads are parsed
   and scrubbed structurally (sensitive keys, coordinates, URLs, identifiers), free-text
   fields pass `DiagnosticRedaction`.
-- Retention: newest 2,000 entries **and** a 24-hour window, whichever trims first —
+- Retention: newest 2,000 entries **and** a 24-hour window, whichever trims first;
   matching the export lookback. A cumulative payload budget (32 MB) drops oldest
   payload bodies first so the archive stays bounded; metadata rows always survive.
 - Persistence: the `shared` instance persists redacted entries to
@@ -81,12 +81,12 @@ the narrative around it.
 ## Refresh diagnostics
 
 `DiagnosticsSnapshot` (published after nearly every refresh-state transition) now also
-carries since-launch counters (`refreshAttempts/Successes/Failures`) — the first fork
+carries since-launch counters (`refreshAttempts/Successes/Failures`); the first fork
 in most "data stopped updating" investigations: never worked vs stopped working. The
 latest snapshot is mirrored into `LatestDiagnosticsStore` for the exporter.
 
 Refresh network round trips are wrapped in `os_signpost` intervals
-(`OSSignposter`, category `refresh`) — visible in Instruments' os_signpost tool with
+(`OSSignposter`, category `refresh`), visible in Instruments' os_signpost tool with
 zero log volume.
 
 ## Diagnostic bundle export

@@ -1,10 +1,10 @@
 # Component Map
 
-The architecturally significant pieces, one per section. Each states what it owns, how it's isolated, and how it fails. File-level detail (every SwiftUI view, every DTO) is deliberately left out — read the source for that.
+The architecturally significant pieces, one per section. Each states what it owns, how it's isolated, and how it fails. File-level detail (every SwiftUI view, every DTO) is deliberately left out; read the source for that.
 
 ## AppDelegate (`App/AppDelegate.swift`)
 
-**Purpose:** app shell — the only `NSApplicationDelegate`, owns the single instances of everything else.
+**Purpose:** app shell: the only `NSApplicationDelegate`, owns the single instances of everything else.
 
 **Responsibilities:** installs the menu bar, migrates the legacy plaintext password, constructs `StatusItemController`/`RefreshCoordinator`/`Notifier`/`UpdateService`/`RemoteActionAuthorizer`, wires every callback between them, resumes a stored session at launch, handles brand switching (`switchActiveBrand`), dispatches remote commands, handles the `hisingen://` URL callback.
 
@@ -24,7 +24,7 @@ The architecturally significant pieces, one per section. Each states what it own
 
 ## RefreshCoordinator (`Services/Refresh/RefreshCoordinator.swift`)
 
-Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refresh-system.md](refresh-system.md) for the full write-up — summary here:
+Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refresh-system.md](refresh-system.md) for the full write-up; summary here:
 
 **Purpose:** prevent timer, manual, wake, and network-recovery refreshes from racing each other or hammering the backend, and turn provider errors into UI-facing diagnostics.
 
@@ -44,11 +44,11 @@ Owns the entire polling lifecycle for one `VehicleProviding` instance. See [refr
 
 **Main types:** `actor PolestarAPI`, `PolestarAuthorizationFlow`, `actor PolestarGRPC`, `PolestarGRPCCapabilities` (extension), `PolestarGRPCRemote` (extension), `PolestarError`.
 
-**State it owns:** access/refresh token and expiry (in-memory only — only the refresh token is persisted), two independent PKCE flow states, `cars`, per-VIN capability cache and backoff tables, the discovered C3 gRPC host, an ephemeral `URLSession` (recreated on `resetSession()`). `PolestarAuthorizationFlow` keeps each verifier, state, start time, progress flag, and invalidation generation atomic.
+**State it owns:** access/refresh token and expiry (in-memory only: only the refresh token is persisted), two independent PKCE flow states, `cars`, per-VIN capability cache and backoff tables, the discovered C3 gRPC host, an ephemeral `URLSession` (recreated on `resetSession()`). `PolestarAuthorizationFlow` keeps each verifier, state, start time, progress flag, and invalidation generation atomic.
 
 **Isolation:** `actor`. Token refresh and C3 host discovery both use the "single stored `Task`, everyone awaits it" pattern to prevent duplicate concurrent requests.
 
-**Failure modes:** see [api/polestar.md](../api/polestar.md#error-handling) and [architecture/capabilities.md](capabilities.md) — a failed optional-capability fetch degrades that one field, not the whole refresh.
+**Failure modes:** see [api/polestar.md](../api/polestar.md#error-handling) and [architecture/capabilities.md](capabilities.md); a failed optional-capability fetch degrades that one field, not the whole refresh.
 
 **Relevant tests:** `GraphQLDecodingTests`, `VehicleCapabilityParsingTests`, `RequestConstructionTests`, `ResumePathTests`, `RemoteCommandTests`, plus `Integration/LivePolestarIntegrationTests.swift` (credential-gated, opt-in).
 
@@ -79,11 +79,11 @@ byte-stream path because buffering would change cancellation and delivery semant
 
 ## Domain model (`Domain/*.swift`)
 
-**Purpose:** the shared vocabulary — `VehicleState`, `VehicleCapabilityProfile`/`VehicleProbedCapabilities`, `RemoteCommand`, `AppFeature`, `VehicleModelFamily`.
+**Purpose:** the shared vocabulary: `VehicleState`, `VehicleCapabilityProfile`/`VehicleProbedCapabilities`, `RemoteCommand`, `AppFeature`, `VehicleModelFamily`.
 
 **Main types:** see [domain/vehicle.md](../domain/vehicle.md) for the full model.
 
-**State it owns:** none — these are value types (`struct`/`enum`), all `Sendable`, `Codable`. `VehicleState.mergingLastKnown(from:features:)` is the one non-trivial piece of behavior living here — see [data-flow.md](data-flow.md).
+**State it owns:** none: these are value types (`struct`/`enum`), all `Sendable`, `Codable`. `VehicleState.mergingLastKnown(from:features:)` is the one non-trivial piece of behavior living here; see [data-flow.md](data-flow.md).
 
 ## Notifier + ChargingTransitionDetector (`Services/Notifications/*.swift`)
 
@@ -91,9 +91,9 @@ byte-stream path because buffering would change cancellation and delivery semant
 
 **Main types:** `Notifier` (`@MainActor`, `UNUserNotificationCenterDelegate`), `ChargingTransitionDetector` (stateless `struct`), `ChargingBaseline` (persisted state).
 
-**State it owns:** `Notifier` owns `previousStateByVIN`, notification-permission status, and an "auth notice already posted" flag. `ChargingTransitionDetector` owns nothing — it's a pure function from `(previous baseline, current state) → (events, new baseline)`.
+**State it owns:** `Notifier` owns `previousStateByVIN`, notification-permission status, and an "auth notice already posted" flag. `ChargingTransitionDetector` owns nothing: it's a pure function from `(previous baseline, current state) → (events, new baseline)`.
 
-**Isolation:** `Notifier` is `@MainActor`. `ChargingTransitionDetector` needs no isolation — it's a value type.
+**Isolation:** `Notifier` is `@MainActor`. `ChargingTransitionDetector` needs no isolation: it's a value type.
 
 **Failure modes:** disabled entirely when not running as a real `.app` bundle (`swift test`/CLI), so the test suite never posts real notifications.
 
@@ -103,19 +103,19 @@ See [domain/notifications.md](../domain/notifications.md).
 
 ## Persistence trio (`Services/Persistence/*.swift`)
 
-**Keychain.swift** — `KeychainStore` (value type) + `InMemorySecretCache` (the one manual-lock singleton in the codebase). Stores Polestar's email/password/refresh-token and Volvo's client-secret/API-key/refresh-token in purpose-specific Keychain accounts.
+**Keychain.swift**: `KeychainStore` (value type) + `InMemorySecretCache` (the one manual-lock singleton in the codebase). Stores Polestar's email/password/refresh-token and Volvo's client-secret/API-key/refresh-token in purpose-specific Keychain accounts.
 
-**Preferences.swift** — `@MainActor enum Preferences`, a typed façade over `UserDefaults` for every non-secret setting (VIN, nicknames, feature selection, notification toggles, theme, etc.).
+**Preferences.swift**: `@MainActor enum Preferences`, a typed façade over `UserDefaults` for every non-secret setting (VIN, nicknames, feature selection, notification toggles, theme, etc.).
 
-**VehicleStateStore.swift** — snapshot-cache entry point. It delegates each fresh snapshot to `VehicleHistoryRecorder`, whose `record(_:)` operation owns the complete activity, telemetry, charging, air-quality, connectivity, climate, and battery-health persistence workflow. SQLite remains authoritative and schema-compatible; the `UserDefaults` snapshot is migration-only.
+**VehicleStateStore.swift**: snapshot-cache entry point. It delegates each fresh snapshot to `VehicleHistoryRecorder`, whose `record(_:)` operation owns the complete activity, telemetry, charging, air-quality, connectivity, climate, and battery-health persistence workflow. SQLite remains authoritative and schema-compatible; the `UserDefaults` snapshot is migration-only.
 
 See [persistence.md](persistence.md) and [security/keychain.md](../security/keychain.md).
 
 ## RemoteActionAuthorizer + VolvoSignInPresenter (`Services/Security/*.swift`)
 
-**RemoteActionAuthorizer** — `@MainActor` class. Shows an `NSAlert` confirmation for every remote command, and additionally requires `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` (Touch ID or Mac password) for `.securitySensitive`/`.destructive`-risk commands.
+**RemoteActionAuthorizer**: `@MainActor` class. Shows an `NSAlert` confirmation for every remote command, and additionally requires `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` (Touch ID or Mac password) for `.securitySensitive`/`.destructive`-risk commands.
 
-**VolvoSignInPresenter** — `@MainActor` class. Drives Volvo's OAuth flow through the system browser (`NSWorkspace.shared.open`, not `ASWebAuthenticationSession`) and resumes a suspended continuation when the `hisingen://` callback URL arrives.
+**VolvoSignInPresenter**: `@MainActor` class. Drives Volvo's OAuth flow through the system browser (`NSWorkspace.shared.open`, not `ASWebAuthenticationSession`) and resumes a suspended continuation when the `hisingen://` callback URL arrives.
 
 See [api/authentication.md](../api/authentication.md).
 
@@ -123,7 +123,7 @@ See [api/authentication.md](../api/authentication.md).
 
 **Purpose:** turn vehicle coordinates into a street address using Apple's `CLGeocoder`, with an in-memory-only cache.
 
-**Isolation:** true Swift `actor` — the one component in the codebase with no `@MainActor`/manual-lock caveat.
+**Isolation:** true Swift `actor`: the one component in the codebase with no `@MainActor`/manual-lock caveat.
 
 ## UpdateService (`Services/Updates/UpdateService.swift`)
 
@@ -137,20 +137,20 @@ See [api/authentication.md](../api/authentication.md).
 
 **Main types:** `StatusItemController` (AppKit: `NSStatusItem`, `NSPopover`, global hotkeys, context menu), `HisingenContentView` (SwiftUI root), `VehicleTabView`, `ControlsTabView`, `SettingsView`, `AccountCredentialsForm`, `WelcomeSignInView`, `HisingenTheme` (design system).
 
-**Isolation:** everything is declared `@MainActor` — there is no cross-actor hop between AppKit and SwiftUI in this app; `StatusItemController` pushes state into SwiftUI by rebuilding the view struct and reassigning `NSHostingController.rootView`, not via `ObservableObject`.
+**Isolation:** everything is declared `@MainActor`; there is no cross-actor hop between AppKit and SwiftUI in this app; `StatusItemController` pushes state into SwiftUI by rebuilding the view struct and reassigning `NSHostingController.rootView`, not via `ObservableObject`.
 
 See [runtime.md](runtime.md#ui-bridging) for the exact bridging mechanism.
 
 ## Added 2026-08-22
 
-- **`Services/Integration/SpotlightIndexer`** — publishes the active vehicle snapshot to the
+- **`Services/Integration/SpotlightIndexer`**: publishes the active vehicle snapshot to the
   local CoreSpotlight index (no VIN in the index; wiped on sign-out).
-- **`UI/ChargingMiniPanel`** (`ChargingMiniPanelController`) — borderless non-activating
+- **`UI/ChargingMiniPanel`** (`ChargingMiniPanelController`): borderless non-activating
   NSPanel shown while charging; position autosaved; driven from `AppDelegate`'s state handler.
-- **`Domain/HistoryInsights`** — pure computations behind the History dashboard: charge curves
+- **`Domain/HistoryInsights`**: pure computations behind the History dashboard: charge curves
   (incl. voltage/current), 10–80 % timing, idle tail, loss/tariff estimates, seasonal split,
   monthly mileage, battery slope/projection, command statistics, data coverage, filter-life
   and cost-per-km estimates, service projection, anomaly detection.
-- **`Domain/Statistics`** — additional aggregate helpers used by History cards.
-- **Persistence additions** — `connectivity_history`, `cabin_climate_history`,
+- **`Domain/Statistics`**: additional aggregate helpers used by History cards.
+- **Persistence additions**: `connectivity_history`, `cabin_climate_history`,
   `fuel_entries`, `telemetry_logs.avg_consumption_unit`; full JSON backup export.

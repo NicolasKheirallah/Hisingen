@@ -13,6 +13,9 @@ struct ChargingControlsCard: View {
     @State private var showAddLocation = false
     @State private var renamingLocation: ChargeLocationSnapshot?
     @State private var renameDraft: String = ""
+    /// Set when the user taps a location's delete button; the row is only removed
+    /// after the confirmation dialog's destructive action forwards the command.
+    @State private var locationPendingDelete: ChargeLocationSnapshot?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
@@ -66,6 +69,7 @@ struct ChargingControlsCard: View {
             }
         }
         .opacity(gate.cardOpacity(chargingCommands))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability(chargingCommands))
         .sheet(isPresented: $showAddLocation) {
             ChargeLocationEditorSheet(
                 defaultAmpLimit: ampLimit ?? 16,
@@ -98,8 +102,35 @@ struct ChargingControlsCard: View {
             }
             Button(L10n.text("Cancel"), role: .cancel) { renamingLocation = nil }
         }
+        .confirmationDialog(
+            L10n.text("Delete this charge location?"),
+            isPresented: Binding(
+                get: { locationPendingDelete != nil },
+                set: { if !$0 { locationPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("Delete Location"), role: .destructive) {
+                if let location = locationPendingDelete {
+                    gate.send(.deleteChargeLocation(id: location.id))
+                }
+                locationPendingDelete = nil
+            }
+            Button(L10n.text("Cancel"), role: .cancel) { locationPendingDelete = nil }
+        } message: {
+            deleteConfirmationMessage
+        }
         .onChange(of: chargeTarget) { _, _ in chargeTargetDraft = nil }
         .onChange(of: ampLimit) { _, _ in ampLimitDraft = nil }
+    }
+
+    private var deleteConfirmationMessage: Text {
+        guard let location = locationPendingDelete else { return Text("") }
+        let name = location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias
+        return Text(L10n.format(
+            "The vehicle will delete \u{201C}%@\u{201D} and its per-location charge limits.",
+            name
+        ))
     }
 
     private var chargeTargetPresets: [Int] { chargeBounds.targetPresets() }
@@ -168,13 +199,16 @@ struct ChargingControlsCard: View {
                 .accessibilityValue(Format.percent(Double(
                     chargeTargetDraft.map { Int($0.rounded()) } ?? chargeTarget
                 )))
+                .transition(.opacity)
                 gate.sendingOverlay(.setChargeTarget(chargeTarget))
             } else {
                 Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
         }
+        .animation(Motion.resolve(Motion.layout), value: chargeTarget)
     }
 
     private var currentLimitControls: some View {
@@ -210,10 +244,14 @@ struct ChargingControlsCard: View {
                                 "Set charging current to %@",
                                 Format.amps(preset)
                             ))
+                            .transition(.opacity)
                         }
                         Spacer()
                     }
                     .padding(.bottom, 2)
+                    // Keyed on the filtered collection so the chip for the now-current
+                    // limit slides out instead of vanishing with the next read.
+                    .animation(Motion.resolve(Motion.layout), value: chips)
                 }
                 Slider(
                     value: Binding(
@@ -235,12 +273,15 @@ struct ChargingControlsCard: View {
                 .accessibilityValue(Format.amps(
                     ampLimitDraft.map { Int($0.rounded()) } ?? ampLimit
                 ))
+                .transition(.opacity)
             } else {
                 Text(L10n.text("The vehicle did not report a configurable current limit."))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
         }
+        .animation(Motion.resolve(Motion.layout), value: ampLimit)
     }
 
     private var chargeOverrideButtons: some View {
@@ -290,8 +331,9 @@ struct ChargingControlsCard: View {
                     } label: {
                         Label(L10n.text("Add here"), systemImage: "plus.circle")
                             .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(HisingenTheme.accent)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.pressable)
                     .disabled(gate.remoteCommandInProgress)
                     .help(L10n.text("Saves the vehicle's current position as a charge location."))
                 }
@@ -300,12 +342,17 @@ struct ChargingControlsCard: View {
                     Text(L10n.text("No saved locations. Use “Add here” while parked where you charge."))
                         .font(.system(size: 9.5))
                         .foregroundStyle(.tertiary)
+                        .transition(.opacity)
                 }
 
                 ForEach(locations) { location in
                     chargeLocationRow(location)
+                        .transition(.opacity)
                 }
             }
+            // Keyed on the collection itself so saved/removed locations reflow
+            // instead of inserting and deleting instantly.
+            .animation(Motion.resolve(Motion.cardChange), value: locations)
         }
     }
 
@@ -324,8 +371,9 @@ struct ChargingControlsCard: View {
                     renamingLocation = location
                 } label: {
                     Image(systemName: "pencil").font(.system(size: 10))
+                        .foregroundStyle(HisingenTheme.accent)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.pressable)
                 .disabled(gate.remoteCommandInProgress)
                 .help(L10n.text("Rename"))
                 .accessibilityLabel(L10n.text("Rename location"))
@@ -416,18 +464,21 @@ struct ChargingControlsCard: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 4)
+                    .transition(.opacity)
             }
 
             Button(role: .destructive) {
-                gate.send(.deleteChargeLocation(id: location.id))
+                locationPendingDelete = location
             } label: {
                 Label(L10n.text("Delete Location"), systemImage: "trash")
                     .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.red)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.pressable)
             .disabled(gate.remoteCommandInProgress)
         }
         .padding(8)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: location.optimisedChargingModeName)
     }
 }

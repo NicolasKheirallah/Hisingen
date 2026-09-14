@@ -5,9 +5,11 @@ import SwiftUI
 struct WelcomeSignInView: View {
     let error: String?
     let onSettingsChanged: (SettingsChange) -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String) = { _ in
-        (false, L10n.text("Connection testing is not available."))
+    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
+        (false, L10n.text("Connection testing is not available."), nil)
     }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -15,6 +17,7 @@ struct WelcomeSignInView: View {
                 header
                 if let error, !error.isEmpty {
                     errorBanner(error)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Card {
                     AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
@@ -22,6 +25,7 @@ struct WelcomeSignInView: View {
                 }
             }
             .padding(HisingenTheme.sectionSpacing)
+            .animation(Motion.resolveCrossfade(Motion.stateChange), value: error)
         }
         .frame(width: HisingenTheme.layoutWidth)
     }

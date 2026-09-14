@@ -71,9 +71,11 @@ extension InfoTabView {
                                 .progressViewStyle(.linear)
                                 .frame(width: 60)
                                 .tint(statusColor)
+                                .animation(Motion.resolve(Motion.progress), value: soh)
                             Text(String(format: "%.1f%%", soh))
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(statusColor)
+                                .hisTelemetryValue(soh, reduceMotion: reduceMotion)
                         }
                     }
                     .padding(.vertical, 2)
@@ -142,7 +144,7 @@ extension InfoTabView {
                                         }
                                         .font(.system(size: 10, weight: .medium))
                                     }
-                                    .buttonStyle(.borderless)
+                                    .buttonStyle(.pressable)
                                     .controlSize(.mini)
                                 }
                                 .padding(.top, 2)

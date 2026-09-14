@@ -99,7 +99,7 @@ struct SettingsNavigationBar: View {
                             .padding(.vertical, 5)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .foregroundStyle(selection == section ? HisingenTheme.accent : .secondary)
                     .background(
                         selection == section ? HisingenTheme.accent.opacity(0.12) : Color.clear,
@@ -108,6 +108,8 @@ struct SettingsNavigationBar: View {
                     .accessibilityAddTraits(selection == section ? .isSelected : [])
                 }
             }
+            // The highlight pill crossfades between tabs instead of snapping.
+            .animation(Motion.resolve(Motion.selection), value: selection)
 
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -120,7 +122,7 @@ struct SettingsNavigationBar: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .help(L10n.text("Clear Search"))
                     .accessibilityLabel(L10n.text("Clear Search"))
                 }

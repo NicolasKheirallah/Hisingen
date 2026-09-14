@@ -82,6 +82,7 @@ extension InfoTabView {
                             rawCapabilityFieldRow(rawFields[index])
                         }
                     }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
                     .padding(.top, 4)
                 }
                 if let climate = state.climateStatus {
@@ -218,12 +219,12 @@ extension InfoTabView {
                         Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(state.identity.vin, forType: .string)
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                            withAnimation(Motion.resolve(Motion.selection)) {
                                 vinCopied = true
                             }
                             Task {
                                 try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                withAnimation { vinCopied = false }
+                                withAnimation(Motion.resolve(Motion.interaction)) { vinCopied = false }
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -234,12 +235,13 @@ extension InfoTabView {
                                 Image(systemName: vinCopied ? "checkmark" : "doc.on.doc")
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(vinCopied ? Color.green : Color.secondary)
+                                    .contentTransition(.symbolEffect(.replace))
                             }
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 4))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .accessibilityLabel(L10n.text("Copy VIN"))
                     }
                     .padding(.vertical, 2)

@@ -179,7 +179,7 @@ extension InfoTabView {
     func angleButton(title: String, angle: Int, icon: String, proxy: ScrollViewProxy? = nil) -> some View {
         let isSelected = selectedAngleIndex == angle
         return Button {
-            withAnimation(.easeInOut(duration: Motion.fast)) {
+            withAnimation(Motion.resolve(Motion.interaction)) {
                 selectedAngleIndex = angle
                 proxy?.scrollTo(angle, anchor: .center)
             }
@@ -204,7 +204,7 @@ extension InfoTabView {
             .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .withoutFocusRing()
         .id(angle)
     }

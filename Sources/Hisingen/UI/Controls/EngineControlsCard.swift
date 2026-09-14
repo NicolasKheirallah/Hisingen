@@ -6,6 +6,9 @@ struct EngineControlsCard: View {
     let gate: ControlsCommandGate
 
     @State private var engineRuntimeMinutes: Int = 15
+    /// Drives the "running" status-dot breath (opacity 1.0 ↔ 0.55), CardHeader-style.
+    @State private var liveDotPulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let startCommand = RemoteCommand.startEngine(runtimeMinutes: engineRuntimeMinutes)
@@ -19,6 +22,7 @@ struct EngineControlsCard: View {
                     )
                     Spacer()
                     engineStatus
+                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.fuelSystem.isEngineRunning)
                 }
                 gate.dimReason(gate.cardAvailability([startCommand]))
 
@@ -77,6 +81,7 @@ struct EngineControlsCard: View {
             }
         }
         .opacity(gate.cardOpacity([startCommand]))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([startCommand]))
         .onAppear {
             engineRuntimeMinutes = gate.preferences.remoteEngineRuntimeMinutes
         }
@@ -86,7 +91,14 @@ struct EngineControlsCard: View {
     private var engineStatus: some View {
         if state.fuelSystem.isEngineRunning == true {
             HStack(spacing: 4) {
-                Circle().fill(HisingenTheme.semanticGood).frame(width: 6, height: 6)
+                Circle()
+                    .fill(HisingenTheme.semanticGood)
+                    .frame(width: 6, height: 6)
+                    .opacity(liveDotPulse ? 0.55 : 1.0)
+                    .animation(Motion.resolve(Motion.livePulse), value: liveDotPulse)
+                    .onAppear {
+                        if !reduceMotion { liveDotPulse = true }
+                    }
                 Text(L10n.text("Engine Running"))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(HisingenTheme.semanticGood)
@@ -94,6 +106,7 @@ struct EngineControlsCard: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
         } else if state.fuelSystem.isEngineRunning == false {
             statusPill(L10n.text("Engine Stopped"))
         } else {

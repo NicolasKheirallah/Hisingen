@@ -8,16 +8,16 @@ struct MeasurementUnitsAndThemeTests {
     @MainActor
     func testInjectedPreferencesStoreOwnsPanelAndPrivacySettings() throws {
         let suiteName = "HisingenTests.preferences.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
 
-        XCTAssertFalse(store.floatingChargingPanelEnabled)
-        XCTAssertFalse(store.privacyRedactionEnabled)
+        #expect(!(store.floatingChargingPanelEnabled))
+        #expect(!(store.privacyRedactionEnabled))
         store.floatingChargingPanelEnabled = true
         store.privacyRedactionEnabled = true
-        XCTAssertTrue(defaults.bool(forKey: "floating_charging_panel"))
-        XCTAssertTrue(defaults.bool(forKey: "privacy_redaction_enabled"))
+        #expect(defaults.bool(forKey: "floating_charging_panel"))
+        #expect(defaults.bool(forKey: "privacy_redaction_enabled"))
     }
 
     @Test
@@ -25,46 +25,46 @@ struct MeasurementUnitsAndThemeTests {
         let liters = 50.0
 
         let litersConverted = FuelVolumeUnit.liters.convert(liters: liters)
-        XCTAssertEqual(litersConverted, 50.0)
-        XCTAssertEqual(FuelVolumeUnit.liters.suffix, "L")
+        #expect(litersConverted == 50.0)
+        #expect(FuelVolumeUnit.liters.suffix == "L")
 
         let usGallons = FuelVolumeUnit.gallonsUS.convert(liters: liters)
-        XCTAssertEqual(round(usGallons * 10) / 10, 13.2)
-        XCTAssertEqual(FuelVolumeUnit.gallonsUS.suffix, "gal")
+        #expect(round(usGallons * 10) / 10 == 13.2)
+        #expect(FuelVolumeUnit.gallonsUS.suffix == "gal")
 
         let ukGallons = FuelVolumeUnit.gallonsUK.convert(liters: liters)
-        XCTAssertEqual(round(ukGallons * 10) / 10, 11.0)
-        XCTAssertEqual(FuelVolumeUnit.gallonsUK.suffix, "UK gal")
+        #expect(round(ukGallons * 10) / 10 == 11.0)
+        #expect(FuelVolumeUnit.gallonsUK.suffix == "UK gal")
 
-        XCTAssertEqual(Format.fuelVolume(liters: 45.0, unit: .liters), "45.0 L")
-        XCTAssertEqual(Format.fuelVolume(liters: 45.0, unit: .gallonsUS), "11.9 gal")
+        #expect(Format.fuelVolume(liters: 45.0, unit: .liters) == "45.0 L")
+        #expect(Format.fuelVolume(liters: 45.0, unit: .gallonsUS) == "11.9 gal")
     }
 
     @Test
     func testFuelEconomyUnitFormatting() {
         let lPer100Km = 6.5
 
-        XCTAssertEqual(FuelEconomyUnit.litersPer100Km.format(lPer100Km: lPer100Km), "6.5 L/100km")
-        XCTAssertEqual(FuelEconomyUnit.milesPerGallonUS.format(lPer100Km: lPer100Km), "36.2 mpg")
-        XCTAssertEqual(FuelEconomyUnit.milesPerGallonUK.format(lPer100Km: lPer100Km), "43.5 mpg (UK)")
-        XCTAssertEqual(FuelEconomyUnit.kmPerLiter.format(lPer100Km: lPer100Km), "15.4 km/L")
+        #expect(FuelEconomyUnit.litersPer100Km.format(lPer100Km: lPer100Km) == "6.5 L/100km")
+        #expect(FuelEconomyUnit.milesPerGallonUS.format(lPer100Km: lPer100Km) == "36.2 mpg")
+        #expect(FuelEconomyUnit.milesPerGallonUK.format(lPer100Km: lPer100Km) == "43.5 mpg (UK)")
+        #expect(FuelEconomyUnit.kmPerLiter.format(lPer100Km: lPer100Km) == "15.4 km/L")
 
-        XCTAssertEqual(Format.fuelEconomy(lPer100Km: 6.5, unit: .litersPer100Km), "6.5 L/100km")
-        XCTAssertEqual(Format.fuelEconomy(lPer100Km: 6.5, unit: .milesPerGallonUS), "36.2 mpg")
+        #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .litersPer100Km) == "6.5 L/100km")
+        #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .milesPerGallonUS) == "36.2 mpg")
     }
 
     @Test
     func testUSUnitFormatting() {
-        XCTAssertEqual(Format.temperature(celsius: 20, unit: .fahrenheit), "68.0 °F")
-        XCTAssertEqual(Format.pressure(kilopascals: 241.3, unit: .psi), "35.0 psi")
-        XCTAssertEqual(Format.distance(km: 13.1, unit: .miles), "8.1 mi")
+        #expect(Format.temperature(celsius: 20, unit: .fahrenheit) == "68.0 °F")
+        #expect(Format.pressure(kilopascals: 241.3, unit: .psi) == "35.0 psi")
+        #expect(Format.distance(km: 13.1, unit: .miles) == "8.1 mi")
     }
 
     @Test
     func testElectricConsumptionFormatting() {
-        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km), "20.0 kWh/100 km")
-        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles), "32.2 kWh/100 mi")
-        XCTAssertEqual(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh), "3.11 mi/kWh")
+        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km) == "20.0 kWh/100 km")
+        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles) == "32.2 kWh/100 mi")
+        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh) == "3.11 mi/kWh")
     }
 
     @Test
@@ -86,8 +86,8 @@ struct MeasurementUnitsAndThemeTests {
             isLocked: true,
             alarmTriggered: false
         )
-        XCTAssertEqual(snapshot.openings.count, 11)
-        XCTAssertEqual(snapshot.physicalDoorCount, 4)
+        #expect(snapshot.openings.count == 11)
+        #expect(snapshot.physicalDoorCount == 4)
     }
 
     @Test
@@ -105,98 +105,100 @@ struct MeasurementUnitsAndThemeTests {
             version: "5.1", state: .failed, updatedAt: now,
             installedVersion: "5.1", latestAvailableVersion: "5.1"
         )
-        XCTAssertTrue(recent.hasActionableFailure(at: now))
-        XCTAssertFalse(old.hasActionableFailure(at: now))
-        XCTAssertFalse(alreadyInstalled.hasActionableFailure(at: now))
+        #expect(recent.hasActionableFailure(at: now))
+        #expect(!(old.hasActionableFailure(at: now)))
+        #expect(!(alreadyInstalled.hasActionableFailure(at: now)))
     }
 
     @Test
     @MainActor
     func testSoftwareEventDismissalIsPerVehicleAndReversible() throws {
         let suiteName = "hisingen.tests.software-dismissal.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
 
         store.setDismissedSoftwareEventIdentifier("event-a", for: "YSMTESTA")
-        XCTAssertEqual(store.dismissedSoftwareEventIdentifier(for: "ysmtesta"), "event-a")
-        XCTAssertNil(store.dismissedSoftwareEventIdentifier(for: "YSMTESTB"))
+        #expect(store.dismissedSoftwareEventIdentifier(for: "ysmtesta") == "event-a")
+        #expect(store.dismissedSoftwareEventIdentifier(for: "YSMTESTB") == nil)
 
         store.setDismissedSoftwareEventIdentifier(nil, for: "YSMTESTA")
-        XCTAssertNil(store.dismissedSoftwareEventIdentifier(for: "YSMTESTA"))
+        #expect(store.dismissedSoftwareEventIdentifier(for: "YSMTESTA") == nil)
     }
 
     @Test
     func testThemeSystemCatalog() {
-        XCTAssertEqual(AppTheme.allCases.count, 9)
+        #expect(AppTheme.allCases.count == 9)
 
         for theme in AppTheme.allCases {
-            XCTAssertFalse(theme.title.isEmpty)
-            XCTAssertFalse(theme.subtitle.isEmpty)
-            XCTAssertFalse(theme.accentColorHex.isEmpty)
-            XCTAssertTrue(theme.previewHexColors.count >= 3)
+            #expect(!(theme.title.isEmpty))
+            #expect(!(theme.subtitle.isEmpty))
+            #expect(!(theme.accentColorHex.isEmpty))
+            #expect(theme.previewHexColors.count >= 3)
         }
 
-        XCTAssertEqual(AppTheme.hisingen.category, .brand)
-        XCTAssertEqual(AppTheme.polestar.category, .brand)
-        XCTAssertEqual(AppTheme.volvo.category, .brand)
-        XCTAssertEqual(AppTheme.polestar.rawValue, "polestar")
-        XCTAssertEqual(AppTheme.volvo.rawValue, "volvo")
-        XCTAssertFalse(AppTheme.polestar.title.localizedCaseInsensitiveContains("Polestar"))
-        XCTAssertFalse(AppTheme.volvo.title.localizedCaseInsensitiveContains("Volvo"))
-        XCTAssertEqual(AppTheme.nordicNight.category, .dark)
-        XCTAssertEqual(AppTheme.aurora.category, .nature)
-        XCTAssertEqual(AppTheme.swedishGold.category, .sport)
-        XCTAssertEqual(AppTheme.cyanRacing.category, .sport)
-        XCTAssertEqual(AppTheme.forest.category, .nature)
-        XCTAssertEqual(AppTheme.sandDune.category, .brand)
+        #expect(AppTheme.hisingen.category == .brand)
+        #expect(AppTheme.polestar.category == .brand)
+        #expect(AppTheme.volvo.category == .brand)
+        #expect(AppTheme.polestar.rawValue == "polestar")
+        #expect(AppTheme.volvo.rawValue == "volvo")
+        #expect(!(AppTheme.polestar.title.localizedCaseInsensitiveContains("Polestar")))
+        #expect(!(AppTheme.volvo.title.localizedCaseInsensitiveContains("Volvo")))
+        #expect(AppTheme.nordicNight.category == .dark)
+        #expect(AppTheme.aurora.category == .nature)
+        #expect(AppTheme.swedishGold.category == .sport)
+        #expect(AppTheme.cyanRacing.category == .sport)
+        #expect(AppTheme.forest.category == .nature)
+        #expect(AppTheme.sandDune.category == .brand)
     }
 
     @Test
     @MainActor
     func testAppearanceModeOptions() throws {
-        XCTAssertEqual(AppearanceMode.allCases.count, 3)
-        XCTAssertEqual(AppearanceMode.system.title, L10n.text("System (Automatic)"))
-        XCTAssertEqual(AppearanceMode.light.title, L10n.text("Light"))
-        XCTAssertEqual(AppearanceMode.dark.title, L10n.text("Dark"))
+        #expect(AppearanceMode.allCases.count == 3)
+        #expect(AppearanceMode.system.title == L10n.text("System (Automatic)"))
+        #expect(AppearanceMode.light.title == L10n.text("Light"))
+        #expect(AppearanceMode.dark.title == L10n.text("Dark"))
 
-        XCTAssertNil(AppearanceMode.system.colorScheme)
-        XCTAssertEqual(AppearanceMode.light.colorScheme, .light)
-        XCTAssertEqual(AppearanceMode.dark.colorScheme, .dark)
+        #expect(AppearanceMode.system.colorScheme == nil)
+        #expect(AppearanceMode.light.colorScheme == .light)
+        #expect(AppearanceMode.dark.colorScheme == .dark)
 
-        XCTAssertNil(AppearanceMode.system.nsAppearance)
-        XCTAssertEqual(AppearanceMode.light.nsAppearance?.name, .aqua)
-        XCTAssertEqual(AppearanceMode.dark.nsAppearance?.name, .darkAqua)
+        #expect(AppearanceMode.system.nsAppearance == nil)
+        #expect(AppearanceMode.light.nsAppearance?.name == .aqua)
+        #expect(AppearanceMode.dark.nsAppearance?.name == .darkAqua)
 
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
 
         store.appearanceMode = .light
-        XCTAssertEqual(store.appearanceMode, .light)
+        #expect(store.appearanceMode == .light)
 
         store.appearanceMode = .dark
-        XCTAssertEqual(store.appearanceMode, .dark)
+        #expect(store.appearanceMode == .dark)
 
         store.appearanceMode = .system
-        XCTAssertEqual(store.appearanceMode, .system)
+        #expect(store.appearanceMode == .system)
     }
 
     @Test
     func testOutlineGeometryCalculations() {
         let og = OutlineGeometry(containerWidth: 380, containerHeight: 96)
         let expectedWidth = 96.0 * (1645.0 / 769.0)
-        XCTAssertEqual(round(og.imageWidth * 10) / 10, round(expectedWidth * 10) / 10)
-        XCTAssertEqual(og.imageHeight, 96.0)
+        // Mixed CGFloat/Double equality inside #expect miscompares (the old shim silently
+        // unified the types), so convert explicitly and compare same-type.
+        #expect(round(og.imageWidth * 10) / 10 == round(CGFloat(expectedWidth) * 10) / 10)
+        #expect(og.imageHeight == 96.0)
 
         let rearWheel = og.point(u: 0.2304, v: 0.6710)
         let frontWheel = og.point(u: 0.8036, v: 0.6710)
 
-        XCTAssertTrue(rearWheel.x < frontWheel.x)
-        XCTAssertEqual(round(rearWheel.y), round(frontWheel.y))
-        XCTAssertTrue(rearWheel.x > og.originX)
-        XCTAssertTrue(frontWheel.x < og.originX + og.imageWidth)
+        #expect(rearWheel.x < frontWheel.x)
+        #expect(round(rearWheel.y) == round(frontWheel.y))
+        #expect(rearWheel.x > og.originX)
+        #expect(frontWheel.x < og.originX + og.imageWidth)
 
         // Validate SVG-mapped opening points
         let frontDoor = og.point(u: 0.5830, v: 0.5234)
@@ -205,47 +207,20 @@ struct MeasurementUnitsAndThemeTests {
         let tailgate = og.point(u: 0.1350, v: 0.3900)
         let chargeLid = og.point(u: 0.2040, v: 0.3979)
 
-        XCTAssertTrue(tailgate.x < rearDoor.x)
-        XCTAssertTrue(rearDoor.x < frontDoor.x)
-        XCTAssertTrue(frontDoor.x < hood.x)
-        XCTAssertTrue(chargeLid.x < rearDoor.x)
+        #expect(tailgate.x < rearDoor.x)
+        #expect(rearDoor.x < frontDoor.x)
+        #expect(frontDoor.x < hood.x)
+        #expect(chargeLid.x < rearDoor.x)
     }
 
-    @Test
-    func testPolestarAndVolvoSoftwareVersionResolution() {
-        let volvoSoftware = VehicleSoftwareInfo(
-            version: "5.1.17",
-            title: "5.1.17",
-            state: .completed,
-            scheduledAt: nil,
-            updatedAt: Date(),
-            installedVersion: "5.1.17",
-            latestAvailableVersion: "5.1.17"
-        )
-        XCTAssertEqual(volvoSoftware.installedVersion, "5.1.17")
-        XCTAssertEqual(volvoSoftware.latestAvailableVersion, "5.1.17")
-        XCTAssertEqual(volvoSoftware.version, "5.1.17")
-        XCTAssertEqual(volvoSoftware.title, "5.1.17")
-        XCTAssertEqual(volvoSoftware.state, .completed)
-
-        let polestarSoftware = VehicleSoftwareInfo(
-            version: "5.1.17",
-            title: "5.1.17",
-            state: .available,
-            scheduledAt: Date(),
-            updatedAt: Date(),
-            installedVersion: "5.1.17",
-            latestAvailableVersion: "5.1.17"
-        )
-        XCTAssertEqual(polestarSoftware.installedVersion, "5.1.17")
-        XCTAssertEqual(polestarSoftware.latestAvailableVersion, "5.1.17")
-        XCTAssertEqual(polestarSoftware.state, .available)
-        XCTAssertNotNil(polestarSoftware.scheduledAt)
-    }
+    // TESTS-14: testPolestarAndVolvoSoftwareVersionResolution was deleted — it only
+    // asserted memberwise-init passthrough (each field equal to the literal it was built
+    // with). Real software-version resolution/precedence is covered by
+    // PolestarMyCarsTests.installedAndPendingVersionsRemainDistinct.
 
     @Test
     func testMenuBarStyleOptionsAndFormatting() {
-        XCTAssertEqual(MenuBarStyle.allCases.count, 8)
+        #expect(MenuBarStyle.allCases.count == 8)
         let sample = VehicleState(
             batteryPercentage: 85, rangeKm: 350, chargingState: .idle,
             estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 90,
@@ -257,12 +232,12 @@ struct MeasurementUnitsAndThemeTests {
             imageData: nil, fetchedAt: Date(), vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        XCTAssertEqual(Format.barTitle(for: sample, style: .battery, unit: .kilometers), "85%")
-        XCTAssertEqual(Format.barTitle(for: sample, style: .range, unit: .kilometers), "350km")
-        XCTAssertEqual(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers), "")
-        XCTAssertEqual(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers), "85%")
-        XCTAssertEqual(Format.lockStatusSymbol(for: sample), "lock.fill")
-        XCTAssertEqual(sample.currentRangeVsModelWltpPercent(), 85.8)
+        #expect(Format.barTitle(for: sample, style: .battery, unit: .kilometers) == "85%")
+        #expect(Format.barTitle(for: sample, style: .range, unit: .kilometers) == "350km")
+        #expect(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers) == "")
+        #expect(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers) == "85%")
+        #expect(Format.lockStatusSymbol(for: sample) == "lock.fill")
+        #expect(sample.currentRangeVsModelWltpPercent() == 85.8)
 
         let volvoXC40 = VehicleState(
             batteryPercentage: 85, rangeKm: 350, chargingState: .idle,
@@ -276,20 +251,20 @@ struct MeasurementUnitsAndThemeTests {
         )
         // 350km reported at 85% SOC vs the XC40's own 570km WLTP reference (Volvo models now
         // resolve via `hasModelReferenceSpecs`, not just Polestar).
-        XCTAssertEqual(volvoXC40.currentRangeVsModelWltpPercent(), 72.2)
+        #expect(volvoXC40.currentRangeVsModelWltpPercent() == 72.2)
 
         // A VIN-specific override entered in Settings takes priority over the model table.
         let override = VehicleSpecificationOverride(usableBatteryCapacityKwh: nil, wltpRangeKm: 400)
-        XCTAssertEqual(sample.currentRangeVsModelWltpPercent(specification: override), 102.9)
+        #expect(sample.currentRangeVsModelWltpPercent(specification: override) == 102.9)
 
         // Below the 20% low-SOC cutoff the vehicle's own range readout is considered too noisy.
         var lowBattery = sample
         lowBattery.energy.batteryPercentage = 15
-        XCTAssertNil(lowBattery.currentRangeVsModelWltpPercent())
+        #expect(lowBattery.currentRangeVsModelWltpPercent() == nil)
 
         var unlockedSample = sample
         unlockedSample.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false)
-        XCTAssertEqual(Format.lockStatusSymbol(for: unlockedSample), "lock.open.fill")
+        #expect(Format.lockStatusSymbol(for: unlockedSample) == "lock.open.fill")
     }
 
     @Test
@@ -301,17 +276,19 @@ struct MeasurementUnitsAndThemeTests {
             kwhDelivered: 45.0, peakPowerWatts: 150000, cost: nil
         )
 
-        XCTAssertNil(session.cost)
-        XCTAssertEqual(session.estimatedCost(tariff: 0.20), 9.0)
-        XCTAssertEqual(session.estimatedCost(tariff: 1.50), 67.5)
-        XCTAssertNil(session.estimatedCost(tariff: nil))
+        #expect(session.cost == nil)
+        #expect(session.estimatedCost(tariff: 0.20) == 9.0)
+        #expect(session.estimatedCost(tariff: 1.50) == 67.5)
+        #expect(session.estimatedCost(tariff: nil) == nil)
     }
 
     @Test
     func testRefreshPolicyAdaptiveInterval() {
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: false), 600)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: false), 120)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true), 120)
-        XCTAssertEqual(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: true), 120)
+        #expect(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: false) == 600)
+        #expect(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: false) == 120)
+        #expect(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true) == 120)
+        #expect(RefreshPolicy.regularInterval(isCharging: true, isClimateActive: true) == 120)
     }
 }
+
+// rebuild-note: force recompile

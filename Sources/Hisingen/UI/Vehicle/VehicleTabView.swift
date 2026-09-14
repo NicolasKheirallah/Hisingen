@@ -16,9 +16,11 @@ struct VehicleTabView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var moreExpanded = true
     @State private var dismissedSoftwareEventIdentifier: String?
+    @Namespace private var carChipNamespace
 
     private var features: FeatureSelection { preferences.features }
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+    private var chipSelectionAnimation: Animation? { reduceMotion ? nil : Motion.selection }
     private var cardTransition: AnyTransition {
         .asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity)
     }
@@ -27,6 +29,11 @@ struct VehicleTabView: View {
     }
     private var pillSignature: String {
         "\(String(describing: state.exteriorStatus?.isLocked))|\(state.energy.chargingState.displayName)|\(String(describing: state.climateStatus?.activity))|\(String(describing: state.fuelSystem.isEngineRunning))|\(String(describing: state.fuelSystem.levelPercent))"
+    }
+    /// Inputs of the smart-charging-planner presence guard, so the declared
+    /// card transition actually fires when a threshold is crossed.
+    private var plannerSignature: String {
+        "\(features.contains(.smartChargingPlanner))|\(state.powertrain.hasElectricRange)|\(String(describing: state.energy.batteryPercentage))|\(String(describing: state.energy.targetPercentage))"
     }
     private var displayedStateSummary: VehicleStateSummary {
         if let software = state.softwareInfo, software.hasActionableFailure(),
@@ -53,11 +60,14 @@ struct VehicleTabView: View {
             adaptiveCardsRow(tireSchematicCard, locationCard)
             if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
                 VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
+                    .transition(cardTransition)
             }
             moreDetailsSection
         }
         .animation(cardChangeAnimation, value: warningsSignature)
         .animation(cardChangeAnimation, value: pillSignature)
+        .animation(cardChangeAnimation, value: state.commandState.receipts.map(\.id))
+        .animation(cardChangeAnimation, value: plannerSignature)
         .task(id: state.identity.vin) {
             dismissedSoftwareEventIdentifier = preferences.dismissedSoftwareEventIdentifier(for: state.identity.vin)
         }
@@ -99,13 +109,28 @@ struct VehicleTabView: View {
                                 Text(car.title).font(.system(size: 11, weight: selected ? .bold : .medium))
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04), in: Capsule())
-                            .overlay(Capsule().stroke(selected ? HisingenTheme.accent : Color.primary.opacity(0.15), lineWidth: selected ? 1.2 : 0.5))
-                            .animation(reduceMotion ? nil : Motion.selection, value: selected)
-                        }.buttonStyle(.pressable)
+                            // One shared capsule slides between chips; matched
+                            // geometry requires exactly one visible source.
+                            .background {
+                                if selected {
+                                    Capsule()
+                                        .fill(HisingenTheme.accent.opacity(0.12))
+                                        .overlay(Capsule().stroke(HisingenTheme.accent, lineWidth: 1.2))
+                                        .matchedGeometryEffect(id: "carChipSelection", in: carChipNamespace)
+                                } else {
+                                    Capsule()
+                                        .fill(Color.primary.opacity(0.04))
+                                        .overlay(Capsule().stroke(Color.primary.opacity(0.15), lineWidth: 0.5))
+                                }
+                            }
+                        }
+                        .buttonStyle(.pressable)
                     }
                 }.padding(.horizontal, 2)
             }
+            // The slide is keyed on the selection itself so programmatic car
+            // switches move the capsule the same way a tap does.
+            .animation(chipSelectionAnimation, value: currentVin)
         }
     }
 

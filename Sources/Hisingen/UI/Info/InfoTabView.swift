@@ -20,6 +20,7 @@ struct InfoTabView: View {
     @State var addressText: String?
     @State var addressResolved = false
     @Environment(\.preferencesStore) var preferences
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State var vinCopied = false
     @State var asyncData = InfoAsyncData()
     @State var showAllCapabilities = false
@@ -105,9 +106,12 @@ struct InfoTabView: View {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                 infoNavBar(proxy: proxy, entries: entries)
                 ForEach(entries) { entry in
-                    entry.view.id(entry.id)
+                    entry.view
+                        .id(entry.id)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
+            .animation(Motion.resolve(Motion.cardChange), value: entries.map(\.id))
             .dynamicTypeSize(.xSmall ... .accessibility1)
             .onAppear {
                 let preferred = preferences.carRenderAngle
@@ -202,19 +206,21 @@ struct InfoTabView: View {
             Image(systemName: state.isStale() ? "moon.stars.fill" : "clock.arrow.circlepath")
                 .font(.system(size: 11))
                 .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.7))
+                .animation(Motion.resolveCrossfade(Motion.theme), value: state.isStale())
                 .accessibilityHidden(true)
             Text(state.freshness.isCached ? L10n.text("Showing an offline copy") : state.freshnessDescription)
                 .font(.system(size: 10.5, weight: state.isStale() ? .semibold : .regular))
                 .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.8))
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .animation(Motion.resolveCrossfade(Motion.theme), value: state.isStale())
 
             Spacer(minLength: 6)
 
             Menu {
                 ForEach(entries) { entry in
                     Button(entry.id.title) {
-                        withAnimation(.easeInOut(duration: 0.25)) {
+                        withAnimation(Motion.resolve(Motion.entrance)) {
                             proxy.scrollTo(entry.id, anchor: .top)
                         }
                     }
@@ -263,11 +269,11 @@ struct InfoTabView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                     .animation(
-                        isRefreshing ? Motion.spin : .default,
+                        Motion.resolve(isRefreshing ? Motion.spin : .default),
                         value: isRefreshing
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .disabled(isRefreshing)
             .help(L10n.text("Refresh now"))
             .accessibilityLabel(L10n.text("Refresh now"))

@@ -6,6 +6,8 @@ struct OpeningChipView: View {
     var onHoverChange: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
+    @State private var dotBreathing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isOpen: Bool { reading.state == .open || reading.state == .ajar }
 
@@ -46,6 +48,7 @@ struct OpeningChipView: View {
             Image(systemName: symbol)
                 .font(.system(size: 9.5))
                 .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : .secondary)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .frame(width: 12)
             Text(shortTitle)
                 .font(.system(size: 10, weight: .medium))
@@ -55,6 +58,10 @@ struct OpeningChipView: View {
             Circle()
                 .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
                 .frame(width: 5, height: 5)
+                .opacity(dotBreathing ? 0.6 : 1)
+                // Breathe only while open — closing re-targets with a
+                // non-repeating animation so the pulse cannot outlive the door.
+                .animation(reduceMotion ? nil : (isOpen ? Motion.livePulse : Motion.interaction), value: dotBreathing)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 4.5)
@@ -72,10 +79,20 @@ struct OpeningChipView: View {
                 )
         )
         .scaleEffect(active ? 1.02 : 1.0)
+        // Open/close recolors icon, label and dot; the hover animation below
+        // only owns the highlight, so this needs its own key.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: isOpen)
         .animation(Motion.selection, value: active)
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
+        }
+        .onAppear {
+            guard isOpen, !reduceMotion else { return }
+            dotBreathing = true
+        }
+        .onChange(of: isOpen) { _, open in
+            dotBreathing = open && !reduceMotion
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(reading.opening.displayName): \(isOpen ? L10n.text("Open") : L10n.text("Closed"))")
@@ -88,6 +105,13 @@ struct DoorsAndOpeningsCardView: View {
     var isTailgateLocked: Bool? = nil
 
     @State private var hoveredOpening: VehicleOpening? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+    /// Reduce Motion keeps the fade and drops the movement.
+    private var pillTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
+    }
 
     private var openItems: [VehicleOpening] {
         ext.itemsNeedingAttention
@@ -113,12 +137,16 @@ struct DoorsAndOpeningsCardView: View {
                             color: HisingenTheme.semanticWarning,
                             symbol: "exclamationmark.triangle.fill"
                         )
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .transition(pillTransition)
                     } else if let isLocked {
                         Pill(
                             text: isLocked ? L10n.text("All Closed & Locked") : L10n.text("All Closed"),
                             color: isLocked ? HisingenTheme.semanticGood : .secondary,
                             symbol: isLocked ? "lock.fill" : "lock.open.fill"
                         )
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                        .transition(pillTransition)
                     }
                     if let isTailgateLocked {
                         Pill(
@@ -126,12 +154,15 @@ struct DoorsAndOpeningsCardView: View {
                             color: isTailgateLocked ? HisingenTheme.semanticGood : .orange,
                             symbol: isTailgateLocked ? "lock.fill" : "lock.open.fill"
                         )
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                        .transition(pillTransition)
                     }
                 }
+                .animation(cardChangeAnimation, value: openItems.count)
+                .animation(cardChangeAnimation, value: isTailgateLocked)
 
                 VehicleSideProfileDoorsView(
                     openings: ext.openings,
-                    isLocked: isLocked,
                     hoveredOpening: hoveredOpening
                 )
                 let readings = displayOrder.compactMap { reading(for: $0) }
@@ -184,6 +215,7 @@ struct TireStatusCardView: View {
     let tyres: [TyrePressure]
 
     @State private var hoveredPosition: TyrePosition? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Some vehicles only ever report a per-tyre warning level (OK/low/very low/high), never a
     /// numeric kPa reading — indirect TPMS (iTPMS), inferred from wheel-speed-sensor imbalance,
@@ -237,6 +269,8 @@ struct TireStatusCardView: View {
                     )
                     Spacer()
                     Pill(text: summary.text, color: summary.color, symbol: summary.symbol)
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: summary.text)
                 }
 
                 if reportsWarningLevelOnly {
@@ -292,6 +326,7 @@ struct TirePillView: View {
 
     @State private var isHovered = false
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let warningState = tyre?.warning ?? TyrePressureWarning.unknown
@@ -331,6 +366,7 @@ struct TirePillView: View {
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(attention ? statusColor : (knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted))
+                    .hisTelemetryValue(statusText, reduceMotion: reduceMotion)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,6 +385,9 @@ struct TirePillView: View {
                 )
         )
         .scaleEffect(activeHover ? 1.02 : 1.0)
+        // Severity changes recolor the dot and rewrite the status line; the
+        // hover animation below only owns the highlight.
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: warningState)
         .animation(Motion.selection, value: activeHover)
         .onHover { hovered in
             isHovered = hovered
@@ -377,6 +416,7 @@ struct LocationCardView: View {
     @State private var streetAddress: String? = nil
     @State private var copiedCoordinates = false
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isMoving: Bool { (speed ?? 0) > 3 }
 
@@ -421,6 +461,7 @@ struct LocationCardView: View {
                         Text(statusLine)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(isLive ? .secondary : HisingenTheme.semanticWarning)
+                            .hisTelemetryValue(statusLine, reduceMotion: reduceMotion)
 
                         if let streetAddress, !streetAddress.isEmpty {
                             Text(streetAddress)
@@ -428,6 +469,7 @@ struct LocationCardView: View {
                                 .foregroundStyle(HisingenTheme.ink)
                                 .lineLimit(2)
                                 .truncationMode(.tail)
+                                .transition(.opacity)
                         }
 
                         HStack(spacing: 5) {
@@ -461,7 +503,7 @@ struct LocationCardView: View {
                                 }
                                 .foregroundStyle(copiedCoordinates ? HisingenTheme.semanticGood : .secondary)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                             .help(L10n.text("Copy Coordinates"))
                         }
 
@@ -515,6 +557,9 @@ struct LocationCardView: View {
                             }
                         }
                     }
+                    // The geocoder resolves async, so the address must fade in
+                    // from an ancestor key, not its own insertion.
+                    .animation(reduceMotion ? nil : Motion.entrance, value: streetAddress)
 
                     Spacer()
 
@@ -554,7 +599,9 @@ struct LocationCardView: View {
                 }
             }
         }
-        .task {
+        // Keyed on the coordinates so live-telemetry moves re-geocode; the geocoder's
+        // cache keeps repeats at the same spot cheap.
+        .task(id: "\(lat),\(lon)") {
             streetAddress = await reverseGeocoder.geocode(latitude: lat, longitude: lon)
         }
     }

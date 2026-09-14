@@ -56,11 +56,20 @@ extension VolvoAPI {
         async let warningsTask: VolvoWarningsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "warnings", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings") }
+        // engine-status only feeds `fuelSystem.isEngineRunning`, so fetch it when the
+        // fuel/powertrain information is actually part of the requested features instead of
+        // paying two round trips on every narrow fetch (garage scans, trip-meters-only).
+        let needsEngineStatus = needsFuel
+            || features.contains(.chargingDetails) || features.contains(.batteryDiagnostics)
         async let engineStatusTask: VolvoEngineStatusDTO? = optional(
-            enabled: true, key: "engine-status", vin: vin
+            enabled: needsEngineStatus, key: "engine-status", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status") }
+        // command-accessibility backs the availability badge and the remote-control cards;
+        // its results are TTL-throttled, so fetch it only when one of those is requested.
+        let needsCommandAccessibility = features.contains(.vehicleAvailability)
+            || !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
-            enabled: true, key: "command-accessibility", vin: vin
+            enabled: needsCommandAccessibility, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
         let needsCommandCapabilities = !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
         async let commandsTask: [VolvoCommandDTO]? = optional(
@@ -135,18 +144,19 @@ extension VolvoAPI {
         // so there is nothing to show and nothing to invent.
         let software: VehicleSoftwareInfo? = nil
 
-        var unavailable: [AppFeature] = []
-        if features.contains(.softwareUpdates) { unavailable.append(.softwareUpdates) }
-        if features.contains(.exteriorStatus), doors == nil, windows == nil { unavailable.append(.exteriorStatus) }
-        if features.contains(.tyreAndWarnings), tyres == nil { unavailable.append(.tyreAndWarnings) }
-        if features.contains(.vehicleHealth), diagnostics == nil, engineDiagnostics == nil, odometer == nil { unavailable.append(.vehicleHealth) }
-        if features.contains(.tripMeters), statistics == nil { unavailable.append(.tripMeters) }
-        if features.contains(.vehicleLocation), vehicleLocation == nil { unavailable.append(.vehicleLocation) }
+        var unavailable = SnapshotAssembly.UnavailableFeatures()
+        unavailable.mark(.softwareUpdates, when: features.contains(.softwareUpdates))
+        unavailable.mark(.exteriorStatus, when: features.contains(.exteriorStatus) && doors == nil && windows == nil)
+        unavailable.mark(.tyreAndWarnings, when: features.contains(.tyreAndWarnings) && tyres == nil)
+        unavailable.mark(.vehicleHealth,
+                         when: features.contains(.vehicleHealth) && diagnostics == nil && engineDiagnostics == nil && odometer == nil)
+        unavailable.mark(.tripMeters, when: features.contains(.tripMeters) && statistics == nil)
+        unavailable.mark(.vehicleLocation, when: features.contains(.vehicleLocation) && vehicleLocation == nil)
         // Volvo has no weather or exterior-temperature resource in Connected Vehicle API v2
         // (`/environment`, `/climatization-status` and every sibling spelling 404 — verified
         // live), so `.vehicleWeather` is always unavailable for this provider.
-        if features.contains(.vehicleWeather) { unavailable.append(.vehicleWeather) }
-        if features.contains(.chargingSchedule) { unavailable.append(.chargingSchedule) }
+        unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
+        unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
 
         var openings: [OpeningReading] = []
         let doorFields: [(VehicleOpening, String?)] = [
@@ -342,7 +352,7 @@ extension VolvoAPI {
                 fetchedAt: Date(),
                 vehicleReportedAt: reportedAt,
                 dataWarnings: activeBulbWarnings,
-                unavailableFeatures: unavailable
+                unavailableFeatures: unavailable.features
             ),
             exteriorStatus: exterior,
             softwareInfo: software,

@@ -7,41 +7,41 @@ struct VolvoDecodingTests {
 
     #if SWIFT_PACKAGE
     private func loadFixture<Payload: Decodable & Sendable>(_ name: String, as: Payload.Type) throws -> Payload {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json"))
+        let url = try #require(Bundle.module.url(forResource: name, withExtension: "json"))
         let data = try Data(contentsOf: url)
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<Payload>.self, from: data)
-        return try XCTUnwrap(envelope.data)
+        return try #require(envelope.data)
     }
 
     @Test
     func testVehiclesListFixtureDecodes() throws {
         let list = try loadFixture("volvo-vehicles-list", as: [VolvoVehicleSummaryDTO].self)
-        XCTAssertEqual(list.map(\.vin), ["YV1FIXTURE0000001", "YV1FIXTURE0000002"])
+        #expect(list.map(\.vin) == ["YV1FIXTURE0000001", "YV1FIXTURE0000002"])
     }
 
     @Test
     func testBEVVehicleDetailsFixtureDecodes() throws {
         let details = try loadFixture("volvo-vehicle-details-bev", as: VolvoVehicleDetailsDTO.self)
-        XCTAssertEqual(details.descriptions?.model, "EX30")
-        XCTAssertEqual(details.descriptions?.upholstery, "Fixture Textile")
-        XCTAssertEqual(details.descriptions?.steering, "Left")
-        XCTAssertEqual(details.batteryCapacityKWH, 64.0)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .bev)
+        #expect(details.descriptions?.model == "EX30")
+        #expect(details.descriptions?.upholstery == "Fixture Textile")
+        #expect(details.descriptions?.steering == "Left")
+        #expect(details.batteryCapacityKWH == 64.0)
+        #expect(VolvoPowertrain.classify(fuelType: details.fuelType) == .bev)
     }
 
     @Test
     func testPHEVVehicleDetailsFixtureDecodes() throws {
         let details = try loadFixture("volvo-vehicle-details-phev", as: VolvoVehicleDetailsDTO.self)
-        XCTAssertEqual(details.descriptions?.model, "XC60")
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .phev)
+        #expect(details.descriptions?.model == "XC60")
+        #expect(VolvoPowertrain.classify(fuelType: details.fuelType) == .phev)
     }
 
     @Test
     func testICEVehicleDetailsFixtureDecodesWithoutBatteryCapacity() throws {
         let details = try loadFixture("volvo-vehicle-details-ice", as: VolvoVehicleDetailsDTO.self)
-        XCTAssertEqual(details.descriptions?.model, "XC90")
-        XCTAssertNil(details.batteryCapacityKWH)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .ice)
+        #expect(details.descriptions?.model == "XC90")
+        #expect(details.batteryCapacityKWH == nil)
+        #expect(VolvoPowertrain.classify(fuelType: details.fuelType) == .ice)
     }
 
     @Test
@@ -49,9 +49,9 @@ struct VolvoDecodingTests {
 
 
         let details = try loadFixture("volvo-vehicle-details-partial", as: VolvoVehicleDetailsDTO.self)
-        XCTAssertEqual(details.modelYear, 2025)
-        XCTAssertNil(details.descriptions)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .mildHybrid)
+        #expect(details.modelYear == 2025)
+        #expect(details.descriptions == nil)
+        #expect(VolvoPowertrain.classify(fuelType: details.fuelType) == .mildHybrid)
     }
 
     @Test
@@ -59,87 +59,87 @@ struct VolvoDecodingTests {
 
 
         let details = try loadFixture("volvo-vehicle-details-unknown-fields", as: VolvoVehicleDetailsDTO.self)
-        XCTAssertEqual(details.descriptions?.model, "Concept Recharge X")
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: details.fuelType), .unknown)
+        #expect(details.descriptions?.model == "Concept Recharge X")
+        #expect(VolvoPowertrain.classify(fuelType: details.fuelType) == .unknown)
     }
 
     @Test
     func testEnergyStateFixtureDecodes() throws {
         let state = try loadFixture("volvo-energy-state", as: VolvoEnergyStateDTO.self)
-        XCTAssertEqual(state.batteryChargeLevel?.value, 68.0)
-        XCTAssertEqual(state.electricRange?.value, 210)
-        XCTAssertEqual(ChargingState(volvoChargingStatus: state.chargingStateValue), .charging)
-        XCTAssertEqual(ChargerConnection(volvoConnectionStatus: state.chargerConnectionStatus?.value), .connected)
-        XCTAssertEqual(state.targetBatteryChargeLevel?.value, 90)
-        XCTAssertEqual(state.targetPercent, 90)
-        XCTAssertEqual(state.chargingPowerWatts, 7_400)
-        XCTAssertEqual(state.chargingCurrentLimit?.value, 16)
-        XCTAssertEqual(ChargingType(volvoChargingType: state.chargingType?.value), .ac)
-        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: state.chargerPowerStatus?.value), .providingPower)
+        #expect(state.batteryChargeLevel?.value == 68.0)
+        #expect(state.electricRange?.value == 210)
+        #expect(ChargingState(volvoChargingStatus: state.chargingStateValue) == .charging)
+        #expect(ChargerConnection(volvoConnectionStatus: state.chargerConnectionStatus?.value) == .connected)
+        #expect(state.targetBatteryChargeLevel?.value == 90)
+        #expect(state.targetPercent == 90)
+        #expect(state.chargingPowerWatts == 7_400)
+        #expect(state.chargingCurrentLimit?.value == 16)
+        #expect(ChargingType(volvoChargingType: state.chargingType?.value) == .ac)
+        #expect(ChargerPowerState(volvoPowerStatus: state.chargerPowerStatus?.value) == .providingPower)
     }
 
     @Test
     func testEnergyCapabilitiesFixtureDecodes() throws {
         let caps = try loadFixture("volvo-energy-capabilities", as: VolvoEnergyCapabilitiesDTO.self)
-        XCTAssertEqual(caps.chargingPower?.isSupported, true)
-        XCTAssertEqual(caps.targetBatteryLevel?.isSupported, false)
-        XCTAssertEqual(caps.chargingCurrentLimit?.isSupported, true)
-        XCTAssertEqual(caps.chargingType?.isSupported, true)
+        #expect(caps.chargingPower?.isSupported == true)
+        #expect(caps.targetBatteryLevel?.isSupported == false)
+        #expect(caps.chargingCurrentLimit?.isSupported == true)
+        #expect(caps.chargingType?.isSupported == true)
     }
 
     @Test
     func testDoorsFixtureDecodesLockedAndClosed() throws {
         let doors = try loadFixture("volvo-doors", as: VolvoDoorsDTO.self)
-        XCTAssertEqual(doors.isLocked, true)
-        XCTAssertEqual(OpeningState(volvoStatus: doors.frontLeftDoor?.value), .closed)
-        XCTAssertEqual(OpeningState(volvoStatus: doors.tankLid?.value), .closed)
+        #expect(doors.isLocked == true)
+        #expect(OpeningState(volvoStatus: doors.frontLeftDoor?.value) == .closed)
+        #expect(OpeningState(volvoStatus: doors.tankLid?.value) == .closed)
     }
 
     @Test
     func testDoorsOpenFixtureDecodesUnlockedAndOpenDoor() throws {
         let doors = try loadFixture("volvo-doors-open", as: VolvoDoorsDTO.self)
-        XCTAssertEqual(doors.isLocked, false)
-        XCTAssertEqual(OpeningState(volvoStatus: doors.frontLeftDoor?.value), .open)
-        XCTAssertEqual(OpeningState(volvoStatus: doors.frontRightDoor?.value), .closed)
+        #expect(doors.isLocked == false)
+        #expect(OpeningState(volvoStatus: doors.frontLeftDoor?.value) == .open)
+        #expect(OpeningState(volvoStatus: doors.frontRightDoor?.value) == .closed)
     }
 
     @Test
     func testWindowsFixtureDecodes() throws {
         let windows = try loadFixture("volvo-windows", as: VolvoWindowsDTO.self)
-        XCTAssertEqual(OpeningState(volvoStatus: windows.frontLeftWindow?.value), .closed)
-        XCTAssertEqual(OpeningState(volvoStatus: windows.sunroof?.value), .closed)
+        #expect(OpeningState(volvoStatus: windows.frontLeftWindow?.value) == .closed)
+        #expect(OpeningState(volvoStatus: windows.sunroof?.value) == .closed)
     }
 
     @Test
     func testTyresFixtureDecodesMixedWarnings() throws {
         let tyres = try loadFixture("volvo-tyres", as: VolvoTyresDTO.self)
         let readings = tyres.readings
-        XCTAssertEqual(readings.count, 4)
-        XCTAssertNil(readings.first(where: { $0.position == .frontLeft })?.kilopascals)
-        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .unknown)
-        XCTAssertEqual(readings.first(where: { $0.position == .frontRight })?.warning, TyrePressureWarning.none)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearLeft })?.warning, .low)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .high)
+        #expect(readings.count == 4)
+        #expect(readings.first(where: { $0.position == .frontLeft })?.kilopascals == nil)
+        #expect(readings.first(where: { $0.position == .frontLeft })?.warning == .unknown)
+        #expect(readings.first(where: { $0.position == .frontRight })?.warning == TyrePressureWarning.none)
+        #expect(readings.first(where: { $0.position == .rearLeft })?.warning == .low)
+        #expect(readings.first(where: { $0.position == .rearRight })?.warning == .high)
     }
 
     @Test
     func testDiagnosticsFixtureOnlyReportsActualWarnings() throws {
         let diagnostics = try loadFixture("volvo-diagnostics", as: VolvoDiagnosticsDTO.self)
-        XCTAssertFalse(diagnostics.hasServiceWarning)
-        XCTAssertEqual(diagnostics.serviceTrigger?.value, "CALENDAR_TIME")
-        XCTAssertEqual(diagnostics.fluidWarnings, ["Oil"])
-        XCTAssertEqual(diagnostics.vehicleWarnings, [.oil])
+        #expect(!(diagnostics.hasServiceWarning))
+        #expect(diagnostics.serviceTrigger?.value == "CALENDAR_TIME")
+        #expect(diagnostics.fluidWarnings == ["Oil"])
+        #expect(diagnostics.vehicleWarnings == [.oil])
 
 
-        XCTAssertEqual(diagnostics.distanceToService?.value, 8500)
-        XCTAssertEqual(diagnostics.timeToService?.value, 5)
-        XCTAssertEqual(diagnostics.daysToServiceApprox, 150)
+        #expect(diagnostics.distanceToService?.value == 8500)
+        #expect(diagnostics.timeToService?.value == 5)
+        #expect(diagnostics.daysToServiceApprox == 150)
     }
 
     @Test
     func testOdometerFixtureDecodes() throws {
         let odometer = try loadFixture("volvo-odometer", as: VolvoOdometerDTO.self)
-        XCTAssertEqual(odometer.odometer?.value, 42317)
+        #expect(odometer.odometer?.value == 42317)
     }
 
     @Test
@@ -147,36 +147,36 @@ struct VolvoDecodingTests {
 
 
         let fuel = try loadFixture("volvo-fuel", as: VolvoFuelDTO.self)
-        XCTAssertEqual(fuel.fuelAmount?.value, 42.0)
+        #expect(fuel.fuelAmount?.value == 42.0)
     }
 
     @Test
     func testStatisticsFixtureDecodesTripMetersAndRange() throws {
         let stats = try loadFixture("volvo-statistics", as: VolvoStatisticsDTO.self)
-        XCTAssertEqual(stats.tripMeterManual?.value, 500.0)
-        XCTAssertEqual(stats.tripMeterAutomatic?.value, 420.0)
-        XCTAssertEqual(stats.distanceToEmptyTank?.value, 1312)
-        XCTAssertEqual(stats.distanceToEmptyBattery?.value, 200)
+        #expect(stats.tripMeterManual?.value == 500.0)
+        #expect(stats.tripMeterAutomatic?.value == 420.0)
+        #expect(stats.distanceToEmptyTank?.value == 1312)
+        #expect(stats.distanceToEmptyBattery?.value == 200)
         // Automatic-trip average consumption is now wired through to BatteryDiagnostics.
-        XCTAssertEqual(stats.averageEnergyConsumptionAutomaticKwhPer100Km, 1.9)
+        #expect(stats.averageEnergyConsumptionAutomaticKwhPer100Km == 1.9)
     }
 
     @Test
     func testLocationFixtureDecodes() throws {
         let location = try loadFixture("volvo-location", as: VolvoLocationDTO.self)
-        XCTAssertEqual(location.geometry?.coordinates?.count, 3)
-        XCTAssertEqual(location.properties?.heading, "180")
-        XCTAssertEqual(location.altitudeMeters, 42.5)
+        #expect(location.geometry?.coordinates?.count == 3)
+        #expect(location.properties?.heading == "180")
+        #expect(location.altitudeMeters == 42.5)
     }
 
     @Test
     func testTokenResponseFixtureDecodes() throws {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "volvo-token-response", withExtension: "json"))
+        let url = try #require(Bundle.module.url(forResource: "volvo-token-response", withExtension: "json"))
         let data = try Data(contentsOf: url)
         let token = try JSONDecoder.volvo.decode(VolvoTokenResponseDTO.self, from: data)
-        XCTAssertEqual(token.accessToken, "fixture-access-token-not-real")
-        XCTAssertEqual(token.refreshToken, "fixture-refresh-token-not-real")
-        XCTAssertEqual(token.expiresIn, 3600)
+        #expect(token.accessToken == "fixture-access-token-not-real")
+        #expect(token.refreshToken == "fixture-refresh-token-not-real")
+        #expect(token.expiresIn == 3600)
     }
     #endif
 
@@ -185,31 +185,31 @@ struct VolvoDecodingTests {
     func testFieldDecodesWrappedValueShape() throws {
         let json = #"{"value": 72.5, "status": "OK", "updatedAt": "2026-08-15T10:00:00Z"}"#
         let field = try JSONDecoder.volvo.decode(VolvoField<Double>.self, from: Data(json.utf8))
-        XCTAssertEqual(field.value, 72.5)
-        XCTAssertEqual(field.status, "OK")
-        XCTAssertNotNil(field.updatedAt)
+        #expect(field.value == 72.5)
+        #expect(field.status == "OK")
+        #expect(field.updatedAt != nil)
     }
 
     @Test
     func testFieldFallsBackToBareScalar() throws {
         let json = "42"
         let field = try JSONDecoder.volvo.decode(VolvoField<Int>.self, from: Data(json.utf8))
-        XCTAssertEqual(field.value, 42)
-        XCTAssertNil(field.status)
+        #expect(field.value == 42)
+        #expect(field.status == nil)
     }
 
     @Test
     func testVolvoDistanceAndConsumptionUnitsNormalizeToDomainUnits() throws {
         let energyJSON = #"{"electricRange":{"value":100,"unit":"mi"},"chargingPower":{"value":7.4,"unit":"kW"}}"#
         let energy = try JSONDecoder.volvo.decode(VolvoEnergyStateDTO.self, from: Data(energyJSON.utf8))
-        XCTAssertEqual(energy.rangeKm, 161)
-        XCTAssertEqual(energy.chargingPowerWatts, 7_400)
+        #expect(energy.rangeKm == 161)
+        #expect(energy.chargingPowerWatts == 7_400)
 
         let statsJSON = #"{"tripMeterAutomatic":{"value":10,"unit":"mi"},"averageEnergyConsumption":{"value":200,"unit":"Wh/km"},"averageSpeed":{"value":50,"unit":"mph"}}"#
         let stats = try JSONDecoder.volvo.decode(VolvoStatisticsDTO.self, from: Data(statsJSON.utf8))
-        XCTAssertEqual(stats.tripMeterAutomaticKm?.rounded(), 16)
-        XCTAssertEqual(stats.averageEnergyConsumptionKwhPer100Km, 20)
-        XCTAssertEqual(stats.averageSpeedKmH?.rounded(), 80)
+        #expect(stats.tripMeterAutomaticKm?.rounded() == 16)
+        #expect(stats.averageEnergyConsumptionKwhPer100Km == 20)
+        #expect(stats.averageSpeedKmH?.rounded() == 80)
     }
 
     @Test
@@ -217,7 +217,7 @@ struct VolvoDecodingTests {
         struct Payload: Decodable, Equatable { let vin: String }
         let json = #"{"data": {"vin": "FIXTURE"}}"#
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<Payload>.self, from: Data(json.utf8))
-        XCTAssertEqual(envelope.data, Payload(vin: "FIXTURE"))
+        #expect(envelope.data == Payload(vin: "FIXTURE"))
     }
 
     @Test
@@ -225,44 +225,44 @@ struct VolvoDecodingTests {
         struct Payload: Decodable, Equatable { let vin: String }
         let json = #"{"vin": "FIXTURE"}"#
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<Payload>.self, from: Data(json.utf8))
-        XCTAssertEqual(envelope.data, Payload(vin: "FIXTURE"))
+        #expect(envelope.data == Payload(vin: "FIXTURE"))
     }
 
     @Test
     func testPowertrainClassification() {
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "NONE"), .unknown)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "ELECTRIC"), .bev)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL/ELECTRIC"), .phev)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL"), .ice)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "DIESEL"), .ice)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: nil), .unknown)
-        XCTAssertEqual(VolvoPowertrain.classify(fuelType: "PETROL MHEV"), .mildHybrid)
+        #expect(VolvoPowertrain.classify(fuelType: "NONE") == .unknown)
+        #expect(VolvoPowertrain.classify(fuelType: "ELECTRIC") == .bev)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL/ELECTRIC") == .phev)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL") == .ice)
+        #expect(VolvoPowertrain.classify(fuelType: "DIESEL") == .ice)
+        #expect(VolvoPowertrain.classify(fuelType: nil) == .unknown)
+        #expect(VolvoPowertrain.classify(fuelType: "PETROL MHEV") == .mildHybrid)
     }
 
     @Test
     func testChargingStateMapping() {
-        XCTAssertEqual(ChargingState(volvoChargingStatus: "CHARGING"), .charging)
-        XCTAssertEqual(ChargingState(volvoChargingStatus: "DONE"), .complete)
-        XCTAssertEqual(ChargingState(volvoChargingStatus: "IDLE"), .idle)
-        XCTAssertEqual(ChargingState(volvoChargingStatus: nil), .unknown("UNSPECIFIED"))
+        #expect(ChargingState(volvoChargingStatus: "CHARGING") == .charging)
+        #expect(ChargingState(volvoChargingStatus: "DONE") == .complete)
+        #expect(ChargingState(volvoChargingStatus: "IDLE") == .idle)
+        #expect(ChargingState(volvoChargingStatus: nil) == .unknown("UNSPECIFIED"))
 
 
-        XCTAssertEqual(ChargingState(volvoChargingStatus: "SOME_NEW_STATE"), .unknown("SOME_NEW_STATE"))
+        #expect(ChargingState(volvoChargingStatus: "SOME_NEW_STATE") == .unknown("SOME_NEW_STATE"))
     }
 
     @Test
     func testChargerConnectionMapping() {
-        XCTAssertEqual(ChargerConnection(volvoConnectionStatus: "CONNECTED"), .connected)
-        XCTAssertEqual(ChargerConnection(volvoConnectionStatus: "DISCONNECTED"), .disconnected)
-        XCTAssertEqual(ChargerConnection(volvoConnectionStatus: nil), .unknown)
+        #expect(ChargerConnection(volvoConnectionStatus: "CONNECTED") == .connected)
+        #expect(ChargerConnection(volvoConnectionStatus: "DISCONNECTED") == .disconnected)
+        #expect(ChargerConnection(volvoConnectionStatus: nil) == .unknown)
     }
 
     @Test
     func testOpeningStateMapping() {
-        XCTAssertEqual(OpeningState(volvoStatus: "OPEN"), .open)
-        XCTAssertEqual(OpeningState(volvoStatus: "CLOSED"), .closed)
-        XCTAssertEqual(OpeningState(volvoStatus: "AJAR"), .ajar)
-        XCTAssertNil(OpeningState(volvoStatus: nil))
+        #expect(OpeningState(volvoStatus: "OPEN") == .open)
+        #expect(OpeningState(volvoStatus: "CLOSED") == .closed)
+        #expect(OpeningState(volvoStatus: "AJAR") == .ajar)
+        #expect(OpeningState(volvoStatus: nil) == nil)
     }
 
     @Test
@@ -280,13 +280,13 @@ struct VolvoDecodingTests {
         }
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoWarningsDTO>.self, from: Data(json.utf8))
-        let warnings = try XCTUnwrap(envelope.data)
-        XCTAssertEqual(warnings.activeWarnings.count, 4)
-        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Left brake light") }))
-        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
-        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
-        XCTAssertTrue(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
-        XCTAssertTrue(warnings.hasReportedLightStatus)
+        let warnings = try #require(envelope.data)
+        #expect(warnings.activeWarnings.count == 4)
+        #expect(warnings.activeWarnings.contains(where: { $0.contains("Left brake light") }))
+        #expect(warnings.activeWarnings.contains(where: { $0.contains("Right high beam") }))
+        #expect(warnings.activeWarnings.contains(where: { $0.contains("Hazard warning lights") }))
+        #expect(warnings.activeWarnings.contains(where: { $0.contains("Reverse light") }))
+        #expect(warnings.hasReportedLightStatus)
     }
 
     @Test
@@ -294,9 +294,9 @@ struct VolvoDecodingTests {
         let running = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"RUNNING"}}"#.utf8))
         let stopped = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"STOPPED"}}"#.utf8))
         let unspecified = try JSONDecoder.volvo.decode(VolvoEngineStatusDTO.self, from: Data(#"{"engineStatus":{"value":"UNSPECIFIED"}}"#.utf8))
-        XCTAssertEqual(running.isRunning, true)
-        XCTAssertEqual(stopped.isRunning, false)
-        XCTAssertNil(unspecified.isRunning)
+        #expect(running.isRunning == true)
+        #expect(stopped.isRunning == false)
+        #expect(unspecified.isRunning == nil)
     }
 
     @Test
@@ -309,8 +309,8 @@ struct VolvoDecodingTests {
         }
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoBrakesDTO>.self, from: Data(json.utf8))
-        let dto = try XCTUnwrap(envelope.data)
-        XCTAssertEqual(dto.brakeFluidLevelWarning?.value, "WARNING")
+        let dto = try #require(envelope.data)
+        #expect(dto.brakeFluidLevelWarning?.value == "WARNING")
     }
 
     @Test
@@ -323,8 +323,8 @@ struct VolvoDecodingTests {
         }
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoEngineStatusDTO>.self, from: Data(json.utf8))
-        let dto = try XCTUnwrap(envelope.data)
-        XCTAssertEqual(dto.isRunning, true)
+        let dto = try #require(envelope.data)
+        #expect(dto.isRunning == true)
     }
 
     @Test
@@ -337,17 +337,17 @@ struct VolvoDecodingTests {
         }
         """
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
-        let dto = try XCTUnwrap(envelope.data)
-        XCTAssertTrue(dto.isAvailable)
+        let dto = try #require(envelope.data)
+        #expect(dto.isAvailable)
     }
 
     @Test
     func testCommandAccessibilityPreservesUnavailableReason() throws {
         let json = #"{"data":{"availabilityStatus":{"value":"UNAVAILABLE","unavailableReason":"POWER_SAVING_MODE"}}}"#
         let envelope = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoCommandAccessibilityDTO>.self, from: Data(json.utf8))
-        let dto = try XCTUnwrap(envelope.data)
-        XCTAssertFalse(dto.isAvailable)
-        XCTAssertEqual(dto.reason, L10n.text("Vehicle is in power-saving mode"))
+        let dto = try #require(envelope.data)
+        #expect(!(dto.isAvailable))
+        #expect(dto.reason == L10n.text("Vehicle is in power-saving mode"))
     }
 
     @Test
@@ -361,8 +361,8 @@ struct VolvoDecodingTests {
         for status in failing {
             let response = try JSONDecoder.volvo.decode(
                 VolvoCommandResponseDTO.self, from: Data("{\"invokeStatus\":\"\(status)\"}".utf8))
-            XCTAssertTrue(response.isFailure, "\(status) should be a failure")
-            XCTAssertNotNil(response.failureReason, "\(status) should carry a user-facing reason")
+            #expect(response.isFailure, "\(status) should be a failure")
+            #expect(response.failureReason != nil, "\(status) should carry a user-facing reason")
         }
     }
 
@@ -371,8 +371,8 @@ struct VolvoDecodingTests {
         for status in ["RUNNING", "WAITING", "COMPLETED", "DELIVERED", "UNKNOWN"] {
             let response = try JSONDecoder.volvo.decode(
                 VolvoCommandResponseDTO.self, from: Data("{\"invokeStatus\":\"\(status)\"}".utf8))
-            XCTAssertFalse(response.isFailure, "\(status) must not be treated as a rejection")
-            XCTAssertNil(response.failureReason)
+            #expect(!(response.isFailure), "\(status) must not be treated as a rejection")
+            #expect(response.failureReason == nil)
         }
     }
 
@@ -380,10 +380,10 @@ struct VolvoDecodingTests {
     func testSleepAndPrivacyStatusesGetSpecificMessages() throws {
         let sleep = try JSONDecoder.volvo.decode(
             VolvoCommandResponseDTO.self, from: Data(#"{"invokeStatus":"VEHICLE_IN_SLEEP"}"#.utf8))
-        XCTAssertEqual(sleep.failureReason?.contains("sleep"), true)
+        #expect(sleep.failureReason?.contains("sleep") == true)
         let privacy = try JSONDecoder.volvo.decode(
             VolvoCommandResponseDTO.self, from: Data(#"{"invokeStatus":"NOT_ALLOWED_PRIVACY_ENABLED"}"#.utf8))
-        XCTAssertEqual(privacy.failureReason?.lowercased().contains("privacy"), true)
+        #expect(privacy.failureReason?.lowercased().contains("privacy") == true)
     }
 
     @Test
@@ -394,22 +394,22 @@ struct VolvoDecodingTests {
         """#
         let envelope = try JSONDecoder.volvo.decode(
             VolvoEnvelope<VolvoVehicleDetailsDTO>.self, from: Data(json.utf8))
-        XCTAssertEqual(envelope.data?.externalColour, "Vapour Grey")
+        #expect(envelope.data?.externalColour == "Vapour Grey")
 
         let flat = try JSONDecoder.volvo.decode(
             VolvoEnvelope<VolvoVehicleDetailsDTO>.self,
             from: Data(#"{"data":{"vin":"YV1TEST","externalColour":"Fjord Blue"}}"#.utf8))
-        XCTAssertEqual(flat.data?.externalColour, "Fjord Blue")
+        #expect(flat.data?.externalColour == "Fjord Blue")
     }
 
     @Test
     func testVolvoNullLiteralStringsAreTreatedAsAbsent() {
         // Volvo serialises `descriptions.upholstery` as the literal string "null" (live).
-        XCTAssertNil(Optional("null").volvoMeaningful)
-        XCTAssertNil(Optional("NULL").volvoMeaningful)
-        XCTAssertNil(Optional("  ").volvoMeaningful)
-        XCTAssertNil(String?.none.volvoMeaningful)
-        XCTAssertEqual(Optional("Charcoal Nubuck").volvoMeaningful, "Charcoal Nubuck")
+        #expect(Optional("null").volvoMeaningful == nil)
+        #expect(Optional("NULL").volvoMeaningful == nil)
+        #expect(Optional("  ").volvoMeaningful == nil)
+        #expect(String?.none.volvoMeaningful == nil)
+        #expect(Optional("Charcoal Nubuck").volvoMeaningful == "Charcoal Nubuck")
     }
 
     @Test
@@ -417,17 +417,17 @@ struct VolvoDecodingTests {
         // Live: command list reports HONK_AND_FLASH but the real invocation path is honk-flash.
         let json = #"[{"command":"HONK_AND_FLASH","href":"/v2/vehicles/X/commands/honk-flash"}]"#
         let list = try JSONDecoder.volvo.decode([VolvoCommandDTO].self, from: Data(json.utf8))
-        XCTAssertEqual(list.first?.normalizedName, "honk-flash")
+        #expect(list.first?.normalizedName == "honk-flash")
         // No href → fall back to the (normalised) command label.
         let noHref = try JSONDecoder.volvo.decode(
             [VolvoCommandDTO].self, from: Data(#"[{"command":"LOCK_REDUCED_GUARD"}]"#.utf8))
-        XCTAssertEqual(noHref.first?.normalizedName, "lock-reduced-guard")
+        #expect(noHref.first?.normalizedName == "lock-reduced-guard")
     }
 
     @Test
     func testChargerPowerStateMapsNoPowerAvailable() {
-        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: "NO_POWER_AVAILABLE"), .noPower)
-        XCTAssertEqual(ChargerPowerState(volvoPowerStatus: "PROVIDING_POWER"), .providingPower)
+        #expect(ChargerPowerState(volvoPowerStatus: "NO_POWER_AVAILABLE") == .noPower)
+        #expect(ChargerPowerState(volvoPowerStatus: "PROVIDING_POWER") == .providingPower)
     }
 
     @Test
@@ -437,20 +437,20 @@ struct VolvoDecodingTests {
           "rearLeft":{"value":"NO_WARNING"},"rearRight":{"value":"LOW"}}}
         """#
         let tyres = try JSONDecoder.volvo.decode(VolvoEnvelope<VolvoTyresDTO>.self, from: Data(json.utf8))
-        let readings = try XCTUnwrap(tyres.data).readings
-        XCTAssertEqual(readings.first(where: { $0.position == .frontLeft })?.warning, .sensorFault)
-        XCTAssertEqual(readings.first(where: { $0.position == .frontRight })?.warning, .sensorFault)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearLeft })?.warning, TyrePressureWarning.none)
-        XCTAssertEqual(readings.first(where: { $0.position == .rearRight })?.warning, .low)
-        XCTAssertFalse(TyrePressureWarning.sensorFault.needsAttention)
+        let readings = try #require(tyres.data).readings
+        #expect(readings.first(where: { $0.position == .frontLeft })?.warning == .sensorFault)
+        #expect(readings.first(where: { $0.position == .frontRight })?.warning == .sensorFault)
+        #expect(readings.first(where: { $0.position == .rearLeft })?.warning == TyrePressureWarning.none)
+        #expect(readings.first(where: { $0.position == .rearRight })?.warning == .low)
+        #expect(!(TyrePressureWarning.sensorFault.needsAttention))
     }
 
     @Test
     func testStagedUnlockResponseDecodes() throws {
         let json = #"{"invokeStatus":"DELIVERED","readyToUnlock":true,"readyToUnlockUntil":120}"#
         let response = try JSONDecoder.volvo.decode(VolvoCommandResponseDTO.self, from: Data(json.utf8))
-        XCTAssertEqual(response.outcome, .delivered)
-        XCTAssertEqual(response.readyToUnlockUntil, 120)
+        #expect(response.outcome == .delivered)
+        #expect(response.readyToUnlockUntil == 120)
     }
 
     @Test
@@ -471,10 +471,10 @@ struct VolvoDecodingTests {
         state.tripComputer.electricRangeKm = 310
         state.energy.currentLimitAmps = 32
 
-        XCTAssertEqual(state.formattedServiceTrigger, "Time")
-        XCTAssertEqual(state.formattedSteeringOrientation, "Left-hand drive")
-        XCTAssertEqual(state.identity.upholstery, "Nordico")
-        XCTAssertEqual(state.tripComputer.electricRangeKm, 310)
-        XCTAssertEqual(state.energy.currentLimitAmps, 32)
+        #expect(state.formattedServiceTrigger == "Time")
+        #expect(state.formattedSteeringOrientation == "Left-hand drive")
+        #expect(state.identity.upholstery == "Nordico")
+        #expect(state.tripComputer.electricRangeKm == 310)
+        #expect(state.energy.currentLimitAmps == 32)
     }
 }

@@ -33,13 +33,13 @@ graph TD
 
 ## 2. Resting geometry
 
-`VehicleStageGeometry` reproduces the SwiftUI layout the hero cards used before the stage existed: an 8 pt horizontal inset, a 205 pt content height, `1.33` zoom about the centre, inside a 220 pt container that clips. The render is aspect-fitted into the content box, rounded to the backing grid, then zoomed — the same order SwiftUI did it in, which is what keeps the resting pixels unchanged.
+`VehicleStageGeometry` reproduces the SwiftUI layout the hero cards used before the stage existed: an 8 pt horizontal inset, a 205 pt content height, `1.33` zoom about the centre, inside a 220 pt container that clips. The render is aspect-fitted into the content box, rounded to the backing grid, then zoomed, the same order SwiftUI did it in, which is what keeps the resting pixels unchanged.
 
-At the popover's 430 pt width the stage is 406 × 220 and a 16:9 render rests at `(-39.06, -26.33, 484.12, 272.65)` — deliberately wider and taller than the stage. The overflow is clipped, which is also why the car can roll in from behind the edge rather than across the card.
+At the popover's 430 pt width the stage is 406 × 220 and a 16:9 render rests at `(-39.06, -26.33, 484.12, 272.65)`, deliberately wider and taller than the stage. The overflow is clipped, which is also why the car can roll in from behind the edge rather than across the card.
 
 Verified against the previous implementation by rendering the old SwiftUI chain with `ImageRenderer` and diffing it against the stage's resting frame: position, size and crop match; the residual is resampler choice, symmetric on every edge, and smaller than the difference between Core Graphics and SwiftUI drawing the same full-resolution source.
 
-**The resting state is canonical and total:** `transform` is identity, `opacity` is 1, `frame` is the resting frame. Nothing animated ever leaves the model values anywhere else — see §5.
+**The resting state is canonical and total:** `transform` is identity, `opacity` is 1, `frame` is the resting frame. Nothing animated ever leaves the model values anywhere else; see §5.
 
 ---
 
@@ -47,15 +47,15 @@ Verified against the previous implementation by rendering the old SwiftUI chain 
 
 Hisingen is a menu bar app. Clicking the status item builds a fresh `NSHostingController`, so the whole SwiftUI tree and every layer under it is new on every open. A telemetry refresh does the opposite: it assigns `hosting.rootView`, and SwiftUI re-evaluates bodies while keeping the views. The two have to be told apart, and no per-view flag can do it.
 
-**What counts as a change.** `VehiclePresentationRequest` is `(identity, byteCount)` — identity being VIN plus angle. Telemetry refreshes arrive several times a minute with the same identity and the same bytes from `CarImageCache`, and `present(identity:imageData:)` returns on the equality check without touching a layer. The byte count stands in for the bytes: the cache hands back the same buffer, and comparing megabytes per body evaluation would cost more than the check saves. A genuinely re-downloaded render for the same angle has a different length, so it crosses over rather than popping.
+**What counts as a change.** `VehiclePresentationRequest` is `(identity, byteCount)`, identity being VIN plus angle. Telemetry refreshes arrive several times a minute with the same identity and the same bytes from `CarImageCache`, and `present(identity:imageData:)` returns on the equality check without touching a layer. The byte count stands in for the bytes: the cache hands back the same buffer, and comparing megabytes per body evaluation would cost more than the check saves. A genuinely re-downloaded render for the same angle has a different length, so it crosses over rather than popping.
 
-**Entrance.** When artwork lands on an empty stage, the identity is stashed in `pendingEntrance` and the layer stays hidden until the view is in a window with a non-empty resting frame — so a deferred decode or a not-yet-laid-out stage cannot produce a car that appears at rest and *then* rolls in. `VehicleEntranceLedger` (keyed by VIN, living outside the view hierarchy) then decides how much entrance is owed:
+**Entrance.** When artwork lands on an empty stage, the identity is stashed in `pendingEntrance` and the layer stays hidden until the view is in a window with a non-empty resting frame, so a deferred decode or a not-yet-laid-out stage cannot produce a car that appears at rest and *then* rolls in. `VehicleEntranceLedger` (keyed by VIN, living outside the view hierarchy) then decides how much entrance is owed:
 
 | Since that car last rolled in | Style |
 | --- | --- |
-| Never, or more than 10 min | `.full` — 660 ms, 124 pt of travel |
-| 2.5 s – 10 min | `.abbreviated` — 400 ms, 44 pt |
-| Under 2.5 s | `.instant` — no animation |
+| Never, or more than 10 min | `.full`: 660 ms, 124 pt of travel |
+| 2.5 s – 10 min | `.abbreviated`: 400 ms, 44 pt |
+| Under 2.5 s | `.instant`: no animation |
 
 A mis-click, or a hop to the Info tab and back, is one continuous glance at the car and gets nothing. Coming back later reads as a fresh visit and earns the full roll-in. Only presenting the car writes to the ledger; telemetry never reaches it.
 
@@ -69,7 +69,7 @@ A mis-click, or a hop to the Info tab and back, is one continuous glance at the 
 
 Entering from the right with a nose-right render is the car reversing into place, and it fights the scale-up that reads as approaching. The distance and the curve are identical either way; only the sign of `VehicleEntranceMotion.travel` changes, so one constant flips the whole thing back if a different artwork set faces the other way.
 
-**Transition.** A changed identity on an occupied stage crosses over instead. Direction comes from the on-screen angle strip, which is ordered the way you walk around the car (3/4 front, front, side, 3/4 rear, rear, top — `CarRenderAngle.allCases`, so there is no second copy of the order to drift). Moving toward the rear sends the old picture left and brings the new one in from the right; moving toward the front mirrors it. The cabin photo, an unknown angle and a different car have no spatial relationship and get a straight crossfade.
+**Transition.** A changed identity on an occupied stage crosses over instead. Direction comes from the on-screen angle strip, which is ordered the way you walk around the car (3/4 front, front, side, 3/4 rear, rear, top; `CarRenderAngle.allCases`, so there is no second copy of the order to drift). Moving toward the rear sends the old picture left and brings the new one in from the right; moving toward the front mirrors it. The cabin photo, an unknown angle and a different car have no spatial relationship and get a straight crossfade.
 
 **Decode.** The studio renders are ~4900 × 2750 PNGs: ~65 ms and ~54 MB each, and PNG cannot be sub-sampled during decode. `VehicleArtworkStore` decodes off the main thread at exactly the pixel size the render will be drawn at (the source's dimensions are read from its header first, ~0.2 ms, no pixels), coalesces duplicate requests, and keeps the last 8. After the first picture installs, the remaining exterior angles are decoded at utility priority so changing angle does not wait. Late decodes are checked against the current request and dropped if the user has clicked on.
 
@@ -79,7 +79,7 @@ Entering from the right with a nose-right render is the car reversing into place
 
 Everything is driven by `VehicleRollCurve`, kept free of Core Animation so the shapes can be tested on their own.
 
-**Travel** is a braking profile, not a bezier: velocity is constant for the first 34% of the travel time, then follows a raised cosine to exactly zero. Half the distance is behind the car in the first third of the time, and the stop has zero terminal velocity *and* zero terminal acceleration — no jerk at the end. That last property is what separates "car parking" from "element sliding in", and a cubic bezier cannot express it as directly.
+**Travel** is a braking profile, not a bezier: velocity is constant for the first 34% of the travel time, then follows a raised cosine to exactly zero. Half the distance is behind the car in the first third of the time, and the stop has zero terminal velocity *and* zero terminal acceleration, no jerk at the end. That last property is what separates "car parking" from "element sliding in", and a cubic bezier cannot express it as directly.
 
 **Ride height** sways once, `sin(π · travel progress)`, about 1.1 pt, back to zero by the time the car stops.
 
@@ -87,11 +87,11 @@ Everything is driven by `VehicleRollCurve`, kept free of Core Animation so the s
 
 **Scale** runs 0.976 → 1 tied to distance covered, so it reads as perspective rather than as a separate effect.
 
-The composite — travel, sway, settle, scale, opacity — is sampled at 120 Hz into a single `CAKeyframeAnimation` on `transform`, with a second on `opacity`, grouped. Sampling rather than per-segment `timingFunctions` because Core Animation cannot reliably compose concurrent animations on `transform.scale` and `transform.translation`, and per-segment curves would force every axis to share one shape. Each axis keeps its own curve, the wheels can be handed the exact travel the body used (§7), and it still runs entirely on the compositor — no timers, no per-frame CPU, no layout passes.
+The composite (travel, sway, settle, scale, opacity) is sampled at 120 Hz into a single `CAKeyframeAnimation` on `transform`, with a second on `opacity`, grouped. Sampling rather than per-segment `timingFunctions` because Core Animation cannot reliably compose concurrent animations on `transform.scale` and `transform.translation`, and per-segment curves would force every axis to share one shape. Each axis keeps its own curve, the wheels can be handed the exact travel the body used (§7), and it still runs entirely on the compositor: no timers, no per-frame CPU, no layout passes.
 
 Transitions are simpler and do use `CAMediaTimingFunction`: a custom deceleration `(0.16, 0.72, 0.20, 1)` for the picture arriving, a standard ease-in for the one leaving, with the incoming fade held back 10% of the duration so the two are not both half-opaque over the same pixels.
 
-Sampled live from the presentation layer on a real display, the full entrance covers `123.4 pt` at 0 ms, `81.9` at 128 ms, `40.5` at 256 ms, `8.0` at 400 ms, `0.7` at 494 ms, compression peak `−1.14 pt` at 525 ms, rest at 660 ms. Opacity reaches 1 at 176 ms, while the car is still 66 pt out — it arrives, it does not fade in. Half the distance is gone in the first 150 ms and the travel is visually over by ~490 ms; the remaining 170 ms is the suspension settling.
+Sampled live from the presentation layer on a real display, the full entrance covers `123.4 pt` at 0 ms, `81.9` at 128 ms, `40.5` at 256 ms, `8.0` at 400 ms, `0.7` at 494 ms, compression peak `−1.14 pt` at 525 ms, rest at 660 ms. Opacity reaches 1 at 176 ms, while the car is still 66 pt out; it arrives, it does not fade in. Half the distance is gone in the first 150 ms and the travel is visually over by ~490 ms; the remaining 170 ms is the suspension settling.
 
 To retune: `duration` and `travel` on `VehicleEntranceMotion.full` set the pace, `VehicleRollCurve.speedHoldFraction` sets how long it holds speed before braking (raise it for a later, harder stop; lower it for a lazier one), and `settleStart` moves the dip relative to the stop.
 
@@ -101,7 +101,7 @@ To retune: `duration` and `travel` on `VehicleEntranceMotion.full` set the pace,
 
 ## 5. Cancellation
 
-Every animation is arranged so the layer's **model values are already the resting ones** and only the animation departs from them. Removing an animation — for any reason, at any point — therefore lands on the canonical state. No completion handler has to repair anything, which is what makes interruption safe rather than merely handled.
+Every animation is arranged so the layer's **model values are already the resting ones** and only the animation departs from them. Removing an animation, for any reason, at any point, therefore lands on the canonical state. No completion handler has to repair anything, which is what makes interruption safe rather than merely handled.
 
 - `animateEntrance` adds a keyframe group whose last sample is exactly identity/opacity 1, and never writes a non-resting model value.
 - `transition` sets the incoming layer's model values to the resting ones and animates *from* the entry state with `fromValue`.
@@ -120,13 +120,13 @@ A mid-flight layout change (theme switch, display move) cancels first, then move
 
 `VehicleMotionPreference.prefersReducedMotion` is the only place `NSWorkspace.accessibilityDisplayShouldReduceMotion` is read, and it carries a test override so both paths can be exercised. It is read at the moment of animating, so a change to the setting applies to the next animation without an observer.
 
-When it is on, `VehicleEntranceMotion.reduced` and the reduced transition plan drop travel, scale, sway and settle entirely; what is left is a 160 ms fade for an entrance and a 140 ms crossfade for an angle change — short enough to read as appearance rather than animation. `.instant` stays instant either way. The cabin photo has no exterior orientation, so it never rolls even with motion enabled.
+When it is on, `VehicleEntranceMotion.reduced` and the reduced transition plan drop travel, scale, sway and settle entirely; what is left is a 160 ms fade for an entrance and a 140 ms crossfade for an angle change, short enough to read as appearance rather than animation. `.instant` stays instant either way. The cabin photo has no exterior orientation, so it never rolls even with motion enabled.
 
 ---
 
 ## 7. Adding genuine rotating wheels
 
-The renders are flattened: one PNG per angle, ~4900 × 2750, alpha, with the shadow baked in. There is no wheel to rotate and no masking trick worth the ugliness, so the illusion is carried by the braking curve, the ride-height sway and the settle. The shadow travels and scales with the body because it is part of the same picture — which is also why the settle scales it, without a synthetic contact shadow that would break the pixel-identical resting state.
+The renders are flattened: one PNG per angle, ~4900 × 2750, alpha, with the shadow baked in. There is no wheel to rotate and no masking trick worth the ugliness, so the illusion is carried by the braking curve, the ride-height sway and the settle. The shadow travels and scales with the body because it is part of the same picture, which is also why the settle scales it, without a synthetic contact shadow that would break the pixel-identical resting state.
 
 The seam for real wheels is already there and is deliberately small.
 
@@ -156,9 +156,9 @@ Polestar2/
 
 1. `VehicleArtworkStore.Artwork` gains a `wheels: [Wheel]` array, decoded alongside the body and empty for every flattened asset. Keep the unit coordinates; convert to points only when the resting frame is known.
 2. `VehicleStageView` adds a sublayer per wheel under the vehicle layer, positioned from `center × restingFrame.size` with `bounds` from `radius`, and passes them to `animateEntrance(_:wheels:)` as `VehicleWheelLayer(layer:radius:)`.
-3. Nothing in the animator changes. It already rotates any wheels it is handed from the same travel samples as the body, via `VehicleRollCurve.wheelRotation(travelled:radius:)` — rolling without slipping, one circumference of travel per turn. Because rotation is a function of distance covered and the travel curve stops with zero velocity, rotation necessarily starts, holds and stops with the car; and because the wheel's resting model value is set to the final angle, a wheel that has rolled stays rolled with no snap when the animation is removed.
+3. Nothing in the animator changes. It already rotates any wheels it is handed from the same travel samples as the body, via `VehicleRollCurve.wheelRotation(travelled:radius:)`, rolling without slipping, one circumference of travel per turn. Because rotation is a function of distance covered and the travel curve stops with zero velocity, rotation necessarily starts, holds and stops with the car; and because the wheel's resting model value is set to the final angle, a wheel that has rolled stays rolled with no snap when the animation is removed.
 
-**Rotation direction is already right.** Because the entry side is derived from the render's facing (§3), and `travel` is signed, `travelled` is negative when the car drives rightwards and positive when it drives leftwards — so `wheelRotation` produces clockwise rotation for rightward travel and counter-clockwise for leftward, with no extra bookkeeping. Wheels added to these assets will spin the way the car is going.
+**Rotation direction is already right.** Because the entry side is derived from the render's facing (§3), and `travel` is signed, `travelled` is negative when the car drives rightwards and positive when it drives leftwards, so `wheelRotation` produces clockwise rotation for rightward travel and counter-clockwise for leftward, with no extra bookkeeping. Wheels added to these assets will spin the way the car is going.
 
 The one thing to move when the assets arrive: `facing` is currently a table over `CarRenderAngle`, correct for the Polestar turntable. If a model's renders face the other way, that per-angle facing belongs in the same `metadata.json`, read alongside the wheel geometry, rather than in a growing switch statement.
 

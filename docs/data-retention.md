@@ -354,9 +354,9 @@ provider-specific sign-out. That operation always removes:
 - charging transition baselines stored in `UserDefaults`; and
 - command receipts stored in `UserDefaults`.
 
-It removes the durable SQLite history tables — charging sessions and samples,
+It removes the durable SQLite history tables (charging sessions and samples,
 battery-health milestones, telemetry, air quality, connectivity, cabin climate,
-manual fuel fill-ups, remote-command audit — **only** when the user has enabled
+manual fuel fill-ups, remote-command audit) **only** when the user has enabled
 **Settings → Privacy & Data → "Erase local history on sign out"** (off by default,
 `erase_history_on_sign_out`). The default keeps that history so a re-signed local
 build, an accidentally dismissed Keychain prompt, or a stray sign-out does not
@@ -491,7 +491,7 @@ At minimum, persistence tests should cover:
 
 ## Related Documentation
 
-- [`../PRIVACY.md`](../PRIVACY.md) — user-facing privacy policy
-- [`security/privacy.md`](security/privacy.md) — privacy-sensitive data flows
-- [`architecture/persistence.md`](architecture/persistence.md) — storage architecture
-- [`security/keychain.md`](security/keychain.md) — credential storage
+- [`../PRIVACY.md`](../PRIVACY.md): user-facing privacy policy
+- [`security/privacy.md`](security/privacy.md): privacy-sensitive data flows
+- [`architecture/persistence.md`](architecture/persistence.md): storage architecture
+- [`security/keychain.md`](security/keychain.md): credential storage

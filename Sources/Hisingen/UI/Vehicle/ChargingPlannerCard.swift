@@ -11,6 +11,7 @@ struct ChargingPlannerCard: View {
     let state: VehicleState
 
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var points: [ElectricityPricePoint] = []
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
@@ -19,12 +20,21 @@ struct ChargingPlannerCard: View {
 
     private var zone: ElspotZone { preferences.electricityPriceZone }
 
+    private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
+    /// Reduce Motion keeps the fade and drops the movement.
+    private var plannerTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
+    }
+
     private var plannerTaskID: String {
         "\(zone.rawValue)|\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)"
     }
 
     var body: some View {
         cardContent
+            // Crossing the charge threshold in either direction must animate
+            // the card's own insertion/removal, not snap it.
+            .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
             .task(id: plannerTaskID) {
                 let fetched = await service.prices(for: zone)
                 guard !Task.isCancelled else { return }
@@ -38,6 +48,7 @@ struct ChargingPlannerCard: View {
     private var cardContent: some View {
         if neededEnergyKwh > 0.5 {
             plannerBody
+                .transition(plannerTransition)
         }
     }
 
@@ -68,24 +79,32 @@ struct ChargingPlannerCard: View {
                 CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: .orange)
 
                 if let model {
-                    Text(model.windowLabel)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Text(model.detailLine)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let savingsLine = model.savingsLine {
-                        HStack(spacing: 5) {
-                            Image(systemName: model.savings > 0 ? "arrow.down.circle.fill" : "clock")
-                                .font(.system(size: 10))
-                                .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
-                            Text(savingsLine)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
+                    Group {
+                        Text(model.windowLabel)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .hisTelemetryValue(model.windowLabel, reduceMotion: reduceMotion)
+                        Text(model.detailLine)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
+                        if let savingsLine = model.savingsLine {
+                            HStack(spacing: 5) {
+                                Image(systemName: model.savings > 0 ? "arrow.down.circle.fill" : "clock")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
+                                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                                Text(savingsLine)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
+                                    .hisTelemetryValue(savingsLine, reduceMotion: reduceMotion)
+                            }
+                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: model.savings > 0)
                         }
+                        PriceCurveView(points: points, plan: plan)
                     }
-                    PriceCurveView(points: points, plan: plan)
+                    .transition(plannerTransition)
                 } else if !hasLoaded && points.isEmpty {
                     HStack(spacing: 6) {
                         ProgressView()
@@ -94,10 +113,12 @@ struct ChargingPlannerCard: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                    .transition(plannerTransition)
                 } else {
                     Text(statusMessage)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .transition(plannerTransition)
                 }
 
                 if !state.energy.schedules.isEmpty {
@@ -117,6 +138,11 @@ struct ChargingPlannerCard: View {
                 .font(.system(size: 9))
                 .foregroundStyle(.tertiary)
             }
+            // Loading → loaded → status branch swaps key here; the persistent
+            // VStack carries the animation because branches cannot animate
+            // their own removal.
+            .animation(cardChangeAnimation, value: hasLoaded)
+            .animation(cardChangeAnimation, value: planModel?.windowLabel)
         }
     }
 

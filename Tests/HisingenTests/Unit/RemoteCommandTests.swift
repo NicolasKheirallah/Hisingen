@@ -10,14 +10,14 @@ struct RemoteCommandTests {
         let availability = CapabilityGate().availability(
             for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
             enabledFeatures: [.remoteLocks], commandInProgress: false)
-        XCTAssertEqual(availability, .unavailableUntilRefresh)
+        #expect(availability == .unavailableUntilRefresh)
     }
 
     @Test
     @MainActor
     func testAuthorizedCommandIsDiscardedWhenVehicleChangesBeforeExecution() async throws {
         let suiteName = "HisingenTests.command-context.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let preferences = PreferencesStore(defaults: defaults)
         preferences.vin = "YSMFIRST"
@@ -33,52 +33,51 @@ struct RemoteCommandTests {
         )
 
         // Fire-and-forget like the interactive surfaces: the coordinator awaits the
-        // authorizer, and the test unblocks it below.
-        Task { await coordinator.perform(.lock) }
+        // authorizer, and the test unblocks it below. The task handle is kept so the
+        // negative assertion is deterministic (TESTS-11): awaiting `perform` guarantees the
+        // post-authorization decision has been made before the count is read, so a slow
+        // machine cannot let a stale command land after the assertion.
+        let performTask = Task { await coordinator.perform(.lock) }
         await authorizer.waitForAuthorizationRequest()
         context.vehicleState = vehicle(vin: "YSMSECOND")
         preferences.vin = "YSMSECOND"
         authorizer.allow()
-        try? await Task.sleep(for: .milliseconds(20))
+        _ = await performTask.value
 
         let executedCount = await provider.executedCount()
-        XCTAssertEqual(executedCount, 0)
+        #expect(executedCount == 0)
     }
 
     @Test
     func testRemoteFeaturesAreDisabledByDefault() {
-        XCTAssertTrue(FeatureSelection.default.enabled.intersection(AppFeature.remoteFeatures).isEmpty)
-        XCTAssertEqual(RemoteCommand.unlock.feature, .remoteLocks)
-        XCTAssertEqual(RemoteCommand.openWindows.risk, .securitySensitive)
-        XCTAssertEqual(RemoteCommand.installOTANow.risk, .destructive)
+        #expect(FeatureSelection.default.enabled.intersection(AppFeature.remoteFeatures).isEmpty)
+        #expect(RemoteCommand.unlock.feature == .remoteLocks)
+        #expect(RemoteCommand.openWindows.risk == .securitySensitive)
+        #expect(RemoteCommand.installOTANow.risk == .destructive)
     }
 
     @Test
     func testOutcomeDescriptionStatesWhatTheCommandDid() {
-        XCTAssertEqual(RemoteCommand.lock.outcomeDescription, L10n.text("Vehicle locked"))
-        XCTAssertEqual(RemoteCommand.unlock.outcomeDescription, L10n.text("Vehicle unlocked"))
-        XCTAssertEqual(RemoteCommand.stopClimate.outcomeDescription, L10n.text("AC (climate) turned off"))
-        XCTAssertEqual(
-            RemoteCommand.startClimate(temperatureCelsius: 22, frontLeftSeat: .off,
+        #expect(RemoteCommand.lock.outcomeDescription == L10n.text("Vehicle locked"))
+        #expect(RemoteCommand.unlock.outcomeDescription == L10n.text("Vehicle unlocked"))
+        #expect(RemoteCommand.stopClimate.outcomeDescription == L10n.text("AC (climate) turned off"))
+        #expect(RemoteCommand.startClimate(temperatureCelsius: 22, frontLeftSeat: .off,
                                        frontRightSeat: .off, rearLeftSeat: .off,
-                                       rearRightSeat: .off, steeringWheel: .off).outcomeDescription,
-            "AC turned on at 22 °C")
-        XCTAssertEqual(
-            RemoteCommand.setChargeTarget(80).outcomeDescription,
-            L10n.format("Charge target set to %d%%", 80))
+                                       rearRightSeat: .off, steeringWheel: .off).outcomeDescription == "AC turned on at 22 °C")
+        #expect(RemoteCommand.setChargeTarget(80).outcomeDescription == L10n.format("Charge target set to %d%%", 80))
     }
 
     @Test
     func testRemoteCommandRequiresContextAndAuthentication() async {
         do {
             _ = try await PolestarAPI().executeRemoteCommand(.lock, vin: "YSMTEST")
-            XCTFail("Remote commands must require selected vehicle and authenticated session")
+            Issue.record("Remote commands must require selected vehicle and authenticated session")
         } catch RemoteCommandError.missingContext {
 
         } catch PolestarError.authenticationRequired {
 
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
@@ -90,15 +89,15 @@ struct RemoteCommandTests {
             rearLeft: .off, rearRight: .level3, steeringWheel: .off
         )
         let fields = Protobuf.fields(data)
-        let envelope = try XCTUnwrap(fields.first { $0.number == 1 && $0.wire == 2 })
-        XCTAssertEqual(string(envelope.data, field: 1), "TESTVIN")
-        XCTAssertEqual(fields.first { $0.number == 2 }?.varint, 1)
-        XCTAssertEqual(float(fields.first { $0.number == 3 }?.data), 21)
-        XCTAssertEqual(fields.first { $0.number == 4 }?.varint, UInt64(HeatingLevel.level1.rawValue))
-        XCTAssertEqual(fields.first { $0.number == 5 }?.varint, UInt64(HeatingLevel.level2.rawValue))
-        XCTAssertEqual(fields.first { $0.number == 6 }?.varint, UInt64(HeatingLevel.level3.rawValue))
-        XCTAssertEqual(fields.first { $0.number == 7 }?.varint, UInt64(HeatingLevel.off.rawValue))
-        XCTAssertEqual(fields.first { $0.number == 8 }?.varint, UInt64(HeatingLevel.off.rawValue))
+        let envelope = try #require(fields.first { $0.number == 1 && $0.wire == 2 })
+        #expect(string(envelope.data, field: 1) == "TESTVIN")
+        #expect(fields.first { $0.number == 2 }?.varint == 1)
+        #expect(float(fields.first { $0.number == 3 }?.data) == 21)
+        #expect(fields.first { $0.number == 4 }?.varint == UInt64(HeatingLevel.level1.rawValue))
+        #expect(fields.first { $0.number == 5 }?.varint == UInt64(HeatingLevel.level2.rawValue))
+        #expect(fields.first { $0.number == 6 }?.varint == UInt64(HeatingLevel.level3.rawValue))
+        #expect(fields.first { $0.number == 7 }?.varint == UInt64(HeatingLevel.off.rawValue))
+        #expect(fields.first { $0.number == 8 }?.varint == UInt64(HeatingLevel.off.rawValue))
     }
 
     @Test
@@ -106,22 +105,23 @@ struct RemoteCommandTests {
         let accepted = try PolestarGRPC.parseInvocationResult(invocation(status: 1))
         let delivered = try PolestarGRPC.parseInvocationResult(invocation(status: 4))
         let completed = try PolestarGRPC.parseInvocationResult(invocation(status: 6))
-        XCTAssertEqual(accepted.outcome, .accepted)
-        XCTAssertEqual(delivered.outcome, .delivered)
-        XCTAssertEqual(completed.outcome, .completed)
+        #expect(accepted.outcome == .accepted)
+        #expect(delivered.outcome == .delivered)
+        #expect(completed.outcome == .completed)
         var flat = Data()
         flat.append(Protobuf.stringField(1, "request-id"))
         flat.append(Protobuf.intField(3, 6))
         let flatResult = try PolestarGRPC.parseInvocationResult(flat)
-        XCTAssertEqual(flatResult.outcome, .completed)
+        #expect(flatResult.outcome == .completed)
         do {
             _ = try PolestarGRPC.parseInvocationResult(invocation(status: 9))
-            XCTFail("Expected the privacy rejection")
+            Issue.record("Expected the privacy rejection")
         } catch {
             guard case RemoteCommandError.rejected(let message) = error else {
-                return XCTFail("Unexpected error: \(error)")
+                Issue.record("Unexpected error: \(error)")
+                return
             }
-            XCTAssertNotNil(message)
+            #expect(message != nil)
         }
     }
 
@@ -133,13 +133,13 @@ struct RemoteCommandTests {
         )
         let timer = try PolestarGRPC.globalChargeTimer(schedule)
         let fields = Protobuf.fields(timer)
-        XCTAssertEqual(fields.first { $0.number == 3 }?.varint, 1)
-        let start = try XCTUnwrap(fields.first { $0.number == 1 }?.data)
-        let end = try XCTUnwrap(fields.first { $0.number == 2 }?.data)
-        XCTAssertEqual(Protobuf.fields(start).first { $0.number == 1 }?.varint, 22)
-        XCTAssertEqual(Protobuf.fields(start).first { $0.number == 2 }?.varint, 30)
-        XCTAssertEqual(Protobuf.fields(end).first { $0.number == 1 }?.varint, 6)
-        XCTAssertEqual(Protobuf.fields(end).first { $0.number == 2 }?.varint, 15)
+        #expect(fields.first { $0.number == 3 }?.varint == 1)
+        let start = try #require(fields.first { $0.number == 1 }?.data)
+        let end = try #require(fields.first { $0.number == 2 }?.data)
+        #expect(Protobuf.fields(start).first { $0.number == 1 }?.varint == 22)
+        #expect(Protobuf.fields(start).first { $0.number == 2 }?.varint == 30)
+        #expect(Protobuf.fields(end).first { $0.number == 1 }?.varint == 6)
+        #expect(Protobuf.fields(end).first { $0.number == 2 }?.varint == 15)
     }
 
     @Test
@@ -151,11 +151,11 @@ struct RemoteCommandTests {
         )
         let timer = try PolestarGRPC.climateTimer(schedule)
         let fields = Protobuf.fields(timer)
-        XCTAssertEqual(string(timer, field: 1), "timer-id")
-        XCTAssertEqual(fields.first { $0.number == 2 }?.varint, 2)
-        XCTAssertEqual(fields.first { $0.number == 4 }?.varint, 1)
-        XCTAssertEqual(fields.first { $0.number == 5 }?.varint, 1)
-        XCTAssertEqual(fields.first { $0.number == 6 }?.data, Data([1, 3, 5]))
+        #expect(string(timer, field: 1) == "timer-id")
+        #expect(fields.first { $0.number == 2 }?.varint == 2)
+        #expect(fields.first { $0.number == 4 }?.varint == 1)
+        #expect(fields.first { $0.number == 5 }?.varint == 1)
+        #expect(fields.first { $0.number == 6 }?.data == Data([1, 3, 5]))
     }
 
     @Test
@@ -166,24 +166,24 @@ struct RemoteCommandTests {
         )
         do {
             _ = try PolestarGRPC.globalChargeTimer(schedule)
-            XCTFail("Expected invalid schedule rejection")
+            Issue.record("Expected invalid schedule rejection")
         } catch {
-            XCTAssertTrue(error is RemoteCommandError)
+            #expect(error is RemoteCommandError)
         }
     }
 
     @Test
     func testHonkHornCommandProperties() {
         let honk = RemoteCommand.honkHorn
-        XCTAssertEqual(honk.feature, .remoteHonkFlash)
-        XCTAssertEqual(honk.requiredCapability, .honkAndFlash)
-        XCTAssertEqual(honk.risk, .routine)
-        XCTAssertEqual(honk.identifier, "honk-horn")
-        XCTAssertFalse(honk.title.isEmpty)
+        #expect(honk.feature == .remoteHonkFlash)
+        #expect(honk.requiredCapability == .honkAndFlash)
+        #expect(honk.risk == .routine)
+        #expect(honk.identifier == "honk-horn")
+        #expect(!(honk.title.isEmpty))
     }
 
     @Test
-    func testHonkFlashWireRequests() {
+    func testHonkFlashWireRequests() throws {
         let honkAndFlash = PolestarGRPC.honkFlashRequest("VIN123", action: 0)
         let honkOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 1)
         let flashOnly = PolestarGRPC.honkFlashRequest("VIN123", action: 2)
@@ -192,23 +192,28 @@ struct RemoteCommandTests {
         let hoFields = Protobuf.fields(honkOnly)
         let foFields = Protobuf.fields(flashOnly)
 
-        XCTAssertEqual(hfFields.first { $0.number == 2 }?.varint, 0)
-        XCTAssertEqual(hoFields.first { $0.number == 2 }?.varint, 1)
-        XCTAssertEqual(foFields.first { $0.number == 2 }?.varint, 2)
+        #expect(hfFields.first { $0.number == 2 }?.varint == 0)
+        #expect(hoFields.first { $0.number == 2 }?.varint == 1)
+        #expect(foFields.first { $0.number == 2 }?.varint == 2)
+
+        // Folded from RequestConstructionTests (TESTS-13): the honk/flash envelope must
+        // carry the target VIN in its inner field 1.
+        let flashEnvelope = try #require(foFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        #expect(string(flashEnvelope, field: 1) == "VIN123")
     }
 
     @Test
     @MainActor
     func testRequireBiometricsPreference() throws {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let store = PreferencesStore(defaults: defaults)
 
         store.requireBiometricsForRemoteControls = true
-        XCTAssertTrue(store.requireBiometricsForRemoteControls)
+        #expect(store.requireBiometricsForRemoteControls)
         store.requireBiometricsForRemoteControls = false
-        XCTAssertFalse(store.requireBiometricsForRemoteControls)
+        #expect(!(store.requireBiometricsForRemoteControls))
     }
 
     @Test
@@ -221,8 +226,7 @@ struct RemoteCommandTests {
             .openWindows, .closeWindows, .flashLights, .honkAndFlash, .honkHorn
         ]
         for command in needsAuth {
-            XCTAssertTrue(command.requiresCommandClientAuthorization,
-                          "\(command.identifier) is dispatched via invocation.InvocationService and needs the command client")
+            #expect(command.requiresCommandClientAuthorization, "\(command.identifier) is dispatched via invocation.InvocationService and needs the command client")
         }
 
         let primaryTokenOnly: [RemoteCommand] = [
@@ -235,8 +239,7 @@ struct RemoteCommandTests {
             .lockReducedGuard
         ]
         for command in primaryTokenOnly {
-            XCTAssertFalse(command.requiresCommandClientAuthorization,
-                           "\(command.identifier) is accepted with the primary session token")
+            #expect(!(command.requiresCommandClientAuthorization), "\(command.identifier) is accepted with the primary session token")
         }
     }
 
@@ -246,11 +249,11 @@ struct RemoteCommandTests {
             _ = try await PolestarGRPC().executeRemoteCommand(
                 .lock, vin: "YSMTEST", accessToken: "web-token", commandToken: nil
             )
-            XCTFail("An invocation command must be rejected before dispatch without a command-client token")
+            Issue.record("An invocation command must be rejected before dispatch without a command-client token")
         } catch RemoteCommandError.rejected(let message) {
-            XCTAssertNotNil(message)
+            #expect(message != nil)
         } catch {
-            XCTFail("Unexpected error: \(error)")
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
@@ -260,18 +263,18 @@ struct RemoteCommandTests {
         let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
         let keychain = KeychainStore(service: service)
         let suiteName = "HisingenTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer {
             try? keychain.deleteCommandSessionToken()
             defaults.removePersistentDomain(forName: suiteName)
         }
         let store = PreferencesStore(defaults: defaults, keychain: keychain)
 
-        XCTAssertFalse(store.hasPolestarCommandAuthorization)
+        #expect(!(store.hasPolestarCommandAuthorization))
         try keychain.saveCommandSessionToken("cmd-refresh-token")
-        XCTAssertTrue(store.hasPolestarCommandAuthorization)
+        #expect(store.hasPolestarCommandAuthorization)
         try keychain.deleteCommandSessionToken()
-        XCTAssertFalse(store.hasPolestarCommandAuthorization)
+        #expect(!(store.hasPolestarCommandAuthorization))
     }
 
     @Test
@@ -287,12 +290,12 @@ struct RemoteCommandTests {
             weekdays: [.monday, .wednesday, .friday],
             isActive: true
         )
-        XCTAssertEqual(climateSchedule.kind, .climate)
-        XCTAssertEqual(climateSchedule.startHour, 8)
-        XCTAssertEqual(climateSchedule.startMinute, 15)
-        XCTAssertEqual(climateSchedule.weekdays.count, 3)
-        XCTAssertTrue(climateSchedule.isActive)
-        XCTAssertEqual(climateSchedule.backendID, "timer-123")
+        #expect(climateSchedule.kind == .climate)
+        #expect(climateSchedule.startHour == 8)
+        #expect(climateSchedule.startMinute == 15)
+        #expect(climateSchedule.weekdays.count == 3)
+        #expect(climateSchedule.isActive)
+        #expect(climateSchedule.backendID == "timer-123")
 
         let chargeSchedule = VehicleSchedule(
             backendID: nil,
@@ -305,10 +308,10 @@ struct RemoteCommandTests {
             weekdays: [.saturday, .sunday],
             isActive: true
         )
-        XCTAssertEqual(chargeSchedule.kind, .globalCharging)
-        XCTAssertEqual(chargeSchedule.startHour, 23)
-        XCTAssertEqual(chargeSchedule.endHour, 6)
-        XCTAssertEqual(chargeSchedule.endMinute, 30)
+        #expect(chargeSchedule.kind == .globalCharging)
+        #expect(chargeSchedule.startHour == 23)
+        #expect(chargeSchedule.endHour == 6)
+        #expect(chargeSchedule.endMinute == 30)
     }
 
     @Test
@@ -316,30 +319,30 @@ struct RemoteCommandTests {
         let start = RemoteCommand.startEngine(runtimeMinutes: 15)
         let stop = RemoteCommand.stopEngine
 
-        XCTAssertTrue(start.isImplemented(by: .volvo))
-        XCTAssertFalse(start.isImplemented(by: .polestar))
-        XCTAssertTrue(stop.isImplemented(by: .volvo))
-        XCTAssertFalse(stop.isImplemented(by: .polestar))
+        #expect(start.isImplemented(by: .volvo))
+        #expect(!(start.isImplemented(by: .polestar)))
+        #expect(stop.isImplemented(by: .volvo))
+        #expect(!(stop.isImplemented(by: .polestar)))
 
-        XCTAssertEqual(start.feature, .remoteClimate)
-        XCTAssertEqual(stop.feature, .remoteClimate)
-        XCTAssertEqual(start.requiredCapability, .engineStart)
-        XCTAssertEqual(stop.requiredCapability, .engineStart)
-        XCTAssertEqual(start.risk, .securitySensitive)
-        XCTAssertEqual(stop.risk, .routine)
-        XCTAssertEqual(start.identifier, "start-engine")
-        XCTAssertEqual(stop.identifier, "stop-engine")
+        #expect(start.feature == .remoteClimate)
+        #expect(stop.feature == .remoteClimate)
+        #expect(start.requiredCapability == .engineStart)
+        #expect(stop.requiredCapability == .engineStart)
+        #expect(start.risk == .securitySensitive)
+        #expect(stop.risk == .routine)
+        #expect(start.identifier == "start-engine")
+        #expect(stop.identifier == "stop-engine")
     }
 
     @Test
     func testVolvoReducedGuardCommandAttributes() {
         let command = RemoteCommand.lockReducedGuard
-        XCTAssertTrue(command.isImplemented(by: .volvo))
-        XCTAssertFalse(command.isImplemented(by: .polestar))
-        XCTAssertEqual(command.feature, .remoteLocks)
-        XCTAssertEqual(command.requiredCapability, .reducedGuardLock)
-        XCTAssertEqual(command.identifier, "lock-reduced-guard")
-        XCTAssertEqual(command.risk, .routine)
+        #expect(command.isImplemented(by: .volvo))
+        #expect(!(command.isImplemented(by: .polestar)))
+        #expect(command.feature == .remoteLocks)
+        #expect(command.requiredCapability == .reducedGuardLock)
+        #expect(command.identifier == "lock-reduced-guard")
+        #expect(command.risk == .routine)
     }
 
     @Test
@@ -375,7 +378,7 @@ struct RemoteCommandTests {
             dataWarnings: []
         )
 
-        XCTAssertNil(state.maintenance.warranty)
+        #expect(state.maintenance.warranty == nil)
 
         var polestarState = VehicleState(
             batteryPercentage: 75.0,
@@ -409,47 +412,54 @@ struct RemoteCommandTests {
         )
         polestarState.identity.structureWeek = "202245"
 
-        XCTAssertNil(polestarState.maintenance.warranty)
+        #expect(polestarState.maintenance.warranty == nil)
     }
 
     @Test
     func testLockAndUnlockWireRequests() throws {
         let lockData = PolestarGRPC.lockRequest("VIN123")
         let lockFields = Protobuf.fields(lockData)
-        let lockEnvelope = try XCTUnwrap(lockFields.first { $0.number == 1 && $0.wire == 2 }?.data)
-        XCTAssertEqual(string(lockEnvelope, field: 1), "VIN123")
-        XCTAssertEqual(lockFields.first { $0.number == 2 }?.varint, 0)
+        let lockEnvelope = try #require(lockFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        #expect(string(lockEnvelope, field: 1) == "VIN123")
+        #expect(lockFields.first { $0.number == 2 }?.varint == 0)
 
         let unlockAllData = PolestarGRPC.unlockRequest("VIN123", trunkOnly: false)
         let unlockAllFields = Protobuf.fields(unlockAllData)
-        let unlockAllEnvelope = try XCTUnwrap(unlockAllFields.first { $0.number == 1 && $0.wire == 2 }?.data)
-        XCTAssertEqual(string(unlockAllEnvelope, field: 1), "VIN123")
-        XCTAssertEqual(unlockAllFields.first { $0.number == 2 }?.varint, 0)
+        let unlockAllEnvelope = try #require(unlockAllFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        #expect(string(unlockAllEnvelope, field: 1) == "VIN123")
+        #expect(unlockAllFields.first { $0.number == 2 }?.varint == 0)
 
         let unlockTrunkData = PolestarGRPC.unlockRequest("VIN123", trunkOnly: true)
         let unlockTrunkFields = Protobuf.fields(unlockTrunkData)
-        let unlockTrunkEnvelope = try XCTUnwrap(unlockTrunkFields.first { $0.number == 1 && $0.wire == 2 }?.data)
-        XCTAssertEqual(string(unlockTrunkEnvelope, field: 1), "VIN123")
-        XCTAssertEqual(unlockTrunkFields.first { $0.number == 2 }?.varint, 1)
+        let unlockTrunkEnvelope = try #require(unlockTrunkFields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        #expect(string(unlockTrunkEnvelope, field: 1) == "VIN123")
+        #expect(unlockTrunkFields.first { $0.number == 2 }?.varint == 1)
     }
 
     @Test
     func testWindowControlAndPreCleaningWireRequests() throws {
         let openData = PolestarGRPC.windowRequest("VIN123", action: 1)
         let openFields = Protobuf.fields(openData)
-        XCTAssertEqual(openFields.first { $0.number == 2 }?.varint, 1)
+        #expect(openFields.first { $0.number == 2 }?.varint == 1)
 
         let closeData = PolestarGRPC.windowRequest("VIN123", action: 2)
         let closeFields = Protobuf.fields(closeData)
-        XCTAssertEqual(closeFields.first { $0.number == 2 }?.varint, 2)
+        #expect(closeFields.first { $0.number == 2 }?.varint == 2)
 
         let startPreclean = PolestarGRPC.preCleaningRequest(vin: "VIN123", start: true)
         let startFields = Protobuf.fields(startPreclean)
-        XCTAssertEqual(startFields.first { $0.number == 2 }?.varint, 1)
+        #expect(startFields.first { $0.number == 2 }?.varint == 1)
 
         let stopPreclean = PolestarGRPC.preCleaningRequest(vin: "VIN123", start: false)
         let stopFields = Protobuf.fields(stopPreclean)
-        XCTAssertEqual(stopFields.first { $0.number == 2 }?.varint, 0)
+        #expect(stopFields.first { $0.number == 2 }?.varint == 0)
+
+        // Folded from RequestConstructionTests (TESTS-13): window and pre-clean envelopes
+        // must carry the target VIN in their inner field 1.
+        for fields in [openFields, closeFields, startFields, stopFields] {
+            let envelope = try #require(fields.first { $0.number == 1 && $0.wire == 2 }?.data)
+            #expect(string(envelope, field: 1) == "VIN123")
+        }
     }
 
     @Test
@@ -458,13 +468,13 @@ struct RemoteCommandTests {
         payload.append(Protobuf.intField(2, 90))
         let chronosData = PolestarGRPC.chronosRequest("VIN123", payload: payload)
         let fields = Protobuf.fields(chronosData)
-        let envelope = try XCTUnwrap(fields.first { $0.number == 1 && $0.wire == 2 }?.data)
+        let envelope = try #require(fields.first { $0.number == 1 && $0.wire == 2 }?.data)
         let envFields = Protobuf.fields(envelope)
-        XCTAssertFalse(string(envelope, field: 1)?.isEmpty ?? true)
-        XCTAssertEqual(string(envelope, field: 2), "VIN123")
-        XCTAssertEqual(string(envelope, field: 3), "RCS")
-        XCTAssertNotNil(envFields.first { $0.number == 4 && $0.wire == 2 })
-        XCTAssertEqual(fields.first { $0.number == 2 }?.varint, 90)
+        #expect(!(string(envelope, field: 1)?.isEmpty ?? true))
+        #expect(string(envelope, field: 2) == "VIN123")
+        #expect(string(envelope, field: 3) == "RCS")
+        #expect(envFields.first { $0.number == 4 && $0.wire == 2 } != nil)
+        #expect(fields.first { $0.number == 2 }?.varint == 90)
     }
 
     @Test
@@ -473,15 +483,15 @@ struct RemoteCommandTests {
         validInner.append(Protobuf.intField(1, 32))
         var validBody = Data()
         validBody.append(Protobuf.messageField(3, validInner))
-        XCTAssertEqual(PolestarGRPC.fetchAmpLimitResponse(validBody), 32)
+        #expect(PolestarGRPC.fetchAmpLimitResponse(validBody) == 32)
 
         var invalidInner = Data()
         invalidInner.append(Protobuf.intField(1, 100))
         var invalidBody = Data()
         invalidBody.append(Protobuf.messageField(3, invalidInner))
-        XCTAssertNil(PolestarGRPC.fetchAmpLimitResponse(invalidBody))
+        #expect(PolestarGRPC.fetchAmpLimitResponse(invalidBody) == nil)
 
-        XCTAssertNil(PolestarGRPC.fetchAmpLimitResponse(Data()))
+        #expect(PolestarGRPC.fetchAmpLimitResponse(Data()) == nil)
     }
 
     @Test
@@ -492,34 +502,36 @@ struct RemoteCommandTests {
         setAmpBody.append(Protobuf.stringField(2, "YSMVSEDE6PL147228"))
         setAmpBody.append(Protobuf.intField(3, 1))
         let setAmpResult = try PolestarGRPC.chronosResult(setAmpBody, statusField: 3)
-        XCTAssertEqual(setAmpResult.outcome, .accepted)
+        #expect(setAmpResult.outcome == .accepted)
 
         // StartOverrideChargeTimer returns status = 2 at top-level field 1 (varint)
         let chargeNowBody = Data([0x08, 0x02])
         let fields = Protobuf.fields(chargeNowBody)
         let status = fields.first(where: { $0.number == 1 && $0.wire == 0 })?.varint
-        XCTAssertEqual(status, 2)
+        #expect(status == 2)
     }
 
     @Test
     func testCommandErrorStatusMapping() {
         let err3 = PolestarGRPC.commandError(status: "3", message: "relativeTime%20out%20of%20bounds", path: "SchedulerService/Schedule")
         guard case RemoteCommandError.rejected(let msg3) = err3 else {
-            return XCTFail("Expected rejected error for status 3")
+            Issue.record("Expected rejected error for status 3")
+            return
         }
-        XCTAssertEqual(msg3, "relativeTime out of bounds")
+        #expect(msg3 == "relativeTime out of bounds")
 
         let err12 = PolestarGRPC.commandError(status: "12", message: nil, path: "ota_mobcache.SchedulerService/Download")
-        XCTAssertTrue(err12 is PolestarError)
+        #expect(err12 is PolestarError)
 
         let err14 = PolestarGRPC.commandError(status: "14", message: nil, path: "services.vehiclestates.battery.BatteryService")
-        XCTAssertTrue(err14 is PolestarError)
+        #expect(err14 is PolestarError)
 
         let err16 = PolestarGRPC.commandError(status: "16", message: nil, path: "invocation.InvocationService/Lock")
         guard case RemoteCommandError.rejected(let msg16) = err16 else {
-            return XCTFail("Expected rejected error for status 16")
+            Issue.record("Expected rejected error for status 16")
+            return
         }
-        XCTAssertTrue(msg16?.contains("mobile app") == true)
+        #expect(msg16?.contains("mobile app") == true)
     }
 
     @Test
@@ -604,9 +616,109 @@ struct RemoteCommandTests {
         let merged = staleIncoming.mergingLastKnown(from: previous, features: features)
 
         // Should preserve optimistic active climate and charge target during the 90s grace window
-        XCTAssertEqual(merged.climateStatus?.activity, .heating)
-        XCTAssertEqual(merged.energy.targetPercentage, 70)
-        XCTAssertEqual(merged.energy.currentAmps, 16)
+        #expect(merged.climateStatus?.activity == .heating)
+        #expect(merged.energy.targetPercentage == 70)
+        #expect(merged.energy.currentAmps == 16)
+    }
+
+    @Test
+    func testStartingTelemetryReplacesOptimisticClimateDuringGracePeriod() {
+        // Regression: the car sits in the backend's STARTING state after a start command,
+        // and that reading must count as a live session — replacing the synthesized
+        // optimistic heating instead of being discarded as a non-running state, while a
+        // stale idle frame still cannot revert the lock.
+        var previous = VehicleState(
+            batteryPercentage: 80.0,
+            rangeKm: 350,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 70,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: 16,
+            chargingVoltageVolts: nil,
+            chargingType: .unknown,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2023",
+            registrationNo: "ZCJ06G",
+            vin: "YSMVSEDE6PL147228",
+            ownerFirstName: "Nico",
+            odometerKm: 30000,
+            daysToService: nil,
+            distanceToServiceKm: nil,
+            serviceWarning: false,
+            fluidWarnings: [],
+            climateStatus: VehicleClimateStatus(
+                activity: .heating,
+                timeRemainingMinutes: 30,
+                timerTriggered: false,
+                interiorTemperatureCelsius: 18.0,
+                requestedTemperatureCelsius: 22.0
+            ),
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: Date(),
+            dataWarnings: []
+        )
+        previous.commandState.optimisticLockUntil = Date().addingTimeInterval(90)
+
+        func incoming(activity: ClimateActivity) -> VehicleState {
+            VehicleState(
+                batteryPercentage: 80.0,
+                rangeKm: 350,
+                chargingState: .idle,
+                estimatedChargingTimeToFullMinutes: nil,
+                chargeTargetPercentage: 70,
+                chargingPowerWatts: nil,
+                chargingCurrentAmps: 16,
+                chargingVoltageVolts: nil,
+                chargingType: .unknown,
+                chargerConnection: .disconnected,
+                availability: .available,
+                modelName: "Polestar 2",
+                modelYear: "2023",
+                registrationNo: "ZCJ06G",
+                vin: "YSMVSEDE6PL147228",
+                ownerFirstName: "Nico",
+                odometerKm: 30000,
+                daysToService: nil,
+                distanceToServiceKm: nil,
+                serviceWarning: false,
+                fluidWarnings: [],
+                climateStatus: VehicleClimateStatus(
+                    activity: activity,
+                    timeRemainingMinutes: activity == .starting ? 30 : nil,
+                    timerTriggered: false,
+                    interiorTemperatureCelsius: 18.0,
+                    requestedTemperatureCelsius: 22.0
+                ),
+                imageData: nil,
+                fetchedAt: Date(),
+                vehicleReportedAt: Date(),
+                dataWarnings: []
+            )
+        }
+
+        var features = FeatureSelection.default
+        features.set(.climateStatus, enabled: true)
+
+        let started = incoming(activity: .starting).mergingLastKnown(from: previous, features: features)
+        #expect(started.climateStatus?.activity == .starting)
+        #expect(started.isClimateActive)
+
+        let staleIdle = incoming(activity: .idle).mergingLastKnown(from: started, features: features)
+        #expect(staleIdle.climateStatus?.activity == .starting)
+    }
+
+    @Test
+    func testClimateActivitySessionClassification() {
+        for active: ClimateActivity in [.active, .starting, .heating, .cooling, .ventilating] {
+            #expect(active.isActiveSession, "\(active) must count as a running session")
+        }
+        for inactive: ClimateActivity in [.unknown, .idle] {
+            #expect(!inactive.isActiveSession, "\(inactive) must not count as a running session")
+        }
     }
 
     private func invocation(status: Int) -> Data {

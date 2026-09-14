@@ -6,6 +6,7 @@ struct OTAControlsCard: View {
     let gate: ControlsCommandGate
 
     @State private var otaScheduleDelayMinutes: Int = 120
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Card {
@@ -17,9 +18,14 @@ struct OTAControlsCard: View {
                 )
                 gate.dimReason(gate.cardAvailability([.installOTANow]))
                 if let software = state.softwareInfo {
-                    otaStatusLine(software)
-                    otaProgressLine(software)
-                    otaActions(software)
+                    // One keyed animation drives the whole status morph: symbol
+                    // replace-crossfade, progress line and action groups in/out.
+                    Group {
+                        otaStatusLine(software)
+                        otaProgressLine(software)
+                        otaActions(software)
+                    }
+                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: software.state)
                 } else {
                     otaStatusRow(
                         symbol: "questionmark.circle.fill",
@@ -30,6 +36,7 @@ struct OTAControlsCard: View {
             }
         }
         .opacity(gate.cardOpacity([.installOTANow]))
+        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([.installOTANow]))
     }
 
     @ViewBuilder
@@ -117,6 +124,7 @@ struct OTAControlsCard: View {
                 }
                 Spacer()
             }
+            .transition(.opacity)
         }
     }
 
@@ -133,6 +141,7 @@ struct OTAControlsCard: View {
                 )
                 otaScheduleRow
             }
+            .transition(.opacity)
         case .scheduled:
             VStack(spacing: 6) {
                 otaButton(
@@ -148,6 +157,7 @@ struct OTAControlsCard: View {
                     prominent: false
                 )
             }
+            .transition(.opacity)
         case .available, .downloading, .installing, .failed, .completed, .unknown:
             EmptyView()
         }
@@ -179,7 +189,9 @@ struct OTAControlsCard: View {
 
     private func otaStatusRow(symbol: String, tint: Color, text: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol).foregroundStyle(tint)
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             Text(text)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(HisingenTheme.ink)

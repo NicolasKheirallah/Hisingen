@@ -8,20 +8,18 @@ import Testing
 struct StreamPolicyTests {
     private func state(charging: Bool, available: VehicleAvailability = .available,
                        climateActive: Bool = false) -> VehicleState {
-        VehicleState(
-            batteryPercentage: 60, rangeKm: 300,
-            chargingState: charging ? .charging : .idle,
-            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: 80,
-            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+        // TESTS-12: thin wrapper over the shared TestSupport fixture builder.
+        vehicle(
+            vin: "YS2P2000000000001", battery: 60, rangeKm: 300,
+            state: charging ? .charging : .idle,
+            connection: charging ? .connected : .disconnected,
             chargingType: charging ? .ac : .none,
-            chargerConnection: charging ? .connected : .disconnected,
             availability: available,
-            modelName: "Polestar 2", modelYear: nil, registrationNo: nil,
-            vin: "YS2P2000000000001", ownerFirstName: nil, odometerKm: nil,
+            modelYear: nil,
             climateStatus: climateActive
                 ? VehicleClimateStatus(activity: .active, timeRemainingMinutes: nil, timerTriggered: false)
                 : nil,
-            imageData: nil, fetchedAt: Date(), vehicleReportedAt: nil, dataWarnings: []
+            fetchedAt: Date(), reportedAt: nil
         )
     }
 
