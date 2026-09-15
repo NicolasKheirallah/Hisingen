@@ -42,42 +42,65 @@ struct OpeningChipView: View {
         }
     }
 
+    private var chipFill: Color {
+        if isHovered || isHighlighted {
+            return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.06)
+        }
+        return isOpen ? HisingenTheme.semanticWarning.opacity(0.07) : Color.primary.opacity(0.03)
+    }
+
+    private var chipStroke: Color {
+        if isHovered || isHighlighted {
+            return isOpen ? HisingenTheme.semanticWarning.opacity(0.6) : HisingenTheme.accent.opacity(0.5)
+        }
+        return isOpen ? HisingenTheme.semanticWarning.opacity(0.3) : Color.primary.opacity(0.04)
+    }
+
+    private var symbolView: some View {
+        Image(systemName: symbol)
+            .hisType(.micro)
+            .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : Color.secondary)
+            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+            .frame(width: 12)
+    }
+
+    private var titleView: some View {
+        Text(shortTitle)
+            .hisType(.caption, weight: .medium)
+            .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.9)
+    }
+
+    private var statusDot: some View {
+        Circle()
+            .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
+            .frame(width: 5, height: 5)
+            .opacity(dotBreathing ? 0.6 : 1)
+            .animation(reduceMotion ? nil : (isOpen ? Motion.livePulse : Motion.interaction), value: dotBreathing)
+    }
+
+    private var chipContent: some View {
+        HStack(spacing: 5) {
+            symbolView
+            titleView
+            Spacer(minLength: 2)
+            statusDot
+        }
+    }
+
     var body: some View {
         let active = isHovered || isHighlighted
-        HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .hisType(.micro)
-                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : .secondary)
-                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                .frame(width: 12)
-            Text(shortTitle)
-                .hisType(.caption, weight: .medium)
-                .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-            Spacer(minLength: 2)
-            Circle()
-                .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
-                .frame(width: 5, height: 5)
-                .opacity(dotBreathing ? 0.6 : 1)
-                // Breathe only while open – closing re-targets with a
-                // non-repeating animation so the pulse cannot outlive the door.
-                .animation(reduceMotion ? nil : (isOpen ? Motion.livePulse : Motion.interaction), value: dotBreathing)
-        }
+        chipContent
         .padding(.horizontal, 6)
         .padding(.vertical, 4.5)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(active ? (isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.06)) : (isOpen ? HisingenTheme.semanticWarning.opacity(0.07) : Color.primary.opacity(0.03)))
+                .fill(chipFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(
-                    active
-                        ? (isOpen ? HisingenTheme.semanticWarning.opacity(0.6) : HisingenTheme.accent.opacity(0.5))
-                        : (isOpen ? HisingenTheme.semanticWarning.opacity(0.3) : Color.primary.opacity(0.04)),
-                    lineWidth: active ? 1.0 : 0.5
-                )
+                .stroke(chipStroke, lineWidth: active ? 1.0 : 0.5)
         )
         .scaleEffect(active ? 1.02 : 1.0)
         // Open/close recolors icon, label and dot; the hover animation below
@@ -347,37 +370,83 @@ struct TirePillView: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        let warningState = tyre?.warning ?? TyrePressureWarning.unknown
-        let attention = warningState.needsAttention
-        let pressureText = tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
-        let unreportedAllClear = treatsUnreportedAsHealthy && pressureText == nil && !attention
+    private var warningState: TyrePressureWarning { tyre?.warning ?? .unknown }
+    private var attention: Bool { warningState.needsAttention }
+    private var pressureText: String? {
+        tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
+    }
+    private var unreportedAllClear: Bool {
+        treatsUnreportedAsHealthy && pressureText == nil && !attention
             && (warningState == .unknown || warningState == .none)
+    }
+
+    private var measuredText: String? { pressureText }
+    private var inferredText: String? {
         // A measured kPa reading and an inferred warning level are different kinds of fact, and
         // they were concatenated into one semibold string that then animated through a proportional
         // font, so the digits reflowed on every update and the two could not be told apart. The
         // measurement is the reading; the level is the qualifier beneath it.
-        let measuredText: String? = pressureText
-        let inferredText: String? = {
-            switch (pressureText, attention) {
-            case (_?, true): return warningState.displayName
-            case (_?, false): return nil
-            case (nil, false) where unreportedAllClear: return TyrePressureWarning.none.displayName
-            default: return warningState.displayName
-            }
-        }()
-        let statusText = measuredText ?? inferredText ?? warningState.displayName
+        switch (pressureText, attention) {
+        case (_?, true): return warningState.displayName
+        case (_?, false): return nil
+        case (nil, false) where unreportedAllClear: return TyrePressureWarning.none.displayName
+        default: return warningState.displayName
+        }
+    }
+
+    private var statusText: String { measuredText ?? inferredText ?? warningState.displayName }
+
+    private var knownGood: Bool {
         // Green dot means "measured fine". A reading with no flag counts as good even when
         // the warning enum stayed unknown (e.g. a discovered pressure quadruple without
         // warning fields). On an iTPMS vehicle an unflagged tyre is presented as the
         // all-clear per the owner decision above. Only genuinely unreported tyres on a
         // pressure-reporting vehicle, or a reported sensor fault, stay muted.
-        let knownGood = !attention && (pressureText != nil || unreportedAllClear)
-        let statusColor: Color = attention
+        !attention && (pressureText != nil || unreportedAllClear)
+    }
+
+    private var statusColor: Color {
+        attention
             ? HisingenTheme.tyreWarningColor(warningState)
             : (knownGood ? HisingenTheme.semanticGood : Color.secondary)
-        let activeHover = isHovered || isHighlighted
+    }
 
+    private var activeHover: Bool { isHovered || isHighlighted }
+
+    private var tireFill: Color {
+        Color.primary.opacity(activeHover ? 0.08 : 0.035)
+    }
+
+    private var tireStroke: Color {
+        if activeHover {
+            return attention ? statusColor.opacity(0.5) : HisingenTheme.accent.opacity(0.45)
+        }
+        return Color.primary.opacity(0.06)
+    }
+
+    private var measuredColor: Color {
+        if attention { return statusColor }
+        return knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted
+    }
+
+    private var readingView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let measuredText {
+                Text(measuredText)
+                    .hisType(.label, weight: .semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(measuredColor)
+                    .hisTelemetryValue(measuredText, reduceMotion: reduceMotion)
+            }
+            if let inferredText {
+                Text(inferredText)
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(attention ? statusColor : Color.secondary)
+            }
+        }
+    }
+
+    private var tireContent: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .hisType(.caption, weight: .medium)
@@ -388,38 +457,22 @@ struct TirePillView: View {
                     .frame(width: 6.5, height: 6.5)
                     .shadow(color: statusColor.opacity(activeHover ? 0.5 : 0), radius: 2)
                     .accessibilityHidden(true)
-                // A pressure reading that changes with the weather, inside a grid of four: a
-                // proportional face re-lays-out the row on every digit that changes width.
-                VStack(alignment: .leading, spacing: 0) {
-                    if let measuredText {
-                        Text(measuredText)
-                            .hisType(.label, weight: .semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(attention ? statusColor : (knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted))
-                            .hisTelemetryValue(measuredText, reduceMotion: reduceMotion)
-                    }
-                    if let inferredText {
-                        Text(inferredText)
-                            .hisType(.micro, weight: .medium)
-                            .foregroundStyle(attention ? statusColor : Color.secondary)
-                    }
-                }
+                readingView
             }
         }
+    }
+
+    var body: some View {
+        tireContent
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(activeHover ? Color.primary.opacity(0.08) : Color.primary.opacity(0.035))
+                .fill(tireFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(
-                    activeHover
-                        ? (attention ? statusColor.opacity(0.5) : HisingenTheme.accent.opacity(0.45))
-                        : Color.primary.opacity(0.06),
-                    lineWidth: activeHover ? 1.0 : 0.5
-                )
+                .stroke(tireStroke, lineWidth: activeHover ? 1.0 : 0.5)
         )
         .scaleEffect(activeHover ? 1.02 : 1.0)
         // Severity changes recolor the dot and rewrite the status line; the

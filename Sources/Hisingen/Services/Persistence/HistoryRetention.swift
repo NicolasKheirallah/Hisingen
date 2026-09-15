@@ -15,6 +15,16 @@ enum HistoryRetention {
     static let automaticInterval: TimeInterval = 7 * 86_400
     private static let lastRunKey = "last_automatic_history_prune"
 
+    // UserDefaults synchronizes access internally. Keep the injected suite together with
+    // the write that crosses the detached task boundary.
+    private struct PruneStamp: @unchecked Sendable {
+        let defaults: UserDefaults
+
+        func record(_ date: Date) {
+            defaults.set(date, forKey: lastRunKey)
+        }
+    }
+
     /// Prunes aged history if at least `automaticInterval` has elapsed since the last automatic
     /// run. The database work happens in a detached task and the run is stamped only after the
     /// prune succeeded, so a failed pass retries on the next launch instead of skipping
@@ -28,14 +38,11 @@ enum HistoryRetention {
            now.timeIntervalSince(last) < automaticInterval {
             return
         }
-        // UserDefaults is thread-safe but not statically Sendable, and the stamp must go
-        // through the caller-injected instance after the async prune. Rebind so the
-        // detached boundary accepts the hand-off (same pattern as the calendar EventStore).
-        nonisolated(unsafe) let defaults = defaults
+        let stamp = PruneStamp(defaults: defaults)
         Task.detached(priority: .utility) {
             do {
                 try database.pruneAgedHistoryOrThrow()
-                defaults.set(now, forKey: lastRunKey)
+                stamp.record(now)
             } catch {
                 AppLog.logger("history-retention").error(
                     "Automatic history prune failed; it will retry next launch: \(error, privacy: .public)")
