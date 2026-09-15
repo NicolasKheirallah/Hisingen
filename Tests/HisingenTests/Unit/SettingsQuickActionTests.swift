@@ -171,6 +171,8 @@ struct ContentDensityTests {
                                          customEnabled: false, customWidth: 0, customHeight: 0)
         #expect(layout.contentScale == 1)
         #expect(layout.logicalWidth == layout.width)
-        #expect(layout.logicalHeight == layout.height)
+        // Use an injected visible frame: reading `layout.height` asks NSScreen for the
+        // active display, which a package test runner has not initialized.
+        #expect(layout.clampedToVisibleFrame(1200) == layout.unclampedHeight)
     }
 }
