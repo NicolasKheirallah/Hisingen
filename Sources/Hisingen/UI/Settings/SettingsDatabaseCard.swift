@@ -1,22 +1,24 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// SQLite storage statistics, maintenance actions, and history exports — extracted from
+/// SQLite storage statistics, maintenance actions, and history exports – extracted from
 /// `SettingsView` so data-management UI lives beside the persistence layer it drives.
 @MainActor
 struct SettingsDatabaseCard: View {
     let state: VehicleState?
     let database: VehicleDatabase
     /// The tier the maintenance actions must drop alongside the rows. This is the app's cache,
-    /// not `CarImageCache.shared` — the two are different instances and dropping the wrong one
+    /// not `CarImageCache.shared` – the two are different instances and dropping the wrong one
     /// leaves erased artwork resident in memory.
     let imageCache: CarImageCache
     @Binding var persistLocationHistory: Bool
 
     @Environment(\.preferencesStore) private var preferences
 
-    @State private var vacuumed = false
-    @State private var pruned = false
+    /// True only for a few seconds after the action, so the acknowledgement is an acknowledgement
+    /// rather than a label that stays pinned until the next run.
+    @State private var justOptimised = false
+    @State private var justPruned = false
     @State private var isMaintaining = false
     @State private var showPruneConfirmation = false
     @State private var showLocationClearConfirmation = false
@@ -55,18 +57,20 @@ struct SettingsDatabaseCard: View {
                 KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
 
             HStack(spacing: 8) {
                 Image(systemName: "location.slash.fill")
-                    .font(.system(size: 12))
+                    .hisType(.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("Store precise location history"))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                     Text(L10n.text("Off by default. Live parking location still works, but coordinates are not written to history."))
-                        .font(.system(size: 9))
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -87,19 +91,21 @@ struct SettingsDatabaseCard: View {
                     .accessibilityLabel(L10n.text("Store precise location history"))
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
                 .padding(.vertical, 2)
 
             HStack(spacing: 8) {
                 Image(systemName: "clock.arrow.2.circlepath")
-                    .font(.system(size: 12))
+                    .hisType(.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("Erase local history on sign out"))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                     Text(L10n.text("Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session."))
-                        .font(.system(size: 9))
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -113,19 +119,21 @@ struct SettingsDatabaseCard: View {
                     .accessibilityLabel(L10n.text("Erase local history on sign out"))
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
                 .padding(.vertical, 2)
 
             HStack(spacing: 8) {
                 Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 12))
+                    .hisType(.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("High-volume sample retention"))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                     Text(L10n.text("Used by Prune Old Samples; charging summaries are retained longer."))
-                        .font(.system(size: 9))
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -141,7 +149,7 @@ struct SettingsDatabaseCard: View {
                 .accessibilityLabel(L10n.text("High-volume sample retention"))
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
                 .padding(.vertical, 2)
 
             VStack(spacing: 8) {
@@ -150,28 +158,28 @@ struct SettingsDatabaseCard: View {
                         runMaintenance(.vacuum)
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: vacuumed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                            Text(vacuumed ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
+                            Image(systemName: justOptimised ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                            Text(justOptimised ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .tint(vacuumed ? HisingenTheme.semanticGood : nil)
+                    .tint(justOptimised ? HisingenTheme.semanticGood : nil)
                     .disabled(isMaintaining)
 
                     Button {
                         showPruneConfirmation = true
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: pruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
-                            Text(pruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
+                            Image(systemName: justPruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+                            Text(justPruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .tint(pruned ? HisingenTheme.semanticGood : nil)
+                    .tint(justPruned ? HisingenTheme.semanticGood : nil)
                     .disabled(isMaintaining)
                 }
 
@@ -180,7 +188,7 @@ struct SettingsDatabaseCard: View {
                         ProgressView().controlSize(.small)
                         Text(L10n.text("Database maintenance in progress…"))
                     }
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
                     .transition(.opacity)
@@ -188,7 +196,7 @@ struct SettingsDatabaseCard: View {
 
                 if let feedback {
                     Label(feedback.message, systemImage: feedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 10, weight: .medium))
+                        .hisType(.caption, weight: .medium)
                         .foregroundStyle(feedback.isError ? Color.red : HisingenTheme.semanticGood)
                         .textSelection(.enabled)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -381,7 +389,7 @@ struct SettingsDatabaseCard: View {
             }
             // isMaintaining flips inside Task continuations without a transaction;
             // this binding is what crossfades the spinner row in and out.
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: isMaintaining)
+            .hisAnimation(Motion.stateChange, value: isMaintaining)
         }
     }
     .task {
@@ -410,7 +418,17 @@ struct SettingsDatabaseCard: View {
         isPresented: $showLocationClearConfirmation,
         titleVisibility: .visible
     ) {
-        Button(L10n.text("Turn Off & Clear Locations"), role: .destructive) {
+        // Three answers, not two. The only non-cancel option was deletion, so a reader who wanted
+        // to stop *recording* location while keeping what already exists had no path at all:
+        // destroy the data or stay opted in.
+        Button(L10n.text("Stop Storing, Keep Locations")) {
+            // The preference first, so the toggle's own `onChange` sees the effective value already
+            // off and does not re-open this dialog.
+            preferences.persistLocationHistory = false
+            persistLocationHistory = false
+            setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
+        }
+        Button(L10n.text("Stop Storing & Clear Locations"), role: .destructive) {
             runMaintenance(.clearLocations)
         }
         Button(L10n.text("Cancel"), role: .cancel) {}
@@ -464,8 +482,15 @@ struct SettingsDatabaseCard: View {
                 await loadStats()
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 withAnimation(reduceMotion ? nil : Motion.stateChange) {
-                    vacuumed = operation == .vacuum
-                    pruned = operation == .prune
+                    justOptimised = operation == .vacuum
+                    justPruned = operation == .prune
+                }
+                Task {
+                    try? await Task.sleep(for: .seconds(Motion.pulseDwell * 3))
+                    withAnimation(reduceMotion ? nil : Motion.stateChange) {
+                        justOptimised = false
+                        justPruned = false
+                    }
                 }
                 switch operation {
                 case .vacuum: setFeedback((L10n.text("Database optimization completed."), false))

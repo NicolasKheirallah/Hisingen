@@ -139,7 +139,7 @@ extension VolvoAPI {
 
         // Volvo publishes no software/OTA resource. The Connected Vehicle API v2 surface is
         // details, doors, windows, tyres, warnings, diagnostics, engine, engine-status, brakes,
-        // fuel, odometer, statistics, commands, command-accessibility — and the Energy and
+        // fuel, odometer, statistics, commands, command-accessibility – and the Energy and
         // Location APIs alongside it. None of them reports a firmware level or update state,
         // so there is nothing to show and nothing to invent.
         let software: VehicleSoftwareInfo? = nil
@@ -153,7 +153,7 @@ extension VolvoAPI {
         unavailable.mark(.tripMeters, when: features.contains(.tripMeters) && statistics == nil)
         unavailable.mark(.vehicleLocation, when: features.contains(.vehicleLocation) && vehicleLocation == nil)
         // Volvo has no weather or exterior-temperature resource in Connected Vehicle API v2
-        // (`/environment`, `/climatization-status` and every sibling spelling 404 — verified
+        // (`/environment`, `/climatization-status` and every sibling spelling 404 – verified
         // live), so `.vehicleWeather` is always unavailable for this provider.
         unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
         unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
@@ -210,7 +210,7 @@ extension VolvoAPI {
         let batteryPct: Double? = energy?.batteryChargeLevel?.value ?? fuel?.batteryChargeLevel?.value
         let rangeKm: Int? = energy?.rangeKm ?? statistics?.distanceToEmptyBatteryKm
         // `/energy/v2/state` reports `estimatedChargingTimeToTargetBatteryChargeLevel: 0` while
-        // parked/unplugged (verified live) — treat a non-positive estimate as "no estimate".
+        // parked/unplugged (verified live) – treat a non-positive estimate as "no estimate".
         let estMinutes: Int? = energy?.estTimeToTargetMinutes.flatMap { $0 > 0 ? $0 : nil }
         let targetPct: Int? = energy?.targetPercent
         let chargingWatts: Int? = energy?.chargingPowerWatts
@@ -264,7 +264,7 @@ extension VolvoAPI {
         }
 
         // Tyre pressure warnings live on `tyres[].warning`, not their own diagnostics field, so
-        // they must be folded into `vehicleWarnings`/`reportedWarnings` explicitly — otherwise
+        // they must be folded into `vehicleWarnings`/`reportedWarnings` explicitly – otherwise
         // `Notifier.warningLabels` (which only reads `healthDetails.warnings`) never sees a
         // flagged tyre and no notification fires even though the UI already shows it.
         let tyreReadings = tyres?.readings ?? []

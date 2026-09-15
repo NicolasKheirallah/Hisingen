@@ -43,7 +43,7 @@ final class UpdateController {
         }
     }
 
-    /// Manual "Check for Updates…" — a no-op when the updates feature is off.
+    /// Manual "Check for Updates…" – a no-op when the updates feature is off.
     func checkNow() {
         guard preferences.features.contains(.updateChecks) else { return }
         updateService.checkForUpdates()

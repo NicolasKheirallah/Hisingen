@@ -8,20 +8,37 @@ import UniformTypeIdentifiers
 @MainActor
 struct SettingsCapabilityMatrixCard: View {
     let state: VehicleState?
+    @Environment(\.preferencesStore) private var preferences
     @State private var capabilityFilter = CapabilityFilter.all
     @State private var exportFeedback: (message: String, isError: Bool)?
 
     @ViewBuilder
     var body: some View {
-        if let state {
+        if state == nil {
+            // The card rendered nothing at all with no vehicle, so searching "capability" scrolled
+            // to a heading with an absent card under it, and the reader was left to guess whether
+            // the section was missing, broken or empty. §16: a dead end says what happened.
+            UnavailableFeatureCard(
+                symbol: "checklist",
+                title: L10n.text("Vehicle Capability Matrix"),
+                color: .blue,
+                badge: L10n.text("No vehicle selected"),
+                message: L10n.text("Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one."),
+                state: .unavailable
+            )
+        } else if let state {
             let profile = state.capabilityProfile
             let items = VehicleCapability.displayed.filter { capabilityFilter.matches(profile.support(for: $0)) }
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
-                    Text(L10n.format("Capability assessment for %@ (%@)", state.identity.modelName ?? L10n.text("Vehicle"), state.identity.vin))
-                        .font(.system(size: 10.5))
+                    // This card printed the raw VIN, and named its export after it, on the screen
+                    // most likely to be screenshotted — defeating the setting whose own promise is
+                    // that it blurs the VIN "across the app".
+                    Text(L10n.format("Capability assessment for %@ (%@)", state.identity.modelName ?? L10n.text("Vehicle"), preferences.displayVIN(state.identity.vin)))
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
+                        .privacySensitive(preferences.privacyRedactionEnabled)
 
                     HStack(spacing: 8) {
                         Picker(L10n.text("Capability filter"), selection: $capabilityFilter) {
@@ -45,17 +62,17 @@ struct SettingsCapabilityMatrixCard: View {
 
                     if let exportFeedback {
                         Label(exportFeedback.message, systemImage: exportFeedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                            .font(.system(size: 9.5, weight: .medium))
+                            .hisType(.micro, weight: .medium)
                             .foregroundStyle(exportFeedback.isError ? Color.red : HisingenTheme.semanticGood)
                     }
 
                     // A degraded dashboard should explain itself here rather than only in the
-                    // unified log — the cached snapshot keeps very little telemetry, so cards
+                    // unified log – the cached snapshot keeps very little telemetry, so cards
                     // going quiet is otherwise indistinguishable from an unsupported vehicle.
                     if state.freshness.isCached {
                         degradedNotice(
                             symbol: "internaldrive",
-                            text: L10n.text("Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.")
+                            text: L10n.text("Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh.")
                         )
                     } else if !state.freshness.unavailableFeatures.isEmpty {
                         degradedNotice(
@@ -72,7 +89,7 @@ struct SettingsCapabilityMatrixCard: View {
                             let support = profile.support(for: cap)
                             HStack {
                                 Text(cap.title)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                     .foregroundStyle(HisingenTheme.ink)
                                 Spacer()
                                 let color: Color = {
@@ -91,15 +108,17 @@ struct SettingsCapabilityMatrixCard: View {
 
                     if items.isEmpty {
                         Text(L10n.text("No capabilities match this filter."))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 8)
                     }
 
                     Text(L10n.text("\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications."))
-                        .font(.system(size: 9))
+                        .hisType(.micro)
                         .foregroundStyle(.tertiary)
+                        .hisCaptionLeading()
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -109,10 +128,10 @@ struct SettingsCapabilityMatrixCard: View {
     private func degradedNotice(symbol: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 10))
+                .hisType(.caption)
                 .foregroundStyle(HisingenTheme.semanticWarning)
             Text(text)
-                .font(.system(size: 9.5))
+                .hisType(.micro)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
@@ -129,7 +148,7 @@ struct SettingsCapabilityMatrixCard: View {
         let csv = (["capability,support"] + rows).joined(separator: "\n") + "\n"
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "capabilities_\(state.identity.vin.prefix(8)).csv"
+        panel.nameFieldStringValue = "capabilities_\(preferences.exportVINComponent(state.identity.vin)).csv"
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {

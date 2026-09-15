@@ -186,7 +186,7 @@ struct GraphQLDecodingTests {
 
     @Test
     func vdmsAuthAndClientRejectionsBackOff_transientErrorsDoNot() {
-        // "Could not validate the accessToken" — the app-backend won't accept this token; a
+        // "Could not validate the accessToken" – the app-backend won't accept this token; a
         // day-long back-off, not a per-discovery retry.
         let authFail = PolestarError.graphQL([
             GraphQLServiceError(message: "Could not validate the accessToken",

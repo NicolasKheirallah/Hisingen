@@ -46,20 +46,21 @@ struct OpeningChipView: View {
         let active = isHovered || isHighlighted
         HStack(spacing: 5) {
             Image(systemName: symbol)
-                .font(.system(size: 9.5))
+                .hisType(.micro)
                 .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : .secondary)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .frame(width: 12)
             Text(shortTitle)
-                .font(.system(size: 10, weight: .medium))
+                .hisType(.caption, weight: .medium)
                 .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.ink)
                 .lineLimit(1)
+                .minimumScaleFactor(0.9)
             Spacer(minLength: 2)
             Circle()
                 .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
                 .frame(width: 5, height: 5)
                 .opacity(dotBreathing ? 0.6 : 1)
-                // Breathe only while open — closing re-targets with a
+                // Breathe only while open – closing re-targets with a
                 // non-repeating animation so the pulse cannot outlive the door.
                 .animation(reduceMotion ? nil : (isOpen ? Motion.livePulse : Motion.interaction), value: dotBreathing)
         }
@@ -81,8 +82,8 @@ struct OpeningChipView: View {
         .scaleEffect(active ? 1.02 : 1.0)
         // Open/close recolors icon, label and dot; the hover animation below
         // only owns the highlight, so this needs its own key.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: isOpen)
-        .animation(Motion.selection, value: active)
+        .hisAnimation(Motion.stateChange, value: isOpen)
+        .hisAnimation(Motion.selection, value: active)
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
@@ -163,7 +164,14 @@ struct DoorsAndOpeningsCardView: View {
 
                 VehicleSideProfileDoorsView(
                     openings: ext.openings,
-                    hoveredOpening: hoveredOpening
+                    hoveredOpening: hoveredOpening,
+                    // Two-way: hovering a chip lights the part, and hovering the part lights the
+                    // chip. The chip grid is the legend now rather than the only interface.
+                    onHoverOpening: { hoveredOpening = $0 },
+                    // A chip does nothing on a tap either, so pointing at the car does what
+                    // hovering a chip does: it holds the part and its chip lit together. Inventing
+                    // a second behaviour for the drawing would be the same defect in reverse.
+                    onSelectOpening: { hoveredOpening = $0 }
                 )
                 let readings = displayOrder.compactMap { reading(for: $0) }
                 let pairs = stride(from: 0, to: readings.count, by: 2).map {
@@ -186,13 +194,22 @@ struct DoorsAndOpeningsCardView: View {
         }
     }
 
+    /// Every opening the card can report, in the order it lists them.
+    ///
+    /// The fuel flap belongs here even though the side profile draws it in the same place as
+    /// the charge lid: the header counts everything in `itemsNeedingAttention`, so an opening
+    /// with no chip left the pill saying "1 Open" over a grid where every chip was closed.
+    /// Ordered to agree with the drawing above it: the side profile faces right, so the rear of
+    /// the car is on the left of the picture and the front is on the right. The grid used to run
+    /// front-then-rear, which meant a reader following the car left to right met its parts in the
+    /// reverse of the order they are listed in.
     private let displayOrder: [VehicleOpening] = [
-        .hood, .tailgate,
-        .frontLeftDoor, .frontRightDoor,
+        .tailgate, .hood,
         .rearLeftDoor, .rearRightDoor,
-        .frontLeftWindow, .frontRightWindow,
         .rearLeftWindow, .rearRightWindow,
-        .sunroof, .chargeLid
+        .frontLeftDoor, .frontRightDoor,
+        .frontLeftWindow, .frontRightWindow,
+        .sunroof, .chargeLid, .fuelFlap
     ]
 
     @ViewBuilder
@@ -218,7 +235,7 @@ struct TireStatusCardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Some vehicles only ever report a per-tyre warning level (OK/low/very low/high), never a
-    /// numeric kPa reading — indirect TPMS (iTPMS), inferred from wheel-speed-sensor imbalance,
+    /// numeric kPa reading – indirect TPMS (iTPMS), inferred from wheel-speed-sensor imbalance,
     /// as opposed to direct TPMS's physical per-wheel pressure sensor. This isn't brand-specific:
     /// it's true of Volvo's whole lineup *and* Polestar 2 (see `VehicleCapabilityProfile`'s
     /// `.tyrePressureValues` case for `.polestar2`, `.unavailable` for the same reason). Keyed on
@@ -232,7 +249,7 @@ struct TireStatusCardView: View {
     /// fine, green-with-caveat for partial reports, muted only when the provider said nothing
     /// at all on a pressure-reporting vehicle. In iTPMS mode (warning level without
     /// measurements) the owner decision for Polestar 2 is: an unflagged reading IS the
-    /// all-clear the system can give — the system only speaks up when it detects an issue —
+    /// all-clear the system can give – the system only speaks up when it detects an issue –
     /// so both the quiet and the flagged-free states render green and only a real flag
     /// turns the card warning-colored.
     private var summaryPill: (text: String, color: Color, symbol: String) {
@@ -270,17 +287,19 @@ struct TireStatusCardView: View {
                     Spacer()
                     Pill(text: summary.text, color: summary.color, symbol: summary.symbol)
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: summary.text)
+                        .hisAnimation(Motion.stateChange, value: summary.text)
                 }
 
                 if reportsWarningLevelOnly {
                     Text(L10n.text("This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading."))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                     Text(L10n.text("The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check."))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -334,14 +353,20 @@ struct TirePillView: View {
         let pressureText = tyre?.kilopascals.map { Format.pressure(kilopascals: $0, unit: preferences.pressureUnit) }
         let unreportedAllClear = treatsUnreportedAsHealthy && pressureText == nil && !attention
             && (warningState == .unknown || warningState == .none)
-        let statusText: String = {
+        // A measured kPa reading and an inferred warning level are different kinds of fact, and
+        // they were concatenated into one semibold string that then animated through a proportional
+        // font, so the digits reflowed on every update and the two could not be told apart. The
+        // measurement is the reading; the level is the qualifier beneath it.
+        let measuredText: String? = pressureText
+        let inferredText: String? = {
             switch (pressureText, attention) {
-            case (let pressure?, true): return "\(pressure) · \(warningState.displayName)"
-            case (let pressure?, false): return pressure
+            case (_?, true): return warningState.displayName
+            case (_?, false): return nil
             case (nil, false) where unreportedAllClear: return TyrePressureWarning.none.displayName
             default: return warningState.displayName
             }
         }()
+        let statusText = measuredText ?? inferredText ?? warningState.displayName
         // Green dot means "measured fine". A reading with no flag counts as good even when
         // the warning enum stayed unknown (e.g. a discovered pressure quadruple without
         // warning fields). On an iTPMS vehicle an unflagged tyre is presented as the
@@ -355,7 +380,7 @@ struct TirePillView: View {
 
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 10, weight: .medium))
+                .hisType(.caption, weight: .medium)
                 .foregroundStyle(.secondary)
             HStack(spacing: 5) {
                 Circle()
@@ -363,10 +388,22 @@ struct TirePillView: View {
                     .frame(width: 6.5, height: 6.5)
                     .shadow(color: statusColor.opacity(activeHover ? 0.5 : 0), radius: 2)
                     .accessibilityHidden(true)
-                Text(statusText)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(attention ? statusColor : (knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted))
-                    .hisTelemetryValue(statusText, reduceMotion: reduceMotion)
+                // A pressure reading that changes with the weather, inside a grid of four: a
+                // proportional face re-lays-out the row on every digit that changes width.
+                VStack(alignment: .leading, spacing: 0) {
+                    if let measuredText {
+                        Text(measuredText)
+                            .hisType(.label, weight: .semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(attention ? statusColor : (knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted))
+                            .hisTelemetryValue(measuredText, reduceMotion: reduceMotion)
+                    }
+                    if let inferredText {
+                        Text(inferredText)
+                            .hisType(.micro, weight: .medium)
+                            .foregroundStyle(attention ? statusColor : Color.secondary)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,14 +424,15 @@ struct TirePillView: View {
         .scaleEffect(activeHover ? 1.02 : 1.0)
         // Severity changes recolor the dot and rewrite the status line; the
         // hover animation below only owns the highlight.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: warningState)
-        .animation(Motion.selection, value: activeHover)
+        .hisAnimation(Motion.stateChange, value: warningState)
+        .hisAnimation(Motion.selection, value: activeHover)
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(statusText)")
+        .accessibilityValue(measuredText.map { "\($0), \(inferredText ?? "")" } ?? (inferredText ?? ""))
     }
 }
 
@@ -414,6 +452,9 @@ struct LocationCardView: View {
     let reverseGeocoder: ReverseGeocoder
 
     @State private var streetAddress: String? = nil
+    /// True while the reverse geocode is in flight, so the card can say it is looking rather than
+    /// looking empty.
+    @State private var isResolvingAddress = false
     @State private var copiedCoordinates = false
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -459,22 +500,36 @@ struct LocationCardView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(statusLine)
-                            .font(.system(size: 10, weight: .semibold))
+                            .hisType(.caption, weight: .semibold)
                             .foregroundStyle(isLive ? .secondary : HisingenTheme.semanticWarning)
                             .hisTelemetryValue(statusLine, reduceMotion: reduceMotion)
 
                         if let streetAddress, !streetAddress.isEmpty {
                             Text(streetAddress)
-                                .font(.system(size: 12, weight: .semibold))
+                                .hisType(.body, weight: .semibold)
                                 .foregroundStyle(HisingenTheme.ink)
                                 .lineLimit(2)
                                 .truncationMode(.tail)
                                 .transition(.opacity)
+                        } else if isResolvingAddress {
+                            // The geocoder resolves asynchronously and the card showed nothing at
+                            // all while it did, so the address simply appeared from nowhere with no
+                            // sign that anything was being looked up.
+                            HStack(spacing: 4) {
+                                ProgressView().controlSize(.mini)
+                                Text(L10n.text("Finding the address…"))
+                                    .hisType(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .transition(.opacity)
                         }
 
                         HStack(spacing: 5) {
+                            // One size whichever way the lookup went. It used to step from 11pt to
+                            // 10pt when the address arrived, so the line moved as a layout response
+                            // to a network result.
                             Text(String(format: "GPS: %.4f°, %.4f°", lat, lon))
-                                .font(.system(size: streetAddress != nil ? 10 : 11, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                                 .monospacedDigit()
                                 .foregroundStyle(streetAddress != nil ? .secondary : HisingenTheme.ink)
 
@@ -495,10 +550,10 @@ struct LocationCardView: View {
                             } label: {
                                 HStack(spacing: 2) {
                                     Image(systemName: copiedCoordinates ? "checkmark" : "doc.on.doc")
-                                        .font(.system(size: 9))
+                                        .hisType(.micro)
                                     if copiedCoordinates {
                                         Text(L10n.text("Copied"))
-                                            .font(.system(size: 9, weight: .semibold))
+                                            .hisType(.micro, weight: .semibold)
                                     }
                                 }
                                 .foregroundStyle(copiedCoordinates ? HisingenTheme.semanticGood : .secondary)
@@ -510,19 +565,19 @@ struct LocationCardView: View {
                         if let weather, let temp = weather.temperatureCelsius {
                             HStack(spacing: 4) {
                                 Image(systemName: "cloud.sun.fill")
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
                                     .foregroundStyle(.orange)
                                 Text(Format.temperature(celsius: temp, unit: preferences.temperatureUnit))
-                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .hisType(.micro, weight: .semibold)
                                     .foregroundStyle(HisingenTheme.ink)
                                 if let cond = weather.condition {
                                     Text("· \(L10n.text(cond))")
-                                        .font(.system(size: 9.5))
+                                        .hisType(.micro)
                                         .foregroundStyle(HisingenTheme.inkMuted)
                                 }
                                 if let hum = weather.relativeHumidity {
                                     Text("· \(hum)%")
-                                        .font(.system(size: 9.5))
+                                        .hisType(.micro)
                                         .foregroundStyle(.tertiary)
                                 }
                             }
@@ -532,11 +587,11 @@ struct LocationCardView: View {
                         if let speed, speed > 0 {
                             HStack(spacing: 6) {
                                 Text("\(L10n.text("Speed")): \(Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit))")
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
                                     .foregroundStyle(.secondary)
                                 if let heading {
                                     Text("· \(Int(heading))°")
-                                        .font(.system(size: 9.5))
+                                        .hisType(.micro)
                                         .foregroundStyle(.tertiary)
                                 }
                             }
@@ -546,12 +601,12 @@ struct LocationCardView: View {
                             HStack(spacing: 6) {
                                 if let altitude {
                                     Text(String(format: "%.0f m %@", altitude, L10n.text("elevation")))
-                                        .font(.system(size: 9.5))
+                                        .hisType(.micro)
                                         .foregroundStyle(.secondary)
                                 }
                                 if let accuracy {
                                     Text(String(format: "±%.1f m", accuracy))
-                                        .font(.system(size: 9.5))
+                                        .hisType(.micro)
                                         .foregroundStyle(.tertiary)
                                 }
                             }
@@ -576,7 +631,7 @@ struct LocationCardView: View {
                                 Image(systemName: "map.fill")
                                 Text(L10n.text("Open in Maps"))
                             }
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -591,7 +646,7 @@ struct LocationCardView: View {
                                 Image(systemName: "safari")
                                 Text(L10n.text("Google Maps"))
                             }
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
@@ -602,6 +657,8 @@ struct LocationCardView: View {
         // Keyed on the coordinates so live-telemetry moves re-geocode; the geocoder's
         // cache keeps repeats at the same spot cheap.
         .task(id: "\(lat),\(lon)") {
+            isResolvingAddress = true
+            defer { isResolvingAddress = false }
             streetAddress = await reverseGeocoder.geocode(latitude: lat, longitude: lon)
         }
     }

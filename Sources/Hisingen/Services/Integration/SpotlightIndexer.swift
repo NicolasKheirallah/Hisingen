@@ -4,7 +4,7 @@ import OSLog
 import UniformTypeIdentifiers
 
 /// Publishes the active vehicle's snapshot to system Spotlight so searching the car's name
-/// surfaces its state without opening Hisingen. Entirely local — the index lives on this Mac,
+/// surfaces its state without opening Hisingen. Entirely local – the index lives on this Mac,
 /// contains only what the dashboard already shows, and is wiped on sign-out.
 @MainActor
 enum SpotlightIndexer {
@@ -37,7 +37,7 @@ enum SpotlightIndexer {
         }
     }
 
-    /// Removes every Hisingen entry — used on sign-out so a signed-out vehicle never keeps
+    /// Removes every Hisingen entry – used on sign-out so a signed-out vehicle never keeps
     /// surfacing stale telemetry in search.
     static func removeAll() {
         guard CSSearchableIndex.isIndexingAvailable() else { return }

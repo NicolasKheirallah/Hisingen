@@ -22,17 +22,17 @@ struct EngineControlsCard: View {
                     )
                     Spacer()
                     engineStatus
-                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.fuelSystem.isEngineRunning)
+                        .hisAnimation(Motion.stateChange, value: state.fuelSystem.isEngineRunning)
                 }
-                gate.dimReason(gate.cardAvailability([startCommand]))
+                gate.dimReason(gate.liveAvailability([startCommand]))
 
                 Text(L10n.text("Starts combustion engine to precondition cabin temperature before departure."))
-                    .font(.system(size: 11))
+                    .hisType(.label)
                     .foregroundStyle(.secondary)
 
                 HStack {
                     Text(L10n.text("Runtime"))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Picker("", selection: $engineRuntimeMinutes) {
@@ -43,7 +43,13 @@ struct EngineControlsCard: View {
                     .pickerStyle(.segmented)
                     .controlSize(.small)
                     .frame(width: 170)
-                    .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning == true)
+                    .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning != false)
+                    // The pill above says "Status Unavailable" while this stays armed. Starting is
+                    // the safe direction so it stays available, but it says what it does not know
+                    // rather than looking as certain as the pill is honest.
+                    .help(state.fuelSystem.isEngineRunning == nil
+                          ? L10n.text("The vehicle has not reported whether the engine is running.")
+                          : L10n.text("Starts the engine."))
                     .onChange(of: engineRuntimeMinutes) { _, newValue in
                         gate.preferences.remoteEngineRuntimeMinutes = newValue
                     }
@@ -56,21 +62,21 @@ struct EngineControlsCard: View {
                         HStack(spacing: 5) {
                             Image(systemName: "flame.fill")
                             Text(L10n.format("Start Engine (%d min)", engineRuntimeMinutes))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                             gate.sendingOverlay(startCommand)
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
-                    .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning == true)
+                    .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning != false)
 
                     Button {
                         gate.send(.stopEngine)
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "stop.fill")
-                            Text(L10n.text("Stop Engine")).font(.system(size: 11, weight: .medium))
+                            Text(L10n.text("Stop Engine")).hisType(.label, weight: .medium)
                             gate.sendingOverlay(.stopEngine)
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
@@ -80,8 +86,8 @@ struct EngineControlsCard: View {
                 }
             }
         }
-        .opacity(gate.cardOpacity([startCommand]))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([startCommand]))
+        .opacity(gate.liveOpacity([startCommand]))
+        .hisAnimation(Motion.stateChange, value: gate.liveAvailability([startCommand]))
         .onAppear {
             engineRuntimeMinutes = gate.preferences.remoteEngineRuntimeMinutes
         }
@@ -100,7 +106,7 @@ struct EngineControlsCard: View {
                         if !reduceMotion { liveDotPulse = true }
                     }
                 Text(L10n.text("Engine Running"))
-                    .font(.system(size: 10, weight: .semibold))
+                    .hisType(.caption, weight: .semibold)
                     .foregroundStyle(HisingenTheme.semanticGood)
             }
             .padding(.horizontal, 7)
@@ -116,7 +122,7 @@ struct EngineControlsCard: View {
 
     private func statusPill(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .medium))
+            .hisType(.caption, weight: .medium)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)

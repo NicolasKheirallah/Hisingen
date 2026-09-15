@@ -2,8 +2,8 @@ import Foundation
 
 /// Turns a vehicle's telemetry rows into trips.
 ///
-/// Pure on purpose: the segmentation rules — how much movement counts as a journey, which
-/// deltas are nonsense, and how long a silence ends one — are testable without a database.
+/// Pure on purpose: the segmentation rules – how much movement counts as a journey, which
+/// deltas are nonsense, and how long a silence ends one – are testable without a database.
 /// `VehicleHistoryLedger.derivedTrips` fetches the rows and delegates here, so the SQL stays
 /// where it is and this stays a rule.
 enum TripSegmentation {
@@ -14,7 +14,7 @@ enum TripSegmentation {
     /// Telemetry this far apart starts a new trip.
     static let maximumGap: TimeInterval = 45 * 60
 
-    /// `records` must be in ascending timestamp order — the order a journey reads in.
+    /// `records` must be in ascending timestamp order – the order a journey reads in.
     static func trips(
         from records: [HistoricalTelemetryRecord],
         vin: String,
@@ -55,7 +55,7 @@ enum TripSegmentation {
 
         for (start, end) in zip(records, records.dropFirst()) {
             // Odometer first, then the trip meters, each accepted only inside the plausible
-            // band — a provider that reports one of the three badly still yields a distance.
+            // band – a provider that reports one of the three badly still yields a distance.
             let odometerDelta: Double? = {
                 guard let current = start.odometerKm, let next = end.odometerKm else { return nil }
                 return next - current

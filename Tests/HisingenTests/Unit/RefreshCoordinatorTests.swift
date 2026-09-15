@@ -114,7 +114,7 @@ private actor MockVehicleProvider: VehicleProviding {
 }
 
 /// Provider whose first restore succeeds; after `expireSession()` every fetch fails with an
-/// auth error until the coordinator restores again — mirroring a real token expiry.
+/// auth error until the coordinator restores again – mirroring a real token expiry.
 private actor RecoveryMockProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMTEST", title: "Test vehicle")]

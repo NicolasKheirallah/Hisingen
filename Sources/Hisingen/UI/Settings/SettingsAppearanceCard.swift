@@ -96,7 +96,7 @@ struct SettingsAppearanceCard: View {
                     CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
                     Spacer()
                     Text(L10n.format("%d Themes", AppTheme.allCases.count))
-                        .font(.system(size: 10, weight: .bold))
+                        .hisType(.caption, weight: .bold)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2.5)
                         .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
@@ -108,10 +108,12 @@ struct SettingsAppearanceCard: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Screenshot Privacy Mode"))
-                                .font(.system(size: 11, weight: .semibold))
+                                .hisType(.label, weight: .semibold)
                                 .foregroundStyle(HisingenTheme.ink)
                             Text(L10n.text("Blurs VIN, plate and coordinates across the app for safe sharing."))
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
+                                .hisCaptionLeading()
+                                .fixedSize(horizontal: false, vertical: true)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -122,14 +124,15 @@ struct SettingsAppearanceCard: View {
                             .accessibilityLabel(L10n.text("Screenshot Privacy Mode"))
                     }
                     .padding(.vertical, 2)
-
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Floating Charging Panel"))
-                                .font(.system(size: 11, weight: .semibold))
+                                .hisType(.label, weight: .semibold)
                                 .foregroundStyle(HisingenTheme.ink)
                             Text(L10n.text("Small always-on-top panel with charge progress while plugged in."))
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
+                                .hisCaptionLeading()
+                                .fixedSize(horizontal: false, vertical: true)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -142,7 +145,7 @@ struct SettingsAppearanceCard: View {
                     .padding(.vertical, 2)
 
                     Text(L10n.text("Mode"))
-                        .font(.system(size: 11, weight: .semibold))
+                        .hisType(.label, weight: .semibold)
                         .foregroundStyle(HisingenTheme.ink)
 
                     HStack(spacing: 8) {
@@ -157,9 +160,9 @@ struct SettingsAppearanceCard: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     Image(systemName: mode.symbol)
-                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                        .hisType(.label, weight: isModeSelected ? .semibold : .regular)
                                     Text(mode.title)
-                                        .font(.system(size: 11, weight: isModeSelected ? .semibold : .regular))
+                                        .hisType(.label, weight: isModeSelected ? .semibold : .regular)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
@@ -174,7 +177,7 @@ struct SettingsAppearanceCard: View {
                                 .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
                             }
                             .buttonStyle(.pressable)
-                            .withoutFocusRing()
+                            .accessibilityAddTraits(isModeSelected ? [.isSelected] : [])
                         }
                     }
                 }
@@ -183,12 +186,12 @@ struct SettingsAppearanceCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(L10n.text(supportsMultipleAngles ? "Vehicle Perspective" : "Vehicle Image"))
-                            .font(.system(size: 11, weight: .semibold))
+                            .hisType(.label, weight: .semibold)
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
                         if supportsMultipleAngles {
                             Text(carRenderAngle.title)
-                                .font(.system(size: 10, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -213,10 +216,11 @@ struct SettingsAppearanceCard: View {
                                 } label: {
                                     HStack(spacing: 5) {
                                         Image(systemName: angle.symbol)
-                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                            .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
                                         Text(angle.title)
-                                            .font(.system(size: 11, weight: isAngleSelected ? .semibold : .regular))
+                                            .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
                                             .lineLimit(1)
+                                            .minimumScaleFactor(0.9)
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
@@ -232,16 +236,16 @@ struct SettingsAppearanceCard: View {
                                     .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
                                 }
                                 .buttonStyle(.pressable)
-                                .withoutFocusRing()
+                                .accessibilityAddTraits(isAngleSelected ? [.isSelected] : [])
                             }
                         }
                     }
                 }
 
-                Divider().opacity(0.4)
+                Divider().opacity(HisingenTheme.dividerOpacity)
 
-                Text(L10n.format("Active for %@ — each vehicle saves its own theme preference.", vehicleLabel))
-                    .font(.system(size: 10.5))
+                Text(L10n.format("Active for %@. Each vehicle saves its own theme preference.", vehicleLabel))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
 
                 // Category Filter Pills
@@ -262,29 +266,31 @@ struct SettingsAppearanceCard: View {
                 }
 
                 Text(L10n.text("Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied."))
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
+                    .hisCaptionLeading()
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
-                Divider().opacity(0.4)
+                Divider().opacity(HisingenTheme.dividerOpacity)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack(spacing: 5) {
                                     Text(L10n.text("Panel Size"))
-                                        .font(.system(size: 12, weight: .medium))
+                                        .hisType(.body, weight: .medium)
                                     if customSizeEnabled {
                                         Text(L10n.text("Custom"))
-                                            .font(.system(size: 9, weight: .bold))
+                                            .hisType(.micro, weight: .bold)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 1.5)
                                             .background(HisingenTheme.accent.opacity(0.14), in: Capsule())
                                             .foregroundStyle(HisingenTheme.accent)
                                     }
                                 }
-                                Text(L10n.text("Dropdown panel preset — applies instantly"))
-                                    .font(.system(size: 10))
+                                Text(L10n.text("Dropdown panel preset: applies instantly"))
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -297,8 +303,6 @@ struct SettingsAppearanceCard: View {
                             .controlSize(.small)
                             .frame(maxWidth: 160)
                         }
-
-                        SegmentedPresetRow(options: PanelSize.allCases, selection: $panelSize)
 
                         PanelCustomSizeControls(
                             isEnabled: $customSizeEnabled,
@@ -319,13 +323,13 @@ struct SettingsAppearanceCard: View {
                         HStack(spacing: 8) {
                             HStack(spacing: 6) {
                                 Text(L10n.text("Current:"))
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                     .foregroundStyle(.secondary)
                                 Image(systemName: "ruler")
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(HisingenTheme.accent)
                                 Text(resolvedLayout.dimensionsLabel)
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .hisType(.label, weight: .semibold)
                                     .monospacedDigit()
                             }
                             Spacer(minLength: 8)
@@ -334,7 +338,7 @@ struct SettingsAppearanceCard: View {
                                 resetPanelGeometry()
                             } label: {
                                 Text(L10n.text("Reset Sizes"))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .hisType(.caption, weight: .semibold)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
@@ -343,15 +347,16 @@ struct SettingsAppearanceCard: View {
                         .padding(.vertical, 2)
                     }
 
-                    Divider().opacity(0.4)
-
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(L10n.text("Content Density"))
-                                    .font(.system(size: 12, weight: .medium))
-                                Text(L10n.text("Zoom content independently of panel size — compact shows more before scrolling"))
-                                    .font(.system(size: 10))
+                                    .hisType(.body, weight: .medium)
+                                Text(L10n.text("Zoom content independently of panel size: compact shows more before scrolling"))
+                                    .hisType(.caption)
+                                    .hisCaptionLeading()
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -365,23 +370,22 @@ struct SettingsAppearanceCard: View {
                             .frame(maxWidth: 160)
                         }
 
-                        SegmentedPresetRow(options: ContentDensity.allCases, selection: $contentDensity)
-
                         HStack(spacing: 6) {
                             Text(L10n.text("Current:"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(.secondary)
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(HisingenTheme.accent)
                                 Text(String(format: "%.0f%%", contentDensity.scale * 100))
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .hisType(.label, weight: .semibold)
                                     .monospacedDigit()
                                 Text("· " + contentDensity.subtitle)
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .minimumScaleFactor(0.9)
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -430,10 +434,10 @@ struct SettingsAppearanceCard: View {
             HStack(spacing: 4) {
                 Text(cat.title)
                 Text("\(count)")
-                    .font(.system(size: 9, weight: .bold))
+                    .hisType(.micro, weight: .bold)
                     .opacity(0.85)
             }
-            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+            .hisType(.label, weight: isSelected ? .semibold : .regular)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background(
@@ -450,7 +454,9 @@ struct SettingsAppearanceCard: View {
 
     private func themeTile(_ theme: AppTheme) -> some View {
         let isSelected = appTheme == theme
-        let accentColor = Color(hex: theme.accentColorHex) ?? HisingenTheme.accent
+        // Appearance-aware, unlike the fixed hex this replaced. The swatch dots below still use
+        // `previewHexColors`, which are meant to be literal.
+        let accentColor = HisingenTheme.accent(for: theme)
         return Button {
             guard appTheme != theme else { return }
             withAnimation(reduceMotion ? nil : Motion.interaction) {
@@ -471,7 +477,7 @@ struct SettingsAppearanceCard: View {
                     Spacer()
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13, weight: .bold))
+                            .hisType(.heading, weight: .bold)
                             .foregroundStyle(accentColor)
                     } else {
                         Circle()
@@ -481,14 +487,17 @@ struct SettingsAppearanceCard: View {
                 }
 
                 Text(theme.title)
-                    .font(.system(size: 11.5, weight: isSelected ? .bold : .semibold))
+                    .hisType(.label, weight: isSelected ? .bold : .semibold)
                     .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.85))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.9)
 
                 Text(theme.subtitle)
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .hisCaptionLeading()
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(9)
@@ -550,7 +559,7 @@ struct SettingsStudioRenderPreview: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
-        .animation(Motion.resolveCrossfade(Motion.theme), value: angle)
+        .hisAnimation(Motion.theme, value: angle)
         .task(id: "\(vin)#\(angle)") {
             let store = VehicleArtworkStore.shared
             let budget = 600

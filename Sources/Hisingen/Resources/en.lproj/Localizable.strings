@@ -58,7 +58,7 @@
 "Active Timers" = "Active Timers";
 "Active Unlimited" = "Active Unlimited";
 "Active Vehicle: %@" = "Active Vehicle: %@";
-"Active for %@ — each vehicle saves its own theme preference." = "Active for %@ — each vehicle saves its own theme preference.";
+"Active for %@. Each vehicle saves its own theme preference." = "Active for %@. Each vehicle saves its own theme preference.";
 "Add Climate Timer…" = "Add Climate Timer…";
 "Add Schedule" = "Add Schedule";
 "Add or Manage Vehicles…" = "Add or Manage Vehicles…";
@@ -92,7 +92,7 @@
 "Altitude" = "Altitude";
 "Ambient Weather" = "Ambient Weather";
 "Ambient weather at vehicle GPS location" = "Ambient weather at vehicle GPS location";
-"Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo";
+"Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo";
 "An installation is scheduled." = "An installation is scheduled.";
 "Another remote command is already running." = "Another remote command is already running.";
 "Another vehicle command conflicts with this request." = "Another vehicle command conflicts with this request.";
@@ -180,6 +180,55 @@
 "Charger module status & energy usage" = "Charger module status & energy usage";
 "Charger power" = "Charger power";
 "Charging" = "Charging";
+"This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
+"The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
+"This is already the highest setting." = "This is already the highest setting.";
+"This is already the lowest setting." = "This is already the lowest setting.";
+"Reading the request log…" = "Reading the request log…";
+"Back to Vehicle" = "Back to Vehicle";
+"Choose a vehicle first; muting applies to one car at a time." = "Choose a vehicle first; muting applies to one car at a time.";
+"Next service projection has no date." = "Next service projection has no date.";
+"Finding the address…" = "Finding the address…";
+"Unrecognised state: %@" = "Unrecognised state: %@";
+"No charging telemetry has been reported for this vehicle yet." = "No charging telemetry has been reported for this vehicle yet.";
+"Try Again" = "Try Again";
+"kr per kWh" = "kr per kWh";
+"%@ kr" = "%@ kr";
+"This is the newest page." = "This is the newest page.";
+"This is the oldest page." = "This is the oldest page.";
+"That departure time has passed. Pick a new one to check readiness." = "That departure time has passed. Pick a new one to check readiness.";
+"L/100km" = "L/100km";
+"Give this location a name." = "Give this location a name.";
+"This vehicle does not support a current limit per location." = "This vehicle does not support a current limit per location.";
+"No automations ran in this period." = "No automations ran in this period.";
+"No charging sessions match this search." = "No charging sessions match this search.";
+"No activity was recorded in this period." = "No activity was recorded in this period.";
+"No fill-ups were recorded in this period." = "No fill-ups were recorded in this period.";
+"No air-cleaning cycles were recorded in this period." = "No air-cleaning cycles were recorded in this period.";
+"Nothing has changed while Hisingen was running." = "Nothing has changed while Hisingen was running.";
+"No vehicle selected" = "No vehicle selected";
+"Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one." = "Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one.";
+"Battery level" = "Battery level";
+"Lower" = "Lower";
+"Raise" = "Raise";
+"Stop Storing, Keep Locations" = "Stop Storing, Keep Locations";
+"Stop Storing & Clear Locations" = "Stop Storing & Clear Locations";
+"New locations will no longer be stored. Existing saved locations are kept." = "New locations will no longer be stored. Existing saved locations are kept.";
+"Add Recommended" = "Add Recommended";
+"Add All Safe Features" = "Add All Safe Features";
+"Saves these credentials and connects." = "Saves these credentials and connects.";
+"Some details still need fixing. Press to see what." = "Some details still need fixing. Press to see what.";
+"The vehicle has not reported a lock state yet, so this sends Lock." = "The vehicle has not reported a lock state yet, so this sends Lock.";
+"Unlocks the vehicle." = "Unlocks the vehicle.";
+"Locks the vehicle." = "Locks the vehicle.";
+"Lock State Not Reported" = "Lock State Not Reported";
+"Window State Not Reported" = "Window State Not Reported";
+"Windows Closed" = "Windows Closed";
+"Windows Open" = "Windows Open";
+"%1$d of %2$d windows open" = "%1$d of %2$d windows open";
+"Re-check Software Status" = "Re-check Software Status";
+"Checks the vehicle again for the current software status." = "Checks the vehicle again for the current software status.";
+"Hide this panel" = "Hide this panel";
 "Charging & Climate Timers" = "Charging & Climate Timers";
 "Charging & Energy" = "Charging & Energy";
 "Charging Active" = "Charging Active";
@@ -359,6 +408,7 @@
 "Engaged" = "Engaged";
 "Engine Hours" = "Engine Hours";
 "Engine Hours to Service" = "Engine Hours to Service";
+"Estimates recorded" = "Estimates recorded";
 "Engine Running" = "Engine Running";
 "Engine State" = "Engine State";
 "Engine Stopped" = "Engine Stopped";
@@ -374,7 +424,7 @@
 "Estimated Cost" = "Estimated Cost";
 "Estimated Degradation" = "Estimated Degradation";
 "Estimated Range" = "Estimated Range";
-"Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading.";
+"Estimated from current range versus this model's rated WLTP range at this charge level, not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level, not a measured battery health reading.";
 "Evening Unlocked Reminder" = "Evening Unlocked Reminder";
 "Everything looks good" = "Everything looks good";
 "Excellent" = "Excellent";
@@ -456,6 +506,8 @@
 "Gear Selector" = "Gear Selector";
 "General" = "General";
 "German" = "German";
+"Critical" = "Critical";
+"%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
 "Good" = "Good";
 "Google Maps" = "Google Maps";
 "Gothenburg Forest" = "Gothenburg Forest";
@@ -595,7 +647,7 @@
 "Modem Wake Reason" = "Modem Wake Reason";
 "Moderate" = "Moderate";
 "Mon" = "Mon";
-"Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below.";
+"Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below.";
 "Monochrome panels, sharp corners, Scandinavian minimalism" = "Monochrome panels, sharp corners, Scandinavian minimalism";
 "More (%d)" = "More (%d)";
 "More, %d sections" = "More, %d sections";
@@ -639,7 +691,7 @@
 "Odometer & Service" = "Odometer & Service";
 "Odometer & service" = "Odometer & service";
 "Off" = "Off";
-"Offline — showing the last available vehicle data." = "Offline — showing the last available vehicle data.";
+"Offline: showing the last available vehicle data." = "Offline: showing the last available vehicle data.";
 "Oil" = "Oil";
 "Oil level" = "Oil level";
 "Online" = "Online";
@@ -753,6 +805,8 @@
 "Ready around" = "Ready around";
 "Ready at" = "Ready at";
 "Ready at %@ · %@ remaining" = "Ready at %@ · %@ remaining";
+"Est. ready %@ · about %@" = "Est. ready %@ · about %@";
+"≈%@ to target at your %@/kWh setting" = "≈%@ to target at your %@/kWh setting";
 "Ready at:" = "Ready at:";
 "Rear" = "Rear";
 "Rear Brake Pads" = "Rear Brake Pads";
@@ -784,7 +838,7 @@
 "Refresh vehicle data before using this command." = "Refresh vehicle data before using this command.";
 "Refresh vehicle data to detect model capabilities." = "Refresh vehicle data to detect model capabilities.";
 "Regenerated Energy" = "Regenerated Energy";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window.";
 "Registration & Model" = "Registration & Model";
 "Registration / License Plate" = "Registration / License Plate";
 "Release" = "Release";
@@ -794,7 +848,7 @@
 "Remote Climate" = "Remote Climate";
 "Remote Controls" = "Remote Controls";
 "Remote Controls Temporarily Disabled" = "Remote Controls Temporarily Disabled";
-"Remote Controls — Sending…" = "Remote Controls — Sending…";
+"Remote Controls: Sending…" = "Remote Controls: Sending…";
 "Remote Engine Start (RES)" = "Remote Engine Start (RES)";
 "Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active." = "Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active.";
 "Remote Locks" = "Remote Locks";
@@ -802,7 +856,7 @@
 "Remote climate, locks, windows, charging, timers and software installation are active." = "Remote climate, locks, windows, charging, timers and software installation are active.";
 "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication." = "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication.";
 "Remote controls restricted to paired mobile devices" = "Remote controls restricted to paired mobile devices";
-"Remote controls — disabled by default" = "Remote controls — disabled by default";
+"Remote controls: disabled by default" = "Remote controls: disabled by default";
 "Remote engine start (RES)" = "Remote engine start (RES)";
 "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices." = "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices.";
 "Render high-resolution %@ visual" = "Render high-resolution %@ visual";
@@ -894,7 +948,7 @@
 "Show the current weather at your vehicle's position." = "Show the current weather at your vehicle's position.";
 "Show the vehicle selector for multi-car accounts." = "Show the vehicle selector for multi-car accounts.";
 "Show vehicle parking GPS coordinates and 1-click Apple Maps integration." = "Show vehicle parking GPS coordinates and 1-click Apple Maps integration.";
-"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
+"Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh.";
 "Shown in footer switcher, menus, and vehicle headers" = "Shown in footer switcher, menus, and vehicle headers";
 "Side" = "Side";
 "Side Profile" = "Side Profile";
@@ -1088,9 +1142,12 @@
 "Unlock trunk" = "Unlock trunk";
 "Unlock vehicle" = "Unlock vehicle";
 "Unlocked" = "Unlocked";
-"Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast";
-"Unofficial — monochrome panels, sharp corners, no color accent" = "Unofficial — monochrome panels, sharp corners, no color accent";
+"Unofficial: Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial: Volvo's blue accent, soft panels, light/bold type contrast";
+"Unofficial: monochrome panels, sharp corners, no color accent" = "Unofficial: monochrome panels, sharp corners, no color accent";
 "Unsupported" = "Unsupported";
+"This vehicle did not report this capability on the last refresh." = "This vehicle did not report this capability on the last refresh.";
+"Showing cached data. This section returns when the next refresh succeeds." = "Showing cached data. This section returns when the next refresh succeeds.";
+"No sensor readings were reported on the last refresh." = "No sensor readings were reported on the last refresh.";
 "Update Available (v%@)…" = "Update Available (v%@)…";
 "Update Failed" = "Update Failed";
 "Update Status" = "Update Status";
@@ -1234,7 +1291,7 @@
 "to target" = "to target";
 "updated %@" = "updated %@";
 "you@example.com" = "you@example.com";
-"—" = "—";
+"–" = "–";
 "•••••••• (only to update credentials)" = "•••••••• (only to update credentials)";
 "⚠︎ %@ is open" = "⚠︎ %@ is open";
 "⚠︎ Service warning" = "⚠︎ Service warning";
@@ -1303,7 +1360,7 @@
 "Switch to %@" = "Switch to %@";
 
 /* History dashboard, live streaming, exact vehicle references, and calculated SoH */
-"%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])" = "%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])";
+"%@ · Switch Vehicle (⌃⌥1–9)" = "%@ · Switch Vehicle (⌃⌥1–9)";
 "%d logs" = "%d logs";
 "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry." = "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry.";
 "Apply References" = "Apply References";
@@ -1330,6 +1387,8 @@
 "High confidence" = "High confidence";
 "Hisingen records meaningful odometer changes, charging sessions and remote-command outcomes locally as new telemetry arrives." = "Hisingen records meaningful odometer changes, charging sessions and remote-command outcomes locally as new telemetry arrives.";
 "History Overview" = "History Overview";
+"History could not be read" = "History could not be read";
+"Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history." = "Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history.";
 "History Period" = "History Period";
 "Legacy calculated estimate retained for trend continuity; not a BMS measurement." = "Legacy calculated estimate retained for trend continuity; not a BMS measurement.";
 "Live stream disconnected. Retrying %@. Scheduled polling is still active." = "Live stream disconnected. Retrying %@. Scheduled polling is still active.";
@@ -1361,7 +1420,7 @@
 "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for available ambient temperature." = "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for available ambient temperature.";
 "WLTP reference range" = "WLTP reference range";
 
-"Command sent — waiting for the vehicle" = "Command sent — waiting for the vehicle";
+"Command sent: waiting for the vehicle" = "Command sent: waiting for the vehicle";
 "Values below may update once the car reports in." = "Values below may update once the car reports in.";
 /* Keys referenced by L10n calls that were missing from the base locale */
 
@@ -1382,7 +1441,7 @@
 "%d µg/m³ PM2.5 removed" = "%d µg/m³ PM2.5 removed";
 "(estimated)" = "(estimated)";
 "/kWh from" = "/kWh from";
-"90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average." = "90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average.";
+"90th percentile of session peak power: less skewed by one outlier fast-charge than a plain average." = "90th percentile of session peak power: less skewed by one outlier fast-charge than a plain average.";
 "A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only." = "A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only.";
 "A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear." = "A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear.";
 "AQI" = "AQI";
@@ -1395,7 +1454,7 @@
 "Air Quality Trend" = "Air Quality Trend";
 "Air quality index history chart" = "Air quality index history chart";
 "Air quality index trend chart" = "Air quality index trend chart";
-"Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days.";
+"Always shows all recorded history. The period selector above doesn't apply here, since state of health moves over months, not days." = "Always shows all recorded history. The period selector above doesn't apply here, since state of health moves over months, not days.";
 "An older software event is recorded, but no current update failure requires attention." = "An older software event is recorded, but no current update failure requires attention.";
 "Announced Version" = "Announced Version";
 "Announced: %@" = "Announced: %@";
@@ -1480,7 +1539,7 @@
 "Door Sensors Reported" = "Door Sensors Reported";
 "Download authorized" = "Download authorized";
 "Download failed" = "Download failed";
-"Dropdown panel preset — applies instantly" = "Dropdown panel preset — applies instantly";
+"Dropdown panel preset: applies instantly" = "Dropdown panel preset: applies instantly";
 "Edit this timer" = "Edit this timer";
 "Enable optimised charging at location" = "Enable optimised charging at location";
 "Energy" = "Energy";
@@ -1511,7 +1570,7 @@
 "Grand (Wide & Tall)" = "Grand (Wide & Tall)";
 "Hisingen is no longer running." = "Hisingen is no longer running.";
 "Idle Tail" = "Idle Tail";
-"If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly." = "If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly.";
+"If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly." = "If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly.";
 "In-Service Date" = "In-Service Date";
 "Install Duration" = "Install Duration";
 "Intelligent timer" = "Intelligent timer";
@@ -1527,6 +1586,7 @@
 "Integrated from sufficiently complete charging-power observations. SoC may move differently because vehicle percentages are rounded or reported late." = "Integrated from sufficiently complete charging-power observations. SoC may move differently because vehicle percentages are rounded or reported late.";
 "Imported from an older Hisingen summary whose original calculation inputs were not retained." = "Imported from an older Hisingen summary whose original calculation inputs were not retained.";
 "Uses each session's saved tariff instead of recalculating old charges with today's settings." = "Uses each session's saved tariff instead of recalculating old charges with today's settings.";
+"Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price." = "Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price.";
 "Mixed currencies" = "Mixed currencies";
 "Costs in different currencies are kept separate and are not added together." = "Costs in different currencies are kept separate and are not added together.";
 "Newer" = "Newer";
@@ -1540,7 +1600,7 @@
 "%d observation gaps" = "%d observation gaps";
 "Lifetime charging cost ≈ %@ per %@" = "Lifetime charging cost ≈ %@ per %@";
 "Lighting Warning Status" = "Lighting Warning Status";
-"Limited data (%@ points) — treat this trend as indicative, not conclusive." = "Limited data (%@ points) — treat this trend as indicative, not conclusive.";
+"Limited data (%@ points): treat this trend as indicative, not conclusive." = "Limited data (%@ points): treat this trend as indicative, not conclusive.";
 "Liters (L)" = "Liters (L)";
 "Log Fuel Fill-Up" = "Log Fuel Fill-Up";
 "Log a fill-up so fuel spend is included in cost estimates" = "Log a fill-up so fuel spend is included in cost estimates";
@@ -1584,8 +1644,8 @@
 "PM2.5" = "PM2.5";
 "PSI" = "PSI";
 "Panel Size" = "Panel Size";
-"Past event — no current action required" = "Past event — no current action required";
-"Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "Peak power at %@ was far below this location's usual level — the cable or charger may be derating.";
+"Past event: no current action required" = "Past event: no current action required";
+"Peak power at %@ was far below this location's usual level. The cable or charger may be derating." = "Peak power at %@ was far below this location's usual level. The cable or charger may be derating.";
 "Performance Software Upgrade" = "Performance Software Upgrade";
 "Plug & Charge" = "Plug & Charge";
 "Polestar remote commands are now available." = "Polestar remote commands are now available.";
@@ -1613,7 +1673,7 @@
 "Reorders the detail rows on the Charging card. Unlisted rows keep their default position below." = "Reorders the detail rows on the Charging card. Unlisted rows keep their default position below.";
 "Reported Battery Capacity" = "Reported Battery Capacity";
 "Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle." = "Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle.";
-"Reported by the vehicle cloud backend — exact support per VIN." = "Reported by the vehicle cloud backend — exact support per VIN.";
+"Reported by the vehicle cloud backend. Exact support per VIN." = "Reported by the vehicle cloud backend. Exact support per VIN.";
 "Reported supported" = "Reported supported";
 "Reset" = "Reset";
 "Restore software event" = "Restore software event";
@@ -1661,7 +1721,7 @@
 "The command failed. Please try again." = "The command failed. Please try again.";
 "The download failed. The vehicle will retry automatically; installation can only be started once the download completes." = "The download failed. The vehicle will retry automatically; installation can only be started once the download completes.";
 "The providers report warning flags, not measured fluid levels." = "The providers report warning flags, not measured fluid levels.";
-"The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it.";
+"The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it.";
 "The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes." = "The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes.";
 "The vehicle did not report a configurable current limit." = "The vehicle did not report a configurable current limit.";
 "The vehicle did not report an air-quality index." = "The vehicle did not report an air-quality index.";
@@ -1675,7 +1735,7 @@
 "This Month vs Last" = "This Month vs Last";
 "This event is hidden from Needs Attention on this Mac." = "This event is hidden from Needs Attention on this Mac.";
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards.";
-"This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.";
+"This vehicle does not support cloud-based download consent. The update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "This vehicle does not support cloud-based download consent. The update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement.";
 "To" = "To";
@@ -1735,7 +1795,7 @@
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Content Density";
-"Zoom content independently of panel size — compact shows more before scrolling" = "Zoom content independently of panel size — compact shows more before scrolling";
+"Zoom content independently of panel size: compact shows more before scrolling" = "Zoom content independently of panel size: compact shows more before scrolling";
 "Custom Size" = "Custom Size";
 "Independent width and height overrides" = "Independent width and height overrides";
 "Width" = "Width";
@@ -1821,7 +1881,7 @@
 "Open the trip route in Apple Maps" = "Open the trip route in Apple Maps";
 "Open trip start in Apple Maps" = "Open trip start in Apple Maps";
 "Overlay previous session" = "Overlay previous session";
-"Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger.";
+"Peak power for this session was far below what this vehicle usually reaches here. Possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here. Possibly a failing cable or a derated charger.";
 "Petrol Equivalent" = "Petrol Equivalent";
 "Pick a custom date range" = "Pick a custom date range";
 "Previous" = "Previous";
@@ -2099,7 +2159,7 @@
 // API feature descriptions (English fallback).
 "%@ failed. %@" = "%@ failed. %@";
 "%@ · %d kW AC / %d kW DC" = "%@ · %d kW AC / %d kW DC";
-"%@ — %@" = "%@ — %@";
+"%@: %@" = "%@: %@";
 "%d AQI (%@)" = "%d AQI (%@)";
 "%d m" = "%d m";
 "%d samples, latest %d, range %d to %d, %@" = "%d samples, latest %d, range %d to %d, %@";
@@ -2242,7 +2302,7 @@
 "The vehicle allows at most %d charging locations." = "The vehicle allows at most %d charging locations.";
 "The vehicle allows at most %d climate timers." = "The vehicle allows at most %d climate timers.";
 "The vehicle could not lock because a door, the hood, or the tailgate is open." = "The vehicle could not lock because a door, the hood, or the tailgate is open.";
-"The vehicle did not respond in time — it may be parked somewhere with no reception." = "The vehicle did not respond in time — it may be parked somewhere with no reception.";
+"The vehicle did not respond in time. It may be parked somewhere with no reception." = "The vehicle did not respond in time. It may be parked somewhere with no reception.";
 "The vehicle has not reported a known charging state." = "The vehicle has not reported a known charging state.";
 "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes." = "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.";
 "The vehicle is not in a state that allows this command (for example, while it is being driven)." = "The vehicle is not in a state that allows this command (for example, while it is being driven).";
@@ -2270,7 +2330,7 @@
 "Vehicle Calculation. Average electric consumption over the automatic trip-meter period." = "Vehicle Calculation. Average electric consumption over the automatic trip-meter period.";
 "Vehicle Health" = "Vehicle Health";
 "Vehicle Report" = "Vehicle Report";
-"Vehicle data is still loading — try again in a moment." = "Vehicle data is still loading — try again in a moment.";
+"Vehicle data is still loading. Try again in a moment." = "Vehicle data is still loading. Try again in a moment.";
 "Vehicle locked" = "Vehicle locked";
 "Vehicle report" = "Vehicle report";
 "Vehicle software installation started" = "Vehicle software installation started";
@@ -2349,11 +2409,11 @@
 "Recent service response" = "Recent service response";
 "Release Notes" = "Release Notes";
 "Reported Connection" = "Reported Connection";
-"Reported by the vehicle at its parked location — not a forecast." = "Reported by the vehicle at its parked location — not a forecast.";
+"Reported by the vehicle at its parked location, not a forecast." = "Reported by the vehicle at its parked location, not a forecast.";
 "Started charging." = "Started charging.";
 "Status Reported" = "Status Reported";
 "Test notification" = "Test notification";
-"The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing.";
+"The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing.";
 "The schedule index must not be negative." = "The schedule index must not be negative.";
 "The schedule type does not match this command." = "The schedule type does not match this command.";
 "The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check." = "The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check.";
@@ -2417,7 +2477,7 @@
 "Tomorrow's prices arrive after 14:15" = "Tomorrow's prices arrive after 14:15";
 "Prices unavailable right now" = "Prices unavailable right now";
 "Spot prices exclude taxes and grid fees" = "Spot prices exclude taxes and grid fees";
-"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Charge %@ over %d h to reach %d%% — average %@, now %@";
+"Charge %@ over %d h to reach %d%%: average %@, now %@" = "Charge %@ over %d h to reach %d%%: average %@, now %@";
 "Saves %@" = "Saves %@";
 "Charging now is cheapest" = "Charging now is cheapest";
 "A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
@@ -2428,7 +2488,7 @@
 "Electricity price outlook" = "Electricity price outlook";
 "Planned window from %@" = "Planned window from %@";
 "Between %@ and %@ kr per kWh. %@" = "Between %@ and %@ kr per kWh. %@";
-"The car has its own charging schedules — the planner does not use them" = "The car has its own charging schedules — the planner does not use them";
+"The car has its own charging schedules. The planner does not use them" = "The car has its own charging schedules. The planner does not use them";
 "fetched %@" = "fetched %@";
 "The vehicle's location suggests %@" = "The vehicle's location suggests %@";
 "Notify When the Cheap Window Opens" = "Notify When the Cheap Window Opens";
@@ -2436,12 +2496,12 @@
 "Notify When Tomorrow's Prices Arrive" = "Notify When Tomorrow's Prices Arrive";
 "One daily banner after 14:15 with the cheapest hour" = "One daily banner after 14:15 with the cheapest hour";
 "Auto-Start Charging in the Window" = "Auto-Start Charging in the Window";
-"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "Sends the start-charging command automatically while the window runs";
 "Market Price Cost" = "Market Price Cost";
 "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.";
 "The cheap charging window runs %@." = "The cheap charging window runs %@.";
-"Plug in the vehicle — the cheap charging window runs %@." = "Plug in the vehicle — the cheap charging window runs %@.";
+"Plug in the vehicle. The cheap charging window runs %@." = "Plug in the vehicle. The cheap charging window runs %@.";
 "Cheap charging window: %@." = "Cheap charging window: %@.";
 "Tomorrow's electricity prices are in" = "Tomorrow's electricity prices are in";
 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
@@ -2449,7 +2509,7 @@
 "Use" = "Use";
 
 "Set up Hisingen" = "Set up Hisingen";
-"Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features." = "Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features.";
+"Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features.";
 "Quick setup" = "Quick setup";
 "Remote commands" = "Remote commands";
 "Polestar remote controls run through a separate one-time browser authorization." = "Polestar remote controls run through a separate one-time browser authorization.";
@@ -2460,7 +2520,7 @@
 "Connect your vehicle account below to get started." = "Connect your vehicle account below to get started.";
 
 "Still failing?" = "Still failing?";
-"Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added." = "Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added.";
+"Your Polestar session expired. Sign in again. The interactive window handles any new verification step Polestar added." = "Your Polestar session expired. Sign in again. The interactive window handles any new verification step Polestar added.";
 "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update." = "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update.";
 "Hidden trips (%d)" = "Hidden trips (%d)";
 "Restore" = "Restore";
@@ -2475,7 +2535,7 @@
 "The backup could not be created." = "The backup could not be created.";
 "Export Selected Month" = "Export Selected Month";
 "Export All Months" = "Export All Months";
-"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.";
+"Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.";
 "Lead Time" = "Lead Time";
 "How long before the window opens the banner arrives" = "How long before the window opens the banner arrives";
 "When the window opens" = "When the window opens";

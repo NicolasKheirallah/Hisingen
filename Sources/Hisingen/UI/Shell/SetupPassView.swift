@@ -21,10 +21,12 @@ struct SetupPassView: View {
             VStack(alignment: .leading, spacing: HisingenTheme.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L10n.text("Set up Hisingen"))
-                        .font(.system(size: 15, weight: .bold))
+                        .hisType(.title, weight: .bold)
                         .foregroundStyle(HisingenTheme.ink)
-                    Text(L10n.text("Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features."))
-                        .font(.system(size: 10.5))
+                    Text(L10n.format("Connected to the %@ account for %@. Pick a starting point. Everything here can be changed later in Settings → Features.",
+                                     brand.displayName,
+                                     preferences.lastVehicleLabel(for: brand)))
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -61,8 +63,9 @@ struct SetupPassView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             CardHeader(symbol: "key.horizontal", title: L10n.text("Remote commands"), color: .accentColor)
                             Text(L10n.text("Polestar remote controls run through a separate one-time browser authorization."))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
+                                .hisCaptionLeading()
                                 .fixedSize(horizontal: false, vertical: true)
                             Button {
                                 onSettingsChanged(.polestarCommandAuthorization)
@@ -120,7 +123,7 @@ struct SetupPassView: View {
             Text(title)
             Spacer()
         }
-        .font(.system(size: 11, weight: .semibold))
+        .hisType(.label, weight: .semibold)
         .frame(maxWidth: .infinity, minHeight: 26)
         Group {
             if prominent {

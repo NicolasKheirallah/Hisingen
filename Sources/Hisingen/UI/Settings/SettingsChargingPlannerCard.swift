@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Settings → Features → "Charging Planner": the opt-in switch for the smart charging
-/// planner plus its inputs — the Swedish spot-price zone (SE1–SE4, with a suggestion
+/// planner plus its inputs – the Swedish spot-price zone (SE1–SE4, with a suggestion
 /// from the vehicle's GPS when one is available), the charger output used to turn needed
 /// energy into whole charging hours, the window-open / prices-published banners, and the
 /// separate auto-start consent. The feature is off by default; enabling it here gates
@@ -11,6 +11,7 @@ import SwiftUI
 struct SettingsChargingPlannerCard: View {
     let binder: PreferenceBinder
     var state: VehicleState? = nil
+    @State private var showAutoStartConfirmation = false
 
     private var prefs: PreferencesStore { binder.preferences }
     private var isEnabled: Bool { prefs.features.contains(.smartChargingPlanner) }
@@ -37,7 +38,7 @@ struct SettingsChargingPlannerCard: View {
     }
 
     /// GPS-based zone suggestion, shown only when it is available and differs from the
-    /// current pick. Approximate by design — the real borders bend around municipalities.
+    /// current pick. Approximate by design – the real borders bend around municipalities.
     private var suggestedZone: ElspotZone? {
         guard let latitude = state?.location?.latitude else { return nil }
         let suggestion = ChargingPlannerSupport.suggestedZone(latitude: latitude)
@@ -58,14 +59,14 @@ struct SettingsChargingPlannerCard: View {
                 )
 
                 if isEnabled {
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Price Zone"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Spot-price area you live in"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -82,10 +83,10 @@ struct SettingsChargingPlannerCard: View {
                     if let suggestedZone {
                         HStack(spacing: 6) {
                             Image(systemName: "location")
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(HisingenTheme.accent)
                             Text(L10n.format("The vehicle's location suggests %@", suggestedZone.title))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                             Button(L10n.text("Use")) {
                                 prefs.electricityPriceZone = suggestedZone
@@ -100,9 +101,9 @@ struct SettingsChargingPlannerCard: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Power"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Used to estimate how many charging hours are needed"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -116,14 +117,14 @@ struct SettingsChargingPlannerCard: View {
                         .frame(maxWidth: 160)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Notify When the Cheap Window Opens"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("One banner per window, respecting quiet hours"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -136,9 +137,9 @@ struct SettingsChargingPlannerCard: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(L10n.text("Lead Time"))
-                                    .font(.system(size: 12, weight: .medium))
+                                    .hisType(.body, weight: .medium)
                                 Text(L10n.text("How long before the window opens the banner arrives"))
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -156,9 +157,9 @@ struct SettingsChargingPlannerCard: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Notify When Tomorrow's Prices Arrive"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("One daily banner after 14:15 with the cheapest hour"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -171,25 +172,54 @@ struct SettingsChargingPlannerCard: View {
                         VStack(alignment: .leading, spacing: 1) {
                             HStack(spacing: 5) {
                                 Text(L10n.text("Auto-Start Charging in the Window"))
-                                    .font(.system(size: 12, weight: .medium))
-                                InformationButton(message: L10n.text("When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature."))
+                                    .hisType(.body, weight: .medium)
+                                InformationButton(message: L10n.text("When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature."))
                             }
                             Text(L10n.text("Sends the start-charging command automatically while the window runs"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
+                                .hisCaptionLeading()
+                                .fixedSize(horizontal: false, vertical: true)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.plannerAutoStartEnabled))
+                        Toggle("", isOn: Binding(
+                            get: { prefs.plannerAutoStartEnabled },
+                            set: { enabled in
+                                if enabled {
+                                    showAutoStartConfirmation = true
+                                } else {
+                                    prefs.plannerAutoStartEnabled = false
+                                    binder.bump()
+                                    binder.notify(.features)
+                                }
+                            }
+                        ))
                             .toggleStyle(.switch)
                             .controlSize(.small)
                     }
 
                     Text(L10n.text("Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se."))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+        }
+        .confirmationDialog(
+            L10n.text("Allow automatic charging commands?"),
+            isPresented: $showAutoStartConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("Allow Auto-Start")) {
+                prefs.plannerAutoStartEnabled = true
+                binder.bump()
+                binder.notify(.features)
+            }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.text("Hisingen will send a start-charging command without another prompt when the planned cheap-price window opens, but only while the vehicle is plugged in and below its charge limit."))
         }
     }
 }

@@ -39,7 +39,7 @@ struct DiagnosticsSnapshot: Sendable {
 
     /// A vehicle selection has been requested but not yet confirmed (in flight, or waiting
     /// for an automatic retry after a raced provider-side flip). During this window
-    /// `refreshInProgress` is often false — without this flag a support bundle cannot tell
+    /// `refreshInProgress` is often false – without this flag a support bundle cannot tell
     /// a pending switch apart from an idle app, which is precisely where same-brand
     /// multi-vehicle failures live.
     var vehicleSwitchPending: Bool = false
@@ -207,15 +207,15 @@ final class RefreshCoordinator {
     private let liveStreamJitter: () -> Double
     private let now: () -> Date
     private let logger = AppLog.logger("refresh")
-    /// Interval instrumentation for Instruments' os_signpost tool — free refresh-latency
+    /// Interval instrumentation for Instruments' os_signpost tool – free refresh-latency
     /// timelines without touching the unified log.
     private static let signposter = OSSignposter(subsystem: AppLog.subsystem, category: "refresh")
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "io.kheirallah.hisingen.network")
 
     /// Task.sleep-based one-shot scheduler for retries, confirmation polls, and the next
-    /// scheduled refresh. Task ticks are immune to run-loop modes — a status-item menu no
-    /// longer defers them — and cancel structurally (shared `AsyncTimerLoop`, RT-08).
+    /// scheduled refresh. Task ticks are immune to run-loop modes – a status-item menu no
+    /// longer defers them – and cancel structurally (shared `AsyncTimerLoop`, RT-08).
     private let scheduler = AsyncTimerLoop()
     private var task: Task<Void, Never>?
     private var generation: UInt64 = 0
@@ -238,7 +238,7 @@ final class RefreshCoordinator {
     /// switch begins, cleared only when it completes (or the session re-resolves the VIN).
     /// Because `preferences.vin` is written optimistically at switch start, this marker is
     /// what distinguishes "already settled on car X" from "car X failed mid-switch and the
-    /// user is retrying" — without it a failed switch was unrecoverable.
+    /// user is retrying" – without it a failed switch was unrecoverable.
     private var requestedSelectionVIN: String?
     /// Automatic retries consumed for the current selection attempt. A raced provider-side
     /// selection flip surfaces as `.notConfigured`, which is otherwise terminal; bounded
@@ -452,14 +452,14 @@ final class RefreshCoordinator {
     /// Records a receipt for a vehicle that is not the selected one. There is no live
     /// confirmation loop for it: the record waits under the target's VIN and is restored when
     /// that vehicle is selected. It never enters the in-memory collection, so it cannot be
-    /// dismissed from here — which is why it must be written by this ledger and not a second
+    /// dismissed from here – which is why it must be written by this ledger and not a second
     /// instance with a different clock.
     func recordOffTargetReceipt(_ receipt: CommandReceipt, targetVIN: String) {
         confirmations.recordOffTarget(receipt, targetVIN: targetVIN)
     }
 
     /// The confirmation window must actually end. A held-open exterior stream only
-    /// re-evaluates its purpose on the next frame or reconnect — on a quiet car that could
+    /// re-evaluates its purpose on the next frame or reconnect – on a quiet car that could
     /// leave a battery/exterior connection running for the whole idle timeout after its
     /// reason expired. The loop owns the deadline and settles the records; this re-decides the
     /// transport afterwards, which is what closes the stream.
@@ -534,13 +534,13 @@ final class RefreshCoordinator {
     /// Switches the active vehicle. Idempotence is decided HERE and nowhere else.
     ///
     /// A switch is skipped only when it is a genuine no-op: the car is already selected,
-    /// its state is live, and no earlier attempt is unresolved. Everything else runs —
+    /// its state is live, and no earlier attempt is unresolved. Everything else runs –
     /// including a repeat click for a car whose previous switch failed, which is the only
     /// way the user can recover. The old pair of independent guards (the UI compared its
     /// stale `activeVin` copy while this method compared `preferences.vin`) disagreed after
     /// any same-brand switch: clicking the previously-active car was vetoed by the UI guard,
     /// re-clicking the new car was vetoed here, and the switcher locked up entirely until
-    /// relaunch — invisible with one car, fatal with two on the same account.
+    /// relaunch – invisible with one car, fatal with two on the same account.
     func selectCar(vin: String) {
         if case .refused(.rateLimited(let until)) = admit(.selection(vin: vin)) {
             // A silent drop reads as a frozen app; surface why switching is paused instead.
@@ -592,7 +592,7 @@ final class RefreshCoordinator {
     private func runSelection(vin: String) {
         // Single-flight invariant: a selection retry firing inside its 2 s window can race a
         // manual/wake/network-restored refresh that legitimately holds `task`. Reschedule
-        // instead of clobbering the slot — overwriting it ran two fetches concurrently and
+        // instead of clobbering the slot – overwriting it ran two fetches concurrently and
         // let `isBusy` report idle while work was still in flight (network operations are
         // timeout-bounded, so the retry cannot spin forever).
         guard task == nil else {
@@ -711,7 +711,7 @@ final class RefreshCoordinator {
         case .refused(.alreadyRunning):
             // Direct triggers (launch, wake, network restore, manual refresh) can safely
             // stand down here: the in-flight operation owns subsequent scheduling and will
-            // rearm itself. A one-shot retry TIMER cannot — if it bailed silently nothing
+            // rearm itself. A one-shot retry TIMER cannot – if it bailed silently nothing
             // would ever reschedule, parking the app on a stale cache until a manual poke.
             // Re-arm briefly instead; each tick is cheap and stops as soon as the queue
             // clears (network operations are timeout-bounded).
@@ -995,7 +995,7 @@ final class RefreshCoordinator {
 
     /// `MainActor.assumeIsolated` is a runtime assertion, not a compiler-checked guarantee: it
     /// traps if the notification is ever delivered off the main thread. What makes it sound is
-    /// `queue: .main` on the registration — so the two must never drift apart. Binding them
+    /// `queue: .main` on the registration – so the two must never drift apart. Binding them
     /// together here means the delivery queue cannot be changed independently of the
     /// assumption that depends on it. The body stays synchronous deliberately: `willSleep`
     /// must cancel in-flight work *before* the machine suspends, which an async hop onto the

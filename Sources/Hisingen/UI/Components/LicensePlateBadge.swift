@@ -23,10 +23,10 @@ struct LicensePlateBadge: View {
                     .stroke(Color.primary.opacity(0.18), lineWidth: 0.8)
             )
         case .belowGreeting, .inlineHeader:
-            Text(plate.uppercased())
-                .font(.system(size: 13, weight: HisingenTheme.valueWeight))
-                .monospaced()
-                .foregroundStyle(HisingenTheme.ink)
+            // `Text.monospaced()` monospaces digits only, so "ABC 123" kept proportional letters
+            // here while the pill and overlay positions monospaced the whole string. `plateText`
+            // monospaces the plate, which is what a plate is.
+            plateText(size: 13, tracking: 0.4)
         case .topRightOverlay, .topLeftOverlay:
             HStack(spacing: 4) {
                 swedishFlag
@@ -34,9 +34,9 @@ struct LicensePlateBadge: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4.5)
-            .background(.ultraThinMaterial, in: Capsule())
+            .background(HisingenTheme.chipFill, in: Capsule())
             .overlay(Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6))
-            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+            .shadow(color: HisingenTheme.shadowTint(0.08), radius: 4, x: 0, y: 1.5)
         case .hidden:
             EmptyView()
         }
@@ -45,7 +45,7 @@ struct LicensePlateBadge: View {
     @ViewBuilder
     private var swedishFlag: some View {
         if showsSwedishFlag {
-            Text("🇸🇪").font(.system(size: 9))
+            Text("🇸🇪").hisType(.micro)
         }
     }
 

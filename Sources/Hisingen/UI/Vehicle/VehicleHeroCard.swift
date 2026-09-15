@@ -9,8 +9,15 @@ struct VehicleHeroCard: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var chargingJustStarted = false
+    @ScaledMetric(relativeTo: .largeTitle) private var heroValueSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .title) private var compactHeroValueSize: CGFloat = 34
 
     private var features: FeatureSelection { preferences.features }
+    /// The chip family's shape, so the model badge follows a theme with square corners instead
+    /// of being the one chip in the app that is always a pill.
+    private var badgeShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
+    }
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
     /// Reduce Motion keeps the fade and drops the movement.
     private var cardTransition: AnyTransition {
@@ -18,7 +25,7 @@ struct VehicleHeroCard: View {
     }
     /// Inputs that decide which hero surfaces exist (image, overlay badges,
     /// inline/below badges, energy layout). The keyed animation lives on the
-    /// card's persistent VStack — a conditionally inserted view cannot animate
+    /// card's persistent VStack – a conditionally inserted view cannot animate
     /// its own removal.
     private var heroLayoutIdentity: String {
         "\(features.contains(.vehicleImage))|\(heroImageData != nil)|\(preferences.vehicleModelBadgePosition.rawValue)|\(preferences.registrationBadgePosition.rawValue)|\(state.identity.modelName ?? "")|\(state.identity.modelYear ?? "")|\(state.identity.registrationNo ?? "")|\(state.powertrain.isCombustionOnly)|\(state.powertrain.isHybrid)"
@@ -62,28 +69,39 @@ struct VehicleHeroCard: View {
                 let showPlateTopLeft = hasPlate && registrationPosition == .topLeftOverlay
                 let showPlateTopRight = hasPlate && registrationPosition == .topRightOverlay
 
-                if features.contains(.vehicleImage), let imageData = heroImageData {
+                if features.contains(.vehicleImage) {
                     ZStack {
                         RadialGradient(
                             colors: [
-                                state.isCharging ? Color.green.opacity(0.18) : Color.primary.opacity(0.06),
+                                state.isCharging ? HisingenTheme.accent.opacity(0.16) : HisingenTheme.accent.opacity(0.08),
                                 Color.clear
                             ],
                             center: .center,
                             startRadius: 40,
                             endRadius: 170
                         )
-                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.isCharging)
+                        .hisAnimation(Motion.stateChange, value: state.isCharging)
 
-                        VehiclePresentationView(
-                            identity: VehiclePresentationIdentity(
-                                vin: state.identity.vin,
-                                angle: preferences.carRenderAngle.rawValue
-                            ),
-                            imageData: imageData
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
+                        if let imageData = heroImageData {
+                            VehiclePresentationView(
+                                identity: VehiclePresentationIdentity(
+                                    vin: state.identity.vin,
+                                    angle: preferences.carRenderAngle.rawValue
+                                ),
+                                imageData: imageData
+                            )
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            VStack(spacing: 8) {
+                                Image(systemName: "car.side")
+                                    .hisType(.displaySmall, weight: .light)
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                                Text(L10n.text("Vehicle image unavailable"))
+                                    .hisType(.caption, weight: .medium)
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
 
                         if showModelTopLeft || showModelTopRight || showPlateTopLeft || showPlateTopRight {
                             VStack {
@@ -124,7 +142,7 @@ struct VehicleHeroCard: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 220)
+                    .frame(height: VehicleRenderLayout.containerHeight(for: HisingenTheme.layoutWidth))
                     .padding(.horizontal, -HisingenTheme.cardPadding)
                     .padding(.top, -HisingenTheme.cardPadding)
                     .clipped()
@@ -153,23 +171,23 @@ struct VehicleHeroCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         if greeting == nil, !nickname.isEmpty {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 12))
+                                .hisType(.body)
                                 .foregroundStyle(HisingenTheme.accent)
                         }
                         Text(primaryTitle)
-                            .font(.system(size: 17, weight: HisingenTheme.headingWeight))
-                            .tracking(HisingenTheme.displayTracking * 0.3)
+                            .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
+                            .tracking(HisingenTheme.displayTracking(forSize: 17))
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
                         if showPlateInline, let plate {
                             Text(plate.uppercased())
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .hisType(.body, weight: .bold, design: .monospaced)
                                 .tracking(0.5)
                                 .foregroundStyle(HisingenTheme.ink)
                         }
                         if showModelInline {
                             Text(modelIdentity)
-                                .font(.system(size: 11.5, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
                     }
@@ -186,13 +204,13 @@ struct VehicleHeroCard: View {
                             }
                             if greeting != nil, !nickname.isEmpty {
                                 Text(nickname)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                     .foregroundStyle(HisingenTheme.inkMuted)
                             }
                             Spacer()
                             if showModelSubheadline {
                                 Text(modelIdentity)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                     .foregroundStyle(HisingenTheme.inkMuted)
                             }
                         }
@@ -215,38 +233,66 @@ struct VehicleHeroCard: View {
                     .transition(cardTransition)
 
                 HStack {
-                    Image(systemName: state.isStale() ? "moon.stars.fill" : "clock.arrow.circlepath")
-                        .font(.system(size: 10))
+                    Image(systemName: state.hasOldData() ? "moon.stars.fill" : "clock.arrow.circlepath")
+                        .hisType(.caption)
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                        // Weight and hue carry staleness, not transparency. Lowering opacity made
+                        // the freshness line hardest to read exactly when the reading was old
+                        // enough to matter; the warning tint and the semibold weight below say the
+                        // same thing without costing legibility.
                         .foregroundStyle(
-                            state.isStale()
+                            state.hasOldData()
                                 ? HisingenTheme.semanticWarning
-                                : Color.secondary.opacity(0.6)
+                                : HisingenTheme.inkMuted
                         )
+                    // A relative age that changes every minute: "12 minutes ago" and "1 hour ago"
+                    // are different widths in a proportional face, so this line nudged the hero
+                    // every time it updated.
                     Text(state.freshnessDescription)
-                        .font(.system(size: 10, weight: state.isStale() ? .semibold : .regular))
+                        .hisType(.caption, weight: state.hasOldData() ? .semibold : .regular)
+                        .monospacedDigit()
                         .foregroundStyle(
-                            state.isStale()
+                            state.hasOldData()
                                 ? HisingenTheme.semanticWarning
-                                : Color.secondary.opacity(0.7)
+                                : HisingenTheme.inkMuted
                         )
                     Spacer()
                 }
-                .animation(cardChangeAnimation, value: state.isStale())
+                .animation(cardChangeAnimation, value: state.hasOldData())
             }
             .animation(cardChangeAnimation, value: heroLayoutIdentity)
         }
     }
 
+    /// Names the hero number, and the charge limit when the vehicle reports one.
+    ///
+    /// The 40pt figure carried no caption in any of the three powertrain branches: nothing on the
+    /// surface said whether it was the current level or the configured charge limit, which is the
+    /// most consequential ambiguity on a charging screen.
+    private var heroNumberCaption: some View {
+        HStack(spacing: 4) {
+            Text(L10n.text("Battery level"))
+            if let target = state.energy.targetPercentage {
+                Text("·")
+                Text(L10n.format("Target %d%%", target))
+            }
+        }
+        .hisType(.caption, weight: .medium)
+        .foregroundStyle(HisingenTheme.inkMuted)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+    }
+
     private func modelOverlayBadge(_ modelIdentity: String) -> some View {
-        Text(modelIdentity)
-            .font(.system(size: 11, weight: .semibold))
+        let elevation = HisingenTheme.shadow(for: .onCard)
+        return Text(modelIdentity)
+            .hisType(.label, weight: .semibold)
             .foregroundStyle(HisingenTheme.ink)
             .padding(.horizontal, 9)
             .padding(.vertical, 4.5)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6))
-            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 1.5)
+            .background(HisingenTheme.chipFill, in: badgeShape)
+            .overlay(badgeShape.stroke(Color.primary.opacity(0.14), lineWidth: 0.6))
+            .shadow(color: elevation.color, radius: elevation.radius, x: 0, y: elevation.y)
     }
 
     private var statusPills: some View {
@@ -260,15 +306,21 @@ struct VehicleHeroCard: View {
                 .transition(.scale.combined(with: .opacity))
             }
             if state.powertrain.hasElectricRange {
+                // An unrecognised provider token is not a state the app can vouch for, so it does
+                // not get the pill's confident treatment: it reads as unknown rather than as a
+                // state.
+                let isRecognised = state.energy.chargingState.isRecognised
                 Pill(
                     text: state.energy.chargingState.displayName,
-                    color: HisingenTheme.statusColor(state: state.energy.chargingState),
-                    symbol: state.isCharging ? "bolt.fill" : nil
+                    color: isRecognised
+                        ? HisingenTheme.statusColor(state: state.energy.chargingState)
+                        : Color.secondary,
+                    symbol: isRecognised ? (state.isCharging ? "bolt.fill" : nil) : "questionmark.circle"
                 )
                 // The pill persists across Charging → Complete; only its
                 // contents swap, so the morph rides a content transition.
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.energy.chargingState)
+                .hisAnimation(Motion.stateChange, value: state.energy.chargingState)
                 .scaleEffect(chargingJustStarted ? 1.08 : 1)
                 .animation(reduceMotion ? nil : Motion.stateChange, value: chargingJustStarted)
             } else if state.powertrain.isCombustionOnly {
@@ -325,15 +377,15 @@ struct VehicleHeroCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(state.fuelSystem.levelPercent.map { String(format: "%.0f%%", $0) }
                          ?? state.fuelSystem.amountLiters.map { String(format: "%.0f L", $0) }
-                         ?? "—")
-                        .font(.system(size: 40, weight: HisingenTheme.displayWeight))
-                        .tracking(HisingenTheme.displayTracking)
+                         ?? "–")
+                        .font(.system(size: heroValueSize, weight: HisingenTheme.displayWeight))
+                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.fuelSystem.levelPercent, reduceMotion: reduceMotion)
                     if let liters = state.fuelSystem.amountLiters {
                         Text("\(Format.fuelVolume(liters: liters, unit: preferences.fuelVolumeUnit)) \(L10n.text("remaining"))")
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(HisingenTheme.inkMuted)
                     }
                 }
@@ -357,15 +409,15 @@ struct VehicleHeroCard: View {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
-                            .font(.system(size: 34, weight: HisingenTheme.displayWeight))
-                            .tracking(HisingenTheme.displayTracking)
+                        Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "–")
+                            .font(.system(size: compactHeroValueSize, weight: HisingenTheme.displayWeight))
+                            .tracking(HisingenTheme.displayTracking(forSize: compactHeroValueSize))
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.ink)
                             .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
                         if let fuel = state.fuelSystem.levelPercent {
                             Text(String(format: "· %.0f%% %@", fuel, L10n.text("fuel")))
-                                .font(.system(size: 14, weight: .medium))
+                                .hisType(.subhead, weight: .medium)
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
                     }
@@ -391,12 +443,18 @@ struct VehicleHeroCard: View {
             )
         } else {
             HStack(alignment: .lastTextBaseline) {
-                Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "—")
-                    .font(.system(size: 40, weight: HisingenTheme.displayWeight))
-                    .tracking(HisingenTheme.displayTracking)
-                    .monospacedDigit()
-                    .foregroundStyle(HisingenTheme.ink)
-                    .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "–")
+                        .font(.system(size: heroValueSize, weight: HisingenTheme.displayWeight))
+                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize))
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.ink)
+                        .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
+                    // The largest number on the surface said nothing about what it measured. On a
+                    // charging screen the two candidates are the current level and the configured
+                    // limit, so the caption names the first and, when there is one, the second.
+                    heroNumberCaption
+                }
                 Spacer()
                 rangeSummary(
                     value: state.energy.rangeKm,
@@ -421,15 +479,15 @@ struct VehicleHeroCard: View {
     private func rangeSummary(value: Int?, title: String, symbol: String) -> some View {
         VStack(alignment: .trailing, spacing: 1) {
             HStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 11))
-                Text(value.map { Format.distance(km: $0, unit: preferences.distanceUnit) } ?? "—")
-                    .font(.system(size: 16, weight: HisingenTheme.valueWeight))
+                Image(systemName: symbol).hisType(.label)
+                Text(value.map { Format.distance(km: $0, unit: preferences.distanceUnit) } ?? "–")
+                    .hisType(.title, weight: HisingenTheme.valueWeight)
                     .monospacedDigit()
                     .hisTelemetryValue(value, reduceMotion: reduceMotion)
             }
             .foregroundStyle(HisingenTheme.inkMuted)
             Text(title)
-                .font(.system(size: 10, weight: .medium))
+                .hisType(.caption, weight: .medium)
                 .foregroundStyle(.tertiary)
         }
     }

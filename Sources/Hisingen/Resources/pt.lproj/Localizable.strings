@@ -62,7 +62,7 @@
 "Active Timers" = "Temporizadores ativos";
 "Active Unlimited" = "Active Unlimited";
 "Active Vehicle: %@" = "Veículo ativo: %@";
-"Active for %@ — each vehicle saves its own theme preference." = "Ativo para %@ — cada veículo guarda a sua própria preferência de tema.";
+"Active for %@. Each vehicle saves its own theme preference." = "Ativo para %@: cada veículo guarda a sua própria preferência de tema.";
 "Add Climate Timer…" = "Add Climate Timer…";
 "Add Schedule" = "Adicionar agendamento";
 "Add or Manage Vehicles…" = "Add or Manage Vehicles…";
@@ -96,7 +96,7 @@
 "Altitude" = "Altitude";
 "Ambient Weather" = "Ambient Weather";
 "Ambient weather at vehicle GPS location" = "Ambient weather at vehicle GPS location";
-"Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo";
+"Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location: sends vehicle coordinates to Open-Meteo";
 "An installation is scheduled." = "An installation is scheduled.";
 "Another remote command is already running." = "Another remote command is already running.";
 "Another vehicle command conflicts with this request." = "Another vehicle command conflicts with this request.";
@@ -378,7 +378,7 @@
 "Estimated Cost" = "Custo estimado";
 "Estimated Degradation" = "Degradação estimada";
 "Estimated Range" = "Estimated Range";
-"Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading.";
+"Estimated from current range versus this model's rated WLTP range at this charge level, not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level: not a measured battery health reading.";
 "Evening Unlocked Reminder" = "Evening Unlocked Reminder";
 "Excellent" = "Excellent";
 "Export" = "Exportar";
@@ -600,7 +600,7 @@
 "Modem Wake Reason" = "Modem Wake Reason";
 "Moderate" = "Moderado";
 "Mon" = "Mon";
-"Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below.";
+"Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar: pick your vehicle's brand and sign in below.";
 "Monochrome panels, sharp corners, Scandinavian minimalism" = "Painéis monocromáticos, cantos retos, minimalismo escandinavo";
 "More (%d)" = "More (%d)";
 "More, %d sections" = "More, %d sections";
@@ -644,7 +644,7 @@
 "Odometer & Service" = "Odómetro e manutenção";
 "Odometer & service" = "Odometer & service";
 "Off" = "Off";
-"Offline — showing the last available vehicle data." = "Offline — showing the last available vehicle data.";
+"Offline: showing the last available vehicle data." = "Offline: showing the last available vehicle data.";
 "Oil" = "Oil";
 "Oil level" = "Oil level";
 "Online" = "Online";
@@ -789,7 +789,7 @@
 "Refresh vehicle data before using this command." = "Refresh vehicle data before using this command.";
 "Refresh vehicle data to detect model capabilities." = "Refresh vehicle data to detect model capabilities.";
 "Regenerated Energy" = "Energia regenerada";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window.";
 "Registration & Model" = "Matrícula e modelo";
 "Registration / License Plate" = "Matrícula / Placa";
 "Release" = "Release";
@@ -799,7 +799,7 @@
 "Remote Climate" = "Climatização remota";
 "Remote Controls" = "Remote Controls";
 "Remote Controls Temporarily Disabled" = "Remote Controls Temporarily Disabled";
-"Remote Controls — Sending…" = "Remote Controls — Sending…";
+"Remote Controls: Sending…" = "Remote Controls: Sending…";
 "Remote Engine Start (RES)" = "Remote Engine Start (RES)";
 "Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active." = "Os comandos remotos de trancar, destrancar, pré-climatização e piscar/buzinar estão ativos.";
 "Remote Locks" = "Trancamento remoto";
@@ -807,7 +807,7 @@
 "Remote climate, locks, windows, charging, timers and software installation are active." = "Climatização remota, trancamento, janelas, carregamento, temporizadores e instalação de software ativos.";
 "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication." = "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication.";
 "Remote controls restricted to paired mobile devices" = "Remote controls restricted to paired mobile devices";
-"Remote controls — disabled by default" = "Remote controls — disabled by default";
+"Remote controls: disabled by default" = "Remote controls: disabled by default";
 "Remote engine start (RES)" = "Remote engine start (RES)";
 "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices." = "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices.";
 "Render high-resolution %@ visual" = "Apresentar imagem de alta resolução do %@";
@@ -899,7 +899,7 @@
 "Show the current weather at your vehicle's position." = "Show the current weather at your vehicle's position.";
 "Show the vehicle selector for multi-car accounts." = "Show the vehicle selector for multi-car accounts.";
 "Show vehicle parking GPS coordinates and 1-click Apple Maps integration." = "Show vehicle parking GPS coordinates and 1-click Apple Maps integration.";
-"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
+"Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot: most live telemetry is unavailable until the next successful refresh.";
 "Shown in footer switcher, menus, and vehicle headers" = "Apresentado no seletor de rodapé, menus e cabeçalhos do veículo";
 "Side" = "Lateral";
 "Side Profile" = "Side Profile";
@@ -1091,8 +1091,8 @@
 "Unlock trunk" = "Unlock trunk";
 "Unlock vehicle" = "Unlock vehicle";
 "Unlocked" = "Destrancado";
-"Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast";
-"Unofficial — monochrome panels, sharp corners, no color accent" = "Unofficial — monochrome panels, sharp corners, no color accent";
+"Unofficial: Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial: Volvo's blue accent, soft panels, light/bold type contrast";
+"Unofficial: monochrome panels, sharp corners, no color accent" = "Unofficial: monochrome panels, sharp corners, no color accent";
 "Unsupported" = "Unsupported";
 "Update Available (v%@)…" = "Update Available (v%@)…";
 "Update Failed" = "Falha na atualização";
@@ -1233,14 +1233,14 @@
 "to target" = "to target";
 "updated %@" = "updated %@";
 "you@example.com" = "you@example.com";
-"—" = "—";
+"–" = "–";
 "•••••••• (only to update credentials)" = "•••••••• (only to update credentials)";
 "⚠︎ %@ is open" = "⚠︎ %@ is open";
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Vehicle alarm triggered";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
 
-"Command sent — waiting for the vehicle" = "Comando enviado — à espera do veículo";
+"Command sent: waiting for the vehicle" = "Comando enviado: à espera do veículo";
 "Values below may update once the car reports in." = "Os valores abaixo podem atualizar-se quando o carro reportar.";
 
 /* Missing translations filled in (keys referenced by L10n calls) */
@@ -1258,13 +1258,13 @@
 "%@ kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)" = "%@ kWh Long Range (LG Energy / CATL · 27 módulos / 324 células · 400V)";
 "%@ kWh T8 Recharge PHEV (96 Cells · %@ kWh Usable)" = "%@ kWh T8 Recharge PHEV (96 células · %@ kWh úteis)";
 "%@ kWh T8 Twin Engine PHEV (%@ kWh Usable)" = "%@ kWh T8 Twin Engine PHEV (%@ kWh úteis)";
-"%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])" = "%@ — Mudar de veículo (⌃⌥[ / ⌃⌥])";
+"%@ · Switch Vehicle (⌃⌥1–9)" = "%@: Mudar de veículo (⌃⌥[ / ⌃⌥])";
 "%d days" = "%d dias";
 "%d logs" = "%d registos";
 "%d µg/m³ PM2.5 removed" = "%d µg/m³ de PM2.5 removidos";
 "(estimated)" = "(estimado)";
 "/kWh from" = "/kWh desde";
-"90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average." = "Percentil 90 da potência de pico das sessões — menos afetado por um carregamento rápido atípico do que uma média simples.";
+"90th percentile of session peak power: less skewed by one outlier fast-charge than a plain average." = "Percentil 90 da potência de pico das sessões: menos afetado por um carregamento rápido atípico do que uma média simples.";
 "\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications." = "\"Valores diretos da pressão dos pneus\" significa leituras numéricas em kPa. Muitos veículos comunicam antes um nível de aviso por pneu (TPMS indireto); esses avisos continuam a aparecer na vista geral do veículo e nas notificações.";
 "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry." = "Um valor prévio conservador do tipo frota, baseado no ano do modelo e no odómetro, estabiliza estimativas escassas; não é telemetria do veículo.";
 "A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only." = "Uma extrapolação aproximada com base no declínio observado da vida útil do filtro entre leituras guardadas localmente. O desgaste real depende da utilização e das condições; considere-o apenas um guia aproximado.";
@@ -1282,7 +1282,7 @@
 "Alert at 30 days, 1,000 km, or a provider service warning" = "Alertar aos 30 dias, 1.000 km ou num aviso de manutenção do fornecedor";
 "Alert below 2 kW for 15 minutes while actively charging" = "Alertar abaixo de 2 kW durante 15 minutos enquanto carrega ativamente";
 "Alert when provider telemetry remains older than its freshness limit" = "Alertar quando a telemetria do fornecedor continuar mais antiga do que o limite de atualidade";
-"Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "Mostra sempre todo o histórico registado — o seletor de período acima não se aplica aqui, pois o estado de saúde evolui ao longo de meses, não de dias.";
+"Always shows all recorded history. The period selector above doesn't apply here, since state of health moves over months, not days." = "Mostra sempre todo o histórico registado: o seletor de período acima não se aplica aqui, pois o estado de saúde evolui ao longo de meses, não de dias.";
 "An older software event is recorded, but no current update failure requires attention." = "Há um evento de software antigo registado, mas nenhuma falha de atualização atual exige atenção.";
 "Announced Version" = "Versão anunciada";
 "Announced: %@" = "Anunciada: %@";
@@ -1390,7 +1390,7 @@
 "Download authorized" = "Transferência autorizada";
 "Download failed" = "Falha na transferência";
 "Driving" = "Condução";
-"Dropdown panel preset — applies instantly" = "Predefinição de painel suspenso — aplicada instantaneamente";
+"Dropdown panel preset: applies instantly" = "Predefinição de painel suspenso: aplicada instantaneamente";
 "Edit this timer" = "Editar este temporizador";
 "Electric consumption unit" = "Unidade de consumo elétrico";
 "Enable optimised charging at location" = "Ativar carregamento otimizado neste local";
@@ -1434,7 +1434,7 @@
 "History Overview" = "Resumo do histórico";
 "History Period" = "Período do histórico";
 "Idle Tail" = "Final em repouso";
-"If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly." = "Se a atualização estiver à espera há muito tempo, contacte o Suporte Polestar ou marque uma visita à assistência — as oficinas podem instalá-la diretamente.";
+"If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly." = "Se a atualização estiver à espera há muito tempo, contacte o Suporte Polestar ou marque uma visita à assistência: as oficinas podem instalá-la diretamente.";
 "In-Service Date" = "Data de entrada em serviço";
 "Install Duration" = "Duração da instalação";
 "Intelligent timer" = "Temporizador inteligente";
@@ -1448,7 +1448,7 @@
 "Legacy estimate" = "Estimativa antiga";
 "Lifetime charging cost ≈ %@ per %@" = "Custo de carregamento acumulado ≈ %@ por %@";
 "Lighting Warning Status" = "Estado de aviso de iluminação";
-"Limited data (%@ points) — treat this trend as indicative, not conclusive." = "Dados limitados (%@ pontos) — considere esta tendência indicativa, não conclusiva.";
+"Limited data (%@ points): treat this trend as indicative, not conclusive." = "Dados limitados (%@ pontos): considere esta tendência indicativa, não conclusiva.";
 "Liters (L)" = "Litros (L)";
 "Live stream disconnected. Retrying %@. Scheduled polling is still active." = "Transmissão em direto desligada. A tentar novamente %@. A consulta agendada continua ativa.";
 "Live vehicle stream connected" = "Transmissão em direto do veículo ligada";
@@ -1507,8 +1507,8 @@
 "Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates." = "Valores opcionais específicos do VIN, da folha de especificações do veículo. Substituem as referências gerais da família do modelo nas estimativas calculadas de autonomia e SoH.";
 "Overhead (Top-Down)" = "Vista superior (de cima)";
 "Panel Size" = "Tamanho do painel";
-"Past event — no current action required" = "Evento anterior — não é necessária qualquer ação atual";
-"Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "A potência de pico em %@ ficou muito abaixo do nível habitual deste local — o cabo ou o carregador podem estar limitados.";
+"Past event: no current action required" = "Evento anterior: não é necessária qualquer ação atual";
+"Peak power at %@ was far below this location's usual level. The cable or charger may be derating." = "A potência de pico em %@ ficou muito abaixo do nível habitual deste local: o cabo ou o carregador podem estar limitados.";
 "Performance Software Upgrade" = "Atualização de software de desempenho";
 "Plug & Charge" = "Plug & Charge";
 "PM2.5" = "PM2.5";
@@ -1541,7 +1541,7 @@
 "Reorders the detail rows on the Charging card. Unlisted rows keep their default position below." = "Reordena as linhas de detalhe do cartão de Carregamento. As linhas não listadas mantêm a posição predefinida abaixo.";
 "Reported Battery Capacity" = "Capacidade da bateria comunicada";
 "Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle." = "Comunicado por um campo não documentado do backend Polestar. Considere-o não verificado até coincidir com a versão mostrada no veículo.";
-"Reported by the vehicle cloud backend — exact support per VIN." = "Comunicado pelo backend cloud do veículo — suporte exato por VIN.";
+"Reported by the vehicle cloud backend. Exact support per VIN." = "Comunicado pelo backend cloud do veículo: suporte exato por VIN.";
 "Reported supported" = "Suporte comunicado";
 "Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in." = "Pedir os âmbitos restritos de trancar, destrancar, motor, localizar e localização no próximo início de sessão.";
 "Reset" = "Repor";
@@ -1601,7 +1601,7 @@
 "The download failed. The vehicle will retry automatically; installation can only be started once the download completes." = "A transferência falhou. O veículo tenta novamente automaticamente; a instalação só pode ser iniciada quando a transferência estiver concluída.";
 "The newest provider refresh did not include these fields. Hisingen retained the previous successful readings and labels them here instead of presenting them as live." = "A atualização mais recente do fornecedor não incluía estes campos. O Hisingen manteve as leituras anteriores bem-sucedidas e identifica-as aqui, em vez de as apresentar como em tempo real.";
 "The providers report warning flags, not measured fluid levels." = "Os fornecedores comunicam sinalizadores de aviso, não níveis de líquidos medidos.";
-"The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "A atualização foi anunciada mas ainda não foi autorizada para transferência. A Polestar lança atualizações principais em lotes — o seu VIN pode não estar no lote atual. O carro transfere-a automaticamente assim que o backend autorizar.";
+"The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "A atualização foi anunciada mas ainda não foi autorizada para transferência. A Polestar lança atualizações principais em lotes: o seu VIN pode não estar no lote atual. O carro transfere-a automaticamente assim que o backend autorizar.";
 "The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes." = "A atualização está pronta para transferência, mas ainda não foi transferida. O veículo transfere-a automaticamente; a instalação só pode ser iniciada quando a transferência estiver concluída.";
 "The vehicle did not report a configurable current limit." = "O veículo não comunicou um limite de corrente configurável.";
 "The vehicle did not report an air-quality index." = "O veículo não comunicou um índice de qualidade do ar.";
@@ -1615,7 +1615,7 @@
 "This event is hidden from Needs Attention on this Mac." = "Este evento fica oculto de Precisa de Atenção neste Mac.";
 "This Month vs Last" = "Este mês vs. o anterior";
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "Esta atualização foi anunciada mas ainda não foi autorizada para transferência. O veículo transfere-a por iniciativa própria assim que o backend autoriza e as condições o permitem; a instalação só pode ser iniciada depois.";
-"This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Este veículo não suporta consentimento de transferência pela cloud — a atualização só pode ser transferida quando o carro contacta o backend por iniciativa própria. Uma visita à assistência Polestar pode instalá-la diretamente.";
+"This vehicle does not support cloud-based download consent. The update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "Este veículo não suporta consentimento de transferência pela cloud: a atualização só pode ser transferida quando o carro contacta o backend por iniciativa própria. Uma visita à assistência Polestar pode instalá-la diretamente.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "O TPMS indireto deste veículo comunica um nível de aviso por pneu, não uma leitura exata de pressão.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "Apenas estado de aviso. O veículo comunica um nível de aviso por pneu e só marca um pneu quando deteta um problema, por isso não é uma medição de pressão em direto.";
 "To" = "Até";
@@ -1698,7 +1698,7 @@
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Densidade do conteúdo";
-"Zoom content independently of panel size — compact shows more before scrolling" = "Ampliar o conteúdo independentemente do tamanho do painel — o modo compacto mostra mais antes de rolar";
+"Zoom content independently of panel size: compact shows more before scrolling" = "Ampliar o conteúdo independentemente do tamanho do painel: o modo compacto mostra mais antes de rolar";
 "Custom Size" = "Tamanho personalizado";
 "Independent width and height overrides" = "Largura e altura independentes";
 "Width" = "Largura";
@@ -1798,7 +1798,7 @@
 "Open the trip route in Apple Maps" = "Open the trip route in Apple Maps";
 "Open trip start in Apple Maps" = "Open trip start in Apple Maps";
 "Overlay previous session" = "Overlay previous session";
-"Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger.";
+"Peak power for this session was far below what this vehicle usually reaches here. Possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here: possibly a failing cable or a derated charger.";
 "Petrol Equivalent" = "Petrol Equivalent";
 "Pick a custom date range" = "Pick a custom date range";
 "Previous" = "Previous";
@@ -2078,7 +2078,7 @@
 // API feature descriptions (English fallback).
 "%@ failed. %@" = "%@ failed. %@";
 "%@ · %d kW AC / %d kW DC" = "%@ · %d kW AC / %d kW DC";
-"%@ — %@" = "%@ — %@";
+"%@: %@" = "%@: %@";
 "%d AQI (%@)" = "%d AQI (%@)";
 "%d m" = "%d m";
 "%d samples, latest %d, range %d to %d, %@" = "%d samples, latest %d, range %d to %d, %@";
@@ -2221,7 +2221,7 @@
 "The vehicle allows at most %d charging locations." = "The vehicle allows at most %d charging locations.";
 "The vehicle allows at most %d climate timers." = "The vehicle allows at most %d climate timers.";
 "The vehicle could not lock because a door, the hood, or the tailgate is open." = "The vehicle could not lock because a door, the hood, or the tailgate is open.";
-"The vehicle did not respond in time — it may be parked somewhere with no reception." = "The vehicle did not respond in time — it may be parked somewhere with no reception.";
+"The vehicle did not respond in time. It may be parked somewhere with no reception." = "The vehicle did not respond in time: it may be parked somewhere with no reception.";
 "The vehicle has not reported a known charging state." = "The vehicle has not reported a known charging state.";
 "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes." = "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.";
 "The vehicle is not in a state that allows this command (for example, while it is being driven)." = "The vehicle is not in a state that allows this command (for example, while it is being driven).";
@@ -2249,7 +2249,7 @@
 "Vehicle Calculation. Average electric consumption over the automatic trip-meter period." = "Vehicle Calculation. Average electric consumption over the automatic trip-meter period.";
 "Vehicle Health" = "Vehicle Health";
 "Vehicle Report" = "Vehicle Report";
-"Vehicle data is still loading — try again in a moment." = "Vehicle data is still loading — try again in a moment.";
+"Vehicle data is still loading. Try again in a moment." = "Vehicle data is still loading: try again in a moment.";
 "Vehicle locked" = "Vehicle locked";
 "Vehicle report" = "Vehicle report";
 "Vehicle software installation started" = "Vehicle software installation started";
@@ -2324,11 +2324,11 @@
 "Recent service response" = "Recent service response";
 "Release Notes" = "Release Notes";
 "Reported Connection" = "Reported Connection";
-"Reported by the vehicle at its parked location — not a forecast." = "Reported by the vehicle at its parked location — not a forecast.";
+"Reported by the vehicle at its parked location, not a forecast." = "Reported by the vehicle at its parked location: not a forecast.";
 "Started charging." = "Started charging.";
 "Status Reported" = "Status Reported";
 "Test notification" = "Test notification";
-"The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing.";
+"The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault: a Polestar workshop can apply the update directly if it keeps failing.";
 "The schedule index must not be negative." = "The schedule index must not be negative.";
 "The schedule type does not match this command." = "The schedule type does not match this command.";
 "This is how Hisingen alerts will look." = "This is how Hisingen alerts will look.";
@@ -2388,7 +2388,7 @@
 "Tomorrow's prices arrive after 14:15" = "Tomorrow's prices arrive after 14:15";
 "Prices unavailable right now" = "Prices unavailable right now";
 "Spot prices exclude taxes and grid fees" = "Spot prices exclude taxes and grid fees";
-"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Charge %@ over %d h to reach %d%% — average %@, now %@";
+"Charge %@ over %d h to reach %d%%: average %@, now %@" = "Charge %@ over %d h to reach %d%%: average %@, now %@";
 "Saves %@" = "Saves %@";
 "Charging now is cheapest" = "Charging now is cheapest";
 "A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
@@ -2404,7 +2404,7 @@
 "Electricity price outlook" = "Electricity price outlook";
 "Planned window from %@" = "Planned window from %@";
 "Between %@ and %@ kr per kWh. %@" = "Between %@ and %@ kr per kWh. %@";
-"The car has its own charging schedules — the planner does not use them" = "The car has its own charging schedules — the planner does not use them";
+"The car has its own charging schedules. The planner does not use them" = "The car has its own charging schedules: the planner does not use them";
 "fetched %@" = "fetched %@";
 "The vehicle's location suggests %@" = "The vehicle's location suggests %@";
 "Notify When the Cheap Window Opens" = "Notify When the Cheap Window Opens";
@@ -2412,12 +2412,12 @@
 "Notify When Tomorrow's Prices Arrive" = "Notify When Tomorrow's Prices Arrive";
 "One daily banner after 14:15 with the cheapest hour" = "One daily banner after 14:15 with the cheapest hour";
 "Auto-Start Charging in the Window" = "Auto-Start Charging in the Window";
-"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab: only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "Sends the start-charging command automatically while the window runs";
 "Market Price Cost" = "Market Price Cost";
 "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.";
 "The cheap charging window runs %@." = "The cheap charging window runs %@.";
-"Plug in the vehicle — the cheap charging window runs %@." = "Plug in the vehicle — the cheap charging window runs %@.";
+"Plug in the vehicle. The cheap charging window runs %@." = "Plug in the vehicle: the cheap charging window runs %@.";
 "Cheap charging window: %@." = "Cheap charging window: %@.";
 "Tomorrow's electricity prices are in" = "Tomorrow's electricity prices are in";
 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
@@ -2427,7 +2427,7 @@
 "Show older entries" = "Show older entries";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded.";
 "Set up Hisingen" = "Configurar o Hisingen";
-"Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features." = "O seu veículo está ligado. Escolha um ponto de partida — tudo pode ser alterado mais tarde em Definições → Features.";
+"Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "O seu veículo está ligado. Escolha um ponto de partida: tudo pode ser alterado mais tarde em Definições → Features.";
 "Quick setup" = "Configuração rápida";
 "Remote commands" = "Comandos remotos";
 "Polestar remote controls run through a separate one-time browser authorization." = "Os comandos remotos da Polestar requerem uma autorização única no navegador.";
@@ -2436,7 +2436,7 @@
 "Click the car icon in the menu bar any time to open this panel." = "Clique no ícone do carro na barra de menus para abrir este painel a qualquer momento.";
 "Connect your vehicle account below to get started." = "Ligue a sua conta de veículo abaixo para começar.";
 "Still failing?" = "A";
-"Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added." = "p";
+"Your Polestar session expired. Sign in again. The interactive window handles any new verification step Polestar added." = "p";
 "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update." = "e";
 "Hidden trips (%d)" = "n";
 "Restore" = "a";
@@ -2450,7 +2450,7 @@
 "Full Backup (JSON)" = "a";
 "Export Selected Month" = "i";
 "Export All Months" = "v";
-"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Apenas indicativo — assume uma intensidade de rede de %@ g CO₂/kWh e um carro a gasolina de %@ g CO₂/km, do poço à roda. Defina o valor de rede em Definições → Geral → Grid Carbon Intensity.";
+"Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Apenas indicativo: assume uma intensidade de rede de %@ g CO₂/kWh e um carro a gasolina de %@ g CO₂/km, do poço à roda. Defina o valor de rede em Definições → Geral → Grid Carbon Intensity.";
 
 // English fallback values pending translation
 "Lead Time" = "Lead Time";
@@ -2458,3 +2458,65 @@
 "When the window opens" = "When the window opens";
 "1 hour before" = "1 hour before";
 "%d minutes before" = "%d minutes before";
+
+// English fallback values pending translation
+"%1$d of %2$d windows open" = "%1$d of %2$d windows open";
+"%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
+"%@ kr" = "%@ kr";
+"Add All Safe Features" = "Add All Safe Features";
+"Add Recommended" = "Add Recommended";
+"Back to Vehicle" = "Back to Vehicle";
+"Battery level" = "Battery level";
+"Checks the vehicle again for the current software status." = "Checks the vehicle again for the current software status.";
+"Choose a vehicle first; muting applies to one car at a time." = "Choose a vehicle first; muting applies to one car at a time.";
+"Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one." = "Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one.";
+"Critical" = "Critical";
+"Est. ready %@ · about %@" = "Est. ready %@ · about %@";
+"Estimates recorded" = "Estimates recorded";
+"Finding the address…" = "Finding the address…";
+"Give this location a name." = "Give this location a name.";
+"Hide this panel" = "Hide this panel";
+"Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history." = "Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history.";
+"History could not be read" = "History could not be read";
+"L/100km" = "L/100km";
+"Lock State Not Reported" = "Lock State Not Reported";
+"Locks the vehicle." = "Locks the vehicle.";
+"Lower" = "Lower";
+"New locations will no longer be stored. Existing saved locations are kept." = "New locations will no longer be stored. Existing saved locations are kept.";
+"Next service projection has no date." = "Next service projection has no date.";
+"No activity was recorded in this period." = "No activity was recorded in this period.";
+"No air-cleaning cycles were recorded in this period." = "No air-cleaning cycles were recorded in this period.";
+"No automations ran in this period." = "No automations ran in this period.";
+"No charging sessions match this search." = "No charging sessions match this search.";
+"No charging telemetry has been reported for this vehicle yet." = "No charging telemetry has been reported for this vehicle yet.";
+"No fill-ups were recorded in this period." = "No fill-ups were recorded in this period.";
+"No sensor readings were reported on the last refresh." = "No sensor readings were reported on the last refresh.";
+"No vehicle selected" = "No vehicle selected";
+"Nothing has changed while Hisingen was running." = "Nothing has changed while Hisingen was running.";
+"Raise" = "Raise";
+"Re-check Software Status" = "Re-check Software Status";
+"Reading the request log…" = "Reading the request log…";
+"Saves these credentials and connects." = "Saves these credentials and connects.";
+"Showing cached data. This section returns when the next refresh succeeds." = "Showing cached data. This section returns when the next refresh succeeds.";
+"Some details still need fixing. Press to see what." = "Some details still need fixing. Press to see what.";
+"Stop Storing & Clear Locations" = "Stop Storing & Clear Locations";
+"Stop Storing, Keep Locations" = "Stop Storing, Keep Locations";
+"That departure time has passed. Pick a new one to check readiness." = "That departure time has passed. Pick a new one to check readiness.";
+"The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
+"The vehicle has not reported a lock state yet, so this sends Lock." = "The vehicle has not reported a lock state yet, so this sends Lock.";
+"This is already the highest setting." = "This is already the highest setting.";
+"This is already the lowest setting." = "This is already the lowest setting.";
+"This is the newest page." = "This is the newest page.";
+"This is the oldest page." = "This is the oldest page.";
+"This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
+"This vehicle did not report this capability on the last refresh." = "This vehicle did not report this capability on the last refresh.";
+"This vehicle does not support a current limit per location." = "This vehicle does not support a current limit per location.";
+"Try Again" = "Try Again";
+"Unlocks the vehicle." = "Unlocks the vehicle.";
+"Unrecognised state: %@" = "Unrecognised state: %@";
+"Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price." = "Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price.";
+"Window State Not Reported" = "Window State Not Reported";
+"Windows Closed" = "Windows Closed";
+"Windows Open" = "Windows Open";
+"kr per kWh" = "kr per kWh";
+"≈%@ to target at your %@/kWh setting" = "≈%@ to target at your %@/kWh setting";

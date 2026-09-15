@@ -8,7 +8,7 @@ import Testing
 /// a single use. `statusController.activeVin` was only ever synced from `onCars` (fired by
 /// session establishment, never by a switch), so the UI-level `vin != activeVin` guard kept
 /// vetoing switches BACK to the launch vehicle while `RefreshCoordinator`'s own
-/// `vin != preferences.vin` guard vetoed repeating the forward switch — and every path
+/// `vin != preferences.vin` guard vetoed repeating the forward switch – and every path
 /// (chips, switcher menu, ⌃⌥[ / ⌃⌥] cycling, context menu) funnels through those guards.
 @MainActor
 struct MultiVehicleSelectionTests {
@@ -115,7 +115,7 @@ struct MultiVehicleSelectionTests {
         #expect(stateB.identity.vin == Self.vinB)
         #expect(preferences.vin == Self.vinB)
 
-        // Switch back — this was the direction permanently blocked before the fix.
+        // Switch back – this was the direction permanently blocked before the fix.
         coordinator.selectCar(vin: Self.vinA)
         let stateA = await awaitState(coordinator, vin: Self.vinA)
         #expect(stateA.identity.vin == Self.vinA)

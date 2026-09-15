@@ -25,16 +25,28 @@ struct StateSummaryChip: View {
         }
     }
 
-    private var chipRadius: CGFloat { HisingenTheme.cornerRadius == 0 ? 0 : 9 }
+    private var chipRadius: CGFloat { HisingenTheme.statusChipRadius }
+
+    /// The chip's whole job is to encode severity in a colour and a symbol, and neither reached
+    /// the accessibility tree, so a critical state and an informational one were announced
+    /// identically. Only the two states that carry a warning are prefixed: "Good" on a calm
+    /// label would be noise.
+    private var severitySpokenLabel: String {
+        switch severity {
+        case .warning: return L10n.format("%@: %@", L10n.text("Warning"), message)
+        case .critical: return L10n.format("%@: %@", L10n.text("Critical"), message)
+        case .good, .neutral: return message
+        }
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: HisingenTheme.headingWeight))
+                .hisType(.label, weight: HisingenTheme.headingWeight)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .accessibilityHidden(true)
             Text(message)
-                .font(.system(size: 12, weight: HisingenTheme.valueWeight))
+                .hisType(.body, weight: HisingenTheme.valueWeight)
             Spacer()
         }
         .foregroundStyle(color)
@@ -45,9 +57,9 @@ struct StateSummaryChip: View {
             RoundedRectangle(cornerRadius: chipRadius, style: .continuous)
                 .stroke(color.opacity(0.22), lineWidth: 0.5)
         )
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: severity)
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: message)
+        .hisAnimation(Motion.stateChange, value: severity)
+        .hisAnimation(Motion.stateChange, value: message)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(message)
+        .accessibilityLabel(severitySpokenLabel)
     }
 }

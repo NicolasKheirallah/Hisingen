@@ -16,12 +16,14 @@ extension InfoTabView {
                     KVRow(L10n.text("Calculated State of Health (SoH)"),
                           L10n.text("Waiting for 100% charge"), symbol: "clock")
                     Text(L10n.text("Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading."))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                     Text(rangeModeGuidance)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             })
@@ -57,11 +59,11 @@ extension InfoTabView {
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "heart.fill")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
                             Text(L10n.text("Calculated State of Health (SoH)"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(.secondary)
                             InformationButton(message: estimate.methodologySummary)
                         }
@@ -71,9 +73,9 @@ extension InfoTabView {
                                 .progressViewStyle(.linear)
                                 .frame(width: 60)
                                 .tint(statusColor)
-                                .animation(Motion.resolve(Motion.progress), value: soh)
+                                .hisAnimation(Motion.progress, value: soh)
                             Text(String(format: "%.1f%%", soh))
-                                .font(.system(size: 11, weight: .bold))
+                                .hisType(.label, weight: .bold)
                                 .foregroundStyle(statusColor)
                                 .hisTelemetryValue(soh, reduceMotion: reduceMotion)
                         }
@@ -84,13 +86,15 @@ extension InfoTabView {
                     .accessibilityValue(String(format: "%.1f%%", soh))
 
                     Text(estimate.methodologySummary)
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(rangeModeGuidance)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let fullChargeRange = estimate.fullChargeRangeKm,
@@ -110,7 +114,7 @@ extension InfoTabView {
                     KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
 
                     if !history.isEmpty {
-                        Divider().opacity(0.4)
+                        Divider().opacity(HisingenTheme.dividerOpacity)
                             .padding(.vertical, 2)
 
                         DisclosureGroup {
@@ -118,14 +122,16 @@ extension InfoTabView {
                                 ForEach(history.prefix(5)) { r in
                                     HStack {
                                         Text(Format.dateTimeFormatter.string(from: r.timestamp))
-                                            .font(.system(size: 10))
+                                            .hisType(.caption)
                                             .foregroundStyle(.secondary)
                                         Spacer()
-                                        Text(String(format: "%.0f km", r.odometerKm))
-                                            .font(.system(size: 10, weight: .medium))
+                                        // This printed raw kilometres while the row three lines
+                                        // above converted through the reader's unit.
+                                        Text(Format.distance(km: r.odometerKm, decimals: 0, unit: preferences.distanceUnit))
+                                            .hisType(.caption, weight: .medium)
                                             .foregroundStyle(.secondary)
                                         Text(String(format: "%.1f%% SoH", r.stateOfHealthPct))
-                                            .font(.system(size: 10, weight: .semibold))
+                                            .hisType(.caption, weight: .semibold)
                                             .foregroundStyle(HisingenTheme.semanticGood)
                                     }
                                     .padding(.vertical, 1)
@@ -142,7 +148,7 @@ extension InfoTabView {
                                             Image(systemName: "square.and.arrow.up")
                                             Text(L10n.text("Export Health Log (CSV)"))
                                         }
-                                        .font(.system(size: 10, weight: .medium))
+                                        .hisType(.caption, weight: .medium)
                                     }
                                     .buttonStyle(.pressable)
                                     .controlSize(.mini)
@@ -155,10 +161,10 @@ extension InfoTabView {
                                 Text(L10n.text("Calculated SoH Milestones"))
                                 Spacer()
                                 Text(L10n.format("%d logs", history.count))
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                         }
                         .disclosureGroupStyle(WholeRowDisclosureStyle())
                     }

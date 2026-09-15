@@ -4,11 +4,11 @@ import SwiftUI
 /// from the user's selected `AppTheme`, so a single Settings toggle restyles the
 /// panel. The surface area is large, so it is split across focused files:
 ///
-/// - `HisingenTheme.swift` — the type plus panel / layout geometry
-/// - `HisingenTheme+Palette.swift` — brand and semantic colour tokens
-/// - `HisingenTheme+Surfaces.swift` — card and popover surface styling
-/// - `HisingenTheme+Typography.swift` — font weights, tracking, decorative tint
-/// - `HisingenTheme+StatusColors.swift` — status / chart colours and domain helpers
+/// - `HisingenTheme.swift` – the type plus panel / layout geometry
+/// - `HisingenTheme+Palette.swift` – brand and semantic colour tokens
+/// - `HisingenTheme+Surfaces.swift` – card and popover surface styling
+/// - `HisingenTheme+Typography.swift` – font weights, tracking, decorative tint
+/// - `HisingenTheme+StatusColors.swift` – status / chart colours and domain helpers
 @MainActor
 enum HisingenTheme {
     static var theme: AppTheme { PreferencesStore.shared.appTheme }
@@ -25,14 +25,23 @@ enum HisingenTheme {
         case .aurora: return 16
         }
     }
-    static var cardPadding: CGFloat {
-        switch theme {
-        case .hisingen, .cyanRacing: return 14
-        case .nordicNight, .aurora, .forest: return 15
-        case .polestar, .volvo, .swedishGold, .sandDune: return 16
-        }
+    /// The density preset's spacing multiplier. Type is the ramp's job; this is the other half of
+    /// what density means now that the content tree is no longer raster-scaled — a denser layout is
+    /// one that reflows, not one whose text a transform has shrunk.
+    static var densitySpacingScale: CGFloat {
+        PreferencesStore.shared.contentDensity.spacingScale
     }
-    static let sectionSpacing: CGFloat = 12
+
+    static var cardPadding: CGFloat {
+        let themePadding: CGFloat = switch theme {
+        case .hisingen, .cyanRacing: 14
+        case .nordicNight, .aurora, .forest: 15
+        case .polestar, .volvo, .swedishGold, .sandDune: 16
+        }
+        return (themePadding * densitySpacingScale).rounded()
+    }
+
+    static var sectionSpacing: CGFloat { (12 * densitySpacingScale).rounded() }
     /// Live panel geometry from the selected size preset / custom overrides /
     /// density zoom, resolved through PanelLayout so every consumer agrees.
     /// Re-evaluated on each layout pass: changing any of the three in Settings
@@ -42,7 +51,7 @@ enum HisingenTheme {
     /// panel, >1 enlarges it.
     static var contentScale: CGFloat { panelLayout.contentScale }
     /// Width that fixed-width views must lay out at *inside* the zoom wrapper: the tree
-    /// is laid out at panelWidth / scale and then scaled by `contentScale`, so this —
-    /// not `popoverWidth` — keeps those views exactly filling the visible panel.
+    /// is laid out at panelWidth / scale and then scaled by `contentScale`, so this –
+    /// not `popoverWidth` – keeps those views exactly filling the visible panel.
     static var layoutWidth: CGFloat { panelLayout.logicalWidth }
 }

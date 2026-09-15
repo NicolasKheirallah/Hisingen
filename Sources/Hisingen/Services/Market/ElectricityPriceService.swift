@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Fetches Swedish spot prices from the free elprisetjustnu.se API — one static JSON
+/// Fetches Swedish spot prices from the free elprisetjustnu.se API – one static JSON
 /// file per zone and day, `https://www.elprisetjustnu.se/api/v1/prices/{YYYY}/{MM-DD}_{ZONE}.json`.
 ///
 /// Fetch cadence: tomorrow's prices are published the day before, so a single pass per
@@ -221,7 +221,7 @@ actor ElectricityPriceService {
     }
 
     /// Tomorrow complete: sleep until the next publication. Otherwise retry this
-    /// evening a bounded number of times — the file can land a little late.
+    /// evening a bounded number of times – the file can land a little late.
     private func armRefresh(zone: ElspotZone, tomorrowComplete: Bool) {
         let delay: TimeInterval
         if tomorrowComplete {

@@ -2,7 +2,7 @@ import Foundation
 
 /// Builds `application/x-www-form-urlencoded` request bodies. Values are percent-encoded
 /// explicitly: `URLComponents.percentEncodedQuery` leaves `+` intact, which a form decoder
-/// reads as a space — silently corrupting credentials that contain one.
+/// reads as a space – silently corrupting credentials that contain one.
 enum FormURLEncoding {
     static func body(_ fields: [String: String]) -> Data? {
         var allowed = CharacterSet.alphanumerics

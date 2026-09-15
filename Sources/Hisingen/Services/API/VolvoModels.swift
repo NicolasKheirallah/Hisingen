@@ -8,7 +8,7 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     /// captured response this project has (all `Tests/HisingenTests/Fixtures/volvo-*.json`
     /// fixtures, sanitized from live captures) reports `"OK"`, and no Volvo documentation
     /// referenced elsewhere in this repo enumerates other values. `unavailableReason` (below) is
-    /// the field this codebase already reads for "why is this unavailable" — that's likely where
+    /// the field this codebase already reads for "why is this unavailable" – that's likely where
     /// any real signal lives. Wiring `status` into anything beyond this would mean inventing
     /// semantics for values that have never actually been observed; needs a live capture of a
     /// genuinely degraded/erroring field (a car with a real reported fault, or a field the active
@@ -418,7 +418,7 @@ struct VolvoTyresDTO: Decodable, Sendable {
     private static func warning(from raw: String?) -> TyrePressureWarning {
         guard let raw = raw?.uppercased() else { return .unknown }
         if raw.contains("NO_WARNING") { return .none }
-        // TPMS hardware problems are not pressure readings — surface them as a distinct state
+        // TPMS hardware problems are not pressure readings – surface them as a distinct state
         // rather than a false "low pressure" alarm or an indistinguishable "unknown".
         if raw.contains("NO_SENSOR") || raw.contains("NOSENSOR")
             || raw.contains("SYSTEM_FAULT") || raw.contains("SYSTEMFAULT")
@@ -565,7 +565,7 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
         energyConsumptionKwhPer100Km(averageEnergyConsumptionSinceCharge)
     }
 
-    /// Average electric consumption over the automatic trip-meter period — pairs with
+    /// Average electric consumption over the automatic trip-meter period – pairs with
     /// `tripMeterAutomaticKm`, the same way `averageSpeedAutomatic` pairs with it.
     var averageEnergyConsumptionAutomaticKwhPer100Km: Double? {
         energyConsumptionKwhPer100Km(averageEnergyConsumptionAutomatic)
@@ -617,7 +617,7 @@ struct VolvoCommandDTO: Decodable, Sendable {
     let href: String?
 
     /// The last path segment of `href` is the *actual* invocation endpoint name and is what
-    /// `dispatchCommand` POSTs to — prefer it. `command` (e.g. `HONK_AND_FLASH` while `href`
+    /// `dispatchCommand` POSTs to – prefer it. `command` (e.g. `HONK_AND_FLASH` while `href`
     /// ends `/honk-flash`, verified live) is only a display label and is the fallback.
     var normalizedName: String? {
         let source = href?.split(separator: "/").last.map(String.init) ?? command
@@ -780,7 +780,7 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
 
 
 /// Response body of `POST /connected-vehicle/v2/vehicles/{vin}/commands/{name}`. Connected
-/// Vehicle API v2 commands are synchronous — there is no `GET .../commands/{id}` status poll —
+/// Vehicle API v2 commands are synchronous – there is no `GET .../commands/{id}` status poll –
 /// so the response's `invokeStatus` is the final word and `commandId` is not carried.
 ///
 /// Previously parsed with untyped `JSONSerialization` dictionary lookups while every read-path
@@ -792,7 +792,7 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     let readyToUnlock: Bool?
     let readyToUnlockUntil: Int?
 
-    /// Blank-normalised accessor — the API returns `""` as often as it omits the key, and
+    /// Blank-normalised accessor – the API returns `""` as often as it omits the key, and
     /// an empty string surfaced to the UI reads as a missing message rather than no message.
     var text: String? { message?.blankAsNil }
 
@@ -802,7 +802,7 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, DELIVERED, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
     /// NOT_ALLOWED_WRONG_USAGE_MODE. The extra values below (`SUCCESS`, `NOT_ALLOWED`,
     /// `UNLOCK_TIME_FRAME_PASSED`, `UNABLE_TO_LOCK_DOOR_OPEN`, `FAILED`) are tolerated
-    /// defensively — older captures and sibling APIs have returned them.
+    /// defensively – older captures and sibling APIs have returned them.
     var outcome: RemoteCommandOutcome? {
         switch invokeStatus?.uppercased() {
         case "COMPLETED", "SUCCESS": return .completed
@@ -813,14 +813,14 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     }
 
     /// A user-facing explanation when `invokeStatus` is a documented failure, or `nil` when the
-    /// command was accepted / is still in progress. `UNKNOWN` is deliberately *not* a failure —
+    /// command was accepted / is still in progress. `UNKNOWN` is deliberately *not* a failure –
     /// it means "the vehicle's final state is not known yet", not "it was rejected".
     var failureReason: String? {
         switch invokeStatus?.uppercased() {
         case "REJECTED", "NOT_ALLOWED", "FAILED":
             return L10n.text("The vehicle rejected the command.")
         case "TIMEOUT":
-            return L10n.text("The vehicle did not respond in time — it may be parked somewhere with no reception.")
+            return L10n.text("The vehicle did not respond in time. It may be parked somewhere with no reception.")
         case "CONNECTION_FAILURE":
             return L10n.text("Hisingen could not reach the vehicle. It may be in an area with no connectivity.")
         case "VEHICLE_IN_SLEEP":
@@ -869,7 +869,7 @@ extension String {
 extension Optional where Wrapped == String {
     /// Volvo's Connected Vehicle API v2 sometimes serialises an absent descriptor as the
     /// literal string `"null"` (confirmed live on `descriptions.upholstery`) rather than a
-    /// JSON null. Collapse that — and blank strings — to a real `nil` so nothing renders it.
+    /// JSON null. Collapse that – and blank strings – to a real `nil` so nothing renders it.
     var volvoMeaningful: String? {
         guard let trimmed = self?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty,

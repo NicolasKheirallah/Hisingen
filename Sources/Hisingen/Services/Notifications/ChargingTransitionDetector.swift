@@ -30,7 +30,7 @@ struct ChargingBaseline: Codable, Equatable, Sendable {
     var interruptionSamples: Int
     var lowBatteryNotified: Bool
     /// Recent event fingerprints, newest last. A set-with-history (not a single slot)
-    /// because one evaluation can emit two events at once — e.g. started + low battery —
+    /// because one evaluation can emit two events at once – e.g. started + low battery –
     /// and a single overwritten slot let the first event's duplicate slip through.
     var recentEventFingerprints: [String] = []
 

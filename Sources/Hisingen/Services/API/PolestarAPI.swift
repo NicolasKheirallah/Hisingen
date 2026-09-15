@@ -33,12 +33,12 @@ actor PolestarAPI {
     // The polestar.com web client. The mobile-app client (`lp8dyrd_10`,
     // `polestar-explore://explore.polestar.com`) authenticates fine but its token is rejected
     // by `pc-api.polestar.com/mystar-v2` with `UnauthorizedException`, so vehicle discovery
-    // returns nothing and the app has no car to talk about — verified live against a real
+    // returns nothing and the app has no car to talk about – verified live against a real
     // account. The `getConsumerCarsV2` query only accepts this client.
     let oidcClientID = "l3oopkc_10"
     let oidcRedirectURL = URL(string: "https://www.polestar.com/sign-in-callback")!
     // `customer:attributes:write` is what the C3 `ota_mobcache.SchedulerService` write RPCs
-    // require. This client grants it on request — adding it does not disturb discovery.
+    // require. This client grants it on request – adding it does not disturb discovery.
     let oidcScope = "openid profile email customer:attributes customer:attributes:write"
 
     // Remote commands are gated on a *client-id allowlist*, separate from scope. C3 spells the
@@ -119,7 +119,7 @@ actor PolestarAPI {
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
     private var imageDownloadTaskIDs: [String: UUID] = [:]
     /// Bumped whenever account state is cleared/reset. Multi-step operations capture it on
-    /// entry and drop their results if a reset interleaved — the actor serializes individual
+    /// entry and drop their results if a reset interleaved – the actor serializes individual
     /// writes but not whole logical transactions (e.g. a slow discovery from a superseded
     /// login could otherwise repopulate `cars` after sign-out cleared them).
     var sessionEpoch = 0
@@ -370,12 +370,12 @@ actor PolestarAPI {
         logger.info("Polestar web-client token acquired via interactive web sign-in")
     }
 
-    /// Builds the command client's authorization URL for a real browser to open — the
+    /// Builds the command client's authorization URL for a real browser to open – the
     /// `polestar-explore://` redirect is the command client's own registered custom scheme, so
     /// unlike the web client (whose redirect lands on `polestar.com`, a domain Hisingen doesn't
     /// control), the OS can route the final redirect straight back into the app. Used by
     /// `PolestarCommandSignInPresenter` instead of the scripted PingFederate form-fill used for
-    /// the web client's own sign-in — Hisingen never sees the password for this flow.
+    /// the web client's own sign-in – Hisingen never sees the password for this flow.
     ///
     /// Any macOS app can also register `polestar-explore://`, so a hostile app that wins the
     /// LaunchServices registration could receive this callback. It is not exploitable: the
@@ -531,8 +531,8 @@ actor PolestarAPI {
 
     /// The IdP rejected the refresh grant with `invalid_grant`/`expired_token`: the stored
     /// token was rotated out or revoked, and every replay is a failed login against it
-    /// (lockout risk). Drop the persisted copies — memory and Keychain, plus the command
-    /// client's — so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
+    /// (lockout risk). Drop the persisted copies – memory and Keychain, plus the command
+    /// client's – so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
     /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
     /// still resolves its own outcome (`.notAuthorized`) from the now-empty storage.
     func discardDeadRefreshToken() {
@@ -665,7 +665,7 @@ actor PolestarAPI {
                     bearerToken = newToken
                     continue
                 }
-                // Server-supplied GraphQL messages are scrubbed before public logging —
+                // Server-supplied GraphQL messages are scrubbed before public logging –
                 // they have been known to echo account details on auth failures.
                 let authSummary = DiagnosticRedaction.redact(Self.errorSummary(errors))
                 logger.error("""
@@ -700,7 +700,7 @@ actor PolestarAPI {
         var accountCars: [ConsumerCarDTO] = []
         var legacyCars: [ConsumerCarDTO] = []
         // A failure here is only degradable when it is specific to this data source. Auth,
-        // rate-limit, server, and transport failures must propagate — previously a swallowed
+        // rate-limit, server, and transport failures must propagate – previously a swallowed
         // 401 or 429 fell through to the manual-VIN branch and surfaced as
         // `.notConfigured` ("Open Settings to sign in"), masking the real problem.
         do {
@@ -714,7 +714,7 @@ actor PolestarAPI {
             legacyCars = []
         }
         // VDMS (`app-backend` GraphQL) validates against the *command* client's token
-        // (`lp8dyrd_10`) — the same split the invocation commands need — not the web-client
+        // (`lp8dyrd_10`) – the same split the invocation commands need – not the web-client
         // session token, which it answers with "Could not validate the accessToken". Without
         // command authorization there is nothing usable to send it, so skip the call rather
         // than fire a request that is guaranteed to fail.
@@ -743,7 +743,7 @@ actor PolestarAPI {
                     logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
                 } else {
                     // A client-side rejection (426), an API-shape mismatch, or a token the
-                    // app-backend refuses to validate won't fix itself on the next discovery —
+                    // app-backend refuses to validate won't fix itself on the next discovery –
                     // stand down for a day.
                     if Self.vdmsFailureIsPersistent(error) {
                         vdmsDiscoveryBlockedUntil = Date().addingTimeInterval(24 * 60 * 60)
@@ -845,8 +845,8 @@ actor PolestarAPI {
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
         // `X-Polestar-Force-Update-Version` is an app-version gate: the app-backend answers
         // `426 Upgrade Required` when the declared version is below its current floor (and a
-        // value that doesn't correspond to a real released build — `6.x` doesn't exist; the
-        // Polestar Android app is on 5.x — is treated the same way). Track a currently-accepted
+        // value that doesn't correspond to a real released build – `6.x` doesn't exist; the
+        // Polestar Android app is on 5.x – is treated the same way). Track a currently-accepted
         // real version. Cross-checked against kildahldev/unofficial-polestar-api, which hit the
         // same 426 and fixed it with this exact bump (5.5.0 → 5.11.0).
         request.setValue("5.11.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
@@ -868,7 +868,7 @@ actor PolestarAPI {
     /// Whether a VDMS discovery failure warrants standing down for a day rather than
     /// re-probing on every discovery: a client-side rejection (426 Upgrade Required), an
     /// API-shape mismatch, or a GraphQL-level authentication rejection ("Could not validate
-    /// the accessToken") — none of which the next attempt would recover from.
+    /// the accessToken") – none of which the next attempt would recover from.
     static func vdmsFailureIsPersistent(_ error: Error) -> Bool {
         switch error as? PolestarError {
         case .client, .incompatibleAPI, .permissionDenied:
@@ -1138,7 +1138,7 @@ actor PolestarAPI {
         ]
     }
 
-    /// See `OAuthCallback.normalizedPath` — kept as a forwarding shim for the redirect
+    /// See `OAuthCallback.normalizedPath` – kept as a forwarding shim for the redirect
     /// delegate and existing call sites.
     static func normalizedPath(_ url: URL) -> String {
         OAuthCallback.normalizedPath(url)
@@ -1208,7 +1208,7 @@ actor PolestarAPI {
 
     static func containsAuthenticationError(_ errors: [GraphQLErrorDTO]) -> Bool {
         errors.contains { error in
-            // A field-scoped error rejects one field, not the session — GraphQL reuses the same
+            // A field-scoped error rejects one field, not the session – GraphQL reuses the same
             // "not authorized" wording for both. Treating a newly restricted field as a dead
             // session tears down a working login and, with the refresh loop backing off on
             // authentication failures, hides every other card behind a stale cache.
@@ -1234,7 +1234,7 @@ actor PolestarAPI {
         }
     }
 
-    /// Errors that mean the request itself failed — authentication, rate limiting, server
+    /// Errors that mean the request itself failed – authentication, rate limiting, server
     /// outage, or transport breakdown. Callers that degrade provider-specific gaps to "no
     /// data" must still surface these: swallowing an expired session or a rate-limit window
     /// here is what made outages masquerade as "Open Settings to sign in".
@@ -1320,7 +1320,7 @@ extension PolestarAPI: VehicleLiveStreaming {
 
 final class OAuthRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     /// Both OAuth clients redirect through this one session, and the command client's callback
-    /// is a custom scheme `URLSession` cannot load — so every callback the app might see has to
+    /// is a custom scheme `URLSession` cannot load – so every callback the app might see has to
     /// be recognised here, or the redirect is followed into a failure and the code is lost.
     private let callbackURLs: [URL]
     private let lock = NSLock()

@@ -147,7 +147,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             options: [.authenticationRequired]
         )
         // Resuming a schedule is a write command too, so it demands the same explicit
-        // device unlock the lock action does — consistent capability gates.
+        // device unlock the lock action does – consistent capability gates.
         let resume = UNNotificationAction(
             identifier: "resume-charge",
             title: L10n.text("Resume Schedule"),
@@ -180,7 +180,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Requests system authorization only when notifications are enabled as a feature *and* at
-    /// least one alert type is on — there is nothing to prompt for otherwise. Called after any
+    /// least one alert type is on – there is nothing to prompt for otherwise. Called after any
     /// settings change that could turn the first alert on.
     func requestAuthorizationIfAnyAlertEnabled() {
         guard preferences.features.contains(.notifications), preferences.anyNotificationAlertEnabled else { return }
@@ -678,7 +678,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func chargingBody(_ state: VehicleState) -> String {
         let brandName = displayName(for: state)
         // Private mode keeps the banner anonymous now that the subtitle carries the
-        // vehicle name — repeating it here said the same thing twice.
+        // vehicle name – repeating it here said the same thing twice.
         guard !preferences.privateNotificationDetails else { return L10n.text("Started charging.") }
         var values: [String] = []
         if let battery = state.energy.batteryPercentage { values.append(percentText(battery)) }
@@ -762,7 +762,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             identifier: "hisingen.notice.\(UUID().uuidString)",
             thread: "hisingen.charging.\(vin)",
             title: L10n.text("Unusually slow charging"),
-            body: privateBody(L10n.format("Peak power at %@ was far below this location's usual level — the cable or charger may be derating.", locationName)),
+            body: privateBody(L10n.format("Peak power at %@ was far below this location's usual level. The cable or charger may be derating.", locationName)),
             subtitle: displayName(forVIN: vin),
             vin: vin
         )
@@ -842,7 +842,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         // The add hop is async in the system API; failures are logged rather than dropped
-        // silently — notification delivery is the primary anomaly channel.
+        // silently – notification delivery is the primary anomaly channel.
         Task { @MainActor [weak self] in
             guard let self else { return }
             do { try await self.dispatcher().add(request) }

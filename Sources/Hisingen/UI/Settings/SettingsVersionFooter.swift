@@ -10,21 +10,22 @@ struct SettingsVersionFooter: View {
         return VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "car.fill")
-                    .font(.system(size: 10, weight: .semibold))
+                    .hisType(.caption, weight: .semibold)
                     .foregroundStyle(HisingenTheme.accent)
-                Text("Hisingen")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text(L10n.text("Hisingen"))
+                    .hisType(.body, weight: .semibold, design: .rounded)
+                    .monospacedDigit()
                     .foregroundStyle(.primary)
                 Text("v\(appVersion)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .hisType(.label, weight: .medium, design: .monospaced)
                     .foregroundStyle(.secondary)
                 Text("(\(buildNumber))")
-                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .hisType(.micro, weight: .regular, design: .monospaced)
                     .foregroundStyle(.tertiary)
             }
             HStack(spacing: 3) {
                 Text(L10n.text("Created by"))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.tertiary)
                 Button("Nicolas Kheirallah") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah") {
@@ -32,9 +33,9 @@ struct SettingsVersionFooter: View {
                     }
                 }
                 .buttonStyle(.link)
-                .font(.system(size: 10, weight: .medium))
+                .hisType(.caption, weight: .medium)
                 Text("·")
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.tertiary)
                 Button("GitHub") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah/Hisingen") {
@@ -42,8 +43,15 @@ struct SettingsVersionFooter: View {
                     }
                 }
                 .buttonStyle(.link)
-                .font(.system(size: 10, weight: .medium))
+                .hisType(.caption, weight: .medium)
             }
+            Label(
+                L10n.text("Credentials stay in Keychain. Vehicle history stays on this Mac unless you export it."),
+                systemImage: "lock.shield"
+            )
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
@@ -54,4 +62,3 @@ struct SettingsVersionFooter: View {
         }
     }
 }
-

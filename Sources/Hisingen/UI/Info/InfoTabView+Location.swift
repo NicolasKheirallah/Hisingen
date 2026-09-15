@@ -38,10 +38,10 @@ extension InfoTabView {
                         onNavigateToHistory()
                     } label: {
                         HStack(spacing: 3) {
-                            Text(L10n.text("View all"))
+                            Text(L10n.text("Open History"))
                             Image(systemName: "chevron.right")
                         }
-                        .font(.system(size: 10, weight: .semibold))
+                        .hisType(.caption, weight: .semibold)
                     }
                     .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
@@ -66,7 +66,7 @@ extension InfoTabView {
                     let hi = max(values.max() ?? 1, lo + 1)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.text("Odometer Trend"))
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
                             .padding(.top, 4)
                         Chart(Array(odometerPoints.enumerated()), id: \.offset) { _, point in
@@ -82,32 +82,33 @@ extension InfoTabView {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(L10n.text("Odometer history chart"))
                         .accessibilityValue(chartAccessibilityValue(points: values))
-                        .animation(Motion.resolve(Motion.progress), value: recentTelemetryChartKey)
+                        .hisAnimation(Motion.progress, value: recentTelemetryChartKey)
                     }
                 }
 
                 if !commands.isEmpty {
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     Text(L10n.text("Recent remote commands"))
-                        .font(.system(size: 10, weight: .semibold))
+                        .hisType(.caption, weight: .semibold)
                         .foregroundStyle(.secondary)
                     ForEach(commands) { record in
                         HStack(spacing: 7) {
                             Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
                                 .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                             Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                .font(.system(size: 10.5, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                             Spacer()
                             Text(record.executedAt, style: .relative)
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
                                 .foregroundStyle(.secondary)
                         }
                         .help(record.errorMessage ?? record.status.capitalized)
                     }
                 }
                 Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
         })
@@ -126,7 +127,7 @@ extension InfoTabView {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
-                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .hisType(.label, weight: .semibold)
                                 Spacer()
                                 if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
                                     Pill(text: mode, color: HisingenTheme.accent, symbol: "leaf.fill")
@@ -147,12 +148,12 @@ extension InfoTabView {
                         }
                         .padding(.vertical, 2)
                         if location.id != locations.last?.id {
-                            Divider().opacity(0.35)
+                            Divider().opacity(HisingenTheme.dividerOpacity)
                         }
                     }
                 }
                 Text(L10n.text("Saved in the vehicle's charging backend. Managed from the Controls tab."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.tertiary)
             }
         })
@@ -199,9 +200,9 @@ extension InfoTabView {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "map.fill")
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                             Text(L10n.text("Open in Maps"))
-                                .font(.system(size: 10.5, weight: .semibold))
+                                .hisType(.caption, weight: .semibold)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3.5)
@@ -210,29 +211,29 @@ extension InfoTabView {
                     }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
-                    .fixedSize()
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 VStack(spacing: 6) {
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
                             Text(L10n.text("Address"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
-                            .font(.system(size: 10.5))
+                            .hisType(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .multilineTextAlignment(.trailing)
                             .privacySensitive()
                             .contentTransition(reduceMotion ? .identity : .opacity)
-                            .animation(Motion.resolveCrossfade(Motion.theme), value: addressText)
+                            .hisAnimation(Motion.theme, value: addressText)
                     }
                     .padding(.vertical, 1)
                     KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
@@ -354,11 +355,11 @@ extension InfoTabView {
                         HStack {
                             HStack(spacing: 6) {
                                 Image(systemName: "allergens")
-                                    .font(.system(size: 11))
+                                    .hisType(.label)
                                     .foregroundStyle(HisingenTheme.accent)
                                     .frame(width: 14)
                                 Text(L10n.text("HEPA Filter Life"))
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -367,9 +368,9 @@ extension InfoTabView {
                                     .progressViewStyle(.linear)
                                     .frame(width: 60)
                                     .tint(filterLife > 20 ? .teal : .orange)
-                                    .animation(Motion.resolve(Motion.progress), value: filterLife)
+                                    .hisAnimation(Motion.progress, value: filterLife)
                                 Text("\(filterLife)%")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .hisType(.label, weight: .bold)
                                     .foregroundStyle(filterLife > 20 ? Color.primary : Color.orange)
                                     .hisTelemetryValue(filterLife, reduceMotion: reduceMotion)
                             }
@@ -396,7 +397,7 @@ extension InfoTabView {
                                     : L10n.text("Clean Cabin Air (PM2.5 Pre-Clean)"),
                                 systemImage: air.cleaningState == .on ? "stop.circle" : "sparkles"
                             )
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                             .frame(maxWidth: .infinity, minHeight: 28)
                         }
                         .buttonStyle(.bordered)
@@ -413,7 +414,7 @@ extension InfoTabView {
         })
     }
 
-    /// Local trend view over stored `air_quality_history` samples — the vehicle/provider APIs
+    /// Local trend view over stored `air_quality_history` samples – the vehicle/provider APIs
     /// don't expose any history of their own, so this is entirely reconstructed from readings
     /// Hisingen recorded during normal refreshes.
     @ViewBuilder
@@ -425,7 +426,7 @@ extension InfoTabView {
             let values = history.compactMap(\.airQualityIndex)
             VStack(alignment: .leading, spacing: 4) {
                 Text(L10n.text("Air Quality Trend"))
-                    .font(.system(size: 10, weight: .medium))
+                    .hisType(.caption, weight: .medium)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
                 Chart(history) { record in
@@ -444,7 +445,7 @@ extension InfoTabView {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(L10n.text("Air quality index history chart"))
                 .accessibilityValue(chartAccessibilityValue(points: values))
-                .animation(Motion.resolve(Motion.progress), value: airQualityHistoryChartKey)
+                .hisAnimation(Motion.progress, value: airQualityHistoryChartKey)
             }
         }
     }

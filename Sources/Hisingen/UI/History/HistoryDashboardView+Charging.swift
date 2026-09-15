@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-// `HistoryDashboardView` — charging cards: the selected-session curve, the sessions list,
+// `HistoryDashboardView` – charging cards: the selected-session curve, the sessions list,
 // charging-by-month, the per-location breakdown, and the aggregate trends card.
 
 extension HistoryDashboardView {
@@ -46,7 +46,8 @@ extension HistoryDashboardView {
                                 .frame(width: 5, height: 5)
                                 .opacity(curveLivePulse ? 1.0 : 0.45)
                                 .animation(Motion.resolve(Motion.livePulse), value: curveLivePulse)
-                            Text(L10n.text("Live")).font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            Text(L10n.text("Live")).hisType(.nano, weight: .bold, design: .rounded)
+                            .monospacedDigit()
                         }
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(Color.green.opacity(0.15), in: Capsule())
@@ -58,7 +59,8 @@ extension HistoryDashboardView {
                     }
                     if let badgeColor = chargingTypeBadgeColor(chargingType) {
                         Text(chargingType.displayName)
-                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .hisType(.nano, weight: .bold, design: .rounded)
+                            .monospacedDigit()
                             .padding(.horizontal, 5).padding(.vertical, 2)
                             .background(badgeColor.opacity(0.18), in: Capsule())
                             .foregroundStyle(badgeColor)
@@ -67,7 +69,7 @@ extension HistoryDashboardView {
                     Button {
                         selectedSessionID = nil
                     } label: {
-                        Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                        Image(systemName: "xmark.circle.fill").hisType(.label)
                     }
                     .buttonStyle(.pressable)
                     .help(L10n.text("Close the charging curve"))
@@ -75,12 +77,12 @@ extension HistoryDashboardView {
                 }
                 if let session, let name = session.locationName, !name.isEmpty {
                     Label(name, systemImage: "mappin.and.ellipse")
-                        .font(.system(size: 9.5, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
                 if isAnomalous {
                     footnote("exclamationmark.triangle.fill",
-                             L10n.text("Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger."))
+                             L10n.text("Peak power for this session was far below what this vehicle usually reaches here. Possibly a failing cable or a derated charger."))
                         .foregroundStyle(HisingenTheme.semanticWarning)
                 }
                 if let session {
@@ -95,7 +97,7 @@ extension HistoryDashboardView {
                                 .foregroundStyle(HisingenTheme.semanticWarning)
                         }
                     }
-                    .font(.system(size: 8.5, weight: .medium)).foregroundStyle(.secondary)
+                    .hisType(.nano, weight: .medium).foregroundStyle(.secondary)
                 }
                 Chart(curve) { point in
                     AreaMark(
@@ -119,7 +121,8 @@ extension HistoryDashboardView {
                 .chartYAxisLabel("%")
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Charging curve charge-level chart"))
-                .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
+                .accessibilityValue(chartAccessibilityValue(points: curve.map { Double($0.soc) }))
+                .hisAnimation(Motion.progress, value: sessionCurveKey)
                 if let peak, peak > 0 {
                     Chart(powerCurve) { point in
                         AreaMark(
@@ -142,7 +145,8 @@ extension HistoryDashboardView {
                     .chartYAxisLabel("kW")
                     .frame(height: chartHeight * 0.72)
                     .accessibilityLabel(L10n.text("Charging curve power chart"))
-                    .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
+                    .accessibilityValue(chartAccessibilityValue(points: powerCurve.map { $0.powerKw ?? 0 }))
+                    .hisAnimation(Motion.progress, value: sessionCurveKey)
                 }
                 if curve.contains(where: { $0.voltageVolts != nil || $0.currentAmps != nil }) {
                     Chart(curve) { point in
@@ -153,7 +157,11 @@ extension HistoryDashboardView {
                                 series: .value(L10n.text("Segment"), "voltage-\(curveSegmentByID[point.id] ?? 0)")
                             )
                             .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Voltage (V)")))
-                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .lineStyle(chartSeriesStroke(
+                                index: 0,
+                                differentiateWithoutColor: differentiateWithoutColor,
+                                width: 1.2
+                            ))
                             .interpolationMethod(.linear)
                         }
                         if let current = point.currentAmps {
@@ -163,7 +171,11 @@ extension HistoryDashboardView {
                                 series: .value(L10n.text("Segment"), "current-\(curveSegmentByID[point.id] ?? 0)")
                             )
                             .foregroundStyle(by: .value(L10n.text("Series"), L10n.text("Current (A)")))
-                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .lineStyle(chartSeriesStroke(
+                                index: 1,
+                                differentiateWithoutColor: differentiateWithoutColor,
+                                width: 1.2
+                            ))
                             .interpolationMethod(.linear)
                         }
                     }
@@ -173,7 +185,10 @@ extension HistoryDashboardView {
                     ])
                     .frame(height: chartHeight * 0.62)
                     .accessibilityLabel(L10n.text("Charging curve voltage and current chart"))
-                    .animation(Motion.resolve(Motion.progress), value: sessionCurveKey)
+                    .accessibilityValue(L10n.format("%@. %@",
+                        chartAccessibilityValue(points: curve.compactMap { $0.voltageVolts }),
+                        chartAccessibilityValue(points: curve.compactMap { $0.currentAmps })))
+                    .hisAnimation(Motion.progress, value: sessionCurveKey)
                 }
                 curveStatsRow(session: session, socGain: socGain, durationMinutes: durationMinutes, peak: peak)
                 if tenToEighty != nil || idleTail != nil || lossPct != nil || displayedCost != nil {
@@ -202,7 +217,7 @@ extension HistoryDashboardView {
                     }
                 }
                 Toggle(isOn: $overlayPreviousSession) {
-                    Text(L10n.text("Overlay previous session")).font(.system(size: 9.5))
+                    Text(L10n.text("Overlay previous session")).hisType(.micro)
                 }
                 .toggleStyle(.checkbox)
                 .controlSize(.mini)
@@ -214,13 +229,14 @@ extension HistoryDashboardView {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: curve.map(\.timestamp))
             }
             // The overlay chart lands one async hop after the toggle flips, so the key
             // covers both the toggle and the loaded curve.
-            .animation(Motion.resolve(Motion.layout), value: previousOverlayKey)
+            .hisAnimation(Motion.layout, value: previousOverlayKey)
         }
     }
 
@@ -312,14 +328,15 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: .green)
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
-                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.tertiary)
                 }
                 if chargingSessions.count > 8 {
                     searchField(L10n.text("Search sessions by date, place or energy"), text: $sessionSearchText,
                                 count: filteredSessionsForPicker.count, total: chargingSessions.count)
                 }
                 PaginatedSection(items: matches, pageSize: 8,
-                                 resetKeys: [sessionSearchText, periodLoadKey]) { rows, footer in
+                                 resetKeys: [sessionSearchText, periodLoadKey],
+                                 emptyMessage: L10n.text("No charging sessions match this search.")) { rows, footer in
                     ForEach(rows) { session in
                         Button {
                             selectedSessionID = (selectedSessionID == session.id) ? nil : session.id
@@ -327,7 +344,7 @@ extension HistoryDashboardView {
                             chargingSessionRow(session, flagged: anomalies.contains(session.id))
                         }
                         .buttonStyle(.pressable)
-                        if session.id != rows.last?.id { Divider().opacity(0.2) }
+                        if session.id != rows.last?.id { Divider().opacity(HisingenTheme.dividerOpacity) }
                     }
                     footer
                 }
@@ -377,18 +394,18 @@ extension HistoryDashboardView {
         let added = (session.endSoc ?? session.startSoc) - session.startSoc
         return HStack(spacing: 8) {
             Image(systemName: selectedSessionID == session.id ? "chart.dots.scatter" : "bolt.circle")
-                .font(.system(size: 12))
+                .hisType(.body)
                 .foregroundStyle(selectedSessionID == session.id ? HisingenTheme.accent : .secondary)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     Text(Format.dateTimeFormatter.string(from: session.startedAt))
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .hisType(.caption, weight: .semibold)
                     if flagged {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 8)).foregroundStyle(HisingenTheme.semanticWarning)
+                            .hisType(.nano).foregroundStyle(HisingenTheme.semanticWarning)
                     }
                     if session.endedAt == nil {
-                        Text(L10n.text("Active")).font(.system(size: 8, weight: .bold))
+                        Text(L10n.text("Active")).hisType(.nano, weight: .bold)
                             .padding(.horizontal, 4).padding(.vertical, 1)
                             .background(Color.green.opacity(0.15), in: Capsule())
                     }
@@ -396,18 +413,21 @@ extension HistoryDashboardView {
                 HStack(spacing: 5) {
                     if let name = session.locationName, !name.isEmpty {
                         Text(name).lineLimit(1)
+                        .minimumScaleFactor(0.9)
                         Text("·")
                     }
                     if added > 0.5 { Text(Format.signedPercent(added)) ; Text("·") }
                     Text(Format.energyKwh(session.energyDeliveredKwh))
                     if session.peakPowerKw > 0 { Text("· " + Format.powerKw(session.peakPowerKw)) }
                 }
-                .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                .hisType(.micro).foregroundStyle(.secondary).lineLimit(1)
+                .minimumScaleFactor(0.9)
             }
             Spacer()
             if let cost {
                 Text(Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol))
-                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                    .hisType(.caption, weight: .bold, design: .rounded)
+                    .monospacedDigit()
             }
         }
         .padding(.vertical, 3)
@@ -418,7 +438,7 @@ extension HistoryDashboardView {
         .accessibilityHint(selectedSessionID == session.id
                            ? L10n.text("Selected. Activate to close the charging curve.")
                            : L10n.text("Activate to show the charging curve."))
-        .animation(Motion.resolve(Motion.selection), value: selectedSessionID)
+        .hisAnimation(Motion.selection, value: selectedSessionID)
     }
 
     func chargingSessionAccessibilityLabel(_ session: HistoricalChargingSession, flagged: Bool,
@@ -442,7 +462,15 @@ extension HistoryDashboardView {
             fallbackPricePerKwh: preferences.electricityPricePerKwh,
             fallbackCurrency: preferences.currencySymbol
         )
-        guard monthly.count >= 2 else { return AnyView(EmptyView()) }
+        guard monthly.count >= 2 else {
+            return AnyView(Card {
+                HisingenEmptyState(
+                    symbol: "calendar.badge.clock",
+                    title: L10n.text("Monthly charging comparison needs more data"),
+                    message: L10n.text("Record charging sessions in at least two months to compare them.")
+                )
+            })
+        }
         let currency = monthly.compactMap(\.currency).first ?? preferences.currencySymbol
         let mixed = Set(monthly.compactMap(\.currency)).count > 1
         let hasCost = monthly.contains { $0.cost != nil }
@@ -460,7 +488,8 @@ extension HistoryDashboardView {
                 .chartYAxisLabel("kWh")
                 .frame(height: chartHeight * 0.8)
                 .accessibilityLabel(L10n.text("Charging energy per month chart"))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .accessibilityValue(chartAccessibilityValue(points: monthly.map { $0.energyKwh }))
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 if !mixed && hasCost {
                     Chart(monthly) { bucket in
                         if let cost = bucket.cost {
@@ -482,7 +511,8 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(currency)
                     .frame(height: chartHeight * 0.6)
                     .accessibilityLabel(L10n.text("Charging cost per month chart"))
-                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                    .accessibilityValue(chartAccessibilityValue(points: monthly.compactMap { $0.cost }))
+                    .hisAnimation(Motion.progress, value: periodDataKey)
                 }
                 dataConfidenceNote(for: monthly.map(\.month))
             }
@@ -498,7 +528,15 @@ extension HistoryDashboardView {
             fallbackCurrency: preferences.currencySymbol,
             unknownLabel: L10n.text("Unknown location")
         )
-        guard stats.count >= 2 else { return AnyView(EmptyView()) }
+        guard stats.count >= 2 else {
+            return AnyView(Card {
+                HisingenEmptyState(
+                    symbol: "mappin.and.ellipse",
+                    title: L10n.text("Location comparison needs more places"),
+                    message: L10n.text("Record charging sessions at two named locations to compare them.")
+                )
+            })
+        }
         let totalEnergy = max(0.001, stats.reduce(0) { $0 + $1.energyKwh })
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -506,16 +544,17 @@ extension HistoryDashboardView {
                 ForEach(stats.prefix(6)) { stat in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(stat.name).font(.system(size: 10.5, weight: .semibold)).lineLimit(1)
+                            Text(stat.name).hisType(.caption, weight: .semibold).lineLimit(1)
+                            .minimumScaleFactor(0.9)
                             Spacer()
                             Text(L10n.format("%d sessions", stat.sessionCount))
-                                .font(.system(size: 9)).foregroundStyle(.secondary)
+                                .hisType(.micro).foregroundStyle(.secondary)
                         }
                         GeometryReader { geo in
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(HisingenTheme.chartPositive.opacity(0.3))
                                 .frame(width: max(2, geo.size.width * stat.energyKwh / totalEnergy), height: 4)
-                                .animation(Motion.resolve(Motion.progress), value: stat.energyKwh)
+                                .hisAnimation(Motion.progress, value: stat.energyKwh)
                         }
                         .frame(height: 4)
                         HStack(spacing: 5) {
@@ -525,7 +564,7 @@ extension HistoryDashboardView {
                                 Text("· " + Format.currency(cost, symbol: currency))
                             }
                         }
-                        .font(.system(size: 8.5)).foregroundStyle(.secondary)
+                        .hisType(.nano).foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -554,14 +593,17 @@ extension HistoryDashboardView {
                 }
                 if let p90Peak, p90Peak > 0 {
                     KVRow(L10n.text("Typical Fast Peak (p90)"), Format.powerKw(p90Peak), symbol: "chart.bar.xaxis",
-                          info: L10n.text("90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average."))
+                          info: L10n.text("90th percentile of session peak power: less skewed by one outlier fast-charge than a plain average."))
                 }
                 if let dominantTimeOfDay, dominantTimeOfDay.value > 0 {
                     KVRow(L10n.text("Mostly Charges"), L10n.text(dominantTimeOfDay.key.rawValue), symbol: "clock.badge")
                 }
                 if let cost {
                     KVRow(L10n.text("Estimated Cost"), Format.currency(cost.amount, symbol: cost.currency), symbol: "creditcard",
-                          info: L10n.text("Uses each session's saved tariff instead of recalculating old charges with today's settings."))
+                          info: cost.fallbackSessions == 0
+                              ? L10n.text("Uses each session's saved tariff instead of recalculating old charges with today's settings.")
+                              : L10n.format("Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price.",
+                                            cost.fallbackSessions, chargingSessions.count))
                 } else {
                     KVRow(L10n.text("Estimated Cost"), L10n.text("Mixed currencies"), symbol: "creditcard",
                           info: L10n.text("Costs in different currencies are kept separate and are not added together."))

@@ -8,7 +8,7 @@ import ServiceManagement
 /// `SMAppService` registration is separate OS state that an app update, move, or re-sign
 /// invalidates (`SMAppService.mainApp` is bound to the bundle's code signature, and
 /// locally-built copies are ad-hoc signed with a fresh hash every build). `reconcile` only
-/// moves the *registration* toward the *intent* — the decision lives in
+/// moves the *registration* toward the *intent* – the decision lives in
 /// ``LaunchAtLoginReconciliation/resolve(intent:status:userInitiated:)`` so it never writes
 /// the intent from `status`, which is what made the first launch after every replace silently
 /// forget the setting.
@@ -34,7 +34,7 @@ final class LaunchAtLoginController {
         case .none:
             break
         case .restoreClearedIntent:
-            // The login item is still enabled but the preference reads off — only the
+            // The login item is still enabled but the preference reads off – only the
             // old destructive reconcile produced that; a real opt-out unregisters.
             preferences.launchAtLogin = true
         case .register:

@@ -6,7 +6,7 @@ import Foundation
 enum AutomationHandoff {
     /// Installed by `AppDelegate` once composition is complete. Shortcuts intents await
     /// this, so a shortcut that fires while the app is still launching dispatches as soon
-    /// as the shell is wired — no URL round-trip, no polling the command audit table.
+    /// as the shell is wired – no URL round-trip, no polling the command audit table.
     private static var waiters: [UUID: CheckedContinuation<any RemoteCommandDispatching, Never>] = [:]
     private(set) static var context: (any RemoteCommandDispatching)?
 
@@ -544,7 +544,7 @@ struct RefreshTelemetryIntent: AppIntent {
             return .result(dialog: IntentDialog(stringLiteral: L10n.text("Hisingen is still launching. Try again in a moment.")))
         }
         refresh()
-        return .result(dialog: IntentDialog(stringLiteral: L10n.text("Refresh requested — Hisingen is fetching the latest vehicle data.")))
+        return .result(dialog: IntentDialog(stringLiteral: L10n.text("Refresh requested – Hisingen is fetching the latest vehicle data.")))
     }
 }
 

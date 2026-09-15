@@ -9,7 +9,7 @@ extension Color {
         hisMixed(with: .white, ratio: amount)
     }
 
-    /// Mixes toward black by `amount` (0…1) — the darker leading stop of the
+    /// Mixes toward black by `amount` (0…1) – the darker leading stop of the
     /// charging fill gradient.
     func hisDarken(_ amount: Double) -> Color {
         hisMixed(with: .black, ratio: amount)
@@ -36,7 +36,7 @@ extension Color {
 ///
 /// The view itself is the clip: SwiftUI sizes it to the filled portion of the
 /// bar (with ``Motion/progress`` driving width changes), and `masksToBounds`
-/// confines all particles to those bounds — they can never render into the
+/// confines all particles to those bounds – they can never render into the
 /// unfilled remainder of the bar.
 ///
 /// All motion is Core Animation work on the GPU; the CPU only spawns a few
@@ -76,6 +76,8 @@ final class ChargingParticleHostView: NSView {
         static let alphaRange: Float = 0.24
         /// Linear fade so a particle is (near) transparent when its life ends.
         static let alphaSpeed: Float = -0.34
+        /// The radius of the gauge this flow is drawn inside, so the clip matches the fill.
+        static let gaugeCornerRadius: CGFloat = 5
         static let scale: CGFloat = 0.78
         static let scaleRange: CGFloat = 0.27
         /// A gentle swell over the particle's life softens its appearance.
@@ -178,7 +180,9 @@ final class ChargingParticleHostView: NSView {
         // view's own frame (SwiftUI's Motion.progress on width changes)
         // carries the emitter geometry along with it, keeping the clip in
         // lockstep with the drawn fill.
-        layer?.cornerRadius = bounds.height / 2
+        // The gauge this is clipped to uses a 5pt radius; `height / 2` is 4.5 on a 9pt bar, so the
+        // particles were clipped to a slightly different shape than the fill they sit in.
+        layer?.cornerRadius = Tuning.gaugeCornerRadius
         emitter.frame = bounds
         emitter.emitterSize = CGSize(width: bounds.width, height: Tuning.spawnHeight)
         emitter.emitterPosition = CGPoint(x: bounds.midX, y: bounds.midY)

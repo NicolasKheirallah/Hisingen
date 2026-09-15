@@ -6,6 +6,44 @@ import SwiftUI
 
 /// Wraps a `(Date, Double)` series so the VoiceOver chart rotor can read individual values.
 /// Attach with `.accessibilityChartDescriptor(TimeSeriesAXDescriptor(...))`.
+/// Spoken summary of a numeric series, for the charts that carry a label but no descriptor.
+///
+/// This lived as an instance method on `InfoTabView`, so the History charts could not reach it and
+/// announced a title with no data: a VoiceOver user heard "Energy consumption trend chart" and
+/// nothing else, which is the element's entire purpose. A free function puts it where every chart
+/// can use it.
+func chartAccessibilityValue(points: [Double]) -> String {
+    guard let first = points.first, let last = points.last, !points.isEmpty else {
+        return L10n.text("No samples")
+    }
+    let lo = Int((points.min() ?? first).rounded())
+    let hi = Int((points.max() ?? first).rounded())
+    let latest = Int(last.rounded())
+    let trendKey = last > first ? "rising" : (last < first ? "falling" : "steady")
+    return L10n.format("%d samples, latest %d, range %d to %d, %@",
+                       points.count, latest, lo, hi, L10n.text(trendKey))
+}
+
+/// Stroke for one series of a multi-series chart.
+///
+/// The two series that share axes in History (voltage with current, PM2.5 with PM10) were told
+/// apart by hue alone, and `accessibilityDifferentiateWithoutColor` appeared nowhere in the app.
+/// Hue is exactly what a colour-blind reader cannot use, in exactly the chart that exists to be
+/// read, so the second series also carries a dash pattern whenever the system setting is on. The
+/// default path is unchanged, down to the stroke width.
+@MainActor
+func chartSeriesStroke(index: Int, differentiateWithoutColor: Bool, width: CGFloat) -> StrokeStyle {
+    guard differentiateWithoutColor, index > 0 else { return StrokeStyle(lineWidth: width) }
+    return StrokeStyle(lineWidth: width, dash: index.isMultiple(of: 2) ? [5, 3] : [2, 2])
+}
+
+/// Whether series `index` of a multi-series chart is drawn dashed, so a legend can say the same
+/// thing the chart does instead of contradicting it.
+@MainActor
+func chartSeriesIsDashed(index: Int, differentiateWithoutColor: Bool) -> Bool {
+    differentiateWithoutColor && index > 0
+}
+
 struct TimeSeriesAXDescriptor: AXChartDescriptorRepresentable {
     let title: String
     let yLabel: String
@@ -50,11 +88,11 @@ struct TimeSeriesAXDescriptor: AXChartDescriptorRepresentable {
 extension View {
     /// Standard styling for the little floating label a chart shows under the scrub cursor.
     func historyScrubCallout() -> some View {
-        self.font(.system(size: 9, weight: .semibold))
+        self.hisType(.micro, weight: .semibold)
             .monospacedDigit()
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(.regularMaterial, in: Capsule())
+            .background(HisingenTheme.chipFill, in: Capsule())
             .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
     }
@@ -70,18 +108,27 @@ enum HistoryExport {
         pasteboard.setString(text, forType: .string)
     }
 
-    /// Prints monospaced text through the standard macOS print panel — which also offers
+    /// Prints monospaced text through the standard macOS print panel – which also offers
     /// "Save as PDF", covering both the print and PDF asks without a bespoke renderer.
     @MainActor
     static func printText(_ text: String, jobTitle: String) {
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 540, height: 720))
+        let longestLine = text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map(\.count)
+            .max() ?? 80
+        let readableWidth = max(540, CGFloat(longestLine) * 6.2)
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: readableWidth, height: 720))
         textView.string = text
         textView.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         textView.isEditable = false
-        let info = NSPrintInfo.shared
+        // A copy, not `NSPrintInfo.shared`: mutating the shared instance means one CSV export
+        // permanently changes the margins, pagination and paper for every print the app makes
+        // afterwards, including ones the reader configures themselves in the print panel.
+        let info = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
         info.topMargin = 36; info.bottomMargin = 36
         info.leftMargin = 36; info.rightMargin = 36
-        info.horizontalPagination = .fit
+        // Preserve a readable font and paginate wide CSV horizontally instead of shrinking
+        // 25 columns to a few points on one sheet.
+        info.horizontalPagination = .automatic
         info.verticalPagination = .automatic
         let operation = NSPrintOperation(view: textView, printInfo: info)
         operation.jobTitle = jobTitle
@@ -92,7 +139,7 @@ enum HistoryExport {
     // mirrors `VehicleDatabase.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
     // so a period export and a full export open the same way.
 
-    /// Quotes a cell containing a comma, quote or newline, doubling embedded quotes — the
+    /// Quotes a cell containing a comma, quote or newline, doubling embedded quotes – the
     /// same rule as the passport export in InfoTabView+Specs, so no data the vehicle supplies
     /// can shift the column layout.
     static func csvField(_ value: String?) -> String {

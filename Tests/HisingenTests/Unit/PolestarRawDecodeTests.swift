@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Hisingen
 
-/// Proves the previously-unmapped Polestar wire fields now decode, and — as positive
-/// controls — that every field already known before this change still decodes correctly.
+/// Proves the previously-unmapped Polestar wire fields now decode, and – as positive
+/// controls – that every field already known before this change still decodes correctly.
 struct PolestarRawDecodeTests {
     // MARK: - C3 battery
 
@@ -159,10 +159,10 @@ struct PolestarRawDecodeTests {
 
     @Test func myCarsRetainsUnknownFieldsRawAndDecodesContentCodes() throws {
         var charging = Data()
-        charging += Protobuf.intField(1, 1)   // known support flag — must not be retained
+        charging += Protobuf.intField(1, 1)   // known support flag – must not be retained
         charging += Protobuf.intField(5, 1)   // unknown charging subfield
         var locks = Data()
-        locks += Protobuf.intField(5, 1)      // known windows flag — must not be retained
+        locks += Protobuf.intField(5, 1)      // known windows flag – must not be retained
         locks += Protobuf.intField(1, 3)      // unknown locks subfield
         var car = Data()
         car += Protobuf.stringField(1, "VIN-RETAIN")
@@ -202,7 +202,7 @@ struct PolestarRawDecodeTests {
 
     @Test func availabilityReasonSevenDecodesWithTransportErrorText() async throws {
         // Reason 7 (observed in live captures) must not disappear. TESTS-01: drive the real
-        // decode path — fetchAvailabilityReport over a stubbed gRPC transport — instead of
+        // decode path – fetchAvailabilityReport over a stubbed gRPC transport – instead of
         // echoing the test's own encoder output through Protobuf.fields.
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [AvailabilityReasonTransport.self]
@@ -319,7 +319,7 @@ struct PolestarRawDecodeTests {
 
     @Test func climateActiveSessionDecodesTimestampsAndStaysActive() throws {
         // Shape of the live heating-session frames: running=1, remaining=30, field 6=2
-        // (unknown activity enum — must NOT classify as ventilating), requested 22.0,
+        // (unknown activity enum – must NOT classify as ventilating), requested 22.0,
         // session start/end timestamp messages.
         let report: UInt64 = 1_789_161_062
         var payload = Data()
@@ -374,7 +374,7 @@ struct PolestarRawDecodeTests {
     }
 
     @Test func climateRetainsUndecodedFieldsForClassification() throws {
-        // Live idle-frame shape: fields 6, 9, 13 are observed but unresolved — they must be
+        // Live idle-frame shape: fields 6, 9, 13 are observed but unresolved – they must be
         // retained raw while decoded fields (2, 3) never enter the capture.
         var payload = Data()
         payload += Protobuf.messageField(1, Protobuf.intField(1, 1_789_130_617))

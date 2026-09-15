@@ -47,7 +47,7 @@ enum PolestarError: Error, LocalizedError {
         case .network(let error):
             switch error.code {
             case .notConnectedToInternet, .networkConnectionLost:
-                return L10n.text("Offline — showing the last available vehicle data.")
+                return L10n.text("Offline: showing the last available vehicle data.")
             case .timedOut:
                 return L10n.text("Polestar took too long to respond. Retrying automatically.")
             default:

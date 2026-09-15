@@ -69,7 +69,9 @@ struct PanelLayoutTests {
         )
         #expect(layout.width == PanelSize.standard.width)
         #expect(layout.unclampedHeight == PanelSize.standard.idealHeight)
-        #expect(layout.contentScale == ContentDensity.standard.scale)
+        // A5: the density preset no longer raster-scales the content tree. Type comes from the
+        // ramp and spacing from the preset, so the tree lays out at the panel's real size.
+        #expect(layout.contentScale == 1)
     }
 
     // MARK: - Resolution invariants
@@ -94,7 +96,9 @@ struct PanelLayoutTests {
                     panelSizeRaw: size.rawValue, densityRaw: density.rawValue,
                     customEnabled: false, customWidth: 0, customHeight: 0
                 )
+                // The logical frame and the physical frame are the same frame now.
                 #expect(abs(layout.logicalWidth * layout.contentScale - layout.width) <= 0.01, "\(size.rawValue) @ \(density.rawValue)")
+                #expect(layout.logicalWidth == layout.width)
             }
         }
     }

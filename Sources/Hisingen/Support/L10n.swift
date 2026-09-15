@@ -5,7 +5,7 @@ enum L10n {
     nonisolated(unsafe) private static var localizedBundleCache: [String: Bundle?] = [:]
 
     /// Resolved once per process. This used to be a computed property that probed several
-    /// `Bundle(path:)` candidates on *every* `text()` call — a filesystem hit per localized
+    /// `Bundle(path:)` candidates on *every* `text()` call – a filesystem hit per localized
     /// string, on render paths in a permanent menu-bar app.
     private static let bundle: Bundle = {
         if let resBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),

@@ -27,7 +27,7 @@ struct CommandReceiptChip: View {
         case .timedOut:
             return L10n.text("Command outcome not confirmed")
         case .awaiting:
-            return L10n.text("Command sent — waiting for the vehicle")
+            return L10n.text("Command sent: waiting for the vehicle")
         }
     }
 
@@ -39,9 +39,9 @@ struct CommandReceiptChip: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(confirmationLabel)
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                 Text(receipt.command?.title ?? L10n.text("Values below may update once the car reports in."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -55,12 +55,15 @@ struct CommandReceiptChip: View {
             .accessibilityLabel(L10n.text("Dismiss command status"))
         }
         .padding(9)
-        .background(appearance.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(
+            appearance.color.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
                 .stroke(appearance.color.opacity(0.25), lineWidth: 0.5)
         )
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: receipt.status)
+        .hisAnimation(Motion.stateChange, value: receipt.status)
         // Declared here so any host stack that animates insertions gets the
         // same drop-in the other vehicle cards use.
         .transition(.move(edge: .top).combined(with: .opacity))

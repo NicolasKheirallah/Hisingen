@@ -11,6 +11,13 @@ enum ChargingState: Codable, Equatable, Sendable {
     case fault
     case unknown(String)
 
+    /// False for a provider token the app does not recognise, which is not a state it can vouch
+    /// for and must not present with the same confidence as one it can.
+    var isRecognised: Bool {
+        if case .unknown = self { return false }
+        return true
+    }
+
     init(apiValue: String?) {
         let key = (apiValue ?? "")
             .replacingOccurrences(of: "CHARGING_STATUS_V2_", with: "")
@@ -44,8 +51,13 @@ enum ChargingState: Codable, Equatable, Sendable {
         case .discharging: return L10n.text("Discharging")
         case .fault: return L10n.text("Fault")
         case .unknown(let value):
+            // A provider token the app does not recognise was rendered as though it were a state
+            // the app understands — "Unknown (Cable Connected Ac)" sat in the hero pill in the same
+            // weight and colour as "Charging". It says plainly that it is unrecognised now.
             let displayValue = value.replacingOccurrences(of: "_", with: " ").capitalized
-            return L10n.format("Unknown (%@)", displayValue)
+            return displayValue.isEmpty
+                ? L10n.text("Not reported")
+                : L10n.format("Unrecognised state: %@", displayValue)
         }
     }
 }

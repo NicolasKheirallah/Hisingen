@@ -35,7 +35,7 @@ final class VehicleDatabase: @unchecked Sendable {
     let electricityPrices: ElectricityPriceStore
 
     /// Whether the database file already existed when this process opened it. Gates the
-    /// one-shot pre-migration backup and the corruption quarantine — neither is meaningful
+    /// one-shot pre-migration backup and the corruption quarantine – neither is meaningful
     /// for a database this launch just created.
     private let databaseFilePreexisted: Bool
 
@@ -58,13 +58,13 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// Opens the default database location, creating the directory if needed. Returns the
     /// handle and whether the database file already existed when this process opened it
-    /// (gates the one-shot pre-migration backup and the corruption quarantine — neither is
+    /// (gates the one-shot pre-migration backup and the corruption quarantine – neither is
     /// meaningful for a database this launch just created).
     private static func openDatabase(logger: Logger) -> (SQLiteDatabase, Bool) {
         guard let baseDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            // No writable Application Support means no durable storage. Use a closed handle —
-            // every write degrades and is logged — rather than a temporary directory macOS
+            // No writable Application Support means no durable storage. Use a closed handle –
+            // every write degrades and is logged – rather than a temporary directory macOS
             // purges, which previously made "my history vanished" indistinguishable from an
             // OS housekeeping sweep.
             logger.fault("Application Support is unavailable; persistent storage is disabled for this launch")
@@ -377,11 +377,11 @@ final class VehicleDatabase: @unchecked Sendable {
     ///
     /// Additive only: `ALTER TABLE ADD COLUMN`, `CREATE TABLE/INDEX IF NOT EXISTS`, and
     /// in-place `UPDATE`s. A migration must never `DROP` or recreate a table that can hold
-    /// user history — `VehicleDatabaseMigrationTests` guards that rows survive an upgrade.
+    /// user history – `VehicleDatabaseMigrationTests` guards that rows survive an upgrade.
     private func runMigrations(from currentVersion: Int) {
         // Local version cursor: a block only advances it after its statements succeeded, and
         // each block only runs when the previous one completed, so a failed migration can
-        // never be skipped by a later block bumping `user_version` past it — it retries on
+        // never be skipped by a later block bumping `user_version` past it – it retries on
         // the next launch instead.
         var version = currentVersion
 
@@ -402,7 +402,7 @@ final class VehicleDatabase: @unchecked Sendable {
                 && columnExists(table: "charging_samples", column: "charging_type")
             if v1ColumnsReady {
                 // Quarantine rows from the old inferred/Volvo-capacity implementation, then
-                // record the version — in one statement group so a failed UPDATE (`sqlite3_exec`
+                // record the version – in one statement group so a failed UPDATE (`sqlite3_exec`
                 // stops at the first error) never lets `user_version` advance past the
                 // quarantine. Previously the bump ran unconditionally and a transient failure
                 // skipped the quarantine forever. Mirrors the v2 block below.
@@ -657,7 +657,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// What makes a battery-health row a *milestone* rather than a duplicate.
     ///
-    /// `VehicleStateStore.save(_:)` runs on every refresh — minutes apart — but state of
+    /// `VehicleStateStore.save(_:)` runs on every refresh – minutes apart – but state of
     /// health moves over months. Recording unconditionally produced ~15 rows/hour that
     /// shared 3 distinct SoH values, and nothing prunes this table, so it grew without
     /// bound. A row is now written only when it carries new information.
@@ -956,7 +956,7 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     /// Bounds growth of the tables that previously had no retention path at all (manual or
-    /// automatic) — `charging_sessions`, `battery_health_history`, `remote_commands_log`,
+    /// automatic) – `charging_sessions`, `battery_health_history`, `remote_commands_log`,
     /// and the per-hour `connectivity_history`/`cabin_climate_history` heartbeats. Defaults
     /// are deliberately longer than `pruneHistoricalSamples`'s 90 days: the session/health/
     /// audit rows are low-volume summaries (one per charge, one per command, health is
@@ -981,7 +981,7 @@ final class VehicleDatabase: @unchecked Sendable {
             ("DELETE FROM connectivity_history WHERE timestamp < ?;", "timestamp", connectivityOlderThanDays),
             ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays),
             // The render-image cache stores a full-resolution PNG plus a thumbnail per
-            // (vin, angle) and was never pruned — it is the single biggest contributor to a
+            // (vin, angle) and was never pruned – it is the single biggest contributor to a
             // multi-megabyte database on accounts that have tried several render angles.
             ("DELETE FROM vehicle_images WHERE updated_at < ?;", "updated_at", vehicleImagesOlderThanDays)
         ]
@@ -1087,7 +1087,7 @@ final class VehicleDatabase: @unchecked Sendable {
 }
 
 extension VehicleDatabase {
-    /// Complete local-history export as one JSON document — every table for every vehicle.
+    /// Complete local-history export as one JSON document – every table for every vehicle.
     /// Intended for backup/migration between Macs. Coordinates are included only when the
     /// caller explicitly opts in, mirroring the location-history preference elsewhere.
     /// Note: this is a snapshot for humans/backup tooling; there is deliberately no import,
@@ -1451,7 +1451,7 @@ extension VehicleDatabase {
     }
 
     /// Records a connectivity sample only when something observable changed (network type,
-    /// signal level, or wake reason) or the hourly heartbeat elapsed — parked-and-sleeping
+    /// signal level, or wake reason) or the hourly heartbeat elapsed – parked-and-sleeping
     /// cars would otherwise duplicate one row per poll.
     @discardableResult
     func recordConnectivity(vin: String, networkType: String?, signalBars: Int?,

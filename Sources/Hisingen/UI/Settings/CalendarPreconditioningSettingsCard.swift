@@ -45,27 +45,31 @@ struct CalendarPreconditioningSettingsCard: View {
                         .accessibilityLabel(L10n.text("Calendar preconditioning"))
                 }
                 Text(L10n.text("Start climate before timed events in calendars you choose. The command targets the currently active vehicle."))
-                    .font(.system(size: 9.5)).foregroundStyle(.secondary)
+                    .hisType(.micro).foregroundStyle(.secondary)
+                    .hisCaptionLeading()
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
                 if preferences.requireBiometricsForRemoteControls {
-                    Label(L10n.text("Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt — nobody is present to answer it when they fire."),
+                    Label(L10n.text("Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt – nobody is present to answer it when they fire."),
                           systemImage: "info.circle")
-                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .hisType(.micro).foregroundStyle(.secondary)
+                        .hisCaptionLeading()
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if permissionDenied {
                     Label(L10n.text("Calendar access is denied. Allow Hisingen in System Settings → Privacy & Security → Calendars."),
                           systemImage: "lock.trianglebadge.exclamationmark")
-                        .font(.system(size: 9.5)).foregroundStyle(.orange)
+                        .hisType(.micro).foregroundStyle(.orange)
                         .transition(.opacity)
                 }
 
                 if CalendarPreconditioningController.hasCalendarAccess {
                     Group {
                         HStack {
-                            Text(L10n.text("Lead time")).font(.system(size: 10, weight: .medium))
+                            Text(L10n.text("Lead time")).hisType(.caption, weight: .medium)
                             Spacer()
                             Picker("", selection: Binding(
                                 get: { preferences.calendarPreconditioningLeadTimeMinutes },
@@ -84,27 +88,29 @@ struct CalendarPreconditioningSettingsCard: View {
 
                         if preferences.calendarPreconditioningEnabled, let nextPreview {
                             Label(nextPreview, systemImage: "clock.arrow.circlepath")
-                                .font(.system(size: 9)).foregroundStyle(HisingenTheme.accent)
+                                .hisType(.micro).foregroundStyle(HisingenTheme.accent)
+                                .hisCaptionLeading()
+                                .hisCaptionLeading()
                                 .fixedSize(horizontal: false, vertical: true)
                                 .transition(.opacity)
                         }
 
-                        Divider().opacity(0.35)
+                        Divider().opacity(HisingenTheme.dividerOpacity)
                         Text(L10n.text("Selected calendars"))
-                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            .hisType(.caption, weight: .semibold).foregroundStyle(.secondary)
                         if calendars.isEmpty {
                             Text(L10n.text("No event calendars are available."))
-                                .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                                .hisType(.micro).foregroundStyle(.tertiary)
                         } else {
                             ForEach(calendars, id: \.calendarIdentifier) { calendar in
                                 Toggle(isOn: calendarBinding(calendar.calendarIdentifier)) {
                                     HStack(spacing: 7) {
                                         Circle().fill(Color(nsColor: calendar.color))
                                             .frame(width: 8, height: 8)
-                                        Text(calendar.title).font(.system(size: 10))
+                                        Text(calendar.title).hisType(.caption)
                                         Spacer()
                                         Text(calendar.source.title)
-                                            .font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                                            .hisType(.micro).foregroundStyle(.tertiary)
                                     }
                                 }
                                 .toggleStyle(.checkbox)
@@ -116,10 +122,10 @@ struct CalendarPreconditioningSettingsCard: View {
             }
             // State writers here run from Task continuations and EventKit callbacks
             // outside any transaction; these bindings power their reveals.
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: requestingAccess)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: permissionDenied)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: nextPreview)
-            .animation(Motion.resolve(Motion.cardChange), value: preferences.calendarPreconditioningEnabled)
+            .hisAnimation(Motion.stateChange, value: requestingAccess)
+            .hisAnimation(Motion.stateChange, value: permissionDenied)
+            .hisAnimation(Motion.stateChange, value: nextPreview)
+            .hisAnimation(Motion.cardChange, value: preferences.calendarPreconditioningEnabled)
         }
         .task { loadCalendars(); refreshPreview() }
     }
@@ -153,7 +159,7 @@ struct CalendarPreconditioningSettingsCard: View {
             return
         }
         // The section's insert is driven by bump(); keeping it in the transaction
-        // (notify stays out — the app-level refresh must not inherit this motion)
+        // (notify stays out – the app-level refresh must not inherit this motion)
         // is what makes the calendar UI ease in after the grant.
         withAnimation(Motion.resolve(Motion.cardChange)) {
             calendars = eventStore.calendars(for: .event).sorted { $0.title < $1.title }
@@ -216,7 +222,7 @@ struct CalendarPreconditioningSettingsCard: View {
             }.value
             guard !Task.isCancelled else { return }
             nextPreview = next.map { title, eventStart, fireAt in
-                L10n.format("Next: %@ at %@ — climate starts %@",
+                L10n.format("Next: %@ at %@ – climate starts %@",
                             title,
                             eventStart.formatted(date: .omitted, time: .shortened),
                             fireAt.formatted(date: .omitted, time: .shortened))

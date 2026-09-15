@@ -5,6 +5,10 @@ struct VehicleReadinessCard: View {
     let lowBatteryThreshold: Int
     @State private var departure = Date().addingTimeInterval(3600)
 
+    /// The date picker refuses any earlier date, so a panel left open past the chosen departure
+    /// would keep computing a verdict for a time that has already passed.
+    private var departureIsPast: Bool { departure < Date() }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -26,7 +30,9 @@ struct VehicleReadinessCard: View {
                             DatePicker(L10n.text("Departure"), selection: $departure, in: Date()...,
                                        displayedComponents: .hourAndMinute)
                                 .datePickerStyle(.compact)
-                            Text(VehicleReadiness.chargingByDeparture(state, departure: departure))
+                            Text(departureIsPast
+                                 ? L10n.text("That departure time has passed. Pick a new one to check readiness.")
+                                 : VehicleReadiness.chargingByDeparture(state, departure: departure))
                                 .font(.caption).fixedSize(horizontal: false, vertical: true)
                             Text(state.chargingEstimateDestination).font(.caption2).foregroundStyle(.secondary)
                         }.padding(.top, 6)

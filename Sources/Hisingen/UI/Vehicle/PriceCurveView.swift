@@ -11,8 +11,6 @@ struct PriceCurveView: View {
     let plan: ChargingPlan?
     var now: Date = Date()
 
-    @State private var appeared = false
-
     private var futurePoints: [ElectricityPricePoint] {
         points.filter { $0.endDate > now }.sorted { $0.startDate < $1.startDate }
     }
@@ -41,7 +39,8 @@ struct PriceCurveView: View {
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
                             Text(date, format: Date.FormatStyle.dateTime.hour())
-                                .font(.system(size: 8))
+                                .hisType(.micro, weight: .medium)
+                                .monospacedDigit()
                         }
                     }
                 }
@@ -50,8 +49,11 @@ struct PriceCurveView: View {
                 AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { (value: AxisValue) in
                     AxisValueLabel {
                         if let price = value.as(Double.self) {
-                            Text(String(format: "%.1f", price))
-                                .font(.system(size: 8))
+                            // The y axis carries the only measurable information on the chart, so
+                            // it is no longer the smallest type on it, and it names its unit.
+                            Text(L10n.format("%@ kr", String(format: "%.1f", price)))
+                                .hisType(.micro, weight: .medium)
+                                .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -59,22 +61,29 @@ struct PriceCurveView: View {
                 }
             }
             .frame(height: 56)
-            .opacity(appeared ? 1 : 0)
-            .animation(Motion.resolve(Motion.entrance), value: appeared)
-            .onAppear { appeared = true }
+            // The chart had no unit and no way to read an individual hour: the bars carried the
+            // information and nothing could be asked of them.
+            .chartYAxisLabel(L10n.text("kr per kWh"))
             .accessibilityLabel(L10n.text("Electricity price outlook"))
             .accessibilityValue(accessibilitySummary(minimum: minimum, maximum: maximum))
         )
     }
 
+    /// The bands are absolute, not relative to the window on screen.
+    ///
+    /// The scale was `(price - minimum) / span` over the visible period, so the same 1.20 kr/kWh
+    /// rendered red on a flat day and grey on a volatile one, and two cards showing different
+    /// periods disagreed about the same hour. These thresholds are the Swedish spot-price bands a
+    /// reader actually plans around.
     private func barColor(for point: ElectricityPricePoint, minimum: Double, span: Double) -> Color {
         if let plan, point.startDate >= plan.start && point.endDate <= plan.end {
             return HisingenTheme.semanticGood
         }
-        let fraction = span > 0 ? (point.sekPerKwh - minimum) / span : 0
-        return fraction > 0.66 ? HisingenTheme.semanticWarning.opacity(0.8)
-            : fraction > 0.33 ? Color.orange.opacity(0.45)
-            : Color.secondary.opacity(0.4)
+        switch point.sekPerKwh {
+        case ..<1.0: return Color.secondary.opacity(0.4)
+        case ..<2.0: return Color.orange.opacity(0.45)
+        default: return HisingenTheme.semanticWarning.opacity(0.8)
+        }
     }
 
     private func accessibilitySummary(minimum: Double, maximum: Double) -> String {

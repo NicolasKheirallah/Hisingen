@@ -35,7 +35,7 @@ struct LiveStreamPolicy: Sendable {
 
     /// Only the available-car charging gate streams by default: the Polestar battery stream
     /// carries charging and battery readings, so an open connection while climate runs adds
-    /// traffic without making climate fresher — the normal two-minute poll covers it.
+    /// traffic without making climate fresher – the normal two-minute poll covers it.
     /// An asleep vehicle answers every stream with the same stale frames, so it never streams.
     func shouldStream(_ state: VehicleState) -> Bool {
         if let customGate { return customGate(state) }

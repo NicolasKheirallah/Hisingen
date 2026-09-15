@@ -90,6 +90,11 @@ struct OutlineGeometry {
 struct VehicleSideProfileDoorsView: View {
     let openings: [OpeningReading]
     var hoveredOpening: VehicleOpening? = nil
+    /// Reports which part the pointer is over, so the card's chip grid can follow the car rather
+    /// than the other way round. Nil when the pointer leaves every zone.
+    var onHoverOpening: ((VehicleOpening?) -> Void)? = nil
+    /// The natural gesture on a drawn car: point at the door and it does the door's thing.
+    var onSelectOpening: ((VehicleOpening) -> Void)? = nil
 
     private func reading(for op: VehicleOpening) -> OpeningReading? {
         openings.first(where: { $0.opening == op })
@@ -255,7 +260,9 @@ struct VehicleSideProfileDoorsView: View {
             }
         }
         .frame(height: 96)
-        .accessibilityHidden(true)
+        // Was `accessibilityHidden(true)`, so a VoiceOver reader got twelve chips and no car. The
+        // zones now carry their own names, states and button trait.
+        .accessibilityElement(children: .contain)
     }
 
     enum OpeningZoneKind {
@@ -294,22 +301,57 @@ struct VehicleSideProfileDoorsView: View {
                 )
             if hovered, let hoverBadge {
                 Text(hoverBadge)
-                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .hisType(.nano, weight: .bold, design: .rounded)
+                    .monospacedDigit()
                     .foregroundStyle(activeColor)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
-                    .background(.regularMaterial, in: Capsule())
+                    .background(HisingenTheme.chipFill, in: Capsule())
             }
         }
         .frame(width: size.width, height: size.height)
         .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
         .scaleEffect(visible ? 1.02 : 1.0)
+        // The zone keeps its own hit area even at rest: `visible` drives the drawing's opacity, and
+        // an invisible zone you can still point at is the whole point of this view.
+        .contentShape(zoneShape(kind: kind))
+        .onHover { inside in
+            guard let onHoverOpening else { return }
+            if inside {
+                onHoverOpening(zoneOpenings(kind: kind).first)
+            } else if zoneOpenings(kind: kind).contains(hoveredOpening ?? .hood) {
+                onHoverOpening(nil)
+            }
+        }
+        .onTapGesture {
+            guard let onSelectOpening, let opening = zoneOpenings(kind: kind).first else { return }
+            onSelectOpening(opening)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(zoneOpenings(kind: kind).map(\.displayName).joined(separator: ", "))
+        .accessibilityValue(L10n.text(open ? "Open" : "Closed"))
+        .accessibilityAddTraits(onSelectOpening == nil ? [] : .isButton)
         .opacity(visible ? 1 : 0)
         .position(pos)
         // Accent→warning recolor and stroke width ride the open flag; the
         // visibility animation below only owns hover in/out.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: open)
-        .animation(Motion.selection, value: visible)
+        .hisAnimation(Motion.stateChange, value: open)
+        .hisAnimation(Motion.selection, value: visible)
+    }
+
+    /// The openings a zone stands for. The charge lid and the fuel flap are drawn in the same
+    /// place, so one zone has to answer for both.
+    private func zoneOpenings(kind: OpeningZoneKind) -> [VehicleOpening] {
+        switch kind {
+        case .hood: return [.hood]
+        case .tailgate: return [.tailgate]
+        case .frontDoor: return [.frontLeftDoor, .frontRightDoor]
+        case .rearDoor: return [.rearLeftDoor, .rearRightDoor]
+        case .frontWindow: return [.frontLeftWindow, .frontRightWindow]
+        case .rearWindow: return [.rearLeftWindow, .rearRightWindow]
+        case .sunroof: return [.sunroof]
+        case .chargeLid: return [.chargeLid, .fuelFlap]
+        }
     }
 
     private func zoneShape(kind: OpeningZoneKind) -> OutlineAnyShape {
@@ -331,7 +373,7 @@ struct VehicleSideProfileDoorsView: View {
         let pos = og.point(u: 0.9125, v: 0.4902)
         let size = og.size(wFraction: 0.13, hFraction: 0.11)
 
-        // Kept in the hierarchy and faded on the flag — a glow that only exists
+        // Kept in the hierarchy and faded on the flag – a glow that only exists
         // while shown cannot animate its own removal (same rule as openingZone).
         return Ellipse()
             .fill(
@@ -345,8 +387,8 @@ struct VehicleSideProfileDoorsView: View {
             .position(pos)
             .blur(radius: 2)
             .opacity(shown ? 1 : 0)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: shown)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: active)
+            .hisAnimation(Motion.stateChange, value: shown)
+            .hisAnimation(Motion.stateChange, value: active)
     }
 
     private func taillightsGlow(og: OutlineGeometry, shown: Bool, active: Bool) -> some View {
@@ -367,8 +409,8 @@ struct VehicleSideProfileDoorsView: View {
             .position(pos)
             .blur(radius: 2)
             .opacity(shown ? 1 : 0)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: shown)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: active)
+            .hisAnimation(Motion.stateChange, value: shown)
+            .hisAnimation(Motion.stateChange, value: active)
     }
 
     private func chargeLidIndicator(
@@ -397,8 +439,8 @@ struct VehicleSideProfileDoorsView: View {
         .scaleEffect(visible ? 1.18 : 1.0)
         .opacity(visible ? 1 : 0)
         .position(pos)
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: open)
-        .animation(Motion.selection, value: visible)
+        .hisAnimation(Motion.stateChange, value: open)
+        .hisAnimation(Motion.selection, value: visible)
     }
 }
 
@@ -547,7 +589,7 @@ struct VehicleSideProfileTiresView: View {
     }
 
     /// Rolls two tyres of an axle up into one level: any attention-needing tyre wins (very low
-    /// outranks low/high), explicit OK only when *both* tyres reported OK — an unreported axle
+    /// outranks low/high), explicit OK only when *both* tyres reported OK – an unreported axle
     /// renders muted rather than falsely healthy.
     private func axleState(_ a: TyrePosition, _ b: TyrePosition) -> TyrePressureWarning {
         let pair = [tyre(for: a), tyre(for: b)].compactMap { $0 }.map(\.warning)
@@ -667,8 +709,8 @@ struct VehicleSideProfileTiresView: View {
         .position(pos)
         // Severity escalation (low→veryLow) recolors and thickens; keyed on the
         // warning level so it crossfades instead of snapping.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: state)
-        .animation(Motion.selection, value: hovered || alerting)
+        .hisAnimation(Motion.stateChange, value: state)
+        .hisAnimation(Motion.selection, value: hovered || alerting)
     }
 }
 

@@ -5,7 +5,7 @@ import SwiftUI
 /// 1.33 zoom over the top that deliberately overflows and is clipped.
 ///
 /// The view below lays the render out with exactly these modifiers, so the
-/// resting state is not *reproduced* — it is the same layout it always was.
+/// resting state is not *reproduced* – it is the same layout it always was.
 enum VehicleRenderLayout {
     static let horizontalInset: CGFloat = 8
     static let contentHeight: CGFloat = 205
@@ -46,21 +46,14 @@ struct VehicleEntranceFrame: Equatable {
     var y: CGFloat = 0
     var scale: CGFloat = 1
     var opacity: CGFloat = 1
-    /// Points of ground the car has covered. Nothing consumes it yet — the
-    /// renders are flattened — but it rides the same timeline as the body, so a
-    /// wheel layer only has to apply
-    /// `.rotationEffect(.radians(VehicleRollCurve.wheelRotation(travelled:radius:)))`
-    /// to turn in step with it. See docs/architecture/vehicle-motion.md.
-    var travelled: CGFloat = 0
-
     static let rest = VehicleEntranceFrame()
 }
 
 /// The vehicle render, and the two ways it can arrive: rolling in when it is
 /// first shown, crossing over when the user changes angle.
 ///
-/// Everything around it — the card, the glow behind the car, the angle strip and
-/// every label — is drawn by the surrounding SwiftUI and holds still.
+/// Everything around it – the card, the glow behind the car, the angle strip and
+/// every label – is drawn by the surrounding SwiftUI and holds still.
 @MainActor
 struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
@@ -223,8 +216,7 @@ extension VehicleEntranceMotion {
                 x: $0.translation.x,
                 y: -$0.translation.y,
                 scale: $0.scale,
-                opacity: $0.opacity,
-                travelled: $0.travelled
+                opacity: $0.opacity
             )
         }
     }
@@ -232,8 +224,8 @@ extension VehicleEntranceMotion {
     /// The whole entrance, sampled onto a fixed grid and laid down as keyframes.
     ///
     /// Sampled rather than expressed as a handful of cubic keyframes because the
-    /// travel is a braking profile — constant velocity, then a raised cosine to
-    /// exactly zero — and no bezier says that. Each property still gets its own
+    /// travel is a braking profile – constant velocity, then a raised cosine to
+    /// exactly zero – and no bezier says that. Each property still gets its own
     /// track, and the sampling is the same one that was measured on screen.
     @KeyframesBuilder<VehicleEntranceFrame>
     var tracks: some Keyframes<VehicleEntranceFrame> {
@@ -252,9 +244,6 @@ extension VehicleEntranceMotion {
         KeyframeTrack(\VehicleEntranceFrame.opacity) {
             for value in steps { LinearKeyframe(value.opacity, duration: step) }
         }
-        // No travelled track: nothing reads VehicleEntranceFrame.travelled until a wheel
-        // layer exists, so animating it every entrance is pure overhead (UISHELL-08).
-        // The field and VehicleRollCurve.wheelRotation stay as the documented reservation.
     }
 }
 
@@ -262,6 +251,12 @@ extension VehicleTransitionMotion {
     var animation: Animation {
         // Quick off the mark, long gentle tail: the same deceleration the
         // entrance ends on, so both read as the same vehicle.
-        .timingCurve(0.16, 0.72, 0.20, 1.0, duration: duration)
+        .timingCurve(
+            Motion.entranceControlPoints.x1,
+            Motion.entranceControlPoints.y1,
+            Motion.entranceControlPoints.x2,
+            Motion.entranceControlPoints.y2,
+            duration: duration
+        )
     }
 }

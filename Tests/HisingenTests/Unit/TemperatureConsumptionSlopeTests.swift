@@ -14,7 +14,7 @@ struct TemperatureConsumptionSlopeTests {
 
     @Test
     func quantifiesAColdWeatherPenalty() throws {
-        // Consumption rises linearly by 0.15 kWh/100km per degree of cooling — about a
+        // Consumption rises linearly by 0.15 kWh/100km per degree of cooling – about a
         // 7% penalty per 10 °C against the ~20 kWh/100km median.
         let trips = stride(from: 20.0, through: -10.0, by: -5.0).enumerated().map { index, temperature in
             trip(id: "t\(index)", temperature: temperature,

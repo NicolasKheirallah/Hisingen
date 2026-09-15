@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Notifications section of Settings — the master switch plus every per-event alert
+/// The Notifications section of Settings – the master switch plus every per-event alert
 /// toggle and its threshold picker. Extracted from `SettingsView`; binds through
 /// `PreferenceBinder` so it needs no local `@State`.
 @MainActor
@@ -26,13 +26,15 @@ struct SettingsNotificationsCard: View {
                 if notificationPermission == .denied {
                     HStack(spacing: 8) {
                         Image(systemName: "bell.slash.fill")
-                            .font(.system(size: 12))
+                            .hisType(.body)
                             .foregroundStyle(HisingenTheme.semanticWarning)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Notifications Blocked in System Settings"))
-                                .font(.system(size: 11, weight: .semibold))
+                                .hisType(.label, weight: .semibold)
                             Text(L10n.text("These toggles won't alert you until notifications are allowed for Hisingen."))
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
+                                .hisCaptionLeading()
+                                .fixedSize(horizontal: false, vertical: true)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -42,7 +44,7 @@ struct SettingsNotificationsCard: View {
                             }
                         } label: {
                             Text(L10n.text("Open Settings"))
-                                .font(.system(size: 10.5, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
@@ -54,8 +56,11 @@ struct SettingsNotificationsCard: View {
                 }
 
                 VStack(spacing: 4) {
-                    // Master switch — the `.notifications` feature flag lives in
+                    // Master switch – the `.notifications` feature flag lives in
                     // `FeatureSelection`, not a plain bool, so it needs its own binding.
+                    // The label promised a "master switch for every local alert below" while the
+                    // rows under it stayed enabled and at full strength, so it governed nothing the
+                    // reader could see. The list below is now disabled and dimmed by it.
                     notificationRow(
                         symbol: "bell.badge.fill",
                         title: "Notifications",
@@ -72,6 +77,7 @@ struct SettingsNotificationsCard: View {
                         )
                     )
 
+                    Group {
                     notificationRow(
                         symbol: "bolt.badge.clock.fill",
                         title: "Charging Started",
@@ -181,11 +187,11 @@ struct SettingsNotificationsCard: View {
                     if prefs.notifyLowBattery {
                         HStack(spacing: 8) {
                             Image(systemName: "slider.horizontal.below.rectangle")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 16)
                             Text(L10n.text("Alert Threshold"))
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Picker("", selection: binder(\.lowBatteryThreshold, .notifications)) {
@@ -202,7 +208,7 @@ struct SettingsNotificationsCard: View {
                         .transition(Self.dependentRowTransition)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                         .padding(.vertical, 2)
 
                     notificationRow(
@@ -228,13 +234,13 @@ struct SettingsNotificationsCard: View {
                         .transition(Self.dependentRowTransition)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                         .padding(.vertical, 2)
 
                     notificationRow(
                         symbol: "speaker.wave.2.fill",
                         title: "Notification Sounds",
-                        detail: "Play a sound on urgent alerts — alarms, warnings and charging problems",
+                        detail: "Play a sound on urgent alerts – alarms, warnings and charging problems",
                         \.notifySounds
                     )
 
@@ -247,11 +253,11 @@ struct SettingsNotificationsCard: View {
                     if prefs.quietHoursEnabled {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 16)
                             Text(L10n.text("Window"))
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                             Spacer()
                             Picker("", selection: binder(\.quietHoursStartHour, .notifications)) {
@@ -263,7 +269,7 @@ struct SettingsNotificationsCard: View {
                             .controlSize(.small)
                             .frame(maxWidth: 76)
                             Text(L10n.text("to"))
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                             Picker("", selection: binder(\.quietHoursEndHour, .notifications)) {
                                 ForEach(0..<24, id: \.self) { h in
@@ -286,13 +292,21 @@ struct SettingsNotificationsCard: View {
                         \.showWarningBadge
                     )
 
-                    if !settingsVehicleVIN.isEmpty {
-                        let nickname = prefs.vehicleNickname(for: settingsVehicleVIN)
-                        let carLabel = nickname.isEmpty ? String(settingsVehicleVIN.suffix(6)) : String(nickname.prefix(24))
+                    Group {
+                        // Shown when there is no VIN too, with the reason. The row used to vanish
+                        // entirely, so a reader who had muted a vehicle and then signed out had no
+                        // way to unmute it and the list changed length between visits.
+                        let hasVehicle = !settingsVehicleVIN.isEmpty
+                        let nickname = hasVehicle ? prefs.vehicleNickname(for: settingsVehicleVIN) : ""
+                        let carLabel = nickname.isEmpty
+                            ? (hasVehicle ? String(settingsVehicleVIN.suffix(6)) : "")
+                            : String(nickname.prefix(24))
                         notificationRow(
                             symbol: "bell.slash.fill",
                             title: "Mute This Vehicle",
-                            detail: "Silence banners for \(carLabel) while telemetry keeps updating",
+                            detail: hasVehicle
+                                ? "Silence banners for \(carLabel) while telemetry keeps updating"
+                                : "Choose a vehicle first; muting applies to one car at a time.",
                             isOn: Binding(
                                 get: { prefs.isMuted(vin: settingsVehicleVIN) },
                                 set: { enabled in
@@ -309,12 +323,12 @@ struct SettingsNotificationsCard: View {
                         Notifier.shared?.sendTestNotification()
                     } label: {
                         Label(L10n.text("Send Test Notification"), systemImage: "bell.and.waves.left.and.right")
-                            .font(.system(size: 10.5, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                         .padding(.vertical, 2)
 
                     notificationRow(
@@ -323,16 +337,25 @@ struct SettingsNotificationsCard: View {
                         detail: "Hide license plate and battery % from lock screen",
                         \.privateNotificationDetails
                     )
+                    }
+                    // A master switch that says it governs "every local alert below" has to govern
+                    // them: disabled, and dimmed so the reason is visible rather than inferred from
+                    // taps that do nothing. Its own row stays live, or it could never be turned
+                    // back on.
+                    .disabled(!prefs.features.contains(.notifications))
+                    .opacity(prefs.features.contains(.notifications) ? 1 : 0.45)
+                    .hisAnimation(Motion.stateChange,
+                                  value: prefs.features.contains(.notifications))
                 }
                 // Preference writes go through the binder with no transaction; these
                 // bindings give each dependent row its reveal/settle animation.
-                .animation(Motion.resolve(Motion.layout), value: prefs.notifyOpeningsLeftOpen)
-                .animation(Motion.resolve(Motion.layout), value: prefs.notifyPlugInReminder)
-                .animation(Motion.resolve(Motion.layout), value: prefs.notifyLowBattery)
-                .animation(Motion.resolve(Motion.layout), value: prefs.notifyEveningUnlocked)
-                .animation(Motion.resolve(Motion.layout), value: prefs.quietHoursEnabled)
+                .hisAnimation(Motion.layout, value: prefs.notifyOpeningsLeftOpen)
+                .hisAnimation(Motion.layout, value: prefs.notifyPlugInReminder)
+                .hisAnimation(Motion.layout, value: prefs.notifyLowBattery)
+                .hisAnimation(Motion.layout, value: prefs.notifyEveningUnlocked)
+                .hisAnimation(Motion.layout, value: prefs.quietHoursEnabled)
             }
-            .animation(Motion.resolve(Motion.entrance), value: notificationPermission)
+            .hisAnimation(Motion.entrance, value: notificationPermission)
         }
     }
 
@@ -362,10 +385,10 @@ struct SettingsNotificationsCard: View {
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 11))
+                .hisType(.label)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            Text(title).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            Text(title).hisType(.caption).foregroundStyle(.secondary)
             Spacer()
             Picker("", selection: binder(keyPath, .notifications)) {
                 ForEach(values, id: \.self) { value in Text(label(value)).tag(value) }

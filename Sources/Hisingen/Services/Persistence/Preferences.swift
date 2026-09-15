@@ -165,6 +165,29 @@ enum ContentDensity: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The multiplier the type ramp applies to every tier's base size.
+    ///
+    /// Gentler than the old raster factor on purpose: 0.85 on a 9pt tier was 7.65pt, and this is a
+    /// legibility floor rather than a zoom. Compact also tightens spacing, which is what actually
+    /// fits more content on a screen.
+    var typeScale: CGFloat {
+        switch self {
+        case .compact: return 0.92
+        case .standard: return 1.0
+        case .relaxed: return 1.12
+        }
+    }
+
+    /// The multiplier for section and card spacing, so density reflows as well as resizes.
+    var spacingScale: CGFloat {
+        switch self {
+        case .compact: return 0.82
+        case .standard: return 1.0
+        case .relaxed: return 1.18
+        }
+    }
+
+    /// The old raster factor, kept only so the preset can still describe itself as a percentage.
     var scale: CGFloat {
         switch self {
         case .compact: return 0.85
@@ -175,7 +198,7 @@ enum ContentDensity: String, CaseIterable, Codable, Sendable {
 }
 
 /// How the menu bar dropdown reacts when focus moves elsewhere. `closeOnFocusLoss`
-/// mirrors standard macOS popover behavior (any click outside — including another app —
+/// mirrors standard macOS popover behavior (any click outside – including another app –
 /// dismisses it); `keepOpen` holds the panel until the status item is clicked again.
 enum PanelCloseBehavior: String, CaseIterable, Codable, Sendable {
     case keepOpen = "keep-open"
@@ -595,7 +618,7 @@ enum FuelEconomyUnit: String, CaseIterable, Codable, Sendable {
     }
 
     func format(lPer100Km: Double) -> String {
-        guard lPer100Km > 0 else { return "— \(suffix)" }
+        guard lPer100Km > 0 else { return "– \(suffix)" }
         switch self {
         case .litersPer100Km:
             return String(format: "%.1f L/100km", lPer100Km)
@@ -658,7 +681,7 @@ enum EnergyConsumptionUnit: String, CaseIterable, Codable, Sendable {
     }
 
     func format(kwhPer100Km value: Double) -> String {
-        guard value > 0 else { return "—" }
+        guard value > 0 else { return "–" }
         switch self {
         case .kwhPer100Km:
             return String(format: "%.1f kWh/100 km", value)

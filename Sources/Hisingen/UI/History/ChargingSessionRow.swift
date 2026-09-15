@@ -55,11 +55,11 @@ struct ChargingSessionRow: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                     let preferredCost = session.spotCost ?? session.estimatedCost(tariff: preferences.electricityPricePerKwh)
                     let costStr = preferredCost.map { String(format: " · %.2f %@", $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
                     Text(String(format: "+%.0f%% · ≈%.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
-                        .font(.system(size: 10))
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -69,14 +69,14 @@ struct ChargingSessionRow: View {
             }
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle())
-        .font(.system(size: 11))
+        .hisType(.label)
         .padding(.vertical, 2)
         .padding(.horizontal, 4)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
         )
-        .animation(Motion.resolve(Motion.selection), value: isHovered)
+        .hisAnimation(Motion.selection, value: isHovered)
         .onHover { isHovered = $0 }
     }
 

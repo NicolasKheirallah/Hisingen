@@ -8,10 +8,10 @@ enum CommandAvailability: Equatable, Sendable {
     case unavailableWhileBusy
     case unavailableUntilRefresh
     /// The backend explicitly reports the signed-in account is not the vehicle's owner
-    /// (`GetMyCars.userIsOwner == false`). Distinct from "unknown" — an absent flag never
+    /// (`GetMyCars.userIsOwner == false`). Distinct from "unknown" – an absent flag never
     /// blocks a command.
     case notVehicleOwner
-    /// The Volvo account token lacks the "Approved" (restricted) scopes a write needs —
+    /// The Volvo account token lacks the "Approved" (restricted) scopes a write needs –
     /// the user must re-grant them in Settings before lock/unlock/locate can run.
     case requiresAccountApproval
     case invalidSettings(String)
@@ -47,7 +47,7 @@ enum CommandAvailability: Equatable, Sendable {
 /// The single application-level decision point for whether a remote command may be shown or sent.
 /// Provider probing remains provider-specific; this combines those facts with app policy.
 struct CapabilityGate: Sendable {
-    /// The one wiring for every availability question — UI dimming and dispatch refusal
+    /// The one wiring for every availability question – UI dimming and dispatch refusal
     /// both come through here, so they can never consult different catalogs. The brand is
     /// the caller's authority for the vehicle the question is about: the executor's brand
     /// when dispatching, the current session's brand when rendering controls.

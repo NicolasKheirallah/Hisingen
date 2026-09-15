@@ -119,7 +119,7 @@ final class SQLiteDatabase: @unchecked Sendable {
     }
 
     /// Fast structural sanity check (`PRAGMA quick_check`). A `false` result means the file
-    /// is damaged and must not be trusted for reads or writes — the caller should quarantine
+    /// is damaged and must not be trusted for reads or writes – the caller should quarantine
     /// it rather than let the schema layer silently recreate an empty database over the top.
     func passesQuickCheck() -> Bool {
         guard isOpen else { return false }
@@ -235,7 +235,7 @@ final class SQLiteStatement: @unchecked Sendable {
     // MARK: - Binding Parameters (1-indexed)
 
     /// Tells SQLite to copy bound buffers immediately. Passing `nil` here would be
-    /// `SQLITE_STATIC`, which requires the buffer to outlive `sqlite3_step` — a contract the
+    /// `SQLITE_STATIC`, which requires the buffer to outlive `sqlite3_step` – a contract the
     /// callers of these helpers cannot honour for Swift temporaries.
     private static let transientDestructor = unsafeBitCast(
         UnsafeRawPointer(bitPattern: -1)!, to: sqlite3_destructor_type.self

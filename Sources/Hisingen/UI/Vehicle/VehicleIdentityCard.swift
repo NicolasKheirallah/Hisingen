@@ -33,7 +33,7 @@ struct VehicleIdentityCard: View {
             rows.append(KVRow(L10n.text("Service Due"), value, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
         }
         if features.contains(.vehicleHealth), let hours = state.maintenance.service.engineHoursToService, hours > 0 {
-            rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
+            rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer"))
         }
         if features.contains(.tripMeters) {
             if let km = state.tripComputer.manualTripKm { rows.append(KVRow(L10n.text("Manual Trip Meter"), Format.distance(km: Int(km.rounded()), unit: preferences.distanceUnit), symbol: "m.circle")) }

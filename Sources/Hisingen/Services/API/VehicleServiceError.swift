@@ -36,7 +36,7 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         case .network(let error):
             switch error.code {
             case .notConnectedToInternet, .networkConnectionLost:
-                return L10n.text("Offline — showing the last available vehicle data.")
+                return L10n.text("Offline: showing the last available vehicle data.")
             case .timedOut:
                 return L10n.text("The vehicle service took too long to respond. Retrying automatically.")
             default:
@@ -79,8 +79,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
 
     /// Whether the refresh loop should keep retrying on its own.
     ///
-    /// Only errors that cannot clear without the owner doing something first — a wrong
-    /// password, an added sign-in step, or no configuration at all — stop the loop. Everything
+    /// Only errors that cannot clear without the owner doing something first – a wrong
+    /// password, an added sign-in step, or no configuration at all – stop the loop. Everything
     /// else stays on a backoff schedule, including an expired session: the stored refresh token
     /// can re-establish it unattended, and a single upstream 401 must not leave the app parked
     /// on a stale cache until someone notices and pokes it.

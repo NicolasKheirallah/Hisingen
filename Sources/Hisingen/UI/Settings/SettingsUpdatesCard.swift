@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 struct SettingsUpdatesCard: View {
     let binder: PreferenceBinder
+
     private var prefs: PreferencesStore { binder.preferences }
 
     var body: some View {
@@ -13,12 +14,14 @@ struct SettingsUpdatesCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "arrow.down.circle.fill", title: L10n.text("Hisingen Updates"), color: .blue)
                 Text(L10n.text("Updates are downloaded from Hisingen’s signed update feed and verified before installation."))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
 
                 HStack {
                     Label(L10n.text("Stable channel"), systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 10, weight: .medium))
+                        .hisType(.caption, weight: .medium)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
@@ -32,9 +35,9 @@ struct SettingsUpdatesCard: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Automatically check for updates"))
-                            .font(.system(size: 12, weight: .medium))
+                            .hisType(.body, weight: .medium)
                         Text(L10n.text("Check quietly in the background while Hisingen is running"))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -42,7 +45,7 @@ struct SettingsUpdatesCard: View {
                         get: { prefs.automaticallyChecksForUpdates },
                         set: { value in
                             prefs.automaticallyChecksForUpdates = value
-                            // Disabling checks also disables downloads — a download with no
+                            // Disabling checks also disables downloads – a download with no
                             // preceding check can never happen.
                             if !value { prefs.automaticallyDownloadsUpdates = false }
                             binder.bump()
@@ -58,9 +61,9 @@ struct SettingsUpdatesCard: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Check frequency"))
-                            .font(.system(size: 12, weight: .medium))
+                            .hisType(.body, weight: .medium)
                         Text(L10n.text("How often Hisingen looks for new versions"))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -76,14 +79,16 @@ struct SettingsUpdatesCard: View {
                     .disabled(!prefs.automaticallyChecksForUpdates)
                 }
 
-                Divider().opacity(0.4)
+                Divider().opacity(HisingenTheme.dividerOpacity)
 
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Automatically download updates"))
-                            .font(.system(size: 12, weight: .medium))
+                            .hisType(.body, weight: .medium)
                         Text(L10n.text("Download verified updates in the background; installation still uses macOS confirmation."))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
+                            .hisCaptionLeading()
+                            .fixedSize(horizontal: false, vertical: true)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()

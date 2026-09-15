@@ -14,6 +14,11 @@ struct ExceptionsCard: View {
 
     private var rows: [KVRow] {
         var rows: [KVRow] = []
+        // A triggered alarm is the one row here that means someone may be tampering with the car,
+        // so it leads and it is the only row that gets the critical treatment.
+        if features.contains(.exteriorStatus), state.exteriorStatus?.alarmTriggered == true {
+            rows.append(KVRow(L10n.text("Vehicle Alarm Triggered"), L10n.text("Active Alarm"), symbol: "speaker.wave.3.fill", critical: true))
+        }
         if features.contains(.vehicleAvailability), state.identity.availability != .unknown, state.identity.availability != .available {
             rows.append(KVRow(L10n.text("Cloud Connectivity"), state.identity.availability.displayName, symbol: "antenna.radiowaves.left.and.right", valueWarning: true))
         }
@@ -28,9 +33,6 @@ struct ExceptionsCard: View {
         if features.contains(.exteriorStatus), let exterior = state.exteriorStatus {
             for opening in exterior.itemsNeedingAttention {
                 rows.append(KVRow(L10n.format("%@ Open", opening.displayName), L10n.text("Warning"), symbol: "exclamationmark.circle.fill", warning: true))
-            }
-            if exterior.alarmTriggered == true {
-                rows.append(KVRow(L10n.text("Vehicle Alarm Triggered"), L10n.text("Active Alarm"), symbol: "speaker.wave.3.fill", warning: true))
             }
         }
         if features.contains(.tyreAndWarnings), let tyres = state.maintenance.details?.tyres {
@@ -54,7 +56,8 @@ struct ExceptionsCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Needs Attention"), color: HisingenTheme.semanticWarning, isSemantic: true)
+                CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Needs Attention"), color: HisingenTheme.semanticWarning, isSemantic: true,
+                           detail: L10n.format("%d", rows.count))
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }

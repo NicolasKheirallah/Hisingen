@@ -29,16 +29,19 @@ struct CapabilityBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: state.symbol)
-                .font(.system(size: 11, weight: HisingenTheme.headingWeight))
+                .hisType(.label, weight: HisingenTheme.headingWeight)
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.system(size: 12, weight: HisingenTheme.valueWeight))
+                .hisType(.body, weight: HisingenTheme.valueWeight)
                 .foregroundStyle(.secondary)
             Spacer()
+            // All three states rendered in `.tertiary`, so a capability this vehicle will never
+            // have and one that is merely unreachable right now looked identical. The permanent
+            // one stays quiet; the temporary one is the state a reader can act on.
             Text(state.label)
-                .font(.system(size: 10.5, weight: HisingenTheme.valueWeight))
-                .foregroundStyle(.tertiary)
+                .hisType(.caption, weight: HisingenTheme.valueWeight)
+                .foregroundStyle(state == .unavailable ? HisingenTheme.semanticWarning : Color.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(state.label)")

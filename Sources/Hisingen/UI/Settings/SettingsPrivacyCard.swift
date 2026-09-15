@@ -12,8 +12,10 @@ struct SettingsPrivacyCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "hand.raised.fill", title: L10n.text("Privacy Dashboard"), color: .purple)
                 Text(L10n.text("Hisingen keeps account secrets in the macOS Keychain and vehicle history in a local SQLite database."))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
+                    .hisCaptionLeading()
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
                 KVRow(L10n.text("Account secrets"), L10n.text("macOS Keychain"), symbol: "key.fill")
@@ -35,8 +37,10 @@ struct SettingsPrivacyCard: View {
                 )
 
                 Text(L10n.text("Exports may contain vehicle identifiers and telemetry. Review files before sharing them."))
-                    .font(.system(size: 9.5, weight: .medium))
+                    .hisType(.micro, weight: .medium)
                     .foregroundStyle(HisingenTheme.semanticWarning)
+                    .hisCaptionLeading()
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

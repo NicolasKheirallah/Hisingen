@@ -18,7 +18,7 @@ enum MapLinks {
         return components.url
     }
 
-    /// Driving directions between two explicit coordinates — used to replay a detected trip's
+    /// Driving directions between two explicit coordinates – used to replay a detected trip's
     /// start→end on the map rather than just dropping a pin at the finish.
     static func appleMapsDirections(fromLatitude: Double, fromLongitude: Double,
                                     toLatitude: Double, toLongitude: Double) -> URL? {

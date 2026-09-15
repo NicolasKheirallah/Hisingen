@@ -33,7 +33,7 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
                 Text(L10n.text("Positive flags were reported by the backend. “Not reported” does not prove that the vehicle lacks a capability."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 6) {
@@ -92,7 +92,7 @@ extension InfoTabView {
                         .padding(.top, 6)
                     } label: {
                         Text(L10n.format("%d not reported by the backend", negative.count))
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }
@@ -116,7 +116,7 @@ extension InfoTabView {
                 }
 
                 Text(L10n.text("Controls also depend on account permissions, enabled features and available command implementations."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.tertiary)
             }
         })
@@ -136,7 +136,7 @@ extension InfoTabView {
     var capabilityProfileEntries: (positive: [(VehicleCapability, VehicleCapabilitySupport)],
                                    negative: [(VehicleCapability, VehicleCapabilitySupport)]) {
         // Only shown when the Polestar GetMyCars flag list isn't (Volvo, or a Polestar without
-        // that payload) — otherwise the two capability cards would say much the same thing.
+        // that payload) – otherwise the two capability cards would say much the same thing.
         guard state.otaCapabilities == nil || state.isVolvo else { return ([], []) }
         let profile = state.capabilityProfile
         var positive: [(VehicleCapability, VehicleCapabilitySupport)] = []
@@ -165,7 +165,7 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
                 Text(L10n.text("Derived from the model profile and any capabilities probed at runtime. Not a live per-VIN guarantee."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 6) {
@@ -180,7 +180,7 @@ extension InfoTabView {
                         .padding(.top, 6)
                     } label: {
                         Text(L10n.format("%d not available on this model", entries.negative.count))
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())
                 }

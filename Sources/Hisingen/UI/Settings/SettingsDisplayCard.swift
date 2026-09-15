@@ -22,12 +22,13 @@ struct SettingsDisplayCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "display", title: L10n.text("General"), color: .blue)
+                CardHeader(symbol: "display", title: L10n.text("Display, Units & Energy"), color: .blue)
 
                 VStack(spacing: 10) {
+                    settingsGroupHeader("Language & Vehicle Labels")
                     HStack {
                         Text(L10n.text("Language"))
-                            .font(.system(size: 12))
+                            .hisType(.body)
                         Spacer()
                         Picker("", selection: binder(\.interfaceLanguage, .presentation)) {
                             ForEach(InterfaceLanguage.allCases, id: \.self) { language in
@@ -39,14 +40,14 @@ struct SettingsDisplayCard: View {
                         .frame(maxWidth: 160)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Model badge position"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Placement of model & year label"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -60,14 +61,14 @@ struct SettingsDisplayCard: View {
                         .frame(maxWidth: 160)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("License plate position"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Placement of registration plate"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -81,14 +82,14 @@ struct SettingsDisplayCard: View {
                         .frame(maxWidth: 160)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Vehicle display name"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Shown in footer switcher, menus, and vehicle headers"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -111,14 +112,14 @@ struct SettingsDisplayCard: View {
                     )
                     HStack(spacing: 6) {
                         Text(L10n.text("Preview:"))
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(HisingenTheme.accent)
                             Text(previewTitle)
-                                .font(.system(size: 11, weight: .semibold))
+                                .hisType(.label, weight: .semibold)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -127,14 +128,14 @@ struct SettingsDisplayCard: View {
                     }
                     .padding(.vertical, 2)
 
-                    Divider().opacity(0.4)
+                    settingsGroupHeader("History")
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Session History"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Keep up to 20 local per-vehicle charging summaries"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -144,11 +145,11 @@ struct SettingsDisplayCard: View {
                             .controlSize(.small)
                     }
 
-                    Divider().opacity(0.4)
+                    settingsGroupHeader("Menu Bar & Panel")
 
                     HStack {
                         Text(L10n.text("Menu bar display"))
-                            .font(.system(size: 12))
+                            .hisType(.body)
                         Spacer()
                         Picker("", selection: binder(\.menuBarStyle, .presentation)) {
                             ForEach(MenuBarStyle.allCases, id: \.self) { style in
@@ -187,7 +188,7 @@ struct SettingsDisplayCard: View {
                     let previewText = Format.barTitle(for: previewSample, style: preferences.menuBarStyle, unit: distanceUnit)
                     HStack(spacing: 6) {
                         Text(L10n.text("Preview:"))
-                            .font(.system(size: 11, weight: .medium))
+                            .hisType(.label, weight: .medium)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             if let glyphImage = MenuBarGlyphImageProvider.shared.image(for: .charging) {
@@ -197,17 +198,17 @@ struct SettingsDisplayCard: View {
                                     .foregroundStyle(preferences.tintMenuBarIcon ? Color.green : Color.primary)
                             } else {
                                 Image(systemName: Format.icon(for: previewSample))
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(preferences.tintMenuBarIcon ? Color.green : Color.primary)
                             }
                             if preferences.menuBarStyle == .lockAndBattery,
                                let lockSymbol = Format.lockStatusSymbol(for: previewSample) {
                                 Image(systemName: lockSymbol)
-                                    .font(.system(size: 12, weight: .bold))
+                                    .hisType(.body, weight: .bold)
                                     .foregroundStyle(HisingenTheme.semanticWarning)
                             }
                             Text(previewText)
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .monospacedDigit()
                         }
                         .padding(.horizontal, 8)
@@ -217,14 +218,14 @@ struct SettingsDisplayCard: View {
                     }
                     .padding(.vertical, 2)
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Panel auto-close"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(preferences.panelCloseBehavior.subtitle)
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -238,17 +239,15 @@ struct SettingsDisplayCard: View {
                         .frame(maxWidth: 220)
                     }
 
-                    Divider().opacity(0.4)
-
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(L10n.text("Card Layout"))
-                                    .font(.system(size: 12, weight: .medium))
+                                    .hisType(.body, weight: .medium)
                                 Text(L10n.text("How mid-size cards flow on wide panels"))
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -262,17 +261,16 @@ struct SettingsDisplayCard: View {
                             .frame(maxWidth: 160)
                         }
 
-                        SegmentedPresetRow(options: WideCardLayout.allCases, selection: binder(\.wideCardLayout, .presentation))
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Dynamic status bar tinting"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Color icon green while charging and orange below 20%"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -282,7 +280,24 @@ struct SettingsDisplayCard: View {
                             .controlSize(.small)
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.text("Launch at login"))
+                                .hisType(.body, weight: .medium)
+                            Text(L10n.text("Automatically start Hisingen on macOS startup"))
+                                .hisType(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: binder(\.launchAtLogin, .launchAtLogin))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                    }
+
+                    settingsGroupHeader("Units")
 
                     unitRow("Distance unit", selection: $distanceUnit, options: DistanceUnit.allCases, label: \.title) { _ in
                             if !preferences.hasExplicitTemperatureUnit {
@@ -298,66 +313,49 @@ struct SettingsDisplayCard: View {
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     unitRow("Temperature unit", selection: $temperatureUnit, options: TemperatureUnit.allCases, label: \.title) { _ in
                             preferences.temperatureUnit = temperatureUnit
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     unitRow("Tyre pressure unit", selection: $pressureUnit, options: PressureUnit.allCases, label: \.title) { _ in
                             preferences.pressureUnit = pressureUnit
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     unitRow("Fuel volume unit", selection: $fuelVolumeUnit, options: FuelVolumeUnit.allCases, label: \.title) { _ in
                             preferences.fuelVolumeUnit = fuelVolumeUnit
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     unitRow("Fuel economy unit", selection: $fuelEconomyUnit, options: FuelEconomyUnit.allCases, label: \.title) { _ in
                             preferences.fuelEconomyUnit = fuelEconomyUnit
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     unitRow("Electric consumption unit", selection: $energyConsumptionUnit, options: EnergyConsumptionUnit.allCases, label: \.title) { _ in
                             preferences.energyConsumptionUnit = energyConsumptionUnit
                             binder.notify(.presentation)
                         }
 
-                    Divider().opacity(0.4)
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Launch at login"))
-                                .font(.system(size: 12, weight: .medium))
-                            Text(L10n.text("Automatically start Hisingen on macOS startup"))
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder(\.launchAtLogin, .launchAtLogin))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-
-                    Divider().opacity(0.4)
+                    settingsGroupHeader("Energy & Emissions")
 
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Electricity Rate"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("For charge cost estimates"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -383,7 +381,7 @@ struct SettingsDisplayCard: View {
                                     }
                                 }
                             Text("/kWh")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -397,9 +395,9 @@ struct SettingsDisplayCard: View {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Night Tariff"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Splits session cost by when energy actually flowed"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -422,19 +420,19 @@ struct SettingsDisplayCard: View {
                                         }
                                     }
                                 Text(L10n.text("/kWh from"))
-                                    .font(.system(size: 11))
+                                    .hisType(.label)
                                     .foregroundStyle(.secondary)
                                 Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
                                     Text(String(format: "%02d:00", preferences.nightTariffStartHour))
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .hisType(.label, design: .monospaced)
                                 }
                                 .controlSize(.small)
                                 Text(L10n.text("to"))
-                                    .font(.system(size: 11))
+                                    .hisType(.label)
                                     .foregroundStyle(.secondary)
                                 Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
                                     Text(String(format: "%02d:00", preferences.nightTariffEndHour))
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .hisType(.label, design: .monospaced)
                                 }
                                 .controlSize(.small)
                             }
@@ -445,14 +443,14 @@ struct SettingsDisplayCard: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
 
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Grid Carbon Intensity"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("For the emissions comparison in History"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -469,7 +467,7 @@ struct SettingsDisplayCard: View {
                                     }
                                 }
                             Text(L10n.text("g CO₂/kWh"))
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -477,14 +475,14 @@ struct SettingsDisplayCard: View {
                         InlineValidationLabel(message: L10n.text("Enter an intensity between 1 and 1,200 g CO₂/kWh."))
                     }
 
-                    Divider().opacity(0.4)
+                    settingsGroupHeader("Security")
 
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Require device-owner authentication"))
-                                .font(.system(size: 12, weight: .medium))
+                                .hisType(.body, weight: .medium)
                             Text(L10n.text("Authenticate before running remote commands"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -497,7 +495,7 @@ struct SettingsDisplayCard: View {
                 }
                 // The night-tariff toggle writes through the binder with no
                 // transaction; this binding reveals the rate row with it.
-                .animation(Motion.resolve(Motion.layout), value: preferences.nightTariffEnabled)
+                .hisAnimation(Motion.layout, value: preferences.nightTariffEnabled)
             }
         }
         .onAppear {
@@ -538,7 +536,7 @@ struct SettingsDisplayCard: View {
     ) -> some View {
         HStack {
             Text(L10n.text(title))
-                .font(.system(size: 12))
+                .hisType(.body)
             Spacer()
             Picker("", selection: selection) {
                 ForEach(options, id: \.self) { unit in
@@ -553,5 +551,16 @@ struct SettingsDisplayCard: View {
                 onChange(newValue)
             }
         }
+    }
+
+    private func settingsGroupHeader(_ title: String) -> some View {
+        Text(L10n.text(title))
+            .hisType(.micro, weight: .semibold)
+            .textCase(.uppercase)
+            .tracking(0.4)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .accessibilityAddTraits(.isHeader)
     }
 }

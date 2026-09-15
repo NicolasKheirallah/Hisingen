@@ -55,14 +55,14 @@ actor PolestarGRPC {
     /// charge-target and amp-limit writes against what the vehicle actually supports.
     var capabilityLimits: [String: VehicleOTACapabilities] = [:]
     /// Last observed OTA state per VIN. `InstallNow` is only meaningful for some of these, and
-    /// the backend reports the rest in HTTP/2 trailers we cannot read — so the precondition is
+    /// the backend reports the rest in HTTP/2 trailers we cannot read – so the precondition is
     /// checked here instead of being discovered as an unexplained refusal.
     var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
     /// Last observed raw OTA state per VIN, preserving the 15 vs 1 distinction.
     var otaRawSoftwareStates: [String: SoftwareStateRaw] = [:]
     /// Backend/VIN/path keys that answered a read with status 12 UNIMPLEMENTED.
     /// They are skipped for this vehicle and backend for 24 hours rather than
-    /// re-attempted — and failing — on every refresh. The expiry lets a newly deployed backend
+    /// re-attempted – and failing – on every refresh. The expiry lets a newly deployed backend
     /// capability recover without requiring the user to clear defaults.
     var unimplementedReadPaths: Set<String>
     var unimplementedReadPathExpirations: [String: Date]
@@ -420,7 +420,7 @@ actor PolestarGRPC {
             // The discovery document is version-dependent through the Accept header: v2 also
             // advertises the undocumented `vca-api-gateway` host, v3 answers 406, and a plain
             // `application/json` Accept returns a different shape entirely. Request v2 first
-            // and fall back to v1 while Polestar serves both — a version-shape rejection
+            // and fall back to v1 while Polestar serves both – a version-shape rejection
             // (4xx or an unexpected body) retries; auth, network, rate-limit, and server
             // failures fail for every version alike and surface immediately.
             let versions = ["application/volvo.cloud.cnepmob.v2+json",
@@ -781,8 +781,8 @@ actor PolestarGRPC {
                 default: break
                 }
             case 7:
-                // Each wire value is matched to its name explicitly — not read as an index into
-                // an array — so a future backend change that inserts or reorders a case can only
+                // Each wire value is matched to its name explicitly – not read as an index into
+                // an array – so a future backend change that inserts or reorders a case can only
                 // ever leave an *existing* value's meaning intact or make a new value fall to
                 // `default` (state stays unset), never silently relabel a known value as the
                 // wrong state the way positional-array indexing would. Mirrors the `connection`/
@@ -799,7 +799,7 @@ actor PolestarGRPC {
                 case 7: name = "DONE"
                 case 8: name = "SMART_CHARGING_PAUSED"
                 // A value outside the known range is preserved as its raw number rather than
-                // silently leaving `state` unset — `ChargingState(apiValue:)` maps anything it
+                // silently leaving `state` unset – `ChargingState(apiValue:)` maps anything it
                 // doesn't recognize to `.unknown(rawValue)`, so a future backend addition shows
                 // up as a visibly-unrecognized state instead of vanishing.
                 default: name = String(field.varint)

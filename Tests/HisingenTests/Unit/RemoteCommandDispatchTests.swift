@@ -3,7 +3,7 @@ import Testing
 @testable import Hisingen
 
 /// The awaited dispatch seam: URL routes, Shortcuts intents, and the Controls tab must all
-/// get the same answer for the same Remote Command — the brand policy lives in
+/// get the same answer for the same Remote Command – the brand policy lives in
 /// `CapabilityGate` + `ProviderCommandCatalog`, never in an entry point. Serialized: the
 /// dispatch hub holds process-wide state.
 @Suite("Remote command dispatch", .serialized)
@@ -34,7 +34,7 @@ struct RemoteCommandDispatchTests {
         URLCommandRouter(context: polestar).route(URL(string: "hisingen://charge-target?percent=70")!)
         #expect(polestar.commands == [.setChargeTarget(70)])
 
-        // Volvo's official API exposes no charging writes — a capability fact, not policy.
+        // Volvo's official API exposes no charging writes – a capability fact, not policy.
         let volvo = RouterContextMock(activeBrand: .volvo)
         URLCommandRouter(context: volvo).route(URL(string: "hisingen://charge-target?percent=70")!)
         #expect(volvo.commands.isEmpty)
@@ -118,7 +118,7 @@ struct RemoteCommandDispatchTests {
         #expect(context.provider.executedCommands == [])
     }
 
-    /// Volvo lock without the Approved scope tier is refused by the shared gate — the same
+    /// Volvo lock without the Approved scope tier is refused by the shared gate – the same
     /// answer the Controls tab now gives (both read the same precondition).
     @Test
     @MainActor
@@ -376,7 +376,7 @@ private final class RouterContextMock: URLCommandRouterContext {
     func notifyCommandNotice(title: String, body: String) { notices.append((title, body)) }
 }
 
-/// Records what actually reached the provider — the real signal behind "was it sent".
+/// Records what actually reached the provider – the real signal behind "was it sent".
 @MainActor
 private final class RecordingProvider: RemoteCommandExecuting {
     nonisolated let brand: VehicleBrand

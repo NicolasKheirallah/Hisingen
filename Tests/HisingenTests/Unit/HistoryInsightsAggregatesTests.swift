@@ -3,7 +3,7 @@ import Testing
 @testable import Hisingen
 
 /// Covers the aggregate/statistical computations added to `HistoryInsights` beyond the
-/// original charging-curve/efficiency/odometer trio — battery health trend, charging-session
+/// original charging-curve/efficiency/odometer trio – battery health trend, charging-session
 /// analytics, trip aggregates, command stats, data coverage and chart-gap segmentation.
 struct HistoryInsightsAggregatesTests {
 
@@ -15,7 +15,7 @@ struct HistoryInsightsAggregatesTests {
         return calendar
     }
 
-    /// Noon UTC, not a raw epoch offset — a "same day" or "N days later" fixture built from a
+    /// Noon UTC, not a raw epoch offset – a "same day" or "N days later" fixture built from a
     /// near-midnight instant can silently roll into the next calendar day depending on the
     /// fraction added, which is exactly the kind of thing that should never depend on which
     /// epoch second happened to be convenient.
@@ -84,7 +84,7 @@ struct HistoryInsightsAggregatesTests {
     @Test
     func testChargingTypePrefersVehicleReportedSignalOverPowerHeuristic() {
         // Vehicle explicitly reports AC throughout, even though peak power (a hand-wavy 30 kW,
-        // above the 22 kW AC/DC heuristic threshold) would otherwise suggest DC — the real,
+        // above the 22 kW AC/DC heuristic threshold) would otherwise suggest DC – the real,
         // manufacturer-reported signal must win over the inferred one.
         let samples = (0..<4).map {
             HistoricalChargingSample(id: Int64($0), sessionId: "s", vin: "VIN",
@@ -111,7 +111,7 @@ struct HistoryInsightsAggregatesTests {
     func testTenToEightyDurationInterpolatesBetweenSamples() throws {
         // A single 20-minute segment from 10% to 90% SoC: the 10% crossing sits exactly at the
         // first sample (fraction 0), the 80% crossing at fraction (80-10)/(90-10) = 7/8 of the
-        // way through, i.e. minute 17.5 — giving an exact, hand-checkable 17.5-minute duration.
+        // way through, i.e. minute 17.5 – giving an exact, hand-checkable 17.5-minute duration.
         let samples = [
             chargingSample(1, minutesAfterStart: 0, soc: 10, powerKw: 50),
             chargingSample(2, minutesAfterStart: 20, soc: 90, powerKw: 50),

@@ -3,12 +3,12 @@ import SwiftUI
 
 /// Tiny always-on-top panel shown while the vehicle is charging. Non-activating, so it never
 /// steals focus from the user's work; position is autosaved. Exists purely to answer
-/// "how's the charge going" at a glance — it performs no actions and holds no state of its own.
+/// "how's the charge going" at a glance – it performs no actions and holds no state of its own.
 @MainActor
 final class ChargingMiniPanelController {
     private var panel: NSPanel?
-    /// Kept alive across telemetry updates so SwiftUI diffs — and therefore
-    /// cross-fades — new readings into place instead of the whole view being
+    /// Kept alive across telemetry updates so SwiftUI diffs – and therefore
+    /// cross-fades – new readings into place instead of the whole view being
     /// torn down and rebuilt on every refresh.
     private var host: NSHostingView<ChargingMiniPanelView>?
     private let preferences: PreferencesStore
@@ -32,7 +32,8 @@ final class ChargingMiniPanelController {
             powerWatts: state.energy.powerWatts,
             minutesToTarget: state.energy.diagnostics?.timeToTargetMinutes
                 ?? state.energy.estimatedTimeToFullMinutes,
-            targetPercent: state.energy.targetPercentage
+            targetPercent: state.energy.targetPercentage,
+            onClose: { [weak self] in self?.hidePanel() }
         )
         if let host {
             host.rootView = content
@@ -43,15 +44,24 @@ final class ChargingMiniPanelController {
         }
         // Match the SwiftUI width so the frame never clips the density-scaled content.
         let scaledWidth = 190 * HisingenTheme.contentScale
+        // Appearing and disappearing are the same transition in both directions: they used
+        // different curves at different durations, so dismissal did not retrace appearance, and
+        // neither consulted Reduce Motion in a file that checks it for the glyph twenty lines away.
+        let reduceMotion = Motion.prefersReducedMotion
         if !panel.isVisible {
             panel.alphaValue = 0
-            panel.setFrame(NSRect(origin: topRightPosition(for: NSSize(width: scaledWidth, height: panel.frame.height)),
-                                  size: NSSize(width: scaledWidth, height: panel.frame.height)),
-                           display: true)
+            let size = NSSize(width: scaledWidth, height: panel.frame.height)
+            if panel.frameAutosaveName.isEmpty || !panel.setFrameUsingName("ChargingMiniPanel") {
+                panel.setFrame(NSRect(origin: topRightPosition(for: size), size: size), display: true)
+            } else if panel.frame.width != scaledWidth {
+                panel.setContentSize(size)
+            }
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = Motion.standard
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 0.72, 0.20, 1.0)
+                context.duration = reduceMotion ? Motion.micro : Motion.standard
+                context.timingFunction = reduceMotion
+                    ? CAMediaTimingFunction(name: .linear)
+                    : Motion.entranceTimingFunction
                 panel.animator().alphaValue = 1
             }
         }
@@ -59,9 +69,14 @@ final class ChargingMiniPanelController {
 
     func close() {
         guard let panel, panel.isVisible else { return }
+        let reduceMotion = Motion.prefersReducedMotion
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = Motion.fast
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.duration = reduceMotion ? Motion.micro : Motion.standard
+            // The same curve the appearance uses, so dismissal retraces it rather than
+            // ease-in-easing-out over a different duration.
+            context.timingFunction = reduceMotion
+                ? CAMediaTimingFunction(name: .linear)
+                : Motion.entranceTimingFunction
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             Task { @MainActor [weak self] in
@@ -70,9 +85,25 @@ final class ChargingMiniPanelController {
         })
     }
 
+    /// Turns the floating panel off from the panel itself, which also flips the preference so it
+    /// does not reappear on the next charge.
+    private func hidePanel() {
+        preferences.floatingChargingPanelEnabled = false
+        close()
+    }
+
     private func finishClosingPanel() {
         panel?.orderOut(nil)
         panel?.alphaValue = 1
+        // Release the SwiftUI tree with the panel.
+        //
+        // `host` is retained across telemetry updates on purpose, so SwiftUI diffs readings
+        // instead of rebuilding the view. But the charging breath is a `repeatForever` animation,
+        // and ordering the panel out left it running against an off-screen window: a charge that
+        // ended could leave a perpetual animation alive indefinitely. A closed panel has nothing
+        // to show, and `update` rebuilds the host on the next charge.
+        host?.removeFromSuperview()
+        host = nil
     }
 
     private func makePanel() {
@@ -106,38 +137,53 @@ private struct ChargingMiniPanelView: View {
     let powerWatts: Int?
     let minutesToTarget: Int?
     let targetPercent: Int?
+    /// Dismisses the panel from the panel. Nil when the host has no way to turn it off.
+    var onClose: (() -> Void)? = nil
 
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathe = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: "bolt.car.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.green)
-                    // The same quiet charging breath used across the app.
-                    .opacity(breathe ? 1.0 : 0.62)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.semanticGood)
                 Text(L10n.text("Charging"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                 Spacer()
                 if let target = targetPercent, target < 100,
                    let battery = batteryPercentage {
                     Text("\(String(format: "%.0f", battery))→\(target)%")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .hisType(.label, weight: .bold, design: .rounded)
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
                         .transition(.opacity)
                 } else if let battery = batteryPercentage {
                     Text(String(format: "%.0f%%", battery))
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .hisType(.heading, weight: .bold, design: .rounded)
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
                         .transition(.opacity)
                 }
+                // The panel floats above every window, on every Space, over full-screen apps, and
+                // it holds no controls of its own: the only way to dismiss it was to know the
+                // switch lived in Settings. A way out belongs where the thing appears.
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .hisType(.nano, weight: .semibold)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18, height: 18)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.text("Hide this panel"))
+                    .accessibilityLabel(L10n.text("Hide this panel"))
+                }
             }
-            .animation(Motion.resolveCrossfade(Motion.telemetry), value: targetPercent)
+            .hisAnimation(Motion.telemetry, value: targetPercent)
             HStack(spacing: 10) {
                 if let watts = powerWatts, watts > 0 {
                     Label(Format.kilowatts(watts: watts), systemImage: "bolt.fill")
@@ -149,7 +195,7 @@ private struct ChargingMiniPanelView: View {
                 }
                 Spacer()
             }
-            .font(.system(size: 10))
+            .hisType(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(12)
@@ -157,20 +203,24 @@ private struct ChargingMiniPanelView: View {
         // consistently with the main panel's text size preference.
         .frame(width: 190 * HisingenTheme.contentScale)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.08),
-                                      lineWidth: 1)
+            ZStack {
+                HisingenTheme.cardSurface(
+                    cornerRadius: HisingenTheme.cornerRadius,
+                    prefersOpaque: reduceTransparency || contrast == .increased
                 )
+                HisingenTheme.cardRim(
+                    cornerRadius: HisingenTheme.cornerRadius,
+                    prefersOpaque: reduceTransparency || contrast == .increased
+                )
+                HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
+            }
         )
-        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        .shadow(
+            color: HisingenTheme.shadow(for: .floating).color,
+            radius: HisingenTheme.shadow(for: .floating).radius,
+            y: HisingenTheme.shadow(for: .floating).y
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.text("Charging status"))
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(Motion.breath) { breathe = true }
-        }
     }
 }

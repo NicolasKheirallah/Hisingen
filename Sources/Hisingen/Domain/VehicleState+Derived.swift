@@ -86,7 +86,7 @@ extension VehicleState {
     }
 
     /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
-    /// (the base per-model table) — not an independent capacity table. Falls through to the base
+    /// (the base per-model table) – not an independent capacity table. Falls through to the base
     /// table for anything without a known year-specific pack revision or a PHEV-specific figure.
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
@@ -165,22 +165,22 @@ extension VehicleState {
     }
 
     /// Every capacity figure below is interpolated from `factoryNominalBatteryCapacityKwh`/
-    /// `factoryUsableBatteryCapacityKwh` — the same computed values shown elsewhere in the UI —
+    /// `factoryUsableBatteryCapacityKwh` – the same computed values shown elsewhere in the UI –
     /// rather than restated as separate hardcoded numbers, so this description can't silently
     /// drift out of sync with them. Only the chemistry/module/voltage prose is hand-authored.
     ///
     /// Some branches below (Polestar 2 and Volvo XC40-family "Standard Range," Volvo EX30
     /// "Standard Range") describe real-world pack variants that exist in the market but that
     /// `VehicleModelFamily.nominalBatteryCapacityKwh` has no signal to distinguish from the
-    /// higher-capacity variant of the same model — the current capacity table only knows one
+    /// higher-capacity variant of the same model – the current capacity table only knows one
     /// figure per model family (plus year), not per-trim. Those branches are therefore currently
     /// unreachable; they're left in place, clearly labelled, rather than silently deleted, in
     /// case a future capability signal makes the distinction possible.
     var batteryPackDescription: String {
         let nominal = factoryNominalBatteryCapacityKwh
         let usable = factoryUsableBatteryCapacityKwh
-        // Formatted with the plain (locale-invariant) `String(format:)` overload — matching
-        // `Format.swift`'s convention for every other numeric readout in the app — rather than
+        // Formatted with the plain (locale-invariant) `String(format:)` overload – matching
+        // `Format.swift`'s convention for every other numeric readout in the app – rather than
         // `L10n.format`, whose `locale:` argument follows the interface language/system region
         // and would otherwise render these as "78,0 kWh" under a comma-decimal locale.
         let nominalText = String(format: "%.1f", nominal)
@@ -193,7 +193,7 @@ extension VehicleState {
             } else if nominal >= 75.0 {
                 return L10n.format("%@ kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)", nominalText)
             } else {
-                // Unreachable with the current capacity table — see the type-level comment above.
+                // Unreachable with the current capacity table – see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 24 Modules / 288 Cells · 400V)")
             }
         case .polestar3:
@@ -206,7 +206,7 @@ extension VehicleState {
             if nominal >= 65.0 {
                 return L10n.format("%@ kWh Extended Range (NMC · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
-                // Unreachable with the current capacity table — see the type-level comment above.
+                // Unreachable with the current capacity table – see the type-level comment above.
                 return L10n.text("51.0 kWh Standard Range (LFP · 49.0 kWh Usable · 400V)")
             }
         case .volvoEX90, .volvoES90:
@@ -217,7 +217,7 @@ extension VehicleState {
             } else if nominal >= 75.0 {
                 return L10n.format("%@ kWh Long Range (LG Energy / CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else {
-                // Unreachable with the current capacity table — see the type-level comment above.
+                // Unreachable with the current capacity table – see the type-level comment above.
                 return L10n.text("69.0 kWh Standard Range (CATL · 64.0 kWh Usable · 400V)")
             }
         case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
@@ -238,7 +238,7 @@ extension VehicleState {
     }
 
     /// Derived label. Because neither provider exposes a measured SoH (see
-    /// `batteryDegradationPercent`), this currently always reads "Unavailable" — it exists so
+    /// `batteryDegradationPercent`), this currently always reads "Unavailable" – it exists so
     /// a future verified source plugs into exactly one place.
     var batteryHealthStatus: String {
         guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else {
@@ -329,7 +329,7 @@ extension VehicleState {
     }
 
     /// Current vehicle-reported range at the present SOC compared with a WLTP reference at the
-    /// same SOC — the model-family table, or a VIN-specific `specification` override entered in
+    /// same SOC – the model-family table, or a VIN-specific `specification` override entered in
     /// Settings when one exists. This is a range comparison, not battery State of Health.
     /// `battery >= 20` matches the same low-SOC cutoff `BatteryHealthEstimator`'s range signal
     /// uses, since the vehicle's own range readout gets noisier as it approaches empty.
@@ -346,13 +346,18 @@ extension VehicleState {
 
     var estimatedChargingCompletion: Date? {
         guard isCharging, let minutes = remainingChargingMinutes, minutes > 0 else { return nil }
-        guard !isStale() else { return nil }
+        guard !hasOldData() else { return nil }
         let completion = (reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt).addingTimeInterval(TimeInterval(minutes * 60))
         return completion > Date() ? completion : nil
     }
 
     var formattedCompletionTime: String? {
         guard let minutes = remainingChargingMinutes, minutes > 0, isCharging else { return nil }
+        // Same guard as `estimatedChargingCompletion` above, and for the same reason. Without
+        // it a retained "80 minutes remaining" reported three hours ago rendered as
+        // "Ready at 14:05 · 1h20m remaining" at 17:00: a completion time already in the past,
+        // stated in the present tense on the Charging card's second line.
+        guard !hasOldData() else { return nil }
         return Format.completionTime(from: minutes, baseDate: reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt)
     }
 
@@ -365,7 +370,7 @@ extension VehicleState {
     }
 
     var freshnessDescription: String {
-        if isStale() {
+        if hasOldData() {
             return L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
         }
         return L10n.format("Updated %@", Format.relativeAge(since: dataTimestamp))
@@ -373,11 +378,23 @@ extension VehicleState {
 
     var dataTimestamp: Date { vehicleReportedAt ?? fetchedAt }
 
-    func isStale(at date: Date = Date()) -> Bool {
-
-
-        if date.timeIntervalSince(fetchedAt) < 120 { return false }
+    /// Whether the *reading* is old. A statement about the car, and what presentation should
+    /// follow.
+    ///
+    /// This is separate from ``isStale(at:)`` because the two questions have different answers.
+    /// The 120-second grace below belongs to the app's polling, not to the data: applying it to
+    /// `isStale()` meant that for two minutes after every poll a three-hour-old reading rendered
+    /// as fresh — exactly the window a user is most likely to be looking at it.
+    func hasOldData(at date: Date = Date()) -> Bool {
         let threshold: TimeInterval = isCharging ? 15 * 60 : 60 * 60
         return date.timeIntervalSince(dataTimestamp) > threshold
+    }
+
+    /// Whether the connection looks broken: nothing polled recently *and* the reading is old.
+    /// Kept for the surfaces that speak about Hisingen's connection — the menu-bar offline glyph
+    /// and the notification conditions — rather than about the car.
+    func isStale(at date: Date = Date()) -> Bool {
+        if date.timeIntervalSince(fetchedAt) < 120 { return false }
+        return hasOldData(at: date)
     }
 }

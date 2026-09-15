@@ -21,7 +21,7 @@ enum ElspotZone: String, CaseIterable, Codable, Sendable, Identifiable {
 }
 
 /// One market price interval as published by elprisetjustnu.se. The JSON keys are the
-/// API's own; before 2025-10-01 each point covers an hour, after that a quarter — the
+/// API's own; before 2025-10-01 each point covers an hour, after that a quarter – the
 /// planner treats points as arbitrary-duration slots, so both shapes work unchanged.
 struct ElectricityPricePoint: Codable, Equatable, Sendable {
     var startDate: Date
@@ -41,13 +41,13 @@ struct ElectricityPricePoint: Codable, Equatable, Sendable {
 struct ChargingPlan: Equatable, Sendable {
     var start: Date
     var end: Date
-    /// Whole hours the window spans — the recommendation is always expressed in hours,
+    /// Whole hours the window spans – the recommendation is always expressed in hours,
     /// never in 15-minute slices.
     var hours: Double
     var energyKwh: Double
     /// SEK/kWh averaged over the window.
     var averagePrice: Double
-    /// SEK/kWh at the moment the plan was computed — the do-nothing baseline.
+    /// SEK/kWh at the moment the plan was computed – the do-nothing baseline.
     var currentPrice: Double
     /// Positive when waiting for the window beats charging immediately.
     var savings: Double
@@ -122,7 +122,7 @@ enum ChargingPlanner {
             .sekPerKwh
     }
 
-    /// Last instant the series can speak for — used to tell "tomorrow not published yet"
+    /// Last instant the series can speak for – used to tell "tomorrow not published yet"
     /// apart from "no data at all".
     static func dataHorizonEnd(prices: [ElectricityPricePoint]) -> Date? {
         prices.map(\.endDate).max()
@@ -131,7 +131,7 @@ enum ChargingPlanner {
 
 /// Shared planning inputs for the dashboard card and the background controller, so the
 /// two can never drift apart. Includes the estimated round-trip AC charging loss between
-/// what the outlet delivers and what lands in the pack — hours and costs are computed on
+/// what the outlet delivers and what lands in the pack – hours and costs are computed on
 /// grid-side energy, which is what the meter, and the bill, actually sees.
 enum ChargingPlannerSupport {
     static let chargingLossFactor: Double = 1.1
@@ -173,7 +173,7 @@ enum ChargingPlannerSupport {
 /// Pure decisions for the background planner controller, extracted so the notification
 /// and auto-start behaviour stays unit-testable without timers or the notification center.
 enum ChargingPlannerDecisions {
-    /// Notify once per window, from `leadMinutes` before it opens until it ends — an app
+    /// Notify once per window, from `leadMinutes` before it opens until it ends – an app
     /// launched mid-window still earns the notice, a relaunch inside the same window does
     /// not repeat it.
     ///
@@ -181,7 +181,7 @@ enum ChargingPlannerDecisions {
     /// cheapest, the recomputed plan starts at `now` and slides a minute forward on every
     /// tick, so a start-keyed dedupe re-announces every minute. The sliding plan still
     /// overlaps the window already announced, so it stays quiet until a plan begins at or
-    /// after the announced end — a genuinely later window.
+    /// after the announced end – a genuinely later window.
     static func shouldNotifyWindowStart(
         plan: ChargingPlan,
         now: Date,
@@ -196,7 +196,7 @@ enum ChargingPlannerDecisions {
 
     /// Start charging automatically only strictly inside the planned window, when the
     /// vehicle is plugged in but not already charging. Never fires at or above the
-    /// charge limit — the plan itself is nil then.
+    /// charge limit – the plan itself is nil then.
     static func shouldAutoStartCharging(
         plan: ChargingPlan,
         now: Date,

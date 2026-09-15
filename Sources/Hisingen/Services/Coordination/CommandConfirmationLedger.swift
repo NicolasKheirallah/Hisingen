@@ -157,7 +157,7 @@ final class CommandConfirmationLedger {
         return true
     }
 
-    /// Drops everything without persisting a farewell — used when the vehicle or brand
+    /// Drops everything without persisting a farewell – used when the vehicle or brand
     /// changed and the pending receipts belong to the previous target.
     func clear() {
         records = []

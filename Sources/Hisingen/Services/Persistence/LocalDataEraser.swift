@@ -3,7 +3,7 @@ import Foundation
 /// Owns every maintenance sequence that spans more than one storage mechanism.
 ///
 /// The individual `DELETE` and `PRAGMA` statements stay on `VehicleDatabase`; what lives here is
-/// the order they run in and the tiers SQL cannot reach — the `UserDefaults` mirrors, the image
+/// the order they run in and the tiers SQL cannot reach – the `UserDefaults` mirrors, the image
 /// cache, and the preference flags that describe what is still on disk. Callers used to
 /// reassemble that sequence themselves, in two different orders, from two different files.
 @MainActor

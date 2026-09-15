@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Vehicle History ledger — one typed read interface over the local history tables.
+/// The Vehicle History ledger – one typed read interface over the local history tables.
 ///
 /// Owns every *read* over `battery_health_history`, `air_quality_history`, `telemetry_logs`,
 /// `vehicle_activity`, `trip_tags`, `remote_commands_log`, `connectivity_history`,
@@ -43,12 +43,20 @@ final class VehicleHistoryLedger: Sendable {
         var thisYear = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
         var lastYear = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
         /// True when the database holds trips/sessions/commands/air-quality outside the
-        /// selected range — lets the empty state say "nothing in this range" rather than
+        /// selected range – lets the empty state say "nothing in this range" rather than
         /// "nothing recorded".
         var hasHistoryOutsideRange = false
         /// True when at least one query returned exactly its row cap, so a caption can warn
         /// that older rows are not shown.
         var truncated = false
+        /// True when the store could not be read at all.
+        ///
+        /// The readers below are `try?` so that one unreadable table cannot take the whole tab
+        /// down, but swallowing the error entirely made a locked or corrupt database look
+        /// exactly like an empty one, and the UI then told the user their history had never
+        /// been recorded. This is the cheap distinction between "nothing here" and "nothing
+        /// here could be read".
+        var storeUnreadable = false
     }
 
     /// Period-independent series (state of health, all-time odometer, fuel, cabin climate)
@@ -80,9 +88,16 @@ final class VehicleHistoryLedger: Sendable {
     /// activities, and ambient histories, filtered to `range`, with derived month/year
     /// comparisons, anomaly classification, and truncation flags applied. The per-domain row
     /// caps (the `min(...)` derivations) are policy here, not per-view state.
+    /// Whether the local store answers a trivial read. A schema that cannot be queried means
+    /// the reads below are not evidence of an empty history.
+    private func storeIsReadable() -> Bool {
+        (try? sql.readQuery(sql: "SELECT count(*) FROM sqlite_master;") { _ in 0 }) != nil
+    }
+
     func dashboard(vin: String, range: ClosedRange<Date>?, rowCap: Int,
                    tripLimit: Int, chargingCapacity: Double) -> DashboardSnapshot {
         var snap = DashboardSnapshot()
+        snap.storeUnreadable = !storeIsReadable()
         func inRange(_ date: Date) -> Bool { range.map { $0.contains(date) } ?? true }
         let queryStart = Self.dashboardQueryStart(for: range)
 
@@ -449,7 +464,7 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
     }
 
-    /// Total spend on fuel across stored entries — the combustion half of lifetime cost.
+    /// Total spend on fuel across stored entries – the combustion half of lifetime cost.
     func lifetimeFuelCost(for vin: String) -> Double {
         var total = 0.0
         try? sql.readQuery(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in

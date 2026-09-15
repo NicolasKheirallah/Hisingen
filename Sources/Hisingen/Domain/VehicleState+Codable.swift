@@ -18,7 +18,7 @@ extension VehicleState {
         case airQuality, batteryDiagnostics, weather, location, unavailableFeatures, probedCapabilities
         case chargingSamples, chargingSessions, imageData, fetchedAt, vehicleReportedAt, dataWarnings
         // `fuelSystem` is the current encoding; the flat fuel cases below exist ONLY for the
-        // decoder's legacy fallback — the explicit `encode(to:)` never writes them.
+        // decoder's legacy fallback – the explicit `encode(to:)` never writes them.
         case powertrain, fuelSystem
         case reportedBatteryCapacityKwh
         case externalColour, gearbox, engineHoursToService, averageSpeedKmH

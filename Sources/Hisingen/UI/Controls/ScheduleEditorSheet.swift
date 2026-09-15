@@ -7,6 +7,13 @@ struct ScheduleEditorSheet: View {
     /// vs. a charging card) carries through.
     var initialKind: ScheduleKind = .climate
     let onRemoteCommand: (RemoteCommand) -> Void
+    /// Whether another remote command is already running.
+    ///
+    /// The sheet takes a raw command closure rather than a `ControlsCommandGate`, so unlike
+    /// every card in the tab it had no busy state at all: a tap while a command was in flight
+    /// was refused by the coordinator with nothing visible happening, and the banner that would
+    /// have said so renders behind the modal sheet.
+    var isBusy: Bool = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -18,6 +25,9 @@ struct ScheduleEditorSheet: View {
     @State private var selectedWeekdays: Set<VehicleWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
     @State private var isEnabled: Bool = true
     @State private var editingScheduleID: String? = nil
+    /// Deleting a timer is remote and not undoable locally, so it is confirmed. It was the only
+    /// destructive action in the app that fired on a single click.
+    @State private var pendingDeletion: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let hours = Array(0...23)
@@ -32,25 +42,25 @@ struct ScheduleEditorSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     existingSchedulesList
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     scheduleConfigSection
                     if chargingWindowInvalid {
                         Label(L10n.text("Start and end time cannot be the same."), systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(HisingenTheme.semanticWarning)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 .padding(16)
-                .animation(Motion.resolve(Motion.entrance), value: chargingWindowInvalid)
+                .hisAnimation(Motion.entrance, value: chargingWindowInvalid)
             }
 
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
             footerButtons
         }
         .frame(width: 380)
@@ -65,15 +75,15 @@ struct ScheduleEditorSheet: View {
         HStack {
             Image(systemName: "clock.badge.checkmark.fill")
                 .foregroundStyle(HisingenTheme.accent)
-                .font(.system(size: 15))
+                .hisType(.title)
             Text(L10n.text("Manage Schedules"))
-                .font(.system(size: 14, weight: .bold))
+                .hisType(.subhead, weight: .bold)
             Spacer()
             Button {
                 dismiss()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
+                    .hisType(.subhead)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.pressable)
@@ -85,26 +95,28 @@ struct ScheduleEditorSheet: View {
     private var existingSchedulesList: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.text("Active Timers"))
-                .font(.system(size: 11, weight: .semibold))
+                .hisType(.label, weight: .semibold)
                 .foregroundStyle(.secondary)
 
             let allSchedules = state.energy.schedules
             if allSchedules.isEmpty {
                 Text(L10n.text("No schedules configured."))
-                    .font(.system(size: 11))
+                    .hisType(.label)
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 4)
             } else {
                 VStack(spacing: 6) {
-                    ForEach(allSchedules.indices, id: \.self) { idx in
-                        let sched = allSchedules[idx]
+                    // Identified by the row itself, not its index. The list animates on
+                    // `backendID`, so an index identity made a deletion animate content into the
+                    // wrong slot: the row that vanished was the one whose position changed.
+                    ForEach(allSchedules, id: \.rowIdentity) { sched in
                         scheduleRow(sched)
                             .transition(.opacity)
                     }
                 }
                 // Keyed on backend identities so a deleted timer reflows instead
                 // of vanishing the moment the command lands.
-                .animation(Motion.resolve(Motion.cardChange), value: allSchedules.map(\.backendID))
+                .hisAnimation(Motion.cardChange, value: allSchedules.map(\.backendID))
             }
         }
     }
@@ -114,15 +126,20 @@ struct ScheduleEditorSheet: View {
         return HStack(spacing: 8) {
             Image(systemName: sched.kind == .climate ? "fan.fill" : "bolt.fill")
                 .foregroundStyle(sched.kind == .climate ? Color.orange : Color.green)
-                .font(.system(size: 12))
+                .hisType(.body)
             VStack(alignment: .leading, spacing: 1) {
                 let timeStr = String(format: "%02d:%02d", sched.startHour ?? 0, sched.startMinute ?? 0)
                 let endStr = sched.endHour.map { String(format: " - %02d:%02d", $0, sched.endMinute ?? 0) } ?? ""
                 Text("\(sched.kind.title): \(timeStr)\(endStr)")
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
                 if !sched.weekdays.isEmpty {
                     Text(sched.weekdays.map(\.shortName).joined(separator: ", "))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                }
+                if !isEditable {
+                    Label(L10n.text("View only"), systemImage: "lock.fill")
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -132,22 +149,42 @@ struct ScheduleEditorSheet: View {
                     beginEditing(sched)
                 } label: {
                     Image(systemName: "pencil")
-                        .font(.system(size: 11))
+                        .hisType(.label)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.pressable)
                 .help(L10n.text("Edit this timer"))
+                .accessibilityLabel(L10n.text("Edit this timer"))
             }
             if let id = sched.backendID {
                 Button {
-                    onRemoteCommand(.deleteClimateTimer(id: id))
-                    if editingScheduleID == id { resetToAddMode() }
+                    pendingDeletion = id
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 11))
+                        .hisType(.label)
                         .foregroundStyle(.red.opacity(0.8))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.pressable)
+                .disabled(isBusy)
+                .help(L10n.text("Delete climate timer"))
+                .accessibilityLabel(L10n.text("Delete climate timer"))
+                .confirmationDialog(
+                    L10n.text("Delete climate timer"),
+                    isPresented: Binding(
+                        get: { pendingDeletion == id },
+                        set: { if !$0 { pendingDeletion = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button(L10n.text("Delete"), role: .destructive) {
+                        onRemoteCommand(.deleteClimateTimer(id: id))
+                        if editingScheduleID == id { resetToAddMode() }
+                        pendingDeletion = nil
+                    }
+                    Button(L10n.text("Cancel"), role: .cancel) { pendingDeletion = nil }
+                }
             }
         }
         .padding(8)
@@ -161,14 +198,18 @@ struct ScheduleEditorSheet: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(editingScheduleID == sched.backendID && isEditable ? HisingenTheme.accent.opacity(0.4) : .clear, lineWidth: 1)
         )
-        .animation(Motion.resolve(Motion.selection), value: editingScheduleID)
+        .hisAnimation(Motion.selection, value: editingScheduleID)
         .contentShape(Rectangle())
         .onTapGesture { if isEditable { beginEditing(sched) } }
+        .accessibilityAddTraits(isEditable ? [.isButton] : [])
+        .accessibilityHint(isEditable
+                           ? L10n.text("Opens this timer for editing")
+                           : L10n.text("This timer is reported by the vehicle and cannot be edited here"))
     }
 
     /// Loads an existing timer's values into the form and switches it into edit mode. Saving
     /// afterward reuses `sched.backendID` so the backend updates this timer in place instead of
-    /// creating a new one — `saveSchedule()` already passes `editingScheduleID` through as
+    /// creating a new one – `saveSchedule()` already passes `editingScheduleID` through as
     /// `backendID` for exactly this reason; only entering edit mode was previously missing.
     private func beginEditing(_ sched: VehicleSchedule) {
         editingScheduleID = sched.backendID
@@ -196,7 +237,7 @@ struct ScheduleEditorSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(editingScheduleID != nil ? L10n.text("Edit Schedule") : L10n.text("Add Schedule"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                     .foregroundStyle(.secondary)
                 if editingScheduleID != nil {
                     HStack {
@@ -205,7 +246,7 @@ struct ScheduleEditorSheet: View {
                             resetToAddMode()
                         }
                         .buttonStyle(.pressable)
-                        .font(.system(size: 10, weight: .medium))
+                        .hisType(.caption, weight: .medium)
                         .foregroundStyle(HisingenTheme.accent)
                     }
                     .transition(.opacity)
@@ -222,7 +263,7 @@ struct ScheduleEditorSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedKind == .climate ? L10n.text("Departure Time") : L10n.text("Start Time"))
-                        .font(.system(size: 10, weight: .medium))
+                        .hisType(.caption, weight: .medium)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 4) {
                         Picker("", selection: $startHour) {
@@ -242,7 +283,7 @@ struct ScheduleEditorSheet: View {
                 if selectedKind == .globalCharging {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.text("End Time"))
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             Picker("", selection: $endHour) {
@@ -264,7 +305,7 @@ struct ScheduleEditorSheet: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.text("Repeat Days"))
-                    .font(.system(size: 10, weight: .medium))
+                    .hisType(.caption, weight: .medium)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 4) {
                     ForEach([VehicleWeekday.monday, .tuesday, .wednesday, .thursday, .friday, .saturday, .sunday], id: \.self) { day in
@@ -273,7 +314,7 @@ struct ScheduleEditorSheet: View {
                             if selected { selectedWeekdays.remove(day) } else { selectedWeekdays.insert(day) }
                         } label: {
                             Text(day.shortName)
-                                .font(.system(size: 9.5, weight: selected ? .bold : .regular))
+                                .hisType(.micro, weight: selected ? .bold : .regular)
                                 .frame(maxWidth: .infinity, minHeight: 24)
                                 .background(selected ? HisingenTheme.accent : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
                                 .foregroundStyle(selected ? Color.white : Color.primary)
@@ -287,10 +328,10 @@ struct ScheduleEditorSheet: View {
             }
 
             Toggle(L10n.text("Enable this schedule"), isOn: $isEnabled)
-                .font(.system(size: 11))
+                .hisType(.label)
                 .toggleStyle(.checkbox)
         }
-        .animation(Motion.resolve(Motion.layout), value: selectedKind)
+        .hisAnimation(Motion.layout, value: selectedKind)
     }
 
     private var footerButtons: some View {
@@ -310,7 +351,8 @@ struct ScheduleEditorSheet: View {
             .buttonStyle(.borderedProminent)
             .tint(HisingenTheme.accent)
             .controlSize(.small)
-            .disabled(chargingWindowInvalid)
+            .disabled(chargingWindowInvalid || isBusy)
+            .help(isBusy ? L10n.text("Another remote command is still running.") : "")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

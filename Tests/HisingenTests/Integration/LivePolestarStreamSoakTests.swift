@@ -30,7 +30,7 @@ private let soakSeconds: TimeInterval = {
 /// service over sustained time.
 ///
 /// The streaming gate is forced open so the soak measures connection stability even when
-/// the test car is parked and idle — production gating rules stay covered by the unit
+/// the test car is parked and idle – production gating rules stay covered by the unit
 /// suites, and the soak only ever reads.
 @Suite(.serialized)
 @MainActor
@@ -86,7 +86,7 @@ struct LivePolestarStreamSoakTests {
             let final = try #require(events.snapshots.last)
             let metrics = final.liveStreamMetrics
 
-            // 1. At most one active stream per supported service — and only one service
+            // 1. At most one active stream per supported service – and only one service
             //    (battery state) streams at all.
             #expect(counters.maxConcurrent <= 1,
                     "Saw \(counters.maxConcurrent) concurrent streams; at most one may exist")
@@ -116,7 +116,7 @@ struct LivePolestarStreamSoakTests {
             #expect(await provider.rateLimitedFetches == 0,
                     "The soak hit rate limiting; the stream budget is too aggressive")
 
-            // The connection must still be alive after the soak — a sustained stream is the
+            // The connection must still be alive after the soak – a sustained stream is the
             // product, not a sequence of retries.
             #expect(final.liveStreamConnected || metrics.disconnects <= reconnectBudget,
                     "Stream was not connected at soak end (disconnects: \(metrics.disconnects), last reason: \(metrics.lastDisconnectReason ?? "none"))")

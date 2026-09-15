@@ -38,7 +38,7 @@ struct SettingsFleetCard: View {
                     CardHeader(symbol: "car.2.fill", title: L10n.text("Garage & Fleet"), color: HisingenTheme.accent)
                     Spacer()
                     Text(L10n.format("%d Vehicles", allVins.count))
-                        .font(.system(size: 10, weight: .bold))
+                        .hisType(.caption, weight: .bold)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2.5)
                         .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
@@ -47,7 +47,9 @@ struct SettingsFleetCard: View {
 
                 if allVins.isEmpty {
                     Text(L10n.text("No vehicles discovered yet. Sign in to Polestar or Volvo above to connect your cars."))
-                        .font(.system(size: 10.5))
+                        .hisType(.caption)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(.secondary)
                 } else {
                     if allVins.count > 1 {
@@ -96,14 +98,15 @@ struct SettingsFleetCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: "gauge.with.needle.fill")
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(HisingenTheme.accent)
                     Text(L10n.text("Fleet Range"))
-                        .font(.system(size: 9, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
                 Text(summary.rangeKm.map { Format.distance(km: $0, unit: prefs.distanceUnit) } ?? "--")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .hisType(.body, weight: .bold, design: .rounded)
+                    .monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(7)
@@ -112,24 +115,25 @@ struct SettingsFleetCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: summary.chargingCount == 0 ? "bolt.slash" : "bolt.fill")
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(summary.chargingCount == 0 ? Color.secondary : Color.green)
                     Text(L10n.text("Charging"))
-                        .font(.system(size: 9, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
                 if summary.chargingCount == 0 {
                     Text(summary.chargingCoverage == vins.count
                          ? L10n.text("No active charging reported") : L10n.text("Incomplete readings"))
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .hisType(.label, weight: .semibold)
                 } else {
                     HStack(spacing: 3) {
                         Text(L10n.format("%d active", summary.chargingCount))
-                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                            .hisType(.label, weight: .bold, design: .rounded)
+                            .monospacedDigit()
                             .foregroundStyle(Color.green)
                         if totalChargingWatts > 0 {
                             Text("(\(Format.kilowatts(watts: totalChargingWatts)))")
-                                .font(.system(size: 9))
+                                .hisType(.micro)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -142,14 +146,15 @@ struct SettingsFleetCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Image(systemName: "road.lanes")
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(HisingenTheme.accent)
                     Text(L10n.text("Fleet Mileage"))
-                        .font(.system(size: 9, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
                 Text(summary.odometerKm.map { Format.distance(km: $0, unit: prefs.distanceUnit) } ?? "--")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .hisType(.body, weight: .bold, design: .rounded)
+                    .monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(7)
@@ -183,7 +188,7 @@ struct SettingsFleetThumbnailView: View {
                         .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
                         .frame(width: 28, height: 28)
                     Image(systemName: brandIcon)
-                        .font(.system(size: 12))
+                        .hisType(.body)
                         .foregroundStyle(isActive ? HisingenTheme.accent : Color.secondary)
                 }
                 .transition(.opacity)
@@ -237,10 +242,10 @@ struct FleetVehicleCardRow: View {
                 VStack(alignment: .leading, spacing: 1.5) {
                     HStack(spacing: 6) {
                         Text(displayTitle)
-                            .font(.system(size: 11, weight: .semibold))
+                            .hisType(.label, weight: .semibold)
                         if isActive {
                             Text(L10n.text("ACTIVE"))
-                                .font(.system(size: 8, weight: .bold))
+                                .hisType(.nano, weight: .bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
@@ -249,15 +254,13 @@ struct FleetVehicleCardRow: View {
                         }
                     }
                     HStack(spacing: 4) {
-                        Text(preferences.privacyRedactionEnabled
-                             ? "VIN •••·\(vin.suffix(4))" // Screenshot Privacy Mode: only the last 4 characters.
-                             : "VIN: \(vin)")
-                            .font(.system(size: 9.5, design: .monospaced))
+                        Text(preferences.displayVIN(vin))
+                            .hisType(.micro, design: .monospaced)
                             .foregroundStyle(.secondary)
                             .privacySensitive(preferences.privacyRedactionEnabled)
                         if let vehicleState {
                             Text("· " + vehicleState.freshnessDescription)
-                                .font(.system(size: 9))
+                                .hisType(.micro)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -270,51 +273,48 @@ struct FleetVehicleCardRow: View {
                         onSettingsChanged(.selectVehicle(vin))
                     } label: {
                         Text(L10n.text("Switch To"))
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                     }
                     .controlSize(.small)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture {
-                if !isActive {
-                    onSettingsChanged(.selectVehicle(vin))
-                }
-            }
 
             if let vehicleState {
                 HStack(spacing: 12) {
                     if let battery = vehicleState.energy.batteryPercentage {
                         HStack(spacing: 4) {
                             Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
                                 .foregroundStyle(HisingenTheme.fleetBatteryTint(level: vehicleState.batteryLevel))
                             Text(String(format: "%.0f%%", battery))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .hisType(.caption, weight: .semibold, design: .rounded)
+                                .monospacedDigit()
                             if vehicleState.isCharging, let power = vehicleState.energy.powerWatts, power > 0 {
                                 Text(Format.kilowatts(watts: power))
-                                    .font(.system(size: 8.5))
+                                    .hisType(.micro)
                                     .foregroundStyle(.secondary)
                             }
                         }
                     } else if let fuel = vehicleState.fuelSystem.levelPercent {
                         HStack(spacing: 4) {
                             Image(systemName: "fuelpump.fill")
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
                                 .foregroundStyle(Color.secondary)
                             Text(String(format: "%.0f%%", fuel))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .hisType(.caption, weight: .semibold, design: .rounded)
+                                .monospacedDigit()
                         }
                     }
 
                     if let range = vehicleState.primaryRangeKm {
                         HStack(spacing: 3) {
                             Image(systemName: "gauge.with.needle.fill")
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
                                 .foregroundStyle(.secondary)
                             Text(Format.distance(km: range, unit: preferences.distanceUnit))
-                                .font(.system(size: 10, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -322,10 +322,10 @@ struct FleetVehicleCardRow: View {
                     if let isLocked = vehicleState.exteriorStatus?.isLocked {
                         HStack(spacing: 3) {
                             Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
-                                .font(.system(size: 9.5))
+                                .hisType(.micro)
                                 .foregroundStyle(isLocked ? Color.secondary : Color.orange)
                             Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
-                                .font(.system(size: 10, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                                 .foregroundStyle(isLocked ? Color.secondary : Color.orange)
                         }
                     }
@@ -339,13 +339,14 @@ struct FleetVehicleCardRow: View {
                         onSettingsChanged(.selectVehicle(vin))
                     }
                 }
+                .accessibilityAddTraits(isActive ? [] : [.isButton])
             }
 
             // Nickname & Theme Controls
             HStack(spacing: 12) {
                 HStack(spacing: 4) {
                     Text(L10n.text("Nickname:"))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
 
                     TextField(L10n.text("Nickname"), text: Binding(
@@ -359,7 +360,7 @@ struct FleetVehicleCardRow: View {
 
                 HStack(spacing: 4) {
                     Text(L10n.text("Theme:"))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
 
                     Picker("", selection: Binding(
@@ -395,8 +396,8 @@ struct FleetVehicleCardRow: View {
         )
         // isActive flips from an app-level SettingsChange with no transaction of
         // its own; this binding drives the badge/button swap and hover tint.
-        .animation(Motion.resolve(Motion.interaction), value: isHovered)
-        .animation(Motion.resolve(Motion.stateChange), value: isActive)
+        .hisAnimation(Motion.interaction, value: isHovered)
+        .hisAnimation(Motion.stateChange, value: isActive)
         .onHover { hovering in
             if !isActive {
                 isHovered = hovering

@@ -9,17 +9,17 @@ import OSLog
 final class LiveStreamEngine {
     /// What the app does with stream transitions. Frame handling and poll cadence stay with
     /// the refresh coordinator; the engine only needs yes/no answers to keep going. The
-    /// closures bind to one engine run — a restart builds fresh ones against the new
+    /// closures bind to one engine run – a restart builds fresh ones against the new
     /// generation, which is what makes stale frames stop the old task.
     struct Context {
         /// Loop guard per attempt: is this purpose + VIN still what the app wants to stream?
         let isDesired: @MainActor (VehicleLiveStreamPurpose, String) -> Bool
-        /// Connected transition — the coordinator re-times its polls around an open stream.
+        /// Connected transition – the coordinator re-times its polls around an open stream.
         let onConnected: @MainActor () -> Void
         /// One telemetry frame. Returns false when the stream must stop (stale vehicle or
         /// generation). `.connected` frames never reach here.
         let onFrame: @MainActor (VehicleLiveUpdate) async -> Bool
-        /// Disconnected transition — the coordinator schedules its fallback poll.
+        /// Disconnected transition – the coordinator schedules its fallback poll.
         let onDisconnected: @MainActor () -> Void
         /// The task ended and the engine reset itself; the coordinator may restart it.
         let onIdle: @MainActor () -> Void
@@ -58,7 +58,7 @@ final class LiveStreamEngine {
     var isRunning: Bool { task != nil }
 
     /// Starts streaming for the purpose, or stops when the purpose is `nil`. A running
-    /// engine is left alone — callers stop it first if they want a different run.
+    /// engine is left alone – callers stop it first if they want a different run.
     func setPurpose(_ newPurpose: VehicleLiveStreamPurpose?, vin: String) {
         guard let newPurpose else {
             stop()

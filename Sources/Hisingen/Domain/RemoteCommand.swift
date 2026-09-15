@@ -102,7 +102,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
     ///
     /// These are the commands routed through Polestar's C3 `invocation.InvocationService`,
     /// which enforces a client-id allowlist the normal account (web) client is not on. The
-    /// remaining writes — charging, timers, charge locations, OTA — are accepted with the
+    /// remaining writes – charging, timers, charge locations, OTA – are accepted with the
     /// primary session token and return `false` here.
     ///
     /// `PolestarGRPC.executeRemoteCommand` is the single dispatch authority; its `invocation`
@@ -147,6 +147,11 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         switch self {
         case .unlock, .unlockTrunk, .openTailgate, .openWindows, .startEngine:
             return .securitySensitive
+        case .honkHorn, .honkAndFlash:
+            // Audible outside the car, and neither can be taken back. Both were `.routine`, so a
+            // single click sounded the horn while deleting a saved location was confirmed — the
+            // confirmation budget spent inversely to the risk.
+            return .securitySensitive
         case .installOTANow, .deleteClimateTimer, .deleteChargeLocation:
             return .destructive
         default:
@@ -154,7 +159,7 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         }
     }
 
-    /// Past-tense summary of what the command did, for result banners — e.g.
+    /// Past-tense summary of what the command did, for result banners – e.g.
     /// "AC turned on at 22 °C", "Vehicle locked". Distinct from `title`, which is an
     /// imperative ("Lock vehicle") suited to buttons and confirmations.
     var outcomeDescription: String {

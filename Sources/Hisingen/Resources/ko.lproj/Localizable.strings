@@ -62,7 +62,7 @@
 "Active Timers" = "활성 타이머";
 "Active Unlimited" = "Active Unlimited";
 "Active Vehicle: %@" = "활성 차량: %@";
-"Active for %@ — each vehicle saves its own theme preference." = "%@에 적용됨 — 각 차량마다 고유한 테마 설정이 저장됩니다.";
+"Active for %@. Each vehicle saves its own theme preference." = "%@에 적용됨: 각 차량마다 고유한 테마 설정이 저장됩니다.";
 "Add Climate Timer…" = "Add Climate Timer…";
 "Add Schedule" = "일정 추가";
 "Add or Manage Vehicles…" = "Add or Manage Vehicles…";
@@ -96,7 +96,7 @@
 "Altitude" = "고도";
 "Ambient Weather" = "Ambient Weather";
 "Ambient weather at vehicle GPS location" = "Ambient weather at vehicle GPS location";
-"Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo";
+"Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo" = "Ambient weather at vehicle GPS location: sends vehicle coordinates to Open-Meteo";
 "An installation is scheduled." = "An installation is scheduled.";
 "Another remote command is already running." = "Another remote command is already running.";
 "Another vehicle command conflicts with this request." = "Another vehicle command conflicts with this request.";
@@ -378,7 +378,7 @@
 "Estimated Cost" = "예상 비용";
 "Estimated Degradation" = "예상 성능 저하율";
 "Estimated Range" = "Estimated Range";
-"Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level — not a measured battery health reading.";
+"Estimated from current range versus this model's rated WLTP range at this charge level, not a measured battery health reading." = "Estimated from current range versus this model's rated WLTP range at this charge level: not a measured battery health reading.";
 "Evening Unlocked Reminder" = "Evening Unlocked Reminder";
 "Excellent" = "Excellent";
 "Export" = "내보내기";
@@ -600,7 +600,7 @@
 "Modem Wake Reason" = "Modem Wake Reason";
 "Moderate" = "보통";
 "Mon" = "Mon";
-"Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below.";
+"Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below." = "Monitor your Polestar or Volvo from the menu bar: pick your vehicle's brand and sign in below.";
 "Monochrome panels, sharp corners, Scandinavian minimalism" = "모노크롬 패널, 직선형 코너, 스칸디나비아 미니멀리즘";
 "More (%d)" = "More (%d)";
 "More, %d sections" = "More, %d sections";
@@ -644,7 +644,7 @@
 "Odometer & Service" = "주행거리 및 서비스";
 "Odometer & service" = "Odometer & service";
 "Off" = "Off";
-"Offline — showing the last available vehicle data." = "Offline — showing the last available vehicle data.";
+"Offline: showing the last available vehicle data." = "Offline: showing the last available vehicle data.";
 "Oil" = "Oil";
 "Oil level" = "Oil level";
 "Online" = "온라인";
@@ -789,7 +789,7 @@
 "Refresh vehicle data before using this command." = "Refresh vehicle data before using this command.";
 "Refresh vehicle data to detect model capabilities." = "Refresh vehicle data to detect model capabilities.";
 "Regenerated Energy" = "회생 제동 에너지";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly — sign-in happens in a system browser window.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly: sign-in happens in a system browser window.";
 "Registration & Model" = "등록번호 및 모델";
 "Registration / License Plate" = "차량 등록번호 / 번호판";
 "Release" = "Release";
@@ -799,7 +799,7 @@
 "Remote Climate" = "원격 공조";
 "Remote Controls" = "Remote Controls";
 "Remote Controls Temporarily Disabled" = "Remote Controls Temporarily Disabled";
-"Remote Controls — Sending…" = "Remote Controls — Sending…";
+"Remote Controls: Sending…" = "Remote Controls: Sending…";
 "Remote Engine Start (RES)" = "Remote Engine Start (RES)";
 "Remote Lock, Unlock, Climate Preconditioning, and Flash/Honk commands are active." = "원격 도어 잠금/잠금 해제, 실내 온도 프리컨디셔닝, 전조등 점멸/경적 명령이 활성화되었습니다.";
 "Remote Locks" = "원격 잠금";
@@ -807,7 +807,7 @@
 "Remote climate, locks, windows, charging, timers and software installation are active." = "원격 실내 온도, 도어 락, 창문, 충전, 타이머 및 소프트웨어 설치 기능이 활성화되었습니다.";
 "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication." = "Remote commands can change or unlock the real vehicle. Commands are sent only after an explicit menu action; sensitive actions also require device-owner authentication.";
 "Remote controls restricted to paired mobile devices" = "Remote controls restricted to paired mobile devices";
-"Remote controls — disabled by default" = "Remote controls — disabled by default";
+"Remote controls: disabled by default" = "Remote controls: disabled by default";
 "Remote engine start (RES)" = "Remote engine start (RES)";
 "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices." = "Remote vehicle commands are unavailable because Polestar restricts them to paired mobile devices.";
 "Render high-resolution %@ visual" = "고해상도 %@ 렌더링 표시";
@@ -899,7 +899,7 @@
 "Show the current weather at your vehicle's position." = "Show the current weather at your vehicle's position.";
 "Show the vehicle selector for multi-car accounts." = "Show the vehicle selector for multi-car accounts.";
 "Show vehicle parking GPS coordinates and 1-click Apple Maps integration." = "Show vehicle parking GPS coordinates and 1-click Apple Maps integration.";
-"Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot — most live telemetry is unavailable until the next successful refresh.";
+"Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh." = "Showing the last saved snapshot: most live telemetry is unavailable until the next successful refresh.";
 "Shown in footer switcher, menus, and vehicle headers" = "하단 전환기, 메뉴 및 차량 헤더에 표시됨";
 "Side" = "측면";
 "Side Profile" = "Side Profile";
@@ -1091,8 +1091,8 @@
 "Unlock trunk" = "Unlock trunk";
 "Unlock vehicle" = "Unlock vehicle";
 "Unlocked" = "잠금 해제됨";
-"Unofficial — Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial — Volvo's blue accent, soft panels, light/bold type contrast";
-"Unofficial — monochrome panels, sharp corners, no color accent" = "Unofficial — monochrome panels, sharp corners, no color accent";
+"Unofficial: Volvo's blue accent, soft panels, light/bold type contrast" = "Unofficial: Volvo's blue accent, soft panels, light/bold type contrast";
+"Unofficial: monochrome panels, sharp corners, no color accent" = "Unofficial: monochrome panels, sharp corners, no color accent";
 "Unsupported" = "Unsupported";
 "Update Available (v%@)…" = "Update Available (v%@)…";
 "Update Failed" = "업데이트 실패";
@@ -1233,14 +1233,14 @@
 "to target" = "to target";
 "updated %@" = "updated %@";
 "you@example.com" = "you@example.com";
-"—" = "—";
+"–" = "–";
 "•••••••• (only to update credentials)" = "•••••••• (only to update credentials)";
 "⚠︎ %@ is open" = "⚠︎ %@ is open";
 "⚠︎ Service warning" = "⚠︎ Service warning";
 "⚠︎ Vehicle alarm triggered" = "⚠︎ Vehicle alarm triggered";
 "⚠︎ Vehicle data may be stale" = "⚠︎ Vehicle data may be stale";
 
-"Command sent — waiting for the vehicle" = "명령 전송됨 — 차량 대기 중";
+"Command sent: waiting for the vehicle" = "명령 전송됨: 차량 대기 중";
 "Values below may update once the car reports in." = "차량이 보고하면 아래 값이 업데이트될 수 있습니다.";
 
 /* Missing translations filled in (keys referenced by L10n calls) */
@@ -1258,13 +1258,13 @@
 "%@ kWh Long Range (LG Energy / CATL · 27 Modules / 324 Cells · 400V)" = "%@ kWh Long Range (LG Energy / CATL · 27개 모듈 / 324개 셀 · 400V)";
 "%@ kWh T8 Recharge PHEV (96 Cells · %@ kWh Usable)" = "%@ kWh T8 Recharge PHEV (96개 셀 · %@ kWh 사용 가능)";
 "%@ kWh T8 Twin Engine PHEV (%@ kWh Usable)" = "%@ kWh T8 Twin Engine PHEV (%@ kWh 사용 가능)";
-"%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])" = "%@ — 차량 전환 (⌃⌥[ / ⌃⌥])";
+"%@ · Switch Vehicle (⌃⌥1–9)" = "%@: 차량 전환 (⌃⌥[ / ⌃⌥])";
 "%d days" = "%d일";
 "%d logs" = "로그 %d개";
 "%d µg/m³ PM2.5 removed" = "PM2.5 %d µg/m³ 제거됨";
 "(estimated)" = "(추정치)";
 "/kWh from" = "/kWh 시작";
-"90th percentile of session peak power — less skewed by one outlier fast-charge than a plain average." = "세션 최대 출력의 90번째 백분위수 — 단순 평균보다 한 번의 비정상적 급속 충전에 덜 왜곡됩니다.";
+"90th percentile of session peak power: less skewed by one outlier fast-charge than a plain average." = "세션 최대 출력의 90번째 백분위수: 단순 평균보다 한 번의 비정상적 급속 충전에 덜 왜곡됩니다.";
 "\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications." = "\"직접 타이어 공기압 값\"은 수치형 kPa 측정값을 의미합니다. 많은 차량은 대신 타이어별 경고 수준을 보고합니다(간접 TPMS). 이러한 경고는 여전히 차량 개요와 알림에 표시됩니다.";
 "A conservative fleet-style prior based on model year and odometer stabilizes sparse estimates; it is not vehicle telemetry." = "모델 연식과 주행거리를 기반으로 한 보수적인 차단 수준의 사전 추정치는 부족한 추정치를 안정화합니다. 이것은 차량 원격 측정 데이터가 아닙니다.";
 "A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only." = "로컬에 저장된 측정값 사이에서 관찰된 필터 수명 감소를 외삽한 대략적인 추정치입니다. 실제 마모는 사용 환경과 조건에 따라 다르므로 참고용으로만 활용하세요.";
@@ -1282,7 +1282,7 @@
 "Alert at 30 days, 1,000 km, or a provider service warning" = "30일, 1,000 km 또는 서비스 제공업체의 정비 경고 시 알림";
 "Alert below 2 kW for 15 minutes while actively charging" = "충전 중 2 kW 미만으로 15분간 유지되면 알림";
 "Alert when provider telemetry remains older than its freshness limit" = "제공업체 원격 측정 데이터가 최신성 한계보다 오래되면 알림";
-"Always shows all recorded history — the period selector above doesn't apply here, since state of health moves over months, not days." = "기록된 전체 기록을 항상 표시합니다. 배터리 상태는 며칠이 아닌 몇 달에 걸쳐 변하므로 위의 기간 선택기는 여기에 적용되지 않습니다.";
+"Always shows all recorded history. The period selector above doesn't apply here, since state of health moves over months, not days." = "기록된 전체 기록을 항상 표시합니다. 배터리 상태는 며칠이 아닌 몇 달에 걸쳐 변하므로 위의 기간 선택기는 여기에 적용되지 않습니다.";
 "An older software event is recorded, but no current update failure requires attention." = "오래된 소프트웨어 이벤트가 기록되어 있지만 현재 주의가 필요한 업데이트 실패는 없습니다.";
 "Announced Version" = "공지된 버전";
 "Announced: %@" = "공지: %@";
@@ -1390,7 +1390,7 @@
 "Download authorized" = "다운로드 승인됨";
 "Download failed" = "다운로드 실패";
 "Driving" = "주행 중";
-"Dropdown panel preset — applies instantly" = "드롭다운 패널 프리셋 — 즉시 적용";
+"Dropdown panel preset: applies instantly" = "드롭다운 패널 프리셋: 즉시 적용";
 "Edit this timer" = "이 타이머 편집";
 "Electric consumption unit" = "전기 소비량 단위";
 "Enable optimised charging at location" = "해당 위치에서 최적화 충전 활성화";
@@ -1434,7 +1434,7 @@
 "History Overview" = "기록 개요";
 "History Period" = "기록 기간";
 "Idle Tail" = "공회전 꼬리 구간";
-"If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly." = "업데이트가 오랫동안 대기 중이라면 Polestar 지원팀에 문의하거나 정비 예약을 하세요. 서비스 센터에서 직접 적용할 수 있습니다.";
+"If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly." = "업데이트가 오랫동안 대기 중이라면 Polestar 지원팀에 문의하거나 정비 예약을 하세요. 서비스 센터에서 직접 적용할 수 있습니다.";
 "In-Service Date" = "출고일";
 "Install Duration" = "설치 소요 시간";
 "Intelligent timer" = "지능형 타이머";
@@ -1448,7 +1448,7 @@
 "Legacy estimate" = "이전 추정치";
 "Lifetime charging cost ≈ %@ per %@" = "누적 충전 비용 ≈ %@ / %@";
 "Lighting Warning Status" = "조명 경고 상태";
-"Limited data (%@ points) — treat this trend as indicative, not conclusive." = "제한된 데이터(%@개 지점) — 이 추세는 확정적이 아닌 참고 자료로 활용하세요.";
+"Limited data (%@ points): treat this trend as indicative, not conclusive." = "제한된 데이터(%@개 지점): 이 추세는 확정적이 아닌 참고 자료로 활용하세요.";
 "Liters (L)" = "리터(L)";
 "Live stream disconnected. Retrying %@. Scheduled polling is still active." = "라이브 스트림 연결이 끊겼습니다. %@ 재시도 중입니다. 예약된 폴링은 계속 활성 상태입니다.";
 "Live vehicle stream connected" = "차량 라이브 스트림 연결됨";
@@ -1507,8 +1507,8 @@
 "Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates." = "차량 사양서의 선택적 VIN별 값입니다. 계산된 주행거리 및 SoH 추정치에서 광범위한 모델 패밀리 참조값을 대체합니다.";
 "Overhead (Top-Down)" = "수직 위에서 보기";
 "Panel Size" = "패널 크기";
-"Past event — no current action required" = "과거 이벤트 — 현재 조치 불필요";
-"Peak power at %@ was far below this location's usual level — the cable or charger may be derating." = "%@의 최대 출력이 이 위치의 평소 수준보다 훨씬 낮았습니다. 케이블이나 충전기가 출력을 낮추고 있을 수 있습니다.";
+"Past event: no current action required" = "과거 이벤트: 현재 조치 불필요";
+"Peak power at %@ was far below this location's usual level. The cable or charger may be derating." = "%@의 최대 출력이 이 위치의 평소 수준보다 훨씬 낮았습니다. 케이블이나 충전기가 출력을 낮추고 있을 수 있습니다.";
 "Performance Software Upgrade" = "성능 소프트웨어 업그레이드";
 "Plug & Charge" = "플러그 앤 차지";
 "PM2.5" = "PM2.5";
@@ -1541,7 +1541,7 @@
 "Reorders the detail rows on the Charging card. Unlisted rows keep their default position below." = "충전 카드의 세부 행 순서를 변경합니다. 나열되지 않은 행은 기본 위치 아래에 유지됩니다.";
 "Reported Battery Capacity" = "보고된 배터리 용량";
 "Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle." = "문서화되지 않은 Polestar 백엔드 필드에서 보고되었습니다. 차량에 표시된 버전과 일치할 때까지 검증되지 않은 것으로 취급하세요.";
-"Reported by the vehicle cloud backend — exact support per VIN." = "차량 클라우드 백엔드에서 보고 — VIN별 정확한 지원 여부.";
+"Reported by the vehicle cloud backend. Exact support per VIN." = "차량 클라우드 백엔드에서 보고: VIN별 정확한 지원 여부.";
 "Reported supported" = "지원됨으로 보고됨";
 "Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in." = "다음 로그인 시 제한된 잠금, 잠금 해제, 엔진, 위치 찾기 및 위치 범위를 요청합니다.";
 "Reset" = "재설정";
@@ -1601,7 +1601,7 @@
 "The download failed. The vehicle will retry automatically; installation can only be started once the download completes." = "다운로드가 실패했습니다. 차량이 자동으로 재시도하며, 설치는 다운로드가 완료된 후에만 시작할 수 있습니다.";
 "The newest provider refresh did not include these fields. Hisingen retained the previous successful readings and labels them here instead of presenting them as live." = "최신 제공업체 새로 고침에 이 필드들이 포함되지 않았습니다. Hisingen은 이전에 성공한 측정값을 유지하고 실시간으로 표시하는 대신 여기에 표시합니다.";
 "The providers report warning flags, not measured fluid levels." = "제공업체는 측정된 오일/액체 수준이 아닌 경고 플래그를 보고합니다.";
-"The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "업데이트가 공지되었지만 아직 다운로드가 승인되지 않았습니다. Polestar는 대규모 업데이트를 일괄 배포하므로 사용자의 VIN이 현재 그룹에 포함되지 않을 수 있습니다. 백엔드가 승인하면 차량이 자동으로 다운로드합니다.";
+"The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it." = "업데이트가 공지되었지만 아직 다운로드가 승인되지 않았습니다. Polestar는 대규모 업데이트를 일괄 배포하므로 사용자의 VIN이 현재 그룹에 포함되지 않을 수 있습니다. 백엔드가 승인하면 차량이 자동으로 다운로드합니다.";
 "The update is ready to download but has not been downloaded yet. The vehicle will download it automatically; installation can only be started once the download completes." = "업데이트를 다운로드할 준비가 되었지만 아직 다운로드되지 않았습니다. 차량이 자동으로 다운로드하며, 설치는 다운로드가 완료된 후에만 시작할 수 있습니다.";
 "The vehicle did not report a configurable current limit." = "차량이 구성 가능한 전류 제한을 보고하지 않았습니다.";
 "The vehicle did not report an air-quality index." = "차량이 대기질 지수를 보고하지 않았습니다.";
@@ -1615,7 +1615,7 @@
 "This event is hidden from Needs Attention on this Mac." = "이 이벤트는 이 Mac의 주의 필요 항목에서 숨겨집니다.";
 "This Month vs Last" = "이번 달 vs 지난달";
 "This update has been announced but not yet authorized for download. The vehicle downloads it on its own once the backend authorizes it and conditions allow; installation can only be started afterwards." = "이 업데이트는 공지되었지만 아직 다운로드가 승인되지 않았습니다. 백엔드가 승인하고 조건이 허용되면 차량이 스스로 다운로드하며, 설치는 그 이후에만 시작할 수 있습니다.";
-"This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "이 차량은 클라우드 기반 다운로드 동의를 지원하지 않습니다. 업데이트는 차량이 백엔드에 자율적으로 접속할 때만 다운로드할 수 있습니다. Polestar 정비 예약을 통해 직접 적용할 수 있습니다.";
+"This vehicle does not support cloud-based download consent. The update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly." = "이 차량은 클라우드 기반 다운로드 동의를 지원하지 않습니다. 업데이트는 차량이 백엔드에 자율적으로 접속할 때만 다운로드할 수 있습니다. Polestar 정비 예약을 통해 직접 적용할 수 있습니다.";
 "This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading." = "이 차량의 간접 TPMS는 정확한 공기압 측정값이 아닌 타이어별 경고 수준을 보고합니다.";
 "Warning status only. The vehicle reports a warning level per tyre and flags a tyre only once it detects an issue, so this is not a live pressure measurement." = "경고 상태만 제공됩니다. 차량은 타이어별 경고 수준을 보고하며 문제를 감지했을 때만 타이어를 표시하므로 이것은 실시간 공기압 측정이 아닙니다.";
 "To" = "까지";
@@ -1698,7 +1698,7 @@
 
 /* Panel size & content density (General settings) */
 "Content Density" = "콘텐츠 밀도";
-"Zoom content independently of panel size — compact shows more before scrolling" = "패널 크기와 별개로 콘텐츠 크기를 조절합니다 – 컴팩트는 스크롤 전에 더 많은 내용을 표시합니다";
+"Zoom content independently of panel size: compact shows more before scrolling" = "패널 크기와 별개로 콘텐츠 크기를 조절합니다 – 컴팩트는 스크롤 전에 더 많은 내용을 표시합니다";
 "Custom Size" = "사용자 지정 크기";
 "Independent width and height overrides" = "독립적인 너비와 높이";
 "Width" = "너비";
@@ -1798,7 +1798,7 @@
 "Open the trip route in Apple Maps" = "Open the trip route in Apple Maps";
 "Open trip start in Apple Maps" = "Open trip start in Apple Maps";
 "Overlay previous session" = "Overlay previous session";
-"Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here — possibly a failing cable or a derated charger.";
+"Peak power for this session was far below what this vehicle usually reaches here. Possibly a failing cable or a derated charger." = "Peak power for this session was far below what this vehicle usually reaches here: possibly a failing cable or a derated charger.";
 "Petrol Equivalent" = "Petrol Equivalent";
 "Pick a custom date range" = "Pick a custom date range";
 "Previous" = "Previous";
@@ -2078,7 +2078,7 @@
 // API feature descriptions (English fallback).
 "%@ failed. %@" = "%@ failed. %@";
 "%@ · %d kW AC / %d kW DC" = "%@ · %d kW AC / %d kW DC";
-"%@ — %@" = "%@ — %@";
+"%@: %@" = "%@: %@";
 "%d AQI (%@)" = "%d AQI (%@)";
 "%d m" = "%d m";
 "%d samples, latest %d, range %d to %d, %@" = "%d samples, latest %d, range %d to %d, %@";
@@ -2221,7 +2221,7 @@
 "The vehicle allows at most %d charging locations." = "The vehicle allows at most %d charging locations.";
 "The vehicle allows at most %d climate timers." = "The vehicle allows at most %d climate timers.";
 "The vehicle could not lock because a door, the hood, or the tailgate is open." = "The vehicle could not lock because a door, the hood, or the tailgate is open.";
-"The vehicle did not respond in time — it may be parked somewhere with no reception." = "The vehicle did not respond in time — it may be parked somewhere with no reception.";
+"The vehicle did not respond in time. It may be parked somewhere with no reception." = "The vehicle did not respond in time: it may be parked somewhere with no reception.";
 "The vehicle has not reported a known charging state." = "The vehicle has not reported a known charging state.";
 "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes." = "The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.";
 "The vehicle is not in a state that allows this command (for example, while it is being driven)." = "The vehicle is not in a state that allows this command (for example, while it is being driven).";
@@ -2249,7 +2249,7 @@
 "Vehicle Calculation. Average electric consumption over the automatic trip-meter period." = "Vehicle Calculation. Average electric consumption over the automatic trip-meter period.";
 "Vehicle Health" = "Vehicle Health";
 "Vehicle Report" = "Vehicle Report";
-"Vehicle data is still loading — try again in a moment." = "Vehicle data is still loading — try again in a moment.";
+"Vehicle data is still loading. Try again in a moment." = "Vehicle data is still loading: try again in a moment.";
 "Vehicle locked" = "Vehicle locked";
 "Vehicle report" = "Vehicle report";
 "Vehicle software installation started" = "Vehicle software installation started";
@@ -2324,11 +2324,11 @@
 "Recent service response" = "Recent service response";
 "Release Notes" = "Release Notes";
 "Reported Connection" = "Reported Connection";
-"Reported by the vehicle at its parked location — not a forecast." = "Reported by the vehicle at its parked location — not a forecast.";
+"Reported by the vehicle at its parked location, not a forecast." = "Reported by the vehicle at its parked location: not a forecast.";
 "Started charging." = "Started charging.";
 "Status Reported" = "Status Reported";
 "Test notification" = "Test notification";
-"The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing.";
+"The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing." = "The backend recorded a failed update event. This is an event record, not a live vehicle fault: a Polestar workshop can apply the update directly if it keeps failing.";
 "The schedule index must not be negative." = "The schedule index must not be negative.";
 "The schedule type does not match this command." = "The schedule type does not match this command.";
 "This is how Hisingen alerts will look." = "This is how Hisingen alerts will look.";
@@ -2388,7 +2388,7 @@
 "Tomorrow's prices arrive after 14:15" = "Tomorrow's prices arrive after 14:15";
 "Prices unavailable right now" = "Prices unavailable right now";
 "Spot prices exclude taxes and grid fees" = "Spot prices exclude taxes and grid fees";
-"Charge %@ over %d h to reach %d%% — average %@, now %@" = "Charge %@ over %d h to reach %d%% — average %@, now %@";
+"Charge %@ over %d h to reach %d%%: average %@, now %@" = "Charge %@ over %d h to reach %d%%: average %@, now %@";
 "Saves %@" = "Saves %@";
 "Charging now is cheapest" = "Charging now is cheapest";
 "A %d h charge is longer than the price outlook" = "A %d h charge is longer than the price outlook";
@@ -2404,7 +2404,7 @@
 "Electricity price outlook" = "Electricity price outlook";
 "Planned window from %@" = "Planned window from %@";
 "Between %@ and %@ kr per kWh. %@" = "Between %@ and %@ kr per kWh. %@";
-"The car has its own charging schedules — the planner does not use them" = "The car has its own charging schedules — the planner does not use them";
+"The car has its own charging schedules. The planner does not use them" = "The car has its own charging schedules: the planner does not use them";
 "fetched %@" = "fetched %@";
 "The vehicle's location suggests %@" = "The vehicle's location suggests %@";
 "Notify When the Cheap Window Opens" = "Notify When the Cheap Window Opens";
@@ -2412,12 +2412,12 @@
 "Notify When Tomorrow's Prices Arrive" = "Notify When Tomorrow's Prices Arrive";
 "One daily banner after 14:15 with the cheapest hour" = "One daily banner after 14:15 with the cheapest hour";
 "Auto-Start Charging in the Window" = "Auto-Start Charging in the Window";
-"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab — only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
+"When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab: only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "Sends the start-charging command automatically while the window runs";
 "Market Price Cost" = "Market Price Cost";
 "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill." = "Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.";
 "The cheap charging window runs %@." = "The cheap charging window runs %@.";
-"Plug in the vehicle — the cheap charging window runs %@." = "Plug in the vehicle — the cheap charging window runs %@.";
+"Plug in the vehicle. The cheap charging window runs %@." = "Plug in the vehicle: the cheap charging window runs %@.";
 "Cheap charging window: %@." = "Cheap charging window: %@.";
 "Tomorrow's electricity prices are in" = "Tomorrow's electricity prices are in";
 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh." = "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.";
@@ -2427,7 +2427,7 @@
 "Show older entries" = "Show older entries";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded.";
 "Set up Hisingen" = "Hisingen 설정";
-"Your vehicle is connected. Pick a starting point — everything here can be changed later in Settings → Features." = "차량이 연결되었습니다. 시작점을 선택하세요. 모든 항목은 나중에 설정 → Features에서 변경할 수 있습니다.";
+"Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "차량이 연결되었습니다. 시작점을 선택하세요. 모든 항목은 나중에 설정 → Features에서 변경할 수 있습니다.";
 "Quick setup" = "빠른 설정";
 "Remote commands" = "원격 명령";
 "Polestar remote controls run through a separate one-time browser authorization." = "Polestar 원격 제어는 브라우저에서 일회성 인증이 필요합니다.";
@@ -2436,13 +2436,13 @@
 "Click the car icon in the menu bar any time to open this panel." = "메뉴 막대의 자동차 아이콘을 클릭하면 언제든지 이 패널을 열 수 있습니다.";
 "Connect your vehicle account below to get started." = "아래에서 차량 계정을 연결하여 시작하세요.";
 "Still failing?" = "참";
-"Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added." = "고";
+"Your Polestar session expired. Sign in again. The interactive window handles any new verification step Polestar added." = "고";
 "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update." = "용";
 "Hidden trips (%d)" = "입";
 "Restore" = "니";
 "Restore this hidden trip to the detected list." = "다";
 "Trips you hid from the detected list. Restoring puts them back." = " ";
-"Grid Carbon Intensity" = "—";
+"Grid Carbon Intensity" = "–";
 "For the emissions comparison in History" = " ";
 "g CO₂/kWh" = "%";
 "Enter an intensity between 1 and 1,200 g CO₂/kWh." = "@";
@@ -2450,7 +2450,7 @@
 "Full Backup (JSON)" = "g";
 "Export Selected Month" = "C";
 "Export All Months" = "O";
-"Indicative only — assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "참고용입니다 — %@ g CO₂/kWh 전력망 강도와 %@ g CO₂/km 가솔린 차(웰투휠)를 가정합니다. 설정 → 일반 → Grid Carbon Intensity에서 전력망 값을 설정할 수 있습니다.";
+"Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "참고용입니다: %@ g CO₂/kWh 전력망 강도와 %@ g CO₂/km 가솔린 차(웰투휠)를 가정합니다. 설정 → 일반 → Grid Carbon Intensity에서 전력망 값을 설정할 수 있습니다.";
 
 // English fallback values pending translation
 "Lead Time" = "Lead Time";
@@ -2458,3 +2458,65 @@
 "When the window opens" = "When the window opens";
 "1 hour before" = "1 hour before";
 "%d minutes before" = "%d minutes before";
+
+// English fallback values pending translation
+"%1$d of %2$d windows open" = "%1$d of %2$d windows open";
+"%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
+"%@ kr" = "%@ kr";
+"Add All Safe Features" = "Add All Safe Features";
+"Add Recommended" = "Add Recommended";
+"Back to Vehicle" = "Back to Vehicle";
+"Battery level" = "Battery level";
+"Checks the vehicle again for the current software status." = "Checks the vehicle again for the current software status.";
+"Choose a vehicle first; muting applies to one car at a time." = "Choose a vehicle first; muting applies to one car at a time.";
+"Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one." = "Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one.";
+"Critical" = "Critical";
+"Est. ready %@ · about %@" = "Est. ready %@ · about %@";
+"Estimates recorded" = "Estimates recorded";
+"Finding the address…" = "Finding the address…";
+"Give this location a name." = "Give this location a name.";
+"Hide this panel" = "Hide this panel";
+"Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history." = "Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history.";
+"History could not be read" = "History could not be read";
+"L/100km" = "L/100km";
+"Lock State Not Reported" = "Lock State Not Reported";
+"Locks the vehicle." = "Locks the vehicle.";
+"Lower" = "Lower";
+"New locations will no longer be stored. Existing saved locations are kept." = "New locations will no longer be stored. Existing saved locations are kept.";
+"Next service projection has no date." = "Next service projection has no date.";
+"No activity was recorded in this period." = "No activity was recorded in this period.";
+"No air-cleaning cycles were recorded in this period." = "No air-cleaning cycles were recorded in this period.";
+"No automations ran in this period." = "No automations ran in this period.";
+"No charging sessions match this search." = "No charging sessions match this search.";
+"No charging telemetry has been reported for this vehicle yet." = "No charging telemetry has been reported for this vehicle yet.";
+"No fill-ups were recorded in this period." = "No fill-ups were recorded in this period.";
+"No sensor readings were reported on the last refresh." = "No sensor readings were reported on the last refresh.";
+"No vehicle selected" = "No vehicle selected";
+"Nothing has changed while Hisingen was running." = "Nothing has changed while Hisingen was running.";
+"Raise" = "Raise";
+"Re-check Software Status" = "Re-check Software Status";
+"Reading the request log…" = "Reading the request log…";
+"Saves these credentials and connects." = "Saves these credentials and connects.";
+"Showing cached data. This section returns when the next refresh succeeds." = "Showing cached data. This section returns when the next refresh succeeds.";
+"Some details still need fixing. Press to see what." = "Some details still need fixing. Press to see what.";
+"Stop Storing & Clear Locations" = "Stop Storing & Clear Locations";
+"Stop Storing, Keep Locations" = "Stop Storing, Keep Locations";
+"That departure time has passed. Pick a new one to check readiness." = "That departure time has passed. Pick a new one to check readiness.";
+"The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
+"The vehicle has not reported a lock state yet, so this sends Lock." = "The vehicle has not reported a lock state yet, so this sends Lock.";
+"This is already the highest setting." = "This is already the highest setting.";
+"This is already the lowest setting." = "This is already the lowest setting.";
+"This is the newest page." = "This is the newest page.";
+"This is the oldest page." = "This is the oldest page.";
+"This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
+"This vehicle did not report this capability on the last refresh." = "This vehicle did not report this capability on the last refresh.";
+"This vehicle does not support a current limit per location." = "This vehicle does not support a current limit per location.";
+"Try Again" = "Try Again";
+"Unlocks the vehicle." = "Unlocks the vehicle.";
+"Unrecognised state: %@" = "Unrecognised state: %@";
+"Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price." = "Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price.";
+"Window State Not Reported" = "Window State Not Reported";
+"Windows Closed" = "Windows Closed";
+"Windows Open" = "Windows Open";
+"kr per kWh" = "kr per kWh";
+"≈%@ to target at your %@/kWh setting" = "≈%@ to target at your %@/kWh setting";

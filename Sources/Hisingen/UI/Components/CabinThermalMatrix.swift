@@ -3,7 +3,7 @@ import SwiftUI
 /// 2D cabin thermal layout: seat and steering-wheel heating levels rendered in their physical
 /// positions (driver left / passenger right, LHD/RHD-aware where the backend reports
 /// orientation), plus the interior/requested temperatures. Reads only from the already-decoded
-/// `VehicleClimateStatus` levels (0 = off, 1–3 = level) — it never infers heat from the vehicle
+/// `VehicleClimateStatus` levels (0 = off, 1–3 = level) – it never infers heat from the vehicle
 /// name or exposes a control; remote heating stays in Controls.
 struct CabinThermalMatrix: View {
     let driverSeatLevel: Int?
@@ -29,19 +29,20 @@ struct CabinThermalMatrix: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "thermometer.and.liquid.waves")
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
                 Text(L10n.text("Cabin Thermal Overview"))
-                    .font(.system(size: 10, weight: .medium))
+                    .hisType(.caption, weight: .medium)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(cabinLabel)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .hisType(.micro, weight: .bold, design: .rounded)
+                    .monospacedDigit()
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(activityBadgeColor.opacity(0.15), in: Capsule())
                     .foregroundStyle(activityBadgeColor)
-                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: activity)
+                    .hisAnimation(Motion.stateChange, value: activity)
             }
 
             HStack(alignment: .top, spacing: 10) {
@@ -64,7 +65,7 @@ struct CabinThermalMatrix: View {
 
             if let interior = interiorTemperatureCelsius {
                 Text(temperatureLine(interior: interior))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
             }
         }
@@ -118,21 +119,24 @@ struct CabinThermalMatrix: View {
         let active = (level ?? 0) > 0
         VStack(spacing: 4) {
             Image(systemName: symbol)
-                .font(.system(size: 13))
+                .hisType(.heading)
                 .foregroundStyle(active ? .orange : .secondary)
             Text(title)
-                .font(.system(size: 8.5, weight: .medium))
+                .hisType(.micro, weight: HisingenTheme.captionWeight)
                 .foregroundStyle(.secondary)
             Text(active
                  ? L10n.format("Level %d", level ?? 0)
                  : L10n.text("Off"))
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .hisType(.micro, weight: .semibold, design: .rounded)
+                .monospacedDigit()
                 .foregroundStyle(active ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .background(active ? Color.orange.opacity(0.10) : Color.primary.opacity(0.03),
+        // 3 % over two stacked materials is below the threshold of perception, so the matrix lost
+        // its structure in exactly the state most of its cells are in. 8 % reads as a cell.
+        .background(active ? Color.orange.opacity(0.14) : Color.primary.opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 6))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: level)
+        .hisAnimation(Motion.stateChange, value: level)
     }
 }

@@ -3,7 +3,7 @@ import Foundation
 /// One shared Task.sleep-based scheduler replacing the hand-rolled Timer/reentrancy idioms
 /// sibling services each maintained (repeating `Timer.scheduledTimer`, one-shot
 /// `Timer(timeInterval:)` + run-loop mode, `Task.sleep` while-loops). Task-based ticks are
-/// immune to run-loop modes — a status-item menu no longer defers them — and cancellation is
+/// immune to run-loop modes – a status-item menu no longer defers them – and cancellation is
 /// structural, with no invalidation bookkeeping to drift out of sync.
 @MainActor
 final class AsyncTimerLoop {

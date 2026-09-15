@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct FormattingTests {
-    /// Isolated preference store per test — the dead `Preferences` global (deleted) wrote to
+    /// Isolated preference store per test – the dead `Preferences` global (deleted) wrote to
     /// `UserDefaults.standard` and leaked state across runs on developer machines.
     private func makeStore() throws -> (store: PreferencesStore, defaults: UserDefaults, suiteName: String) {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
@@ -196,7 +196,7 @@ struct FormattingTests {
         #expect(!(features.contains(.connectivityDiagnostics)))
         #expect(!(features.contains(.airQuality)))
         // batteryDiagnostics ships on by default now, alongside vehicleWeather and
-        // ownerGreeting — see FeatureSelection.default.
+        // ownerGreeting – see FeatureSelection.default.
         #expect(features.contains(.batteryDiagnostics))
         #expect(!(features.contains(.vehicleHealth)))
         #expect(!(AppFeature.remoteFeatures.contains { features.contains($0) }))
@@ -409,7 +409,7 @@ struct FormattingTests {
         // Resolve through the explicit-language API rather than assigning
         // Preferences.interfaceLanguage. That preference is process-global, and the suite
         // runs in parallel, so mutating it here made unrelated tests read Swedish strings
-        // for the duration — see the macos-14 failures in VolvoDecodingTests and
+        // for the duration – see the macos-14 failures in VolvoDecodingTests and
         // VehicleServiceErrorTests, which passed on macos-15 purely by scheduling luck.
         #expect(InterfaceLanguage.english.languageCode == "en")
         #expect(InterfaceLanguage.swedish.languageCode == "sv")

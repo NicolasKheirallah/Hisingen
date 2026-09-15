@@ -10,6 +10,9 @@ struct ControlsBanners: View {
     let showRestrictedNotice: Bool
 
     @State private var dismissedFeedbackID: UUID?
+    /// Drives the 45-second expiry. It was a wall-clock comparison evaluated only when the view
+    /// happened to re-render, so a banner could sit past its expiry indefinitely on an idle panel.
+    @State private var now = Date()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -21,7 +24,7 @@ struct ControlsBanners: View {
     private var liveFeedback: RemoteCommandFeedback? {
         guard let feedback,
               feedback.id != dismissedFeedbackID,
-              Date().timeIntervalSince(feedback.issuedAt) < 45 else {
+              now.timeIntervalSince(feedback.issuedAt) < 45 else {
             return nil
         }
         return feedback
@@ -41,24 +44,28 @@ struct ControlsBanners: View {
         }
         // Keyed on each banner's driving identity so an insertion carries the
         // entrance while the removal rides the dismissing transaction.
-        .animation(Motion.resolve(Motion.entrance), value: liveFeedback?.id)
-        .animation(Motion.resolve(Motion.entrance), value: vehicleOffline)
-        .animation(Motion.resolve(Motion.entrance), value: showRestrictedNotice)
+        .hisAnimation(Motion.entrance, value: liveFeedback?.id)
+        .hisAnimation(Motion.entrance, value: vehicleOffline)
+        .hisAnimation(Motion.entrance, value: showRestrictedNotice)
+        // The expiry needs a clock, not a render.
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { tick in
+            now = tick
+        }
     }
 
     private func feedbackBanner(_ feedback: RemoteCommandFeedback) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: feedback.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.system(size: 15))
+                .hisType(.title)
                 .foregroundStyle(feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                .animation(Motion.resolveCrossfade(Motion.stateChange), value: feedback.success)
+                .hisAnimation(Motion.stateChange, value: feedback.success)
             VStack(alignment: .leading, spacing: 2) {
                 Text(feedback.title)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                     .foregroundStyle(.primary)
                 Text(feedback.message)
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -67,7 +74,7 @@ struct ControlsBanners: View {
                 withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .hisType(.caption, weight: .bold)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.pressable)
@@ -76,10 +83,10 @@ struct ControlsBanners: View {
         .padding(10)
         .background(
             (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.10),
-            in: RoundedRectangle(cornerRadius: 10)
+            in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
                 .stroke(
                     (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.28),
                     lineWidth: 0.5
@@ -97,19 +104,19 @@ struct ControlsBanners: View {
     private var offlineBanner: some View {
         HStack(spacing: 10) {
             Image(systemName: "wifi.slash")
-                .font(.system(size: 14))
+                .hisType(.subhead)
                 .foregroundStyle(HisingenTheme.semanticWarning)
             VStack(alignment: .leading, spacing: 2) {
                 Text(L10n.text("Vehicle is offline"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                 Text(L10n.text("Commands may not be delivered until it reconnects."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
             }
             Spacer()
         }
         .padding(10)
-        .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }
@@ -121,26 +128,27 @@ struct ControlsBanners: View {
 
         return HStack(spacing: 10) {
             Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 16))
+                .hisType(.title)
                 .foregroundStyle(HisingenTheme.accent)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Polestar Remote Commands"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                     .foregroundStyle(.primary)
                 Text(activeNames.isEmpty
                      ? L10n.text("No remote-control features are enabled.")
                      : L10n.format("Enabled: %@.", activeNames.joined(separator: ", ")))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
         .padding(10)
-        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
                 .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -160,7 +168,7 @@ struct ControlsReprobeButton: View {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                 Text(L10n.text("Re-check what this vehicle supports"))
-                    .font(.system(size: 10.5, weight: .medium))
+                    .hisType(.caption, weight: .medium)
             }
             .frame(maxWidth: .infinity, minHeight: 26)
         }
@@ -177,9 +185,9 @@ extension ControlsCommandGate {
         if let reason = availability.shortReason {
             HStack(spacing: 5) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                 Text(reason)
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
             }
             .foregroundStyle(.secondary)
         }
@@ -194,16 +202,16 @@ extension ControlsCommandGate {
             if isSending(command) {
                 HStack(spacing: 4) {
                     ProgressView().controlSize(.small).scaleEffect(0.7)
-                    Text(L10n.text("Sending…")).font(.system(size: 9, weight: .medium))
+                    Text(L10n.text("Sending…")).hisType(.micro, weight: .medium)
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(.ultraThinMaterial, in: Capsule())
+                .background(HisingenTheme.chipFill, in: Capsule())
                 .transition(Motion.prefersReducedMotion
                     ? .opacity
                     : .opacity.combined(with: .scale(scale: 0.95)))
             }
         }
-        .animation(Motion.resolveCrossfade(Motion.interaction), value: isSending(command))
+        .hisAnimation(Motion.interaction, value: isSending(command))
     }
 }

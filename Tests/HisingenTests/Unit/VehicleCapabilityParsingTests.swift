@@ -21,7 +21,7 @@ struct VehicleCapabilityParsingTests {
         #expect(merged.isLocked == true)
     }
 
-    /// Exterior field 16 is an independent `LockStatus tailgate_lock` upstream — it is not
+    /// Exterior field 16 is an independent `LockStatus tailgate_lock` upstream – it is not
     /// derivable from field 12 (whether the tailgate is open) and must not be inferred.
     @Test
     func testTailgateLockDecodesIndependentlyOfTailgateOpenState() throws {
@@ -211,7 +211,7 @@ struct VehicleCapabilityParsingTests {
         #expect(software.updatedAt != nil)                              // field 10
     }
 
-    /// The C3 scheduler answers `relativeTime should be between 2 to 10080!` — minutes, not
+    /// The C3 scheduler answers `relativeTime should be between 2 to 10080!` – minutes, not
     /// seconds. Pins the unit and bounds so the `* 60` bug cannot come back.
     @Test
     func testOtaScheduleDelayIsExpressedInMinutesWithinBackendBounds() {
@@ -355,7 +355,7 @@ struct VehicleCapabilityParsingTests {
         #expect(report.manualAverageSpeedKmH == 62)
         #expect(report.automaticAverageSpeedKmH == 71)
         #expect(report.reportedAt == Date(timeIntervalSince1970: 1_780_000_000))
-        // Absent fields stay nil — omission is never a zero speed.
+        // Absent fields stay nil – omission is never a zero speed.
         let empty = PolestarGRPC.parseOdometer(Data())
         #expect(empty.manualAverageSpeedKmH == nil)
         #expect(empty.automaticAverageSpeedKmH == nil)
@@ -490,7 +490,7 @@ struct VehicleCapabilityParsingTests {
     }
 
     /// Health field 2 is `engine_hours_to_service` upstream, and the ServiceWarning enum
-    /// carries ENGINE_HOURS_* triggers — a real service-interval input even for a BEV.
+    /// carries ENGINE_HOURS_* triggers – a real service-interval input even for a BEV.
     @Test
     func testHealthEngineHoursToServiceAndTimestampDecode() {
         var payload = Data()

@@ -5,8 +5,27 @@ import Testing
 /// The diagnostic bundle's `OSLogStore` query filters on one subsystem string. A file
 /// that instantiates its own `Logger(subsystem: …)` would log fine yet vanish from
 /// exports if the literal ever drifted, so every logger must come from the
-/// `AppLog.logger(_:)` factory — no direct `Logger(subsystem:)` call anywhere else.
+/// `AppLog.logger(_:)` factory – no direct `Logger(subsystem:)` call anywhere else.
 struct DiagnosticSourceGuardrailTests {
+    @Test
+    func chargingPlannerPriceCurveIsNeverHiddenByEntranceState() throws {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let packageRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = packageRoot.appendingPathComponent(
+            "Sources/Hisingen/UI/Vehicle/PriceCurveView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(
+            !source.contains("hasPlayedEntrance")
+                && !source.contains(".opacity(appeared ? 1 : 0)"),
+            "The price graph must render at full opacity whenever it has plottable points; process-wide entrance state can leave a rebuilt chart permanently hidden."
+        )
+    }
+
     @Test
     func swiftUIRenderingNeverReadsProtectedKeychainValues() throws {
         let testFile = URL(fileURLWithPath: #filePath)

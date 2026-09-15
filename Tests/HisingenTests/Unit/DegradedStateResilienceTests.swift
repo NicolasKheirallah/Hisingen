@@ -1,11 +1,19 @@
 import Foundation
+import Security
 import Testing
 @testable import Hisingen
+
+private struct MissingTestKeychainSecurity: KeychainSecurity {
+    func copy(_ query: [String: Any]) -> (OSStatus, Data?) { (errSecItemNotFound, nil) }
+    func update(_ query: [String: Any], attributes: [String: Any]) -> OSStatus { errSecItemNotFound }
+    func add(_ attributes: [String: Any]) -> OSStatus { errSecSuccess }
+    func delete(_ query: [String: Any]) -> OSStatus { errSecSuccess }
+}
 
 /// Regression cover for the failure mode where a single upstream authentication error parked the
 /// app on its on-disk snapshot indefinitely: the refresh loop stopped rescheduling, and because
 /// `cacheableCopy` keeps only a handful of fields, every card backed by live telemetry silently
-/// vanished — indistinguishable from a vehicle that does not support those features.
+/// vanished – indistinguishable from a vehicle that does not support those features.
 @MainActor
 struct DegradedStateResilienceTests {
 
@@ -17,7 +25,7 @@ struct DegradedStateResilienceTests {
         let noSession = VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
         #expect(expired.allowsAutomaticRetry)
         #expect(noSession.allowsAutomaticRetry)
-        // These are not "transient" — the point is that retry eligibility is a separate question.
+        // These are not "transient" – the point is that retry eligibility is a separate question.
         #expect(!(expired.isTransient))
     }
 
@@ -210,7 +218,13 @@ struct AuthFailureReschedulingTests {
         let suiteName = "HisingenTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(
+                service: "io.kheirallah.hisingen.tests.auth-retry.\(UUID())",
+                security: MissingTestKeychainSecurity()
+            )
+        )
         preferences.vin = "YSMTEST"
 
         let coordinator = RefreshCoordinator(

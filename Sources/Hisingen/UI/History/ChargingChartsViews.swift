@@ -33,7 +33,7 @@ struct ChargingCurveView: View {
     @State private var hoverLocation: CGPoint? = nil
     @State private var curveMode: CurveMode = .soc
 
-    /// Sample-derived geometry that does not depend on the hover position — rebuilt when the
+    /// Sample-derived geometry that does not depend on the hover position – rebuilt when the
     /// samples, live wattage, target or chart size change, not on every mouse move.
     private struct CurveGeometry {
         var sortedSamples: [ChargingSample] = []
@@ -143,7 +143,7 @@ struct ChargingCurveView: View {
         )
     }
 
-    /// Binary search over the cached chronological samples — O(log n) per hover move.
+    /// Binary search over the cached chronological samples – O(log n) per hover move.
     private func nearestSample(to date: Date) -> ChargingSample? {
         let sorted = geometry.sortedSamples
         guard !sorted.isEmpty else { return nil }
@@ -188,18 +188,20 @@ struct ChargingCurveView: View {
         }
     }
 
+    @ViewBuilder
     var body: some View {
-        guard !samples.isEmpty else { return AnyView(EmptyView()) }
-        let (domainLow, domainHigh) = socDomain
-        let (pwrLow, pwrHigh) = powerDomain
-        let (timeStart, timeEnd) = timeSpan
-        let totalSpan = max(60, timeEnd.timeIntervalSince(timeStart))
+        if samples.isEmpty {
+            EmptyView()
+        } else {
+            let (domainLow, domainHigh) = socDomain
+            let (pwrLow, pwrHigh) = powerDomain
+            let (timeStart, timeEnd) = timeSpan
+            let totalSpan = max(60, timeEnd.timeIntervalSince(timeStart))
 
-        return AnyView(
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 6) {
                     Label(curveMode == .power ? L10n.text("Power Curve") : L10n.text("Charging Curve"), systemImage: curveMode == .power ? "waveform.path.ecg" : "chart.xyaxis.line")
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                         .foregroundStyle(.secondary)
                     if isLive {
                         Circle()
@@ -207,8 +209,9 @@ struct ChargingCurveView: View {
                             .frame(width: 5, height: 5)
                             .opacity(pulse ? 1.0 : 0.45)
                             .animation(Motion.resolve(Motion.livePulse), value: pulse)
-                        Text(L10n.text("Live").uppercased())
-                            .font(.system(size: 8, weight: .bold))
+                        Text(L10n.text("Live"))
+                            .textCase(.uppercase)
+                            .hisType(.nano, weight: .bold)
                             .tracking(0.3)
                             .foregroundStyle(HisingenTheme.semanticGood)
                     }
@@ -226,7 +229,7 @@ struct ChargingCurveView: View {
 
                     Spacer()
                     Text(summaryText)
-                        .font(.system(size: 11, weight: .semibold))
+                        .hisType(.label, weight: .semibold)
                         .monospacedDigit()
                         .foregroundStyle(curveMode == .power ? Color.green : HisingenTheme.accent)
                         .hisTelemetryValue(summaryText, reduceMotion: reduceMotion)
@@ -247,7 +250,7 @@ struct ChargingCurveView: View {
                                 .foregroundStyle(.orange)
                         }
                     }
-                    .font(.system(size: 8.5, weight: .medium))
+                    .hisType(.nano, weight: .medium)
                     .foregroundStyle(.secondary)
                 }
 
@@ -260,7 +263,7 @@ struct ChargingCurveView: View {
                     let chartHeight = max(1, height - verticalInset * 2)
                     let bottomY = verticalInset + chartHeight
 
-                    // Cached, hover-independent geometry — see refreshGeometry.
+                    // Cached, hover-independent geometry – see refreshGeometry.
                     let socPointSegments = geometry.socPointSegments
                     let socPoints = socPointSegments.flatMap { $0 }
 
@@ -349,10 +352,13 @@ struct ChargingCurveView: View {
                                 hoverLayer(info: info, verticalInset: verticalInset, bottomY: bottomY, width: width)
                             }
                             .transition(.opacity)
-                            .animation(Motion.resolveCrossfade(Motion.interaction), value: isHovering)
+                            .hisAnimation(Motion.interaction, value: isHovering)
                         }
                     }
-                    .animation(Motion.resolve(Motion.entrance), value: curveMode)
+                    // A mode switch is a selection, and `resolve` returns nil under Reduce Motion,
+                    // so this was a hard cut where the app's own rule is a crossfade. It also used
+                    // the entrance curve, which is for things arriving, not for a control toggling.
+                    .hisAnimation(Motion.selection, value: curveMode)
                     .contentShape(Rectangle())
                     .onContinuousHover { phase in
                         switch phase {
@@ -378,7 +384,17 @@ struct ChargingCurveView: View {
                 }
                 .frame(height: 64)
                 .padding(.vertical, 2)
-                .accessibilityHidden(true)
+                // Was hidden outright, even though `TimeSeriesAXDescriptor` exists in this very
+                // file and is attached at six other sites: a VoiceOver reader was told nothing
+                // about the one view the card is built around.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.text("Charging curve"))
+                .accessibilityValue(chartAccessibilityValue(points: samples.map(\.batteryPercentage)))
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: L10n.text("Charging curve"),
+                    yLabel: "%",
+                    points: samples.map { ($0.timestamp, $0.batteryPercentage) }
+                ))
 
                 HStack(alignment: .top) {
                     curveCaption(title: L10n.text("Start"), pct: startSample.batteryPercentage, date: startSample.timestamp)
@@ -386,10 +402,10 @@ struct ChargingCurveView: View {
                     if curveMode == .power && peakWatts > 0 {
                         VStack(alignment: .center, spacing: 1) {
                             Text(L10n.text("PEAK POWER"))
-                                .font(.system(size: 8, weight: .semibold))
+                                .hisType(.nano, weight: .semibold)
                                 .foregroundStyle(.tertiary)
                             Text(Format.kilowatts(watts: peakWatts))
-                                .font(.system(size: 11, weight: .bold))
+                                .hisType(.label, weight: .bold)
                                 .foregroundStyle(.green)
                                 .hisTelemetryValue(peakWatts, reduceMotion: reduceMotion)
                         }
@@ -414,7 +430,7 @@ struct ChargingCurveView: View {
             }
             .padding(9)
             .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
-        )
+        }
     }
 
     @ViewBuilder
@@ -432,19 +448,20 @@ struct ChargingCurveView: View {
                         .fill(HisingenTheme.accent)
                         .frame(width: 4, height: 4)
                 }
-                Text(title.uppercased())
-                    .font(.system(size: 8, weight: .semibold))
+                Text(title)
+                    .textCase(.uppercase)
+                    .hisType(.nano, weight: .semibold)
                     .tracking(0.4)
                     .foregroundStyle(.tertiary)
             }
             Text(String(format: "%.0f%%", pct))
-                .font(.system(size: 12, weight: emphasized ? .bold : .semibold))
+                .hisType(.body, weight: emphasized ? .bold : .semibold)
                 .monospacedDigit()
                 .foregroundStyle(emphasized ? HisingenTheme.accent : .primary)
                 .hisTelemetryValue(pct, reduceMotion: reduceMotion)
             if let date {
                 Text(Format.shortTime(date: date))
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
@@ -474,11 +491,11 @@ struct ChargingCurveView: View {
                 .stroke(Color.secondary.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
 
                 Text(L10n.format("Target %d%%", Int(effectiveTargetPct)))
-                    .font(.system(size: 8, weight: .semibold))
+                    .hisType(.nano, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1.5)
-                    .background(.regularMaterial, in: Capsule())
+                    .background(HisingenTheme.chipFill, in: Capsule())
                     .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
             }
             .transition(.opacity)
@@ -619,9 +636,10 @@ struct ChargingCurveView: View {
         }
     }
 
-    /// Hover rule line, marker and readout capsule. Only the marker animates its position
-    /// (Motion.fast follow); the rule and capsule track the cursor unanimated so the
-    /// readout stays glued to the pointer.
+    /// Hover rule line, marker and readout capsule. This is a pointer-tracking interaction, so all
+    /// three move unanimated and therefore as one rigid group: the rule and the capsule always
+    /// tracked the cursor directly, and easing only the marker made it slide along its own rule
+    /// during a horizontal scrub, which is the opposite of what the old comment described.
     @ViewBuilder
     private func hoverLayer(info: (point: CGPoint, pct: Double, date: Date, powerWatts: Int?, isProjected: Bool),
                             verticalInset: CGFloat, bottomY: CGFloat, width: CGFloat) -> some View {
@@ -637,31 +655,30 @@ struct ChargingCurveView: View {
             .frame(width: 9, height: 9)
             .shadow(color: (curveMode == .power ? Color.green : HisingenTheme.accent).opacity(0.6), radius: 4)
             .position(info.point)
-            .animation(Motion.resolve(Motion.interaction), value: info.point)
 
         HStack(spacing: 4) {
             Text(String(format: "%.0f%%", info.pct))
-                .font(.system(size: 9, weight: .bold))
+                .hisType(.micro, weight: .bold)
                 .monospacedDigit()
                 .foregroundStyle(HisingenTheme.accent)
             if let watts = info.powerWatts, watts > 0 {
                 Text("· \(Format.kilowatts(watts: watts))")
-                    .font(.system(size: 8.5, weight: .semibold))
+                    .hisType(.nano, weight: .semibold)
                     .foregroundStyle(.green)
             }
             Text("· " + Format.shortTime(date: info.date))
-                .font(.system(size: 8.5))
+                .hisType(.nano)
                 .monospacedDigit()
                 .foregroundStyle(.tertiary)
             if info.isProjected {
                 Text("(\(L10n.text("Projected")))")
-                    .font(.system(size: 8, weight: .medium))
+                    .hisType(.nano, weight: .medium)
                     .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(.regularMaterial, in: Capsule())
+        .background(HisingenTheme.chipFill, in: Capsule())
         .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
         .position(
@@ -672,19 +689,23 @@ struct ChargingCurveView: View {
 }
 
 struct MiniSparklineView: View {
+    /// The charge shape had no text alternative and was not hidden either, so whether VoiceOver
+    /// said anything about it was left to the shapes it happens to be drawn from.
     let samples: [ChargingSample]
 
+    @ViewBuilder
     var body: some View {
-        guard samples.count >= 2 else { return AnyView(EmptyView()) }
-        let ordered = samples.sorted { $0.timestamp < $1.timestamp }
-        let pcts = ordered.map(\.batteryPercentage)
-        let minV = pcts.min() ?? 0
-        let maxV = pcts.max() ?? 100
-        let span = max(1.0, maxV - minV)
-        let firstDate = ordered.first?.timestamp ?? Date()
-        let duration = max(1, (ordered.last?.timestamp ?? firstDate).timeIntervalSince(firstDate))
+        if samples.count < 2 {
+            EmptyView()
+        } else {
+            let ordered = samples.sorted { $0.timestamp < $1.timestamp }
+            let pcts = ordered.map(\.batteryPercentage)
+            let minV = pcts.min() ?? 0
+            let maxV = pcts.max() ?? 100
+            let span = max(1.0, maxV - minV)
+            let firstDate = ordered.first?.timestamp ?? Date()
+            let duration = max(1, (ordered.last?.timestamp ?? firstDate).timeIntervalSince(firstDate))
 
-        return AnyView(
             GeometryReader { geo in
                 let w = geo.size.width
                 let h = geo.size.height
@@ -723,7 +744,13 @@ struct MiniSparklineView: View {
                 }
             }
             .frame(width: 44, height: 16)
-        )
+            // The charge shape was neither labelled nor hidden, so whether VoiceOver said anything
+            // depended on the shapes it is drawn from. It says the shape in words, which is the
+            // only thing a 44x16 line can carry.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(L10n.text("Charge shape"))
+            .accessibilityValue(chartAccessibilityValue(points: pcts))
+        }
     }
 
 

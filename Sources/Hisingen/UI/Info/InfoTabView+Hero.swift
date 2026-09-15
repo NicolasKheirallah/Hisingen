@@ -105,7 +105,7 @@ extension InfoTabView {
                                 .font(.system(size: 38))
                                 .foregroundStyle(HisingenTheme.accent.opacity(0.7))
                             Text(isInterior ? L10n.text("Interior View") : L10n.text("Studio Render"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -143,7 +143,7 @@ extension InfoTabView {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(primaryTitle)
-                                .font(.system(size: 15, weight: .bold))
+                                .hisType(.title, weight: .bold)
                                 .foregroundStyle(HisingenTheme.ink)
                             if let color = state.identity.externalColour, !color.isEmpty && !isInterior {
                                 Pill(
@@ -161,14 +161,14 @@ extension InfoTabView {
                         }
                         if let subtitleText, !subtitleText.isEmpty {
                             Text(subtitleText)
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
                     }
                     Spacer()
                     if showRegBadge, let reg = state.identity.registrationNo, !reg.isEmpty {
                         Text(reg)
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .hisType(.body, weight: .bold, design: .monospaced)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
@@ -192,9 +192,9 @@ extension InfoTabView {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                 Text(title)
-                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
+                    .hisType(.caption, weight: isSelected ? .bold : .medium)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -207,7 +207,6 @@ extension InfoTabView {
             .contentShape(Capsule())
         }
         .buttonStyle(.pressable)
-        .withoutFocusRing()
         .id(angle)
     }
 
@@ -224,7 +223,7 @@ extension InfoTabView {
         }
     }
 
-    /// Opens the render at full resolution in the system image viewer — reliable from inside a
+    /// Opens the render at full resolution in the system image viewer – reliable from inside a
     /// menu-bar popover, where an in-app sheet/overlay cannot size itself to the viewport.
     func openImageInPreview(_ data: Data?) {
         guard let data else { return }

@@ -18,10 +18,16 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
             let alert = NSAlert()
             alert.alertStyle = command.risk == .destructive ? .critical : .warning
             alert.messageText = command.title(temperatureUnit: preferences.temperatureUnit)
+            // A software install takes the car out of use for the duration, and the confirmation
+            // said only that a command would be sent. The one consequence the reader cannot undo by
+            // waiting is stated where they decide.
+            let consequence = command == .installOTANow
+                ? " " + L10n.text("The car cannot be driven while this installs.")
+                : ""
             alert.informativeText = L10n.format(
                 "Send this command to %@? Hisingen will submit it once and then refresh vehicle state.",
                 vehicle
-            )
+            ) + consequence
             alert.addButton(withTitle: L10n.text("Send Command"))
             alert.addButton(withTitle: L10n.text("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return false }

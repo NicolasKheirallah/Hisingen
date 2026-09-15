@@ -52,7 +52,7 @@ struct ChargingSpotCostLedgerTests {
         #expect(updated == 1)
         let priced = try #require(ledger.recentChargingSessions(for: vin).first)
         // Sample-integrated energy scaled to the authoritative (SoC-derived) ~15.8 kWh
-        // at 1.0 kr — the estimate tracks the session's own energy figure.
+        // at 1.0 kr – the estimate tracks the session's own energy figure.
         let spot = try #require(priced.spotEstimatedCost)
         #expect(abs(spot - priced.energyDeliveredKwh * 1.0) < 0.5)
 

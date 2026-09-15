@@ -42,7 +42,7 @@ struct VehicleSoftwareCard: View {
         if let title = software.title { rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text")) }
         if let summary = software.shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty, summary != software.title { rows.append(KVRow(L10n.text("Summary"), summary, symbol: "doc.plaintext")) }
         if let minutes = software.scheduleRelativeMinutes, minutes > 0 { rows.append(KVRow(L10n.text("Installs In"), L10n.format("%d min", minutes), symbol: "hourglass")) }
-        let status = software.state == .failed && !software.hasActionableFailure() ? L10n.text("Past event — no current action required") : software.statusDisplayName
+        let status = software.state == .failed && !software.hasActionableFailure() ? L10n.text("Past event: no current action required") : software.statusDisplayName
         rows.append(KVRow(L10n.text("Update Status"), status, symbol: "arrow.triangle.2.circlepath", valueWarning: software.hasActionableFailure() && !eventDismissed))
         if let scheduled = software.scheduledAt {
             rows.append(KVRow(L10n.text("Installation Scheduled"), Format.dateTimeFormatter.string(from: scheduled), symbol: "calendar.badge.clock"))
@@ -63,33 +63,33 @@ struct VehicleSoftwareCard: View {
                 CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: .blue)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 if updateInstallable {
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack {
                         Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
-                        Text(L10n.format("Version %@ is ready to install in Controls.", software.latestAvailableVersion ?? software.version ?? "—"))
-                            .font(.system(size: 10.5, weight: .medium)).foregroundStyle(HisingenTheme.ink)
+                        Text(L10n.format("Version %@ is ready to install in Controls.", software.latestAvailableVersion ?? software.version ?? "–"))
+                            .hisType(.caption, weight: .medium).foregroundStyle(HisingenTheme.ink)
                     }
                     .transition(cardTransition)
                 }
                 if software.state == .failed { failedEventControls }
                 if software.rawState == .updateAvailable { waitingForAuthorization }
                 if let notes = software.longDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-                    Divider().opacity(0.4)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.text("Release notes")).font(.system(size: 10.5, weight: .semibold)).foregroundStyle(HisingenTheme.ink)
-                        Text(Self.strippedReleaseNotes(notes)).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(L10n.text("Release notes")).hisType(.caption, weight: .semibold).foregroundStyle(HisingenTheme.ink)
+                        Text(Self.strippedReleaseNotes(notes)).hisType(.caption).foregroundStyle(.secondary)
                     }
                     .transition(cardTransition)
                 }
                 if let code = software.qbCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty,
                    code.lowercased() != software.latestAvailableVersion?.lowercased(), code.lowercased() != software.installedVersion?.lowercased() {
-                    Divider().opacity(0.4)
-                    Text(L10n.format("Build code: %@", code)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    Text(L10n.format("Build code: %@", code)).hisType(.caption).foregroundStyle(.secondary)
                     .transition(cardTransition)
                 }
                 if let originator = software.originator?.trimmingCharacters(in: .whitespacesAndNewlines), !originator.isEmpty {
-                    Divider().opacity(0.4)
-                    Text(L10n.format("Schedule originator: %@", originator)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    Text(L10n.format("Schedule originator: %@", originator)).hisType(.caption).foregroundStyle(.secondary)
                     .transition(cardTransition)
                 }
             }
@@ -102,38 +102,38 @@ struct VehicleSoftwareCard: View {
 
     private var failedEventControls: some View {
         Group {
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
             Button {
                 let identifier = eventDismissed ? nil : software.eventIdentifier
                 preferences.setDismissedSoftwareEventIdentifier(identifier, for: state.identity.vin)
                 dismissedSoftwareEventIdentifier = identifier
             } label: {
                 Label(eventDismissed ? L10n.text("Restore software event") : L10n.text("Dismiss software event"), systemImage: eventDismissed ? "arrow.uturn.backward.circle" : "xmark.circle")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .hisType(.caption, weight: .medium)
                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             }
             .buttonStyle(.pressable)
             Text(eventDismissed ? L10n.text("This event is hidden from Needs Attention on this Mac.") : L10n.text("Dismissal is local and does not alter vehicle or Polestar backend data."))
-                .font(.system(size: 9.5)).foregroundStyle(.secondary)
+                .hisType(.micro).foregroundStyle(.secondary)
         }
         .transition(cardTransition)
     }
 
     private var waitingForAuthorization: some View {
         Group {
-            Divider().opacity(0.4)
+            Divider().opacity(HisingenTheme.dividerOpacity)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange).font(.system(size: 10.5))
-                    Text(L10n.text("Waiting for backend authorization")).font(.system(size: 10.5, weight: .medium)).foregroundStyle(.orange)
+                    Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange).hisType(.caption)
+                    Text(L10n.text("Waiting for backend authorization")).hisType(.caption, weight: .medium).foregroundStyle(.orange)
                 }
-                Text(L10n.text("The update has been announced but not yet authorized for download. Polestar releases major updates in batches — your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it."))
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                if let updated = software.updatedAt { Text(L10n.format("Announced: %@", Format.dateTimeFormatter.string(from: updated))).font(.system(size: 10)).foregroundStyle(.secondary) }
+                Text(L10n.text("The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it."))
+                    .hisType(.caption).foregroundStyle(.secondary)
+                if let updated = software.updatedAt { Text(L10n.format("Announced: %@", Format.dateTimeFormatter.string(from: updated))).hisType(.caption).foregroundStyle(.secondary) }
                 Text(state.otaCapabilities?.supportsCloudBasedOtaDownloadConsent == false
-                    ? L10n.text("This vehicle does not support cloud-based download consent — the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.")
-                    : L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment — workshops can apply it directly."))
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    ? L10n.text("This vehicle does not support cloud-based download consent – the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.")
+                    : L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly."))
+                    .hisType(.caption).foregroundStyle(.secondary)
             }
         }
         .transition(cardTransition)

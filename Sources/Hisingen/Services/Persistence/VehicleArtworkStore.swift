@@ -5,8 +5,8 @@ import ImageIO
 ///
 /// `CarImageCache` hands out the raw bytes, and the studio renders behind them
 /// are around 4900 × 2750 px. Decoding one costs ~65 ms and ~54 MB, and PNG
-/// cannot be sub-sampled during decode, so this has to happen once per picture —
-/// off the main thread — and be kept. The alternative is what the hero card used
+/// cannot be sub-sampled during decode, so this has to happen once per picture –
+/// off the main thread – and be kept. The alternative is what the hero card used
 /// to do: hand `NSImage(data:)` to SwiftUI on every body evaluation and let the
 /// decode land in the render pass of whichever telemetry refresh got there first.
 @MainActor
@@ -23,7 +23,7 @@ final class VehicleArtworkStore {
         /// Decoded at display resolution rather than at source resolution.
         let image: CGImage
         /// True pixel dimensions of the source, which is what the aspect ratio
-        /// has to come from — the thumbnail's own size is rounded.
+        /// has to come from – the thumbnail's own size is rounded.
         let sourcePixelSize: CGSize
     }
 
@@ -47,8 +47,8 @@ final class VehicleArtworkStore {
     /// change does not throw away a perfectly good decode.
     ///
     /// The step is small deliberately: decoding much larger than the drawn size
-    /// means the render is downscaled twice — once by ImageIO, once by the
-    /// compositor — and detail like grille slats and wheel spokes softens.
+    /// means the render is downscaled twice – once by ImageIO, once by the
+    /// compositor – and detail like grille slats and wheel spokes softens.
     static func pixelBudget(pointSize: CGSize, scale: CGFloat) -> Int {
         let longest = max(pointSize.width, pointSize.height) * max(scale, 1)
         guard longest > 0 else { return 256 }
@@ -56,7 +56,7 @@ final class VehicleArtworkStore {
     }
 
     /// The source's true pixel dimensions, read from its header without decoding
-    /// any pixels — around 0.2 ms for a 3 MB PNG. Cheap enough to ask before
+    /// any pixels – around 0.2 ms for a 3 MB PNG. Cheap enough to ask before
     /// deciding how big a decode to order.
     nonisolated static func sourcePixelSize(of data: Data) -> CGSize? {
         guard !data.isEmpty,

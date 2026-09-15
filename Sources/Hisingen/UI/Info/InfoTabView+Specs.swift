@@ -184,7 +184,7 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
         }
         if let hours = state.maintenance.service.engineHoursToService, hours > 0 {
-            rows.append(KVRow(L10n.text("Engine Hours"), "\(hours) h", symbol: "timer"))
+            rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer"))
         }
         if let workshopName = state.maintenance.service.preferredWorkshopName, !workshopName.isEmpty {
             var val = workshopName
@@ -215,11 +215,11 @@ extension InfoTabView {
                     HStack {
                         HStack(spacing: 6) {
                             Image(systemName: "number.square.fill")
-                                .font(.system(size: 11))
+                                .hisType(.label)
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
                             Text(L10n.text("VIN"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -236,11 +236,11 @@ extension InfoTabView {
                         } label: {
                             HStack(spacing: 4) {
                                 Text(state.identity.vin)
-                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .hisType(.caption, design: .monospaced)
                                     .foregroundStyle(.primary)
                                     .privacySensitive()
                                 Image(systemName: vinCopied ? "checkmark" : "doc.on.doc")
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
                                     .foregroundStyle(vinCopied ? Color.green : Color.secondary)
                                     .contentTransition(.symbolEffect(.replace))
                             }
@@ -288,7 +288,7 @@ extension InfoTabView {
                         }
                     } label: {
                         Label(L10n.text("Export Factory Passport (CSV)"), systemImage: "square.and.arrow.down")
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -300,8 +300,8 @@ extension InfoTabView {
     }
 
     /// Machine-readable factory identity ("window sticker"). Values come exclusively from
-    /// what the providers reported for this VIN — an absent field exports as an empty cell,
-    /// never a placeholder — so the file is honest about what is and is not known.
+    /// what the providers reported for this VIN – an absent field exports as an empty cell,
+    /// never a placeholder – so the file is honest about what is and is not known.
     static func factoryPassportCSV(state: VehicleState, preferences: PreferencesStore) -> String {
         func csvField(_ value: String?) -> String {
             guard let value, !value.isEmpty else { return "" }
@@ -367,8 +367,9 @@ extension InfoTabView {
                             Image(systemName: "calendar.badge.exclamationmark")
                                 .foregroundStyle(.secondary)
                             Text(L10n.text("Warranty dates are not supplied by the vehicle API. Add the verified in-service date in Settings → Vehicle Data if you want it recorded here."))
-                                .font(.system(size: 10.5))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
+                                .hisCaptionLeading()
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                         }
@@ -397,8 +398,13 @@ extension InfoTabView {
 
                     if let batteryDate = warranty?.batteryWarrantyValidUntil, state.powertrain.hasElectricRange {
                         let isExpired = batteryDate < Date()
+                        let termDistance = Format.distance(
+                            km: warranty?.batteryWarrantyKm ?? 160_000,
+                            grouped: true,
+                            unit: preferences.distanceUnit
+                        )
                         KVRow(
-                            L10n.text("EV Battery (8 yr / 160k km)"),
+                            L10n.format("EV Battery (8 yr / %@)", termDistance),
                             Format.dateFormatter.string(from: batteryDate),
                             symbol: "bolt.shield.fill",
                             warning: isExpired

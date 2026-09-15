@@ -112,7 +112,7 @@ final class VehicleStateStore {
 
         // SQLite is the authoritative snapshot store (`database.saveSnapshot` above). The
         // UserDefaults mirror is no longer written: it previously re-encoded the entire
-        // per-VIN dictionary on every save — an O(all-vehicles) plist rewrite per refresh —
+        // per-VIN dictionary on every save – an O(all-vehicles) plist rewrite per refresh –
         // and was only ever a legacy fallback for installs predating SQLite.
     }
 

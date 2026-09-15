@@ -111,7 +111,7 @@ extension PolestarAPI {
             if Self.isGlobalFailure(error) { throw error }
             let interval: TimeInterval
             let unsupported: Bool
-            // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle —
+            // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle –
             // treat it like `incompatibleAPI` and stay away for hours, not minutes. (The gRPC
             // layer also remembers the specific backend/VIN/path for 24 hours.)
             if case PolestarError.incompatibleAPI = error {

@@ -79,7 +79,7 @@ enum Format {
     }
 
     /// Completion-time rendering shares one formatter per time zone instead of building a new
-    /// `DateFormatter` per call — this feeds a computed property evaluated on every popover
+    /// `DateFormatter` per call – this feeds a computed property evaluated on every popover
     /// render while charging.
     private static let completionTimeLock = NSLock()
     nonisolated(unsafe) private static var completionTimeFormatters: [String: DateFormatter] = [:]
@@ -160,12 +160,12 @@ enum Format {
         L10n.format("%@ kWh", decimal(kwh, decimals: decimals))
     }
 
-    /// "48.2 kW" — one decimal under 10 kW, whole numbers above; `kilowatts(watts:)` delegates here.
+    /// "48.2 kW" – one decimal under 10 kW, whole numbers above; `kilowatts(watts:)` delegates here.
     static func powerKw(_ kw: Double) -> String {
         L10n.format("%@ kW", decimal(kw, decimals: kw >= 10 ? 0 : 1))
     }
 
-    /// "+12%" / "−4%" — a real minus sign, locale digits, no separator drift.
+    /// "+12%" / "−4%" – a real minus sign, locale digits, no separator drift.
     static func signedPercent(_ value: Double, decimals: Int = 0) -> String {
         signedNumber(value, decimals: decimals) + "%"
     }
@@ -175,27 +175,27 @@ enum Format {
         decimal(value, decimals: decimals)
     }
 
-    /// "92.4%" — unsigned, locale decimal.
+    /// "92.4%" – unsigned, locale decimal.
     static func percent(_ value: Double, decimals: Int = 0) -> String {
         decimal(value, decimals: decimals) + "%"
     }
 
-    /// "16 A" — locale digits, non-breaking space before the unit.
+    /// "16 A" – locale digits, non-breaking space before the unit.
     static func amps(_ value: Int) -> String {
         L10n.format("%@\u{00A0}A", decimal(Double(value), decimals: 0))
     }
 
-    /// "+0.42" / "−0.42" — a signed plain number for trend slopes.
+    /// "+0.42" / "−0.42" – a signed plain number for trend slopes.
     static func signedNumber(_ value: Double, decimals: Int = 2) -> String {
         (value >= 0 ? "+" : "−") + decimal(abs(value), decimals: decimals)
     }
 
-    /// "148.4 kg" — used for the History tab's CO₂ comparison.
+    /// "148.4 kg" – used for the History tab's CO₂ comparison.
     static func massKg(_ kg: Double, decimals: Int = 1) -> String {
         L10n.format("%@ kg", decimal(kg, decimals: decimals))
     }
 
-    /// "12.34 kr" — amount then symbol, locale decimal. The symbol is passed through as-is so
+    /// "12.34 kr" – amount then symbol, locale decimal. The symbol is passed through as-is so
     /// a session's own stored currency is honoured.
     static func currency(_ amount: Double, symbol: String, decimals: Int = 2) -> String {
         L10n.format("%@ %@", decimal(amount, decimals: decimals), symbol)

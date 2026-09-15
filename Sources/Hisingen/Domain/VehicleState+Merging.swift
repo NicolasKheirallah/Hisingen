@@ -114,7 +114,7 @@ extension VehicleState {
         }()
         // Polestar reports a single version string whose meaning flips once an update is
         // pending, so the running version drops out of the payload for the whole rollout.
-        // Carry the last settled reading forward — otherwise "Installed Version" disappears
+        // Carry the last settled reading forward – otherwise "Installed Version" disappears
         // from the moment an update is offered until it finishes installing.
         let mergedSoftware: VehicleSoftwareInfo? = {
             guard var current = softwareInfo else {

@@ -22,6 +22,20 @@ struct VehicleChargingCard: View {
         Group {
             if eligible && state.powertrain.hasElectricRange && hasContent {
                 card
+            } else if eligible && state.powertrain.hasElectricRange {
+                // The card was simply not built when it had nothing to show, so a charging section
+                // that failed to load was indistinguishable from a vehicle that has no charging
+                // section at all. The Doors and Location cards explain themselves in this position.
+                Card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green, isSemantic: true)
+                        HisingenEmptyState(
+                            symbol: "questionmark.circle",
+                            title: L10n.text("Temporarily unavailable"),
+                            message: L10n.text("No charging telemetry has been reported for this vehicle yet.")
+                        )
+                    }
+                }
             }
         }
         .task(id: loadIdentifier) { await loadPersistentSessions() }
@@ -46,7 +60,10 @@ struct VehicleChargingCard: View {
     private var readyLine: String? {
         guard state.isCharging, let completion = state.formattedCompletionTime,
               let minutes = state.remainingChargingMinutes, minutes > 0 else { return nil }
-        return state.chargingEstimateDestination + " · " + L10n.format("Ready at %@ · %@ remaining", completion, Format.shortDuration(minutes: minutes))
+        // Marked as an estimate in the line itself. It sits one weight step below the measured
+        // headline and the card already calls this a "Vehicle Dynamic Calculation" in its
+        // detail rows, but at a glance it read as a reading.
+        return state.chargingEstimateDestination + " · " + L10n.format("Est. ready %@ · about %@", completion, Format.shortDuration(minutes: minutes))
     }
 
     private var secondaryLine: String? {
@@ -56,7 +73,14 @@ struct VehicleChargingCard: View {
         if let battery = state.energy.batteryPercentage, let target = state.energy.targetPercentage, battery < Double(target) {
             let capacity = preferences.vehicleSpecificationOverride(for: state.identity.vin)?.usableBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh
             let cost = ((Double(target) - battery) / 100) * capacity * preferences.electricityPricePerKwh
-            if cost > 0 { parts.append("≈" + String(format: "%.2f %@", cost, preferences.currencySymbol) + " " + L10n.text("to target")) }
+            if cost > 0 {
+                // Whole units: the inputs are an assumed usable capacity and a static price, so
+                // hundredths implied precision the calculation does not have. The basis is
+                // stated because every detail row below this line names its own.
+                parts.append(L10n.format("≈%@ to target at your %@/kWh setting",
+                                          Format.currency(cost.rounded(), symbol: preferences.currencySymbol),
+                                          String(format: "%.2f", preferences.electricityPricePerKwh)))
+            }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -94,7 +118,13 @@ struct VehicleChargingCard: View {
     private var activeSamples: [ChargingSample] {
         if !state.energy.samples.isEmpty { return state.energy.samples }
         if state.isCharging, let percentage = state.energy.batteryPercentage {
-            return [ChargingSample(timestamp: state.freshness.fetchedAt, batteryPercentage: percentage, powerWatts: state.energy.powerWatts)]
+            // The single point a charge starts with is stamped with the *vehicle's* report time,
+            // not Hisingen's fetch time, and marked as the estimate it is: the chart drew it like an
+            // observed sample, so a reading the car took twenty minutes ago appeared to have been
+            // measured when the app last polled.
+            let reportedAt = state.freshness.vehicleReportedAt ?? state.freshness.fetchedAt
+            return [ChargingSample(timestamp: reportedAt, batteryPercentage: percentage,
+                                   powerWatts: state.energy.powerWatts, isSynthesised: true)]
         }
         return []
     }
@@ -106,15 +136,23 @@ struct VehicleChargingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green, isSemantic: true, isPulsing: state.isCharging)
-                    if state.isComplete { Image(systemName: "checkmark.circle.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
+                    if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
                 }
-                if let headline { Text(headline).font(.system(size: 15, weight: .semibold)).foregroundStyle(state.isCharging ? HisingenTheme.semanticGood : .primary).id(headline).transition(.opacity) }
-                if let readyLine { Text(readyLine).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary).id(readyLine).transition(.opacity) }
-                if let secondaryLine { Text(secondaryLine).font(.system(size: 11)).foregroundStyle(.tertiary).id(secondaryLine).transition(.opacity) }
-                if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: state.estimatedChargingCompletion, isLive: state.isCharging, currentPowerWatts: state.energy.powerWatts).transition(.opacity) }
+                // Tabular figures on all three stacked lines. Every one of them carries a number
+                // that changes as the car charges, and a proportional face re-lays-out the string
+                // on every digit that changes width, so the whole card reflowed across its full
+                // width on each refresh. The app had five explicit tabular sites against 24 inline
+                // live-value labels with none.
+                // No `.id(...)` on the formatted string. It destroyed and rebuilt each line on
+                // every refresh, so the countdown flickered instead of morphing and could not be
+                // interrupted mid-update. `hisTelemetryValue` rolls the digits in place.
+                if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging ? HisingenTheme.semanticGood : .primary).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
+                if let readyLine { Text(readyLine).hisType(.body, weight: .medium).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(readyLine, reduceMotion: reduceMotion) }
+                if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.tertiary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
+                if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: state.estimatedChargingCompletion, isLive: state.isCharging && !state.hasOldData(), currentPowerWatts: state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
                     Text(state.chargingExplanation).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).font(.system(size: 12, weight: .medium))
+                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
                 }
                 if !persistentSessions.isEmpty { history }
             }
@@ -126,20 +164,20 @@ struct VehicleChargingCard: View {
         DisclosureGroup {
             VStack(spacing: 8) {
                 ForEach(persistentSessions.reversed(), id: \.id) { ChargingSessionRow(session: $0) }
-                Divider().opacity(0.4)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 HStack {
                     Spacer()
                     Menu {
                         Button(L10n.text("Export as CSV...")) { ChargingHistoryExport.saveCSV(sessions: persistentSessions, vin: state.identity.vin, tariffPricePerKwh: preferences.electricityPricePerKwh, currencySymbol: preferences.currencySymbol) }
                         Button(L10n.text("Export as JSON...")) { ChargingHistoryExport.saveJSON(sessions: persistentSessions, vin: state.identity.vin) }
-                    } label: { HStack(spacing: 4) { Image(systemName: "square.and.arrow.up"); Text(L10n.text("Export")) }.font(.system(size: 10, weight: .medium)) }
-                    .menuStyle(.borderlessButton).controlSize(.mini).withoutFocusRing()
+                    } label: { HStack(spacing: 4) { Image(systemName: "square.and.arrow.up"); Text(L10n.text("Export")) }.hisType(.caption, weight: .medium) }
+                    .menuStyle(.borderlessButton).controlSize(.mini)
                 }
             }.padding(.top, 6)
         } label: {
-            HStack { Text(L10n.text("Charging History")); Spacer(); Text(L10n.format("%d sessions", persistentSessions.count)).font(.system(size: 10)).foregroundStyle(.secondary) }
+            HStack { Text(L10n.text("Charging History")); Spacer(); Text(L10n.format("%d sessions", persistentSessions.count)).hisType(.caption).foregroundStyle(.secondary) }
         }
-        .disclosureGroupStyle(WholeRowDisclosureStyle()).font(.system(size: 12, weight: .medium))
+        .disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
     }
 
     private func loadPersistentSessions() async {

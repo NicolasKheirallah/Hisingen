@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -37,6 +38,9 @@ struct HisingenContentView: View {
     let diagnostics: DiagnosticsSnapshot?
     let onRefresh: () -> Void
     let onSettings: () -> Void
+    /// Dismisses the panel. Reached from Escape, which is the one key every panel-shaped surface
+    /// on this platform answers and which nothing here answered before.
+    let onClose: () -> Void
     let onCheckForUpdates: () -> Void
     let onOpenUpdate: () -> Void
     let onRemoteCommand: (RemoteCommand) -> Void
@@ -55,10 +59,16 @@ struct HisingenContentView: View {
     let imageCache: CarImageCache
 
     @State private var selectedTab: Tab
+    @State private var historyJumpTarget: String?
     private let tabSelection: Binding<Tab>
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
     @State private var firstLaunchCardDismissed = false
+    /// Drives ``EnvironmentValues/ambientMotionAllowed``. Starts true: the panel is built while the
+    /// app is becoming active, and a first frame of frozen motion would be the bug in reverse.
+    @State private var isAppActive = true
+    /// Scroll anchor for the shared container. See the reset in `body`.
+    private static let scrollTopAnchor = "hisingen.scrollTop"
     @Namespace private var tabIndicatorNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.preferencesStore) private var preferences
@@ -95,6 +105,7 @@ struct HisingenContentView: View {
         updateVersion: String?, checkingForUpdates: Bool,
         notificationPermission: NotificationPermission, diagnostics: DiagnosticsSnapshot?,
         onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
+        onClose: @escaping () -> Void = {},
         onCheckForUpdates: @escaping () -> Void, onOpenUpdate: @escaping () -> Void,
         onRemoteCommand: @escaping (RemoteCommand) -> Void,
         onSelectCar: @escaping (String) -> Void,
@@ -125,6 +136,7 @@ struct HisingenContentView: View {
         self.diagnostics = diagnostics
         self.onRefresh = onRefresh
         self.onSettings = onSettings
+        self.onClose = onClose
         self.onCheckForUpdates = onCheckForUpdates
         self.onOpenUpdate = onOpenUpdate
         self.onRemoteCommand = onRemoteCommand
@@ -144,7 +156,7 @@ struct HisingenContentView: View {
     }
 
     // Panel geometry mirrors. Reading the raw defaults through @AppStorage means a
-    // preset / density / custom-slider change invalidates this view natively — the
+    // preset / density / custom-slider change invalidates this view natively – the
     // frames below animate without needing the rootView replacement dance, which
     // also keeps scroll positions and disclosure state intact across resizes.
     @AppStorage("panel_size") private var storedPanelSizeRaw: String = PanelSize.standard.rawValue
@@ -186,15 +198,18 @@ struct HisingenContentView: View {
             } else if !authenticated {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged, onTestConnection: onTestConnection)
                     .transition(modeTransition)
-            } else if setupMode, let state {
+            } else if setupMode {
+                // Deliberately not gated on `state`. SetupPassView only needs the brand, and
+                // requiring vehicle data meant an account with no VIN, or a first fetch that
+                // failed, could never reach the pass that explains what to do next.
                 SetupPassView(brand: commandBrand,
                               onSettingsChanged: onSettingsChanged,
                               onComplete: onCompleteSetup)
-                    .id(state.identity.vin)
+                    .id(state?.identity.vin ?? commandBrand.rawValue)
                     .transition(modeTransition)
             } else if let state {
                 tabBar
-                Divider().opacity(0.4)
+                scrollEdgeFade
                 if selectedTab == .settings {
                     SettingsView(notificationPermission: notificationPermission,
                                  state: state,
@@ -211,65 +226,52 @@ struct HisingenContentView: View {
                         .transition(.opacity)
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: HisingenTheme.sectionSpacing) {
-                            if let noticeID = RetainedDataNoticeID(state: state),
-                               noticeID != dismissedRetainedDataNotice {
-                                retainedDataNotice(state, id: noticeID)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        ScrollViewReader { proxy in
+                            VStack(spacing: HisingenTheme.sectionSpacing) {
+                                // Zero-height anchor: one scroll container serves every tab, so a
+                                // new tab used to open at the previous tab's offset — its heading,
+                                // primary value and any banner already scrolled off. Resetting to an
+                                // anchor avoids giving each tab its own identity, which would discard
+                                // its internal state (expanded sections, disclosure rows).
+                                Color.clear.frame(height: 0).id(Self.scrollTopAnchor)
+                                if let noticeID = RetainedDataNoticeID(state: state),
+                                   noticeID != dismissedRetainedDataNotice {
+                                    retainedDataNotice(state, id: noticeID)
+                                        .transition(retainedDataTransition)
+                                }
+                                selectedTabContent(state: state)
                             }
-                            switch selectedTab {
-                            case .vehicle:
-                                VehicleTabView(state: state, cars: cars, activeVin: activeVin,
-                                               onSelectCar: onSelectCar,
-                                               onDismissCommandReceipt: onDismissCommandReceipt,
-                                               error: error,
-                                               database: database, reverseGeocoder: reverseGeocoder,
-                                               imageCache: imageCache)
-                                    .id(state.identity.vin)
-                                    .transition(.opacity)
-                            case .info:
-                                InfoTabView(state: state, database: database, imageCache: imageCache,
-                                            reverseGeocoder: reverseGeocoder,
-                                            onRefresh: onRefresh,
-                                            onNavigateToHistory: {
-                                                withAnimation(tabIndicatorAnimation) { selectedTab = .history }
-                                                tabSelection.wrappedValue = .history
-                                            },
-                                            onRemoteCommand: onRemoteCommand)
-                                    .id(state.identity.vin)
-                                    .transition(.opacity)
-                            case .history:
-                                HistoryDashboardView(state: state, database: database)
-                                    .id(state.identity.vin)
-                                    .transition(.opacity)
-                            case .controls:
-                                ControlsTabView(state: state,
-                                                brand: commandBrand,
-                                                remoteCommandInProgress: remoteCommandInProgress,
-                                                inFlightCommandID: inFlightRemoteCommandID,
-                                                feedback: lastRemoteCommandFeedback,
-                                                onRemoteCommand: onRemoteCommand,
-                                                onRefresh: onRefresh)
-                                    .transition(.opacity)
-                            case .settings:
-                                EmptyView()
+                            .padding(HisingenTheme.sectionSpacing)
+                            .animation(reduceMotion ? nil : Motion.interaction, value: selectedTab)
+                            .hisAnimation(Motion.cardChange, value: activeVin)
+                            .hisAnimation(Motion.stateChange, value: noticeIdentity)
+                            .onChange(of: selectedTab) { _, _ in
+                                if selectedTab != .history { historyJumpTarget = nil }
+                                proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
+                            }
+                            // A command's outcome renders in the banner at the top of this one
+                            // shared scroller, with indicators hidden. A reader who scrolled to the
+                            // OTA card, tapped Install and got "Command failed" saw nothing at all:
+                            // no result, no scroll-to, not even a scrollbar to hint that content
+                            // existed above. The outcome now comes to them.
+                            .onChange(of: lastRemoteCommandFeedback?.id) { _, feedbackID in
+                                guard feedbackID != nil, selectedTab == .controls else { return }
+                                withAnimation(Motion.resolve(Motion.cardChange)) {
+                                    proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
+                                }
                             }
                         }
-                        .padding(HisingenTheme.sectionSpacing)
-                        .animation(reduceMotion ? nil : Motion.interaction, value: selectedTab)
-                        .animation(Motion.resolveCrossfade(Motion.cardChange), value: activeVin)
-                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: noticeIdentity)
                     }
                 }
             } else {
                 placeholderView
                     .transition(.opacity)
             }
-            Divider().opacity(0.4)
+            scrollEdgeFade
             footerBar
         }
         // Content-density zoom: lay out at panelSize/scale, then scale into the physical
-        // panel — so Compact fits more content and Relaxed enlarges it, independently of
+        // panel – so Compact fits more content and Relaxed enlarges it, independently of
         // the window preset. Transforms are ignored by layout, hence the inverse frames.
         // Height comes pre-clamped by PanelLayout to what fits below the menu bar.
         .frame(width: layout.logicalWidth)
@@ -289,6 +291,83 @@ struct HisingenContentView: View {
         .animation(reduceMotion ? nil : Motion.theme, value: appTheme)
         .animation(reduceMotion ? nil : Motion.theme, value: storedAppearanceMode)
         .id(preferences.interfaceLanguage.rawValue)
+        // Ambient motion stops when the app is not frontmost. The panel can be kept open behind
+        // another window for hours, and the charging particle flow, the gauge breath and the fan
+        // all ran whether or not anyone could see them.
+        .environment(\.ambientMotionAllowed, isAppActive)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isAppActive = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            isAppActive = false
+        }
+        // Escape closes the panel. The tabs carry their own shortcuts, the footer buttons are
+        // reachable, and a panel that traps you in it is the thing a keyboard user notices first.
+        .onExitCommand(perform: onClose)
+    }
+
+    private var retainedDataTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
+    }
+
+    private func navigateFromInfoToHistory() {
+        historyJumpTarget = "activity"
+        withAnimation(tabIndicatorAnimation) { selectedTab = .history }
+        tabSelection.wrappedValue = .history
+    }
+
+    @ViewBuilder
+    private func selectedTabContent(state: VehicleState) -> some View {
+        switch selectedTab {
+        case .vehicle:
+            VehicleTabView(state: state, cars: cars, activeVin: activeVin,
+                           onSelectCar: onSelectCar,
+                           onDismissCommandReceipt: onDismissCommandReceipt,
+                           error: error,
+                           database: database, reverseGeocoder: reverseGeocoder,
+                           imageCache: imageCache)
+                .id(state.identity.vin)
+                .transition(.opacity)
+        case .info:
+            InfoTabView(state: state, database: database, imageCache: imageCache,
+                        reverseGeocoder: reverseGeocoder,
+                        onRefresh: onRefresh,
+                        onNavigateToHistory: navigateFromInfoToHistory,
+                        onRemoteCommand: onRemoteCommand)
+                .id(state.identity.vin)
+                .transition(.opacity)
+        case .history:
+            HistoryDashboardView(state: state, database: database,
+                                 initialSection: historyJumpTarget)
+                .id(state.identity.vin)
+                .transition(.opacity)
+        case .controls:
+            ControlsTabView(state: state,
+                            brand: commandBrand,
+                            remoteCommandInProgress: remoteCommandInProgress,
+                            inFlightCommandID: inFlightRemoteCommandID,
+                            feedback: lastRemoteCommandFeedback,
+                            onRemoteCommand: onRemoteCommand,
+                            onRefresh: onRefresh,
+                            onDismissCommandReceipt: onDismissCommandReceipt)
+                .transition(.opacity)
+        case .settings:
+            EmptyView()
+        }
+    }
+
+    private var scrollEdgeFade: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [HisingenTheme.hairline.opacity(0.55), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(height: 5)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var garageStates: [VehicleState] {
@@ -299,7 +378,7 @@ struct HisingenContentView: View {
     }
 
     /// The card marks the very first panel session ever. It hides inside Settings and the
-    /// setup pass (both already orient the user) and goes away for good on dismissal — or
+    /// setup pass (both already orient the user) and goes away for good on dismissal – or
     /// when the panel closes, which `StatusItemController.popoverDidClose` records.
     private var showsFirstLaunchWelcome: Bool {
         !firstLaunchCardDismissed
@@ -366,6 +445,7 @@ struct HisingenContentView: View {
     private var tabBar: some View {
         HStack(spacing: 4) {
             ForEach(Tab.allCases, id: \.self) { tab in
+                let tabNumber = (Tab.allCases.firstIndex(of: tab) ?? 0) + 1
                 Button {
                     withAnimation(tabIndicatorAnimation) {
                         selectedTab = tab
@@ -374,14 +454,16 @@ struct HisingenContentView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: tab.symbol)
-                            .font(.system(size: 10.5, weight: selectedTab == tab ? .semibold : .regular))
+                            .hisType(.caption, weight: selectedTab == tab ? .semibold : .regular)
                         Text(L10n.text(tab.rawValue))
-                            .font(.system(size: 10, weight: selectedTab == tab ? .semibold : .medium))
+                            .hisType(.caption, weight: selectedTab == tab ? .semibold : .medium)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.9)
                     }
                     .foregroundStyle(selectedTab == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 9)
+                    .contentShape(Rectangle())
                     .background(alignment: .bottom) {
                         if selectedTab == tab {
 
@@ -404,8 +486,10 @@ struct HisingenContentView: View {
                     }
                 }
                 .buttonStyle(.pressable)
-                .withoutFocusRing()
+                .focusEffectDisabled()
                 .help(L10n.text(tab.rawValue))
+                .keyboardShortcut(KeyEquivalent(Character("\(tabNumber)")), modifiers: .command)
+                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
             }
             Spacer()
         }
@@ -414,14 +498,34 @@ struct HisingenContentView: View {
     }
 
 
+    /// Shown while authenticated but with no snapshot yet.
+    ///
+    /// A failure is not a loading state. Printing the error under a spinner that keeps
+    /// spinning made "still connecting" and "this failed for good" look identical, and left
+    /// the user watching an indicator that would never resolve.
     private var placeholderView: some View {
         VStack(spacing: 12) {
-            ProgressView()
-                .controlSize(.regular)
-            Text(error ?? L10n.format("Connecting to %@…", preferences.activeBrand.displayName))
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+            if let error {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                Text(error)
+                    .hisType(.body)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(L10n.text("Refresh Now")) { onRefresh() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            } else {
+                ProgressView()
+                    .controlSize(.regular)
+                Text(L10n.format("Connecting to %@…", preferences.activeBrand.displayName))
+                    .hisType(.body)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.horizontal, HisingenTheme.sectionSpacing)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -596,21 +700,21 @@ struct HisingenContentView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: brandIcon)
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                 Text(currentTitle)
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.9)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .bold))
+                    .hisType(.nano, weight: .bold)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: 155, alignment: .leading)
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
-        .withoutFocusRing()
-        .help(L10n.format("%@ — Switch Vehicle (⌃⌥[ / ⌃⌥])", currentTitle))
+        .help(L10n.format("%@ · Switch Vehicle (⌃⌥1–9)", currentTitle))
         .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentTitle))
     }
 
@@ -620,7 +724,7 @@ struct HisingenContentView: View {
                 vehicleSwitcher
             }
             // Data freshness indicator
-            if let fetchedAt = state?.freshness.fetchedAt, state?.isStale() == false {
+            if let fetchedAt = state?.freshness.fetchedAt, state?.hasOldData() == false {
                 let age = Date().timeIntervalSince(fetchedAt)
                 let freshnessColor: Color = age < 30 ? .green : (age < 120 ? .yellow : .red)
                 let ageText: String = age < 60 ? "\(Int(age))s" : "\(Int(age / 60))m"
@@ -628,13 +732,19 @@ struct HisingenContentView: View {
                     Circle()
                         .fill(freshnessColor)
                         .frame(width: 6, height: 6)
-                        .opacity(reduceMotion ? 1 : (age < 30 ? 1 : 0.6))
-                        .animation(Motion.resolveCrossfade(Motion.stateChange), value: freshnessColor)
+                        // The hue already changes with age (green, yellow, red). Fading the dot
+                        // as well spent legibility on the one message that most needs reading.
+                        .hisAnimation(Motion.stateChange, value: freshnessColor)
                     Text(ageText)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                        // Tabular figures rather than a monospaced face: this is an ordinary UI
+                        // numeral, and SF Mono here was a different typeface from the battery
+                        // percentage one row above. `.secondary` because 9pt in `.tertiary` over
+                        // a material is below AA.
+                        .hisType(.micro, weight: .medium)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
-                        .animation(Motion.resolveCrossfade(Motion.telemetry), value: ageText)
+                        .hisAnimation(Motion.telemetry, value: ageText)
                 }
                 .help(L10n.format("Last updated %@", Format.dateTimeFormatter.string(from: fetchedAt)))
             }
@@ -643,13 +753,13 @@ struct HisingenContentView: View {
                     Image(systemName: "dot.radiowaves.left.and.right")
                     Text(L10n.text("Live"))
                 }
-                .font(.system(size: 9, weight: .semibold))
+                .hisType(.micro, weight: .semibold)
                 .foregroundStyle(HisingenTheme.semanticGood)
                 .help(L10n.text("Connected to the Polestar server stream. Battery and exterior changes are applied as the provider sends them; scheduled polling remains as a reliability fallback."))
                 .accessibilityLabel(L10n.text("Live vehicle stream connected"))
             } else if let retryAt = diagnostics?.liveStreamRetryAt {
                 Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .help(L10n.format("Live stream disconnected. Retrying %@. Scheduled polling is still active.", Format.relativeAge(since: retryAt)))
                     .accessibilityLabel(L10n.text("Live vehicle stream reconnecting"))
@@ -660,11 +770,10 @@ struct HisingenContentView: View {
                     onOpenUpdate()
                 } label: {
                     Label("v\(updateVersion)", systemImage: "arrow.down.circle.fill")
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                         .foregroundStyle(.tint)
                 }
                 .controlSize(.small)
-                .withoutFocusRing()
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else if preferences.features.contains(.updateChecks) {
                 Button {
@@ -680,8 +789,8 @@ struct HisingenContentView: View {
                     }
                 }
                 .controlSize(.small)
-                .withoutFocusRing()
                 .help(L10n.text("Check for Updates…"))
+                .accessibilityLabel(L10n.text("Check for Updates…"))
             }
             Button {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
@@ -694,8 +803,9 @@ struct HisingenContentView: View {
                     .rotationEffect(.degrees(refreshRotation))
             }
             .controlSize(.small)
-            .withoutFocusRing()
             .help(L10n.text("Refresh Telemetry (⌘R)"))
+            .accessibilityLabel(L10n.text("Refresh Telemetry"))
+            .keyboardShortcut("r", modifiers: .command)
             .disabled(!authenticated)
 
             Button {
@@ -705,12 +815,13 @@ struct HisingenContentView: View {
                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             }
             .controlSize(.small)
-            .withoutFocusRing()
             .help(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
+            .accessibilityLabel(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
+            .keyboardShortcut(",", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: updateVersion)
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: checkingForUpdates)
+        .hisAnimation(Motion.stateChange, value: updateVersion)
+        .hisAnimation(Motion.stateChange, value: checkingForUpdates)
     }
 }

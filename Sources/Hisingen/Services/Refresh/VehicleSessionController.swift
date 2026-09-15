@@ -19,7 +19,7 @@ protocol VehicleSessionControllerContext: AnyObject {
     func vehicleSwitchDidPause()
     /// Reconcile settings after brand adoption and before restarting the session.
     func sessionCredentialsDidChange()
-    /// A session was (re)established — schedule the background garage scan.
+    /// A session was (re)established – schedule the background garage scan.
     func sessionDidEstablish()
 }
 
@@ -54,7 +54,7 @@ final class VehicleSessionController {
         preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
     }
 
-    /// True while an interactive refresh or vehicle switch owns the provider — the background
+    /// True while an interactive refresh or vehicle switch owns the provider – the background
     /// garage scan checks this so it never competes with the foreground path.
     var isRefreshBusy: Bool { refreshCoordinator.isBusy }
     /// True inside a provider rate-limit pause.

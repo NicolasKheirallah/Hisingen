@@ -111,6 +111,18 @@ struct FeatureSelection: Codable, Equatable, Sendable {
 
     func contains(_ feature: AppFeature) -> Bool { enabled.contains(feature) }
 
+    /// This selection with `features` added, and nothing removed.
+    ///
+    /// A bulk convenience action may add; it may not take away. Both of Settings' quick actions used
+    /// to assign a fixed set, so "Recommended" switched off every remote-control feature for a
+    /// reader who had them on, and "Enable All Safe Features" — labelled as purely additive —
+    /// turned them all off, because that is what its set excludes.
+    func adding<S: Sequence>(_ features: S) -> FeatureSelection where S.Element == AppFeature {
+        var result = self
+        for feature in features { result.set(feature, enabled: true) }
+        return result
+    }
+
     mutating func set(_ feature: AppFeature, enabled isEnabled: Bool) {
         if isEnabled { enabled.insert(feature) }
         else { enabled.remove(feature) }

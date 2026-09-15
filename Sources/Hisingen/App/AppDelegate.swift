@@ -265,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .reauthenticate(let brand):
             switch brand {
             case .polestar:
-                // Interactive browser window — no Polestar ID password re-entry.
+                // Interactive browser window – no Polestar ID password re-entry.
                 signInCoordinator.beginPolestarWebSignIn()
             case .volvo:
                 // Re-run the browser OAuth with the developer keys already on file.
@@ -379,7 +379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The planner's unattended start-charging path. Guarded on the remote-charging
     /// feature so turning that off also disarms auto-start; `.automation` origin means
     /// the coordinator runs the routine-risk `startChargingOverride` silently (no sheet,
-    /// no biometrics) — auto-start is its own explicit consent in the planner settings.
+    /// no biometrics) – auto-start is its own explicit consent in the planner settings.
     private func startPlannerCharging() async -> RemoteCommandDispatchOutcome {
         guard preferences.features.contains(.remoteCharging) else {
             return .refused(reason: RemoteCommandError.disabled.localizedDescription)
@@ -446,8 +446,8 @@ extension AppDelegate: CommandExecutionContext {
             let nick = preferences.vehicleNickname(for: state.identity.vin)
             return nick.isEmpty ? state.model.brand.displayName : nick
         }
-        // Inline banner in the Controls tab first — it is visible regardless of the system
-        // notification permission — then the notification for when the panel is closed.
+        // Inline banner in the Controls tab first – it is visible regardless of the system
+        // notification permission – then the notification for when the panel is closed.
         lastRemoteCommandFeedback = RemoteCommandFeedback(
             title: title, message: message, success: success)
         render()

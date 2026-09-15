@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Dashboard card for the opt-in Smart Charging Planner. Fetches (via the shared price
-/// service — cached, one fetch per day after publication) today's and tomorrow's Swedish
+/// service – cached, one fetch per day after publication) today's and tomorrow's Swedish
 /// spot prices for the selected zone, then shows the cheapest contiguous whole-hour
 /// window that covers the energy still needed between the current battery level and the
 /// set charge limit, with the price of charging right now as the baseline, a 48-hour
@@ -81,26 +81,27 @@ struct ChargingPlannerCard: View {
                 if let model {
                     Group {
                         Text(model.windowLabel)
-                            .font(.system(size: 14, weight: .semibold))
+                            .hisType(.subhead, weight: .semibold)
                             .foregroundStyle(.primary)
                             .hisTelemetryValue(model.windowLabel, reduceMotion: reduceMotion)
                         Text(model.detailLine)
-                            .font(.system(size: 11))
+                            .hisType(.label)
                             .foregroundStyle(.secondary)
+                            .hisCaptionLeading()
                             .fixedSize(horizontal: false, vertical: true)
                             .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
                         if let savingsLine = model.savingsLine {
                             HStack(spacing: 5) {
                                 Image(systemName: model.savings > 0 ? "arrow.down.circle.fill" : "clock")
-                                    .font(.system(size: 10))
+                                    .hisType(.caption)
                                     .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
                                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                                 Text(savingsLine)
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .hisType(.label, weight: .semibold)
                                     .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
                                     .hisTelemetryValue(savingsLine, reduceMotion: reduceMotion)
                             }
-                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: model.savings > 0)
+                            .hisAnimation(Motion.stateChange, value: model.savings > 0)
                         }
                         PriceCurveView(points: points, plan: plan)
                     }
@@ -110,21 +111,21 @@ struct ChargingPlannerCard: View {
                         ProgressView()
                             .controlSize(.mini)
                         Text(L10n.text("Loading prices…"))
-                            .font(.system(size: 11))
+                            .hisType(.label)
                             .foregroundStyle(.secondary)
                     }
                     .transition(plannerTransition)
                 } else {
                     Text(statusMessage)
-                        .font(.system(size: 11))
+                        .hisType(.label)
                         .foregroundStyle(.secondary)
                         .transition(plannerTransition)
                 }
 
                 if !state.energy.schedules.isEmpty {
-                    Label(L10n.text("The car has its own charging schedules — the planner does not use them"),
+                    Label(L10n.text("The car has its own charging schedules. The planner does not use them"),
                           systemImage: "calendar.badge.exclamationmark")
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -135,7 +136,7 @@ struct ChargingPlannerCard: View {
                         Text(" · " + L10n.format("fetched %@", Format.shortTime(date: fetchedAt)))
                     }
                 }
-                .font(.system(size: 9))
+                .hisType(.micro)
                 .foregroundStyle(.tertiary)
             }
             // Loading → loaded → status branch swaps key here; the persistent
@@ -160,7 +161,7 @@ struct ChargingPlannerCard: View {
             return L10n.text("Prices unavailable right now")
         }
         // Distinguish "tomorrow's file has not landed yet" from "the outlook can never
-        // fit this charge" — a 54 h charge on a weak outlet will not fit into even a
+        // fit this charge" – a 54 h charge on a weak outlet will not fit into even a
         // complete two-day outlook, and blaming the publication time would be a lie.
         let now = Date()
         let planHours = max(1.0, (neededEnergyKwh / plannerPowerKw).rounded(.up))
@@ -202,7 +203,7 @@ struct ChargingPlannerCard: View {
         let average = Format.currency(plan.averagePrice, symbol: "kr") + "/kWh"
         let current = Format.currency(plan.currentPrice, symbol: "kr") + "/kWh"
         let detailLine = L10n.format(
-            "Charge %@ over %d h to reach %d%% — average %@, now %@",
+            "Charge %@ over %d h to reach %d%%: average %@, now %@",
             Format.energyKwh(plan.energyKwh),
             Int(plan.hours),
             target,

@@ -56,7 +56,7 @@ struct NotificationTestHarness {
     }
 
     /// Notifier posts through `Task { @MainActor … try await dispatcher.add(request) }`
-    /// (RT-05), so tests must drain those hops before asserting on `added` — otherwise a
+    /// (RT-05), so tests must drain those hops before asserting on `added` – otherwise a
     /// pass may just mean "not scheduled yet". Waits until the posted count is stable.
     func drainNotificationHops() async {
         await awaitStable { [dispatcher] in dispatcher.added.count }
@@ -268,7 +268,7 @@ struct NotificationPostingTests {
     @Test func sustainedDeduplicationSurvivesRelaunch() async throws {
         let harness = try NotificationTestHarness()
         // Seed the persisted started-at so the 1-second stale condition is already
-        // satisfied at launch — exactly the mid-condition relaunch scenario.
+        // satisfied at launch – exactly the mid-condition relaunch scenario.
         let staleSince = Date().addingTimeInterval(-10).timeIntervalSince1970
         harness.defaults.set([("\(NotificationTestHarness.vin).stale"): staleSince],
                              forKey: "notifier_sustained_starts_v1")
@@ -413,7 +413,7 @@ struct ChargingBaselineFingerprintTests {
 
         #expect(result.events.contains(ChargingEvent.fault))
         #expect(result.events.contains(ChargingEvent.lowBattery(threshold: 20)))
-        // Both fingerprints persist — the old single-slot baseline forgot the first.
+        // Both fingerprints persist – the old single-slot baseline forgot the first.
         #expect(result.baseline.recentEventFingerprints.count == 2)
     }
 

@@ -2,7 +2,7 @@ import AppKit
 import Charts
 import SwiftUI
 
-// `HistoryDashboardView` — trip cards: the hour-of-day histogram, distance over time, and
+// `HistoryDashboardView` – trip cards: the hour-of-day histogram, distance over time, and
 // the detected-trip list with expandable per-trip detail.
 
 extension HistoryDashboardView {
@@ -11,7 +11,15 @@ extension HistoryDashboardView {
     var drivingPatternsCard: AnyView {
         let hours = tripPresentation.hours
         let split = tripPresentation.weekdayWeekend
-        guard trips.count >= 4 else { return AnyView(EmptyView()) }
+        guard aggregateTrips.count >= 4 else {
+            return AnyView(Card {
+                HisingenEmptyState(
+                    symbol: "clock.arrow.circlepath",
+                    title: L10n.text("Driving patterns need more trips"),
+                    message: L10n.text("This section appears after four recorded trips in the selected period.")
+                )
+            })
+        }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Driving Patterns"), color: .blue)
@@ -28,7 +36,8 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(L10n.text("Trips"))
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(L10n.text("Departures by hour of day chart"))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .accessibilityValue(chartAccessibilityValue(points: hours.map { Double($0.tripCount) }))
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Weekday / day"),
                               Format.distance(km: split.weekdayKmPerDay, decimals: 1, unit: preferences.distanceUnit))
@@ -38,7 +47,7 @@ extension HistoryDashboardView {
                         curveStat(L10n.text("Busiest hour"), String(format: "%02d:00", busiest.hour))
                     }
                 }
-                dataConfidenceNote(for: trips.map(\.startedAt))
+                dataConfidenceNote(for: aggregateTrips.map(\.startedAt))
             }
         })
     }
@@ -73,7 +82,7 @@ extension HistoryDashboardView {
                     }
                     .labelsHidden()
                     .controlSize(.small)
-                    .fixedSize()
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 if let report = selectedMileageReport {
                     HStack(spacing: 8) {
@@ -87,7 +96,7 @@ extension HistoryDashboardView {
                     HStack {
                         Text(L10n.format("%d trips · %@ total", report.totalTrips,
                                          Format.distance(km: report.totalKm, decimals: 1, unit: preferences.distanceUnit)))
-                            .font(.system(size: 9.5))
+                            .hisType(.micro)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Menu {
@@ -107,10 +116,11 @@ extension HistoryDashboardView {
                             }
                         } label: {
                             Label(L10n.text("Export report"), systemImage: "square.and.arrow.up")
-                                .font(.system(size: 9))
+                                .hisType(.micro)
                         }
                         .menuStyle(.borderlessButton)
-                        .fixedSize()
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -120,10 +130,11 @@ extension HistoryDashboardView {
     func mileageStat(_ title: String, trips: Int, distance: Double, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(Format.distance(km: distance, decimals: 1, unit: preferences.distanceUnit))
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .hisType(.label, weight: .bold, design: .rounded)
+                .monospacedDigit()
                 .foregroundStyle(color)
             Text(L10n.format("%@ · %d trips", title, trips))
-                .font(.system(size: 8.5))
+                .hisType(.nano)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,12 +174,13 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(preferences.distanceUnit.suffix)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Trip distance history chart"))
+                .accessibilityValue(chartAccessibilityValue(points: trips.map { $0.distanceKm }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Distance Over Time"),
                     yLabel: preferences.distanceUnit.suffix,
                     points: daily.map { ($0.day, preferences.distanceUnit.convert(km: $0.distanceKm)) }
                 ))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 if weekly.count >= 3 {
                     Chart(weekly) { bucket in
                         BarMark(
@@ -181,7 +193,8 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(preferences.distanceUnit.suffix)
                     .frame(height: chartHeight * 0.62)
                     .accessibilityLabel(L10n.text("Weekly distance chart"))
-                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                    .accessibilityValue(chartAccessibilityValue(points: weekly.map { $0.distanceKm }))
+                    .hisAnimation(Motion.progress, value: periodDataKey)
                 }
                 if let longest {
                     HStack(spacing: 12) {
@@ -198,14 +211,16 @@ extension HistoryDashboardView {
                     Text(L10n.format("Cold raises consumption by about %@ per 10 °C, across %d trips.",
                                      Format.percent(slope.percentPer10DegreesColder, decimals: 0),
                                      slope.observationCount))
-                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let correlation, correlation < -0.2 {
                     Text(L10n.text("Colder trips consume more: consumption rises as ambient temperature drops."))
-                        .font(.system(size: 9)).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                dataConfidenceNote(for: trips.map(\.endedAt))
+                dataConfidenceNote(for: aggregateTrips.map(\.endedAt))
             }
         }
     }
@@ -222,10 +237,11 @@ extension HistoryDashboardView {
                         }
                     } label: {
                         Label(L10n.text(tripSort.rawValue), systemImage: "arrow.up.arrow.down")
-                            .font(.system(size: 9, weight: .medium))
+                            .hisType(.micro, weight: .medium)
                     }
                     .menuStyle(.borderlessButton)
-                    .fixedSize()
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 if snapshot.trips.count > 8 {
                     searchField(L10n.text("Search trips by date"), text: $tripSearchText,
@@ -237,20 +253,21 @@ extension HistoryDashboardView {
                                  olderHelp: L10n.text("Show older trips")) { visible, footer in
                     ForEach(visible) { trip in
                         tripRow(trip)
-                        if trip.id != visible.last?.id { Divider().opacity(0.25) }
+                        if trip.id != visible.last?.id { Divider().opacity(HisingenTheme.dividerOpacity) }
                     }
                     footer
                 }
-                .animation(Motion.resolve(Motion.cardChange), value: tripListKey)
+                .hisAnimation(Motion.cardChange, value: tripListKey)
                 hiddenTripsSection
                 Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    /// Hidden trips stay in the local ledger — hiding only filters them from the detected
+    /// Hidden trips stay in the local ledger – hiding only filters them from the detected
     /// list, so every hide stays reversible here.
     var hiddenTrips: [TripHistoryEntry] {
         let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
@@ -279,14 +296,14 @@ extension HistoryDashboardView {
                 ForEach(trips) { trip in
                     HStack(spacing: 8) {
                         Image(systemName: "eye.slash")
-                            .font(.system(size: 8, weight: .semibold))
+                            .hisType(.nano, weight: .semibold)
                             .foregroundStyle(.tertiary)
                             .accessibilityHidden(true)
                         Text(Format.dateTimeFormatter.string(from: trip.endedAt))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                         Spacer()
                         Text(Format.distance(km: trip.distanceKm, decimals: 1, unit: preferences.distanceUnit))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .hisType(.caption, weight: .semibold, design: .rounded)
                             .monospacedDigit()
                         Button {
                             preferences.setTripHidden(false, id: trip.id, for: state.identity.vin)
@@ -294,7 +311,7 @@ extension HistoryDashboardView {
                             expandedTripIDs.remove(trip.id)
                         } label: {
                             Label(L10n.text("Restore"), systemImage: "arrow.uturn.backward")
-                                .font(.system(size: 9))
+                                .hisType(.micro)
                         }
                         .buttonStyle(.pressable)
                         .accessibilityLabel(L10n.text("Restore this hidden trip to the detected list."))
@@ -305,11 +322,11 @@ extension HistoryDashboardView {
             } label: {
                 Label(L10n.format("Hidden trips (%d)", trips.count),
                       systemImage: "eye.slash")
-                    .font(.system(size: 9.5, weight: .medium))
+                    .hisType(.micro, weight: .medium)
                     .foregroundStyle(.secondary)
             }
             .disclosureGroupStyle(WholeRowDisclosureStyle())
-            .animation(Motion.resolve(Motion.cardChange), value: hiddenTripsKey)
+            .hisAnimation(Motion.cardChange, value: hiddenTripsKey)
             .accessibilityHint(L10n.text("Trips you hid from the detected list. Restoring puts them back."))
         }
     }
@@ -325,12 +342,12 @@ extension HistoryDashboardView {
                     // Rotating glyph (WholeRowDisclosureStyle treatment) instead of a
                     // hard swap between chevron.right / chevron.down.
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold)).foregroundStyle(.tertiary)
+                        .hisType(.nano, weight: .semibold).foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
-                        .animation(Motion.resolve(Motion.interaction), value: expanded)
+                        .hisAnimation(Motion.interaction, value: expanded)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(Format.dateTimeFormatter.string(from: trip.endedAt))
-                            .font(.system(size: 10.5, weight: .semibold))
+                            .hisType(.caption, weight: .semibold)
                         HStack(spacing: 5) {
                             Text(Format.shortDuration(minutes: max(1, Int(trip.duration / 60))))
                             if let speed = HistoryInsights.averageSpeedKmh(trip) {
@@ -344,11 +361,12 @@ extension HistoryDashboardView {
                                 Text("· " + Format.energyConsumption(kwhPer100Km: consumption, unit: preferences.energyConsumptionUnit))
                             }
                         }
-                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Text(Format.distance(km: trip.distanceKm, decimals: 1, unit: preferences.distanceUnit))
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .hisType(.label, weight: .bold, design: .rounded)
+                        .monospacedDigit()
                 }
                 .contentShape(Rectangle())
             }
@@ -372,11 +390,12 @@ extension HistoryDashboardView {
                             }
                             .buttonStyle(.pressable)
                             .help(L10n.text("Clear trip classification"))
+                            .accessibilityLabel(L10n.text("Clear trip classification"))
                         }
                         if let lat = trip.startLatitude, let lon = trip.startLongitude {
                             Button { openMap(latitude: lat, longitude: lon) } label: {
                                 Label(L10n.text("Start"), systemImage: "mappin")
-                                    .font(.system(size: 9))
+                                    .hisType(.micro)
                             }
                             .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open trip start in Apple Maps"))
@@ -384,7 +403,7 @@ extension HistoryDashboardView {
                         if let lat = trip.endLatitude, let lon = trip.endLongitude {
                             Button { openMap(latitude: lat, longitude: lon) } label: {
                                 Label(L10n.text("End"), systemImage: "mappin.circle.fill")
-                                    .font(.system(size: 9))
+                                    .hisType(.micro)
                             }
                             .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open trip endpoint in Apple Maps"))
@@ -393,7 +412,7 @@ extension HistoryDashboardView {
                            let eLat = trip.endLatitude, let eLon = trip.endLongitude {
                             Button { openRoute(fromLat: sLat, fromLon: sLon, toLat: eLat, toLon: eLon) } label: {
                                 Label(L10n.text("Route"), systemImage: "arrow.triangle.turn.up.right.diamond")
-                                    .font(.system(size: 9))
+                                    .hisType(.micro)
                             }
                             .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Open the trip route in Apple Maps"))
@@ -403,7 +422,7 @@ extension HistoryDashboardView {
                             preferences.setTripHidden(true, id: trip.id, for: state.identity.vin)
                             expandedTripIDs.remove(trip.id)
                         } label: {
-                            Label(L10n.text("Hide"), systemImage: "eye.slash").font(.system(size: 9))
+                            Label(L10n.text("Hide"), systemImage: "eye.slash").hisType(.micro)
                         }
                         .buttonStyle(.pressable)
                         .help(L10n.text("Hide this trip if segmentation combined or invented it"))
@@ -414,7 +433,7 @@ extension HistoryDashboardView {
             }
         }
         .padding(.vertical, 1)
-        .animation(Motion.resolve(Motion.layout), value: expanded)
+        .hisAnimation(Motion.layout, value: expanded)
     }
 
     func tripPurposeButton(_ purpose: TripPurpose, trip: TripHistoryEntry) -> some View {
@@ -424,12 +443,12 @@ extension HistoryDashboardView {
         } label: {
             Label(purpose.displayName,
                   systemImage: purpose == .business ? "briefcase.fill" : "person.fill")
-                .font(.system(size: 9, weight: selected ? .semibold : .regular))
+                .hisType(.micro, weight: selected ? .semibold : .regular)
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
         .tint(selected ? (purpose == .business ? .blue : .green) : .gray)
-        .animation(Motion.resolve(Motion.selection), value: selected)
+        .hisAnimation(Motion.selection, value: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

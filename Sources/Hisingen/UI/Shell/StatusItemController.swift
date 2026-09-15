@@ -69,7 +69,7 @@ final class StatusItemController: NSObject {
     var onCheckForUpdates: () -> Void = {}
     var onOpenUpdate: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
-    /// The live session's brand — the availability authority shared by the controls gate
+    /// The live session's brand – the availability authority shared by the controls gate
     /// and command dispatch, so a brand-switch window can never make them disagree.
     var onCommandBrand: () -> VehicleBrand = { .polestar }
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
@@ -98,7 +98,7 @@ final class StatusItemController: NSObject {
     private var completionExpiryTask: Task<Void, Never>?
     /// When the popover last closed. In transient ("Close When Switching Apps") mode the
     /// system closes the panel *before* the click on the status item reaches this class,
-    /// so a naive toggle would immediately reopen it — the guard swallows that same click.
+    /// so a naive toggle would immediately reopen it – the guard swallows that same click.
     private var lastPopoverCloseDate: Date?
 
     @MainActor
@@ -125,7 +125,10 @@ final class StatusItemController: NSObject {
         let layout = PanelLayout.resolve(from: preferences)
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
         if let button = statusItem.button {
-            button.image = MenuBarGlyphImageProvider.shared.image(for: .offline)
+            // The first paint of every launch was the *offline* glyph, which asserts a
+            // disconnection nothing has established yet. The resting glyph is the honest one until
+            // a reading arrives; `MenuBarGlyph.resolve` decides from then on.
+            button.image = MenuBarGlyphImageProvider.shared.image(for: .normal)
                 ?? NSImage(systemSymbolName: "bolt.car", accessibilityDescription: L10n.text("Hisingen"))
             button.imagePosition = .imageLeft
             button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -156,7 +159,7 @@ final class StatusItemController: NSObject {
     }
 
     /// The hot-key combination: ⌃⌥ (Control+Option). Plain ⌥+[ / ⌥+1…9 were previously
-    /// matched in the *global* monitor, which cannot consume events — so typing characters
+    /// matched in the *global* monitor, which cannot consume events – so typing characters
     /// like "¡", "±", or "™" in any other app switched vehicles behind the user's back.
     /// Requiring Control as well makes the combination exclusive enough to be safe globally.
     private static let hotKeyModifiers: NSEvent.ModifierFlags = [.option, .control]
@@ -221,7 +224,7 @@ final class StatusItemController: NSObject {
     /// True when the popover was already closed by the *current* status-item click
     /// (transient auto-close fires before this action runs); treating that click as a
     /// toggle would instantly reopen the panel the user just dismissed. Only the button
-    /// path consults this — the hot-key never triggers an outside-click auto-close.
+    /// path consults this – the hot-key never triggers an outside-click auto-close.
     private var popoverJustClosedByThisClick: Bool {
         guard let closed = lastPopoverCloseDate else { return false }
         return Date().timeIntervalSince(closed) < 0.3
@@ -265,7 +268,9 @@ final class StatusItemController: NSObject {
             let headerItem = NSMenuItem(title: summary, action: nil, keyEquivalent: "")
             headerItem.attributedTitle = NSAttributedString(
                 string: summary,
-                attributes: [.font: NSFont.boldSystemFont(ofSize: 13)]
+                // Tabular digits: this string carries a live battery percentage and range, and
+                // the status-item button a few lines up already uses a monospaced-digit face.
+                attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)]
             )
             menu.addItem(headerItem)
 
@@ -710,15 +715,24 @@ final class StatusItemController: NSObject {
         })
         let hosting = NSHostingController(rootView: root)
         popover.contentViewController = hosting
-        if let button = statusItem.button {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        }
-        // Apple Liquid Glass: clear the popover's opaque backing so SwiftUI materials
-        // sample the real content behind the window (same pattern as ChargingMiniPanel).
-        if let window = hosting.view.window {
+        // Apple Liquid Glass: clear the popover's opaque backing so SwiftUI materials sample the
+        // real content behind the window (same pattern as ChargingMiniPanel).
+        //
+        // Applied before `show` as well as after. Doing it only afterwards meant `show` ordered the
+        // window in with AppKit's opaque popover backing and the clearing landed on the next
+        // statement, so every open painted at least one opaque frame before the material could
+        // sample the desktop — a visible flash on the app's highest-frequency interaction. The
+        // post-show pass stays because some macOS versions only vend `window` once it is on screen.
+        func clearBacking() {
+            guard let window = hosting.view.window else { return }
             window.isOpaque = false
             window.backgroundColor = .clear
         }
+        clearBacking()
+        if let button = statusItem.button {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+        clearBacking()
     }
 
     func openPopover() {
@@ -845,7 +859,7 @@ final class StatusItemController: NSObject {
         return dimmed(icon, when: stale)
     }
 
-    /// Tint for the custom artwork when "Tint menu bar icon" is on — the same
+    /// Tint for the custom artwork when "Tint menu bar icon" is on – the same
     /// level the SF-Symbol path reads, plus orange for the warning glyph.
     private func menuBarTintColor(for data: VehicleState, glyph: MenuBarGlyph) -> NSColor? {
         guard preferences.tintMenuBarIcon else { return nil }
@@ -992,6 +1006,7 @@ final class StatusItemController: NSObject {
             diagnostics: snapshot.diagnostics,
             onRefresh: { [weak self] in self?.onRefresh() },
             onSettings: { [weak self] in self?.toggleSettings() },
+            onClose: { [weak self] in self?.popover.performClose(nil) },
             onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
             onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
@@ -1051,11 +1066,24 @@ final class StatusItemController: NSObject {
         let security = data.exteriorStatus?.isLocked.map {
             $0 ? L10n.text("Vehicle Locked") : L10n.text("Vehicle Unlocked")
         }
-        let summary = [title.nilIfEmpty, security].compactMap { $0 }.joined(separator: ", ")
+        let summary = [criticalCondition(data), title.nilIfEmpty, security]
+            .compactMap { $0 }.joined(separator: ", ")
         if data.isStale() {
             return L10n.format("Hisingen, %@, %@, data may be stale", summary, data.energy.chargingState.displayName)
         }
         return L10n.format("Hisingen, %@, %@", summary, data.energy.chargingState.displayName)
+    }
+
+    /// The condition the glyph cannot draw while the snapshot is stale, because offline
+    /// outranks it (`MenuBarGlyph.resolve`). This label is therefore the only surface a
+    /// critical condition reaches when the data is old, so it is derived from the same
+    /// inputs the glyph uses rather than a second reading of the state that could
+    /// disagree with it.
+    private func criticalCondition(_ data: VehicleState) -> String? {
+        let inputs = MenuBarIconState.inputs(
+            for: data, remoteCommandInProgress: false, chargingRecentlyCompleted: false)
+        guard inputs.isCritical else { return nil }
+        return inputs.alarmTriggered ? L10n.text("Alarm triggered") : L10n.text("Charging fault")
     }
 }
 

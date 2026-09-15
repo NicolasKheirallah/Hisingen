@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-// `HistoryDashboardView` — long-horizon trend cards: consumption (electric + combustion),
+// `HistoryDashboardView` – long-horizon trend cards: consumption (electric + combustion),
 // odometer, battery health, cabin air quality, cabin temperature, and the automation log.
 
 extension HistoryDashboardView {
@@ -14,10 +14,14 @@ extension HistoryDashboardView {
         let segmentByID = gapSegmentIndex(of: points, timestamp: \.timestamp)
         let seasonal = HistoryInsights.seasonalEfficiency(from: telemetryRecords)
         let slopePerDay = HistoryInsights.efficiencyTrendSlopePerDay(from: points)
-        let smoothed: [SmoothedPoint] = points.count >= 8
+        let smoothedBase: [SmoothedPoint] = points.count >= 8
             ? zip(points, Statistics.movingAverage(points.map(\.kwhPer100Km), windowSize: 5))
                 .map { point, value in SmoothedPoint(id: point.id, timestamp: point.timestamp, value: value) }
             : []
+        // The moving average carries the same timestamps as the readings it averages, so the raw
+        // series' gap segments apply to it unchanged rather than needing a second rule.
+        let smoothed = smoothedBase
+        let smoothedSegmentByID = gapSegmentIndex(of: smoothedBase, timestamp: \.timestamp)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -25,7 +29,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let average {
                         Text(preferences.energyConsumptionUnit.format(kwhPer100Km: average))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                            .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
                 Chart {
@@ -45,12 +50,15 @@ extension HistoryDashboardView {
                         .symbolSize(14)
                         .foregroundStyle(HisingenTheme.chartInfo.opacity(0.85))
                     }
-                    // No `series:` — the trailing average is one unbroken line, unlike the raw
-                    // reading which is split into gap segments above.
+                    // Split by the same gap rule as the raw reading. It used to run as one
+                    // unbroken line across every gap, so an average drawn through a fortnight of
+                    // missing data looked exactly like an average drawn through a fortnight of
+                    // readings, and the app contradicted the gap rule it applies three lines above.
                     ForEach(smoothed) { point in
                         LineMark(
                             x: .value(L10n.text("Date"), point.timestamp),
-                            y: .value(L10n.text("Smoothed"), point.value)
+                            y: .value(L10n.text("Smoothed"), point.value),
+                            series: .value(L10n.text("Segment"), smoothedSegmentByID[point.id] ?? 0)
                         )
                         .foregroundStyle(HisingenTheme.chartInfo.opacity(0.4))
                         .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
@@ -69,12 +77,13 @@ extension HistoryDashboardView {
                 .chartXSelection(value: $scrubEfficiency)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Energy consumption trend chart"))
+                .accessibilityValue(chartAccessibilityValue(points: smoothed.map { $0.value }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Consumption Trend"),
                     yLabel: "kWh/100km",
                     points: points.map { ($0.timestamp, $0.kwhPer100Km) }
                 ))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 if !smoothed.isEmpty {
                     HStack(spacing: 10) {
                         legendSwatch(HisingenTheme.chartInfo, L10n.text("Reading"))
@@ -85,7 +94,7 @@ extension HistoryDashboardView {
                 if let median, let average, abs(median - average) > 0.5 {
                     Text(L10n.format("Typical drive: %@ (average is pulled by outlier trips)",
                                      preferences.energyConsumptionUnit.format(kwhPer100Km: median)))
-                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                 }
                 seasonalRow(seasonal)
                 if state.hasFreshReading(.battery), let battery = state.energy.batteryPercentage,
@@ -107,11 +116,12 @@ extension HistoryDashboardView {
                 if let slopePerDay {
                     let monthlySlope = slopePerDay * 30
                     Text(L10n.format("Trending %@ kWh/100km per month", Format.signedNumber(monthlySlope, decimals: 2)))
-                        .font(.system(size: 9, weight: .medium))
+                        .hisType(.micro, weight: .medium)
                         .foregroundStyle(monthlySlope > 0.5 ? HisingenTheme.semanticWarning : .secondary)
                 }
                 Text(L10n.text("Vehicle-reported consumption between charges. Short drives and climate use raise it; motorway cruising lowers it."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: points.map(\.timestamp))
             }
@@ -142,7 +152,7 @@ extension HistoryDashboardView {
         HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 1).fill(color).frame(width: 14, height: 2.5)
                 .overlay(dashed ? RoundedRectangle(cornerRadius: 1).stroke(color, style: StrokeStyle(lineWidth: 2.5, dash: [2, 2])) : nil)
-            Text(label).font(.system(size: 8.5)).foregroundStyle(.secondary)
+            Text(label).hisType(.nano).foregroundStyle(.secondary)
         }
     }
 
@@ -159,7 +169,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let average {
                         Text(Format.fuelEconomy(lPer100Km: average, unit: preferences.fuelEconomyUnit))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                            .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
                 Chart(points) { point in
@@ -172,17 +183,18 @@ extension HistoryDashboardView {
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                     .interpolationMethod(.catmullRom)
                 }
-                .chartYAxisLabel("L/100km")
+                .chartYAxisLabel(L10n.text("L/100km"))
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Fuel consumption trend chart"))
+                .accessibilityValue(chartAccessibilityValue(points: points.map { $0.kwhPer100Km }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Fuel Consumption Trend"),
                     yLabel: "L/100km",
                     points: points.map { ($0.timestamp, $0.kwhPer100Km) }
                 ))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 Text(L10n.text("Vehicle-reported litres per 100 km between fill-ups. Short, cold trips raise it."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
                 dataConfidenceNote(for: points.map(\.timestamp))
             }
         }
@@ -200,7 +212,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let covered {
                         Text("+\(Format.distance(km: covered, decimals: 0, unit: preferences.distanceUnit))")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                            .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
                 Chart {
@@ -228,13 +241,14 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(preferences.distanceUnit.suffix)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Odometer history chart"))
+                .accessibilityValue(chartAccessibilityValue(points: odometerPoints.map { Double($0.odometerKm) }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Odometer History"),
                     yLabel: preferences.distanceUnit.suffix,
                     points: odometerPoints.map { ($0.timestamp, preferences.distanceUnit.convert(km: $0.odometerKm)) },
                     valueFormat: { String(format: "%.0f", $0) }
                 ))
-                .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                .hisAnimation(Motion.progress, value: periodDataKey)
                 if monthly.count >= 2 {
                     Chart(monthly) { bucket in
                         BarMark(
@@ -247,14 +261,16 @@ extension HistoryDashboardView {
                     .chartYAxisLabel(preferences.distanceUnit.suffix)
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Monthly mileage chart"))
-                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
+                    .accessibilityValue(chartAccessibilityValue(points: monthly.map { $0.distanceKm }))
+                    .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 if let kmPerDay {
                     curveStat(L10n.text("Average Daily Distance"),
                               Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit) + "/" + L10n.text("day"))
                 }
                 Text(L10n.text("Monthly totals and the daily average use all recorded odometer history, independent of the period selector above."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: allTimeOdometerPoints.map(\.timestamp))
             }
@@ -273,7 +289,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let latest {
                         Text(Format.percent(latest.stateOfHealthPct, decimals: 1))
-                            .font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.secondary)
+                            .hisType(.label, weight: .bold, design: .rounded).foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
                 if records.count >= 2 {
@@ -308,12 +325,13 @@ extension HistoryDashboardView {
                     .chartYAxisLabel("%")
                     .frame(height: chartHeight)
                     .accessibilityLabel(L10n.text("Battery health trend chart"))
+                    .accessibilityValue(chartAccessibilityValue(points: records.map { $0.stateOfHealthPct }))
                     .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                         title: L10n.text("Battery Health Trend"),
                         yLabel: "%",
                         points: records.map { ($0.timestamp, $0.stateOfHealthPct) }
                     ))
-                    .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
+                    .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 if let latest {
                     KVRow(L10n.text("Degradation"),
@@ -331,9 +349,11 @@ extension HistoryDashboardView {
                                   info: L10n.text("A linear projection from the current trend, not a manufacturer estimate. Real degradation is rarely linear."))
                         }
                     }
-                    KVRow(latest.measurementSource == BatteryHealthRecord.fullChargeRangeSource
-                              ? L10n.text("Full-charge range estimate")
-                              : L10n.text("Previous estimate"),
+                    // Named for what it shows. The label used to name the measurement *method*
+                    // while the value was a record count, which read as "Full-charge range
+                    // estimate - 4": neither a measurement nor a tally. The method policy is in
+                    // the info text, where it belongs.
+                    KVRow(L10n.text("Estimates recorded"),
                           Format.count(batteryHealthRecords.count), symbol: "questionmark.circle",
                           info: L10n.text("New SoH values are calculated only from vehicle-reported range at 100% charge divided by the configured WLTP range. Previous methods remain visible only for trend continuity."))
                 }
@@ -373,7 +393,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let latestAqi = latest?.airQualityIndex {
                         Text("\(Int(latestAqi)) AQI")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                            .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
                 }
                 if !aqiPoints.isEmpty {
@@ -389,16 +410,25 @@ extension HistoryDashboardView {
                         RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
                             .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.35))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            // The adjacent PM chart draws a legend; this line was labelled for
+                            // VoiceOver only, so a sighted reader saw a dashed rule with nothing
+                            // saying what it marks.
+                            .annotation(position: .top, alignment: .leading) {
+                                Text(L10n.text("Moderate"))
+                                    .hisType(.nano, weight: .medium)
+                                    .foregroundStyle(HisingenTheme.semanticWarning)
+                            }
                     }
                     .chartYAxisLabel(L10n.text("AQI"))
                     .frame(height: chartHeight)
                     .accessibilityLabel(L10n.text("Air quality index trend chart"))
+                    .accessibilityValue(chartAccessibilityValue(points: aqiPoints.map { $0.aqi }))
                     .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                         title: L10n.text("Cabin Air Quality Trend"),
                         yLabel: L10n.text("AQI"),
                         points: aqiPoints.map { ($0.record.timestamp, $0.aqi) }
                     ))
-                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                    .hisAnimation(Motion.progress, value: periodDataKey)
                 }
                 if pm25Points.count >= 2 || pm10Points.count >= 2 {
                     Chart {
@@ -419,18 +449,30 @@ extension HistoryDashboardView {
                                 series: .value(L10n.text("Series"), "PM10")
                             )
                             .foregroundStyle(HisingenTheme.chartAttention)
-                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .lineStyle(chartSeriesStroke(
+                                index: 1,
+                                differentiateWithoutColor: differentiateWithoutColor,
+                                width: 1.2
+                            ))
                             .interpolationMethod(.catmullRom)
                         }
                     }
                     .chartYAxisLabel("µg/m³")
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
-                    .animation(Motion.resolve(Motion.progress), value: periodDataKey)
+                    .accessibilityValue(chartAccessibilityValue(points: pm10Points.map { $0.pm10 }))
+                    .hisAnimation(Motion.progress, value: periodDataKey)
                     if !pm10Points.isEmpty {
                         HStack(spacing: 10) {
                             legendSwatch(HisingenTheme.chartInfo, "PM2.5")
-                            legendSwatch(HisingenTheme.chartAttention, "PM10")
+                            legendSwatch(
+                                HisingenTheme.chartAttention,
+                                "PM10",
+                                dashed: chartSeriesIsDashed(
+                                    index: 1,
+                                    differentiateWithoutColor: differentiateWithoutColor
+                                )
+                            )
                             Spacer()
                         }
                     }
@@ -445,7 +487,8 @@ extension HistoryDashboardView {
                           info: L10n.text("Extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
                 }
                 Text(L10n.text("Recorded from vehicle-reported CleanZone readings during normal refreshes. The provider keeps no history of its own, so coverage depends on how often Hisingen was running."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: chronological.map(\.timestamp))
             }
@@ -469,7 +512,8 @@ extension HistoryDashboardView {
                     Spacer()
                     if let rate = stats.successRatePct {
                         Text(Format.percent(rate))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .hisType(.caption, weight: .semibold, design: .rounded)
+                            .monospacedDigit()
                             .foregroundStyle(rate >= 90 ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
                     }
                 }
@@ -487,30 +531,31 @@ extension HistoryDashboardView {
                         ForEach(breakdown.prefix(6), id: \.command) { row in
                             HStack(spacing: 6) {
                                 Text(row.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
                                 Spacer()
                                 if row.failed > 0 {
                                     Text(L10n.format("%d failed", row.failed))
-                                        .font(.system(size: 8.5)).foregroundStyle(HisingenTheme.semanticWarning)
+                                        .hisType(.nano).foregroundStyle(HisingenTheme.semanticWarning)
                                 }
-                                Text(Format.count(row.total)).font(.system(size: 9.5, weight: .semibold)).monospacedDigit()
+                                Text(Format.count(row.total)).hisType(.micro, weight: .semibold).monospacedDigit()
                             }
                         }
                     }
                     .padding(.vertical, 2)
                 }
-                PaginatedSection(items: commands, pageSize: 12, resetKeys: [periodLoadKey]) { visibleCommands, footer in
+                PaginatedSection(items: commands, pageSize: 12, resetKeys: [periodLoadKey],
+                                 emptyMessage: L10n.text("No automations ran in this period.")) { visibleCommands, footer in
                     ForEach(visibleCommands) { record in
                         HStack {
                             Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
                                 .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                             Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                .font(.system(size: 10.5, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                             if let ms = record.durationMs {
-                                Text(L10n.format("%d ms", ms)).font(.system(size: 8.5)).foregroundStyle(.tertiary)
+                                Text(L10n.format("%d ms", ms)).hisType(.nano).foregroundStyle(.tertiary)
                             }
                             Spacer()
-                            Text(record.executedAt, style: .relative).font(.system(size: 9)).foregroundStyle(.secondary)
+                            Text(record.executedAt, style: .relative).hisType(.micro).foregroundStyle(.secondary)
                         }
                         .help(record.errorMessage ?? record.status.capitalized)
                     }
@@ -518,14 +563,13 @@ extension HistoryDashboardView {
                 }
                 if !failures.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(L10n.text("Recent failures")).font(.system(size: 8.5, weight: .semibold)).foregroundStyle(.secondary)
+                        Text(L10n.text("Recent failures")).hisType(.nano, weight: .semibold).foregroundStyle(.secondary)
                         ForEach(Array(failures), id: \.id) { record in
                             Text("• " + (record.errorMessage ?? ""))
-                                .font(.system(size: 8.5)).foregroundStyle(.tertiary).lineLimit(2)
+                                .hisType(.nano).foregroundStyle(.tertiary).lineLimit(2)
                         }
                     }
                 }
-                dataConfidenceNote(for: commands.map(\.executedAt))
             }
         }
     }
@@ -542,7 +586,8 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "thermometer.medium", title: L10n.text("Cabin Temperature Trend"), color: .orange)
                     Spacer()
                     Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
-                        .font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+                        .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
                 Chart(plotted) { record in
                     LineMark(
@@ -564,9 +609,13 @@ extension HistoryDashboardView {
                 .chartYAxisLabel(preferences.temperatureUnit.suffix)
                 .frame(height: chartHeight * 0.9)
                 .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
-                .animation(Motion.resolve(Motion.progress), value: lifetimeDataKey)
+                .accessibilityValue(chartAccessibilityValue(
+                    points: plotted.compactMap { $0.interiorCelsius }
+                        .map { preferences.temperatureUnit.convert(celsius: $0) }))
+                .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
-                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
         })

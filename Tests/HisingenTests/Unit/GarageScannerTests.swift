@@ -10,8 +10,8 @@ struct GarageScannerTests {
         return (defaults, suiteName)
     }
 
-    /// Regression: a mid-scan interruption — a remote command grabs the provider, or the user
-    /// switches vehicles — must abort the WHOLE pass, not fall through to the next brand or the
+    /// Regression: a mid-scan interruption – a remote command grabs the provider, or the user
+    /// switches vehicles – must abort the WHOLE pass, not fall through to the next brand or the
     /// closing re-render. The pre-extraction `refreshGarageVehicles` bailed the entire function
     /// from its inner guards; turning them into `return`s from a per-brand helper silently lost
     /// that, letting a scan keep hitting the network while an interactive operation was live.

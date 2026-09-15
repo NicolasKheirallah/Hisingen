@@ -17,7 +17,7 @@ enum HistoryInsights {
     struct EfficiencyPoint: Identifiable, Equatable, Sendable {
         let id: Int64
         let timestamp: Date
-        /// kWh per 100 km — the canonical internal unit. Presentation converts on display.
+        /// kWh per 100 km – the canonical internal unit. Presentation converts on display.
         let kwhPer100Km: Double
     }
 
@@ -84,13 +84,13 @@ enum HistoryInsights {
 
     /// No onboard AC charger fitted to a Polestar or Volvo EV in this fleet exceeds ~22 kW, so
     /// anything above that observed on a session is DC fast charging. Used only as a fallback
-    /// (see `chargingType(from:peakPowerKw:)`) — voltage/current readings during charging
+    /// (see `chargingType(from:peakPowerKw:)`) – voltage/current readings during charging
     /// reflect pack-side values on these vehicles, which land in a similar range for both AC
     /// and DC charging, so power, not voltage, is the more reliable signal to fall back to.
     static let dcPowerThresholdKw = 22.0
 
-    /// A session's charging type, preferring the vehicle's own reported signal — the majority
-    /// value across its samples' real `chargingType` column — since that's ground truth, not a
+    /// A session's charging type, preferring the vehicle's own reported signal – the majority
+    /// value across its samples' real `chargingType` column – since that's ground truth, not a
     /// guess. Falls back to the peak-power heuristic only when every sample predates that
     /// column (`chargingType == nil`) or the vehicle reported `.unknown` throughout.
     static func chargingType(from samples: [HistoricalChargingSample], peakPowerKw: Double?) -> ChargingType {
@@ -122,7 +122,7 @@ enum HistoryInsights {
         return end.timeIntervalSince(start)
     }
 
-    /// Trailing low-power time at the end of a session once the pack is effectively full — the
+    /// Trailing low-power time at the end of a session once the pack is effectively full – the
     /// slow "trickle" some onboard chargers do to balance cells rather than deliver meaningful
     /// energy. Detected as the run of trailing samples at or above `socThreshold` with power
     /// under `powerThresholdKw`. `nil` when the session never reaches the threshold, or ends
@@ -190,7 +190,7 @@ enum HistoryInsights {
                   let value = record.averageConsumption,
                   efficiencyBounds.contains(value) else { continue }
             // `<=`, not `<`: a reading exactly 0.05 kWh/100km from the last kept point is still
-            // "within tolerance," not just outside it — the boundary case matters here since
+            // "within tolerance," not just outside it – the boundary case matters here since
             // real vehicle-reported consumption values are often rounded to two decimal places.
             if let last = points.last, abs(last.kwhPer100Km - value) <= 0.05,
                record.timestamp.timeIntervalSince(last.timestamp) < 6 * 3_600 {
@@ -278,7 +278,7 @@ enum HistoryInsights {
         let distanceKm: Double
     }
 
-    /// Distance driven per calendar month, from consecutive odometer deltas — works even when
+    /// Distance driven per calendar month, from consecutive odometer deltas – works even when
     /// trip-segmentation drops sparse-telemetry drives, since it only needs two odometer
     /// readings, not a continuous run of them.
     static func monthlyMileage(from points: [OdometerPoint], calendar: Calendar = .current) -> [MonthlyMileage] {
@@ -334,7 +334,7 @@ enum HistoryInsights {
     }
 
     /// Pearson correlation between ambient temperature and consumption across trips reporting
-    /// both. Negative — the expected case — means colder trips consume more. `nil` under 5
+    /// both. Negative – the expected case – means colder trips consume more. `nil` under 5
     /// trips, where a correlation coefficient is mostly noise.
     static func temperatureConsumptionCorrelation(from trips: [TripHistoryEntry]) -> Double? {
         let pairs = trips.compactMap { trip -> (Double, Double)? in
@@ -428,7 +428,7 @@ enum HistoryInsights {
         }
         // Only known-good outcomes count as success (statuses written by
         // CommandCoordinator/CommandConfirmationLedger). A vehicle that silently ignored a
-        // command ends up "confirmation_timed_out" — or stays pending on "accepted"/"delivered" —
+        // command ends up "confirmation_timed_out" – or stays pending on "accepted"/"delivered" –
         // and neither may inflate the rate the way a plain != "failed" test allowed.
         let successCount = records.filter { ["completed", "confirmed", "acknowledged"].contains($0.status) }.count
         let counts = Dictionary(grouping: records, by: \.command).mapValues(\.count)
@@ -475,7 +475,7 @@ enum HistoryInsights {
 
     /// Splits a chronologically-sorted series into runs with no internal gap larger than
     /// `maxGap`, so a chart can render each run as its own line instead of drawing a straight
-    /// edge across a period with no data — e.g. the car sitting unplugged and unused for weeks.
+    /// edge across a period with no data – e.g. the car sitting unplugged and unused for weeks.
     static func segments<T>(of points: [T], maxGap: TimeInterval, timestamp: (T) -> Date) -> [[T]] {
         guard let firstPoint = points.first else { return [] }
         var result: [[T]] = [[firstPoint]]
@@ -564,7 +564,7 @@ extension HistoryInsights {
     }
 
     /// Estimates remaining filter life from the *observed* wear rate across stored air-quality
-    /// samples — explicitly a guesstimate: it extrapolates a linear rate from sparse readings
+    /// samples – explicitly a guesstimate: it extrapolates a linear rate from sparse readings
     /// and assumes usage stays similar. Returns nil until at least 0.5 percentage points of
     /// decline have been observed over at least 7 days.
     static func filterLifeEstimate(from records: [AirQualityRecord]) -> FilterLifeEstimate? {
@@ -586,7 +586,7 @@ extension HistoryInsights {
 
     /// Lifetime energy cost per distance driven, from stored charging sessions and odometer
     /// history. Both figures are local estimates; nil when either side lacks data.
-    /// - Parameter fuelCost: manual fill-up spend for PHEV/ICE — combined with electricity
+    /// - Parameter fuelCost: manual fill-up spend for PHEV/ICE – combined with electricity
     ///   so hybrid economics are complete instead of silently electric-only.
     static func costPerKm(totalEnergyKwh: Double?, pricePerKwh: Double,
                           odometerPoints: [OdometerPoint],
@@ -601,7 +601,7 @@ extension HistoryInsights {
 
 extension HistoryInsights {
     /// Detects a completed session whose peak power is dramatically below what this vehicle
-    /// usually achieves at the same named location — a classic failing-cable / derated-EVSE
+    /// usually achieves at the same named location – a classic failing-cable / derated-EVSE
     /// signal. Requires ≥3 comparable sessions so a first visit can never trigger it.
     static func sessionPeakAnomaly(currentPeakKw: Double,
                                    priorPeaksKwAtSameLocation: [Double]) -> Bool {
@@ -637,7 +637,7 @@ extension HistoryInsights {
 // MARK: - Chart scrubbing
 
 extension HistoryInsights {
-    /// The element of `points` whose `timestamp` is closest to `date` — the point a chart
+    /// The element of `points` whose `timestamp` is closest to `date` – the point a chart
     /// scrub gesture snaps its readout to.
     static func nearest<T>(to date: Date, in points: [T], timestamp: (T) -> Date) -> T? {
         points.min { abs(timestamp($0).timeIntervalSince(date)) < abs(timestamp($1).timeIntervalSince(date)) }
@@ -665,7 +665,7 @@ extension HistoryInsights {
                 DateInterval(start: previousMonthStart, end: previousEnd))
     }
 
-    /// Year-to-date paired with the same span a year earlier — the basis for a year-over-year
+    /// Year-to-date paired with the same span a year earlier – the basis for a year-over-year
     /// line on the comparison card.
     static func yearToDateWindows(now: Date = Date(), calendar: Calendar = .current)
         -> (current: DateInterval, previous: DateInterval)? {
@@ -883,8 +883,8 @@ extension HistoryInsights {
     }
 
     /// Rough well-to-wheel CO₂ comparison for distance driven electrically vs a comparable
-    /// petrol car. Every input is an estimate — grid intensity varies by time and region, and
-    /// the petrol baseline is a segment average, not the driver's former car — so callers
+    /// petrol car. Every input is an estimate – grid intensity varies by time and region, and
+    /// the petrol baseline is a segment average, not the driver's former car – so callers
     /// should present the result as indicative. `nil` for non-positive distance/consumption.
     static func emissionsComparison(electricKm: Double,
                                     consumptionKwhPer100Km: Double,

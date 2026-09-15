@@ -5,6 +5,20 @@ struct VehicleActivityList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // With no events this rendered the footnote and nothing else, which reads as content
+            // that failed to load above it rather than as an empty list.
+            if events.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "moon.zzz")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(L10n.text("Nothing has changed while Hisingen was running."))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .hisCaptionLeading()
+            }
             ForEach(events) { event in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {

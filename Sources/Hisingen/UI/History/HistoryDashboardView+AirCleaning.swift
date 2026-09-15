@@ -6,11 +6,8 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "wind", title: L10n.text("Observed Air-Cleaning Runs"), color: .mint)
-                if cycles.isEmpty {
-                    Text(L10n.text("No paired running and stopped readings in this period."))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                PaginatedSection(items: cycles, pageSize: 10, resetKeys: [periodLoadKey]) { visible, footer in
+                PaginatedSection(items: cycles, pageSize: 10, resetKeys: [periodLoadKey],
+                                 emptyMessage: L10n.text("No air-cleaning cycles were recorded in this period.")) { visible, footer in
                     ForEach(visible) { cycle in
                         HStack {
                             Text(cycle.startedAt, style: .date)

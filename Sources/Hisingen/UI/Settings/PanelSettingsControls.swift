@@ -35,11 +35,11 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: option.symbol)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .hisType(.heading, weight: isSelected ? .semibold : .regular)
                         Text(option.title)
-                            .font(.system(size: 9, weight: isSelected ? .semibold : .regular))
+                            .hisType(.caption, weight: isSelected ? .semibold : .regular)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.85)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
@@ -54,10 +54,9 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.ink)
                 }
                 .buttonStyle(.pressable)
-                .withoutFocusRing()
                 .accessibilityLabel("\(option.title). \(option.subtitle)")
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                .help("\(option.title) — \(option.subtitle)")
+                .help("\(option.title) – \(option.subtitle)")
             }
         }
     }
@@ -94,12 +93,12 @@ struct PanelProportionPreview: View {
                 )
                 .frame(width: actual.width, height: actual.height)
             Text("\(Int(layout.width)) × \(Int(layout.unclampedHeight))")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .hisType(.micro, weight: .semibold, design: .monospaced)
                 .foregroundStyle(HisingenTheme.ink)
         }
         .frame(width: box.width, height: box.height)
         // Ghost and current rectangles settle between presets instead of snapping.
-        .animation(Motion.resolve(Motion.layout), value: layout)
+        .hisAnimation(Motion.layout, value: layout)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.format("Panel is %@ points wide and %@ points tall",
                                         String(Int(layout.width)), String(Int(layout.unclampedHeight))))
@@ -115,7 +114,7 @@ struct PanelCustomSizeControls: View {
     @Binding var width: Double
     @Binding var height: Double
     /// True when a custom size was already committed (persisted) when the control
-    /// appeared — enabling custom mode must not clobber it with the preset.
+    /// appeared – enabling custom mode must not clobber it with the preset.
     let hasCommittedSize: Bool
     /// Seeds the sliders from the active preset the first time custom mode turns on.
     let seedValues: () -> (width: Double, height: Double)
@@ -130,9 +129,9 @@ struct PanelCustomSizeControls: View {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("Custom Size"))
-                        .font(.system(size: 12, weight: .medium))
+                        .hisType(.body, weight: .medium)
                     Text(L10n.text("Independent width and height overrides"))
-                        .font(.system(size: 10))
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -142,7 +141,7 @@ struct PanelCustomSizeControls: View {
                     .controlSize(.small)
                     .onChange(of: isEnabled) { _, newValue in
                         // Seed from the resolved geometry on the false→true transition,
-                        // but only when no custom size was previously committed — the
+                        // but only when no custom size was previously committed – the
                         // host always initializes positive values, so a width/height == 0
                         // check would never fire.
                         if newValue && !hasCommittedSize && !committedWhileVisible {
@@ -172,14 +171,14 @@ struct PanelCustomSizeControls: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(Motion.resolve(Motion.layout), value: isEnabled)
+        .hisAnimation(Motion.layout, value: isEnabled)
     }
 
     private func dimensionSlider(label: String, value: Binding<Double>,
                                  range: ClosedRange<CGFloat>, step: CGFloat) -> some View {
         HStack(spacing: 8) {
             Text(label)
-                .font(.system(size: 11))
+                .hisType(.label)
                 .frame(width: 44, alignment: .leading)
             Slider(value: Binding(
                 get: { Double(value.wrappedValue) },
@@ -193,8 +192,9 @@ struct PanelCustomSizeControls: View {
                 }
             ), in: Double(range.lowerBound)...Double(range.upperBound))
             Text("\(Int(value.wrappedValue))")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
+                // `design: .monospaced` already gives tabular figures; the extra
+                // `.monospacedDigit()` was a no-op.
+                .hisType(.caption, weight: .semibold, design: .monospaced)
                 .frame(width: 32, alignment: .trailing)
                 .foregroundStyle(.secondary)
         }

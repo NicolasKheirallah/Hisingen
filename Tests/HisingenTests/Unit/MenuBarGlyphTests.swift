@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Hisingen
 
-/// Which bundled Hisingen artwork the menu bar shows for a set of signals —
+/// Which bundled Hisingen artwork the menu bar shows for a set of signals –
 /// the drawable half of `MenuBarIconState`'s priority machine. The PNGs
 /// themselves are judged on screen; this covers the logic that picks them.
 @Suite
@@ -15,7 +15,7 @@ struct MenuBarGlyphTests {
 
     @Test
     func offlineWinsOverEverythingElse() {
-        // No data (or stale data) is the loudest statement the bar can make —
+        // No data (or stale data) is the loudest statement the bar can make –
         // even a charging fault cannot be drawn on top of "not connected".
         let inputs = MenuBarIconInputs(
             isCharging: true, pluggedIn: true, climateActive: true, alarmTriggered: true
@@ -74,7 +74,7 @@ struct MenuBarGlyphTests {
         let completed = MenuBarIconInputs(chargingRecentlyCompleted: true, pluggedIn: true)
         #expect(MenuBarGlyph.resolve(inputs: completed, offline: false, connectionGlyphsEnabled: false) == .normal)
 
-        // Climate and warnings are not connection details — they still surface.
+        // Climate and warnings are not connection details – they still surface.
         let preconditioning = MenuBarIconInputs(pluggedIn: true, climateActive: true)
         #expect(MenuBarGlyph.resolve(inputs: preconditioning, offline: false, connectionGlyphsEnabled: false) == .climateActive)
         #expect(MenuBarGlyph.resolve(inputs: MenuBarIconInputs(alarmTriggered: true), offline: false, connectionGlyphsEnabled: false) == .warning)

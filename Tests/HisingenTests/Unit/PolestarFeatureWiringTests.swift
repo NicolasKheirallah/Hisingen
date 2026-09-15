@@ -146,7 +146,7 @@ struct PolestarFeatureWiringTests {
 
     @Test func ownerGateRunsBeforeFreshnessGate() {
         // An owner-explicit-false state with a stale snapshot must report the ownership
-        // reason, not the refresh reason — ownership is a policy fact, not a timing one.
+        // reason, not the refresh reason – ownership is a policy fact, not a timing one.
         var state = makeState(userIsOwner: false)
         state.freshness.fetchedAt = Date().addingTimeInterval(-60 * 60)
         let gate = CapabilityGate()

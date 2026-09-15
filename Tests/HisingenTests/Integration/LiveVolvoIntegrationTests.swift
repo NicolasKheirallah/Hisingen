@@ -15,7 +15,7 @@ private let liveVolvoCredentialsConfigured: Bool = {
 // The probe tests below deliberately send credentials that Volvo's identity provider
 // rejects (client_credentials and ROPC grants this client is not entitled to, plus a
 // scripted Volvo ID form post). PingFederate counts every rejection towards a per-client
-// lockout — running them unattended on every `swift test` locked the production client
+// lockout – running them unattended on every `swift test` locked the production client
 // out of the token endpoint. They stay opt-in, and never carry a credential fallback.
 private let volvoProbeRequiredVariables = [
     "HISINGEN_ENABLE_VOLVO_PROBES",
@@ -112,7 +112,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
         var req = URLRequest(url: authURL)
         req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: req)
-        // TESTS-08: hard signals — the probe fails (not just prints) when the IdP does not
+        // TESTS-08: hard signals – the probe fails (not just prints) when the IdP does not
         // answer or the authorize form no longer exposes its authenticate action.
         let http = try #require(response as? HTTPURLResponse, "authorize probe must get an HTTP response")
         print("  • Authorize Response Status: HTTP \(http.statusCode)")
@@ -161,9 +161,9 @@ struct LiveVolvoReadOnlyIntegrationTests {
             let parsedRejection = postHtml.contains("\"message\":")
                 || (400...499).contains(postHttp.statusCode)
             #expect(receivedCode || parsedRejection,
-                    "form POST produced neither an authorization code nor a parsed rejection — the flow shape changed")
+                    "form POST produced neither an authorization code nor a parsed rejection – the flow shape changed")
         } else {
-            Issue.record("Volvo authorize form no longer exposes the authenticate action URL — form-shape regression")
+            Issue.record("Volvo authorize form no longer exposes the authenticate action URL – form-shape regression")
         }
         print("========================================================\n")
     }
@@ -285,7 +285,7 @@ struct LiveVolvoReadOnlyIntegrationTests {
             }
         }
 
-        // TESTS-08: hard signal — the sweep must reach at least one endpoint successfully;
+        // TESTS-08: hard signal – the sweep must reach at least one endpoint successfully;
         // per-endpoint 401s are expected when the deliberately-rejected grants yield no token.
         let successfulEndpoints = endpointStatuses.filter { (200...299).contains($0.status) }
         #expect(!successfulEndpoints.isEmpty,

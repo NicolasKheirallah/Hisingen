@@ -3,7 +3,7 @@ import Testing
 @testable import Hisingen
 
 /// Coverage for the round-3 insight helpers: filter-life guesstimate and lifetime
-/// cost-per-km. Both are explicitly estimates — the tests pin their honest-failure
+/// cost-per-km. Both are explicitly estimates – the tests pin their honest-failure
 /// behaviour (nil until enough data exists) as much as their arithmetic.
 struct InsightEstimatesTests {
 

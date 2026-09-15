@@ -213,7 +213,7 @@ struct MeasurementUnitsAndThemeTests {
         #expect(chargeLid.x < rearDoor.x)
     }
 
-    // TESTS-14: testPolestarAndVolvoSoftwareVersionResolution was deleted — it only
+    // TESTS-14: testPolestarAndVolvoSoftwareVersionResolution was deleted – it only
     // asserted memberwise-init passthrough (each field equal to the literal it was built
     // with). Real software-version resolution/precedence is covered by
     // PolestarMyCarsTests.installedAndPendingVersionsRemainDistinct.

@@ -243,7 +243,7 @@ struct KeychainStore: Sendable {
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
     /// holding three secrets, so concurrent single-field writes (e.g. a sign-in flow saving
     /// the client secret while a token refresh persists the session token) would otherwise
-    /// drop one of the fields — last writer wins with its stale copy of the other two.
+    /// drop one of the fields – last writer wins with its stale copy of the other two.
     private func mutateVolvoBundle(_ mutate: (inout VolvoSecretBundle) -> Void) throws {
         volvoBundleLock.lock()
         defer { volvoBundleLock.unlock() }

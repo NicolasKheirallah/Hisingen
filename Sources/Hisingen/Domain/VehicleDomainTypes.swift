@@ -40,6 +40,17 @@ enum ScheduleKind: String, Codable, Sendable {
 }
 
 struct VehicleSchedule: Codable, Equatable, Sendable {
+    /// Stable identity for a list row.
+    ///
+    /// A backend row is identified by its `backendID`; a locally added one has none until the
+    /// backend answers, so its position and kind stand in. The schedule editor keyed its rows on
+    /// the array index while animating on `backendID`, so deleting a row animated content into the
+    /// wrong slot.
+    var rowIdentity: String {
+        if let backendID { return "backend-\(backendID)" }
+        return "local-\(kind.rawValue)-\(startHour ?? -1):\(startMinute ?? -1)-\(weekdays.map(\.rawValue).sorted().map(String.init).joined(separator: ","))"
+    }
+
     let backendID: String?
     let index: Int?
     let kind: ScheduleKind
@@ -128,6 +139,12 @@ enum VehicleOpening: String, Codable, CaseIterable, Sendable {
         case .sunroof: return L10n.text("Sunroof")
         }
     }
+
+    /// The side windows, in the order the app lists them. Used to summarise window state beside the
+    /// commands that move them.
+    static let sideWindows: [VehicleOpening] = [
+        .frontLeftWindow, .frontRightWindow, .rearLeftWindow, .rearRightWindow
+    ]
 }
 
 enum OpeningState: Int, Codable, Sendable {
@@ -191,6 +208,16 @@ struct ExteriorSnapshot: Codable, Equatable, Sendable {
 
     var itemsNeedingAttention: [VehicleOpening] {
         openings.filter { $0.state == .open || $0.state == .ajar }.map(\.opening)
+    }
+
+    /// The side windows this snapshot carries a reading for, in a fixed order. Empty when the
+    /// vehicle reports no window position at all, which is not the same as every window closed.
+    /// The opening commands are physical and cannot be verified by looking at the app, so this is
+    /// what lets the card that offers them state what it knows.
+    var windowStates: [OpeningState] {
+        VehicleOpening.sideWindows.compactMap { window in
+            openings.first { $0.opening == window }?.state
+        }
     }
 
     var physicalDoorCount: Int {
@@ -387,7 +414,7 @@ enum SoftwareStateRaw: Int, Codable, Sendable {
     /// Whether the `SchedulerService` will accept `Schedule`/`InstallNow` in this state.
     /// Verified live: states 3, 10, 12 are accepted; 15 is rejected with
     /// "The software with software id … is not ready to be scheduled!"
-    /// Note: `downloadReady` (1) means "ready to download" — the vehicle hasn't downloaded
+    /// Note: `downloadReady` (1) means "ready to download" – the vehicle hasn't downloaded
     /// the payload yet, so installation is NOT possible. Only `downloadCompleted` (3) and
     /// the deferred/scheduled states are installable.
     var isInstallable: Bool {
@@ -428,7 +455,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     /// (observed: 5400 = 90 min). `nil` when not reported.
     var estimatedInstallDurationSeconds: Int?
     var scheduledAt: Date?
-    /// Who set the schedule (APP, HMI, CLOUD) — from `SchedulerService/GetSchedule` field 5.
+    /// Who set the schedule (APP, HMI, CLOUD) – from `SchedulerService/GetSchedule` field 5.
     var scheduleSetBy: ScheduleSetBy?
     let updatedAt: Date?
     var installedVersion: String?
@@ -672,7 +699,7 @@ enum AirCleaningState: String, Codable, Sendable {
     }
 }
 
-/// Who asked for the current/last pre-cleaning cycle — `PreCleaningStartReason` (field 7).
+/// Who asked for the current/last pre-cleaning cycle – `PreCleaningStartReason` (field 7).
 enum AirCleaningStartReason: Int, Codable, Sendable {
     case unspecified = 0
     case remote = 1
@@ -726,7 +753,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     /// Precise backend error classification (field 13). `nil` when the field is absent.
     let errorKind: AirCleaningError?
     /// When the cabin air was last measured (field 2). Updates on vehicle wakes and at the
-    /// end of a cleaning cycle — distinct from `reportedAt` (field 1, the frame time).
+    /// end of a cleaning cycle – distinct from `reportedAt` (field 1, the frame time).
     var measuredAt: Date? = nil
 
     init(
@@ -817,7 +844,7 @@ enum ChargerPowerState: String, Codable, Sendable {
 }
 
 /// One undecoded protobuf field from a Polestar response, preserved so nothing on the wire
-/// disappears silently. Semantics are intentionally unknown — values are shown raw in the
+/// disappears silently. Semantics are intentionally unknown – values are shown raw in the
 /// diagnostics surfaces and reclassified as they are identified by live probing.
 struct PolestarRawWireField: Codable, Equatable, Sendable {
     let field: Int
@@ -1094,17 +1121,22 @@ struct ChargingSample: Codable, Equatable, Sendable {
     /// AC/DC/wireless, when the provider reported it for this reading. Defaults to `.unknown`
     /// for samples recorded before this field existed or when the provider omitted the type.
     let chargingType: ChargingType
+    /// True when Hisingen derived this point from a single snapshot rather than observing it.
+    /// The charging chart drew such a point like any other sample, so an inferred reading looked
+    /// like a measurement.
+    let isSynthesised: Bool
 
     init(timestamp: Date = Date(), batteryPercentage: Double, powerWatts: Int? = nil,
-         chargingType: ChargingType = .unknown) {
+         chargingType: ChargingType = .unknown, isSynthesised: Bool = false) {
         self.timestamp = timestamp
         self.batteryPercentage = batteryPercentage
         self.powerWatts = powerWatts
         self.chargingType = chargingType
+        self.isSynthesised = isSynthesised
     }
 
     private enum CodingKeys: String, CodingKey {
-        case timestamp, batteryPercentage, powerWatts, chargingType
+        case timestamp, batteryPercentage, powerWatts, chargingType, isSynthesised
     }
 
     init(from decoder: Decoder) throws {
@@ -1114,6 +1146,9 @@ struct ChargingSample: Codable, Equatable, Sendable {
         powerWatts = try c.decodeIfPresent(Int.self, forKey: .powerWatts)
         // Absent key = sample recorded before this field existed.
         chargingType = try c.decodeIfPresent(ChargingType.self, forKey: .chargingType) ?? .unknown
+        // Absent in anything recorded before the flag existed, and an older sample was observed
+        // rather than derived, so the default is the safe direction.
+        isSynthesised = try c.decodeIfPresent(Bool.self, forKey: .isSynthesised) ?? false
     }
 }
 
@@ -1161,7 +1196,7 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     var controlSettings: VehicleControlSettings? = nil
     let identity: VehicleBackendIdentity?
     /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
-    /// installed version from the `Car.consumerSoftwareVersion` field — `GetSoftwareInfo`
+    /// installed version from the `Car.consumerSoftwareVersion` field – `GetSoftwareInfo`
     /// does not report the installed version during a rollout, only the target.
     let installedSoftwareVersion: String?
     /// Whether the vehicle supports full OTA updates (not just minor patches).
@@ -1169,7 +1204,7 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     /// Whether remote OTA install scheduling is supported (`Schedule`/`InstallNow`).
     let supportsRemoteOtaInstallSchedule: Bool
     /// Whether the vehicle supports cloud-based OTA download consent. When `false`, the
-    /// download authorization cannot be triggered by a cloud API — the TCU must check in
+    /// download authorization cannot be triggered by a cloud API – the TCU must check in
     /// autonomously and the backend must have the VIN in the rollout cohort.
     let supportsCloudBasedOtaDownloadConsent: Bool
     /// Whether the vehicle reports update status via the `supportsUpdateStatus` flag.

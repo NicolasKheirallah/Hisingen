@@ -4,7 +4,7 @@ import Testing
 
 /// Pins the market-price session estimator: trapezoidal sample energy priced by the hourly
 /// (or quarterly) spot series at each interval's midpoint, scaled to the authoritative
-/// session energy, and `nil` — never an invented rate — whenever the price series does not
+/// session energy, and `nil` – never an invented rate – whenever the price series does not
 /// fully cover the charged window.
 struct ChargingSpotCostTests {
     private let zoneStart = Date(timeIntervalSince1970: 1_789_100_000)

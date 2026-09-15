@@ -41,7 +41,7 @@ final class URLCommandRouter: NSObject {
         super.init()
     }
 
-    /// Registers for the `GetURL` Apple Event — `hisingen://…` opened while the app is already
+    /// Registers for the `GetURL` Apple Event – `hisingen://…` opened while the app is already
     /// running, plus the OAuth redirect handed back by the system browser.
     func startHandlingAppleEvents() {
         NSAppleEventManager.shared().setEventHandler(
@@ -149,7 +149,7 @@ final class URLCommandRouter: NSObject {
     }
 
     /// Deep-link command dispatch. Brand policy lives in `CapabilityGate` + the provider
-    /// command catalog — the same single answer the Controls tab and Shortcuts intents get —
+    /// command catalog – the same single answer the Controls tab and Shortcuts intents get –
     /// so a deep link cannot contradict the in-app surface for the same command.
     private func dispatch(_ command: RemoteCommand, targetVIN: String?) {
         context?.performRemoteCommand(command, targetVIN: targetVIN)

@@ -4,6 +4,8 @@ import SwiftUI
 struct OTAControlsCard: View {
     let state: VehicleState
     let gate: ControlsCommandGate
+    /// Asks the host to re-read the vehicle, so a failed install has somewhere to go.
+    let onRefresh: () -> Void
 
     @State private var otaScheduleDelayMinutes: Int = 120
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,7 +18,7 @@ struct OTAControlsCard: View {
                     title: L10n.text("Vehicle Software & OTA"),
                     color: .blue
                 )
-                gate.dimReason(gate.cardAvailability([.installOTANow]))
+                gate.dimReason(gate.liveAvailability([.installOTANow]))
                 if let software = state.softwareInfo {
                     // One keyed animation drives the whole status morph: symbol
                     // replace-crossfade, progress line and action groups in/out.
@@ -25,7 +27,7 @@ struct OTAControlsCard: View {
                         otaProgressLine(software)
                         otaActions(software)
                     }
-                    .animation(Motion.resolveCrossfade(Motion.stateChange), value: software.state)
+                    .hisAnimation(Motion.stateChange, value: software.state)
                 } else {
                     otaStatusRow(
                         symbol: "questionmark.circle.fill",
@@ -35,8 +37,8 @@ struct OTAControlsCard: View {
                 }
             }
         }
-        .opacity(gate.cardOpacity([.installOTANow]))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability([.installOTANow]))
+        .opacity(gate.liveOpacity([.installOTANow]))
+        .hisAnimation(Motion.stateChange, value: gate.liveAvailability([.installOTANow]))
     }
 
     @ViewBuilder
@@ -89,6 +91,21 @@ struct OTAControlsCard: View {
                 tint: HisingenTheme.semanticWarning,
                 text: L10n.text("The last software update failed.")
             )
+            // The card narrated the failure and then offered nothing at all: no retry, no re-check,
+            // no route onward. The only re-probe button on the tab appears for a different
+            // condition, so a user who hit this was stuck with a sentence.
+            Button(action: onRefresh) {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.clockwise")
+                    Text(L10n.text("Re-check Software Status"))
+                        .hisType(.caption, weight: .medium)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help(L10n.text("Checks the vehicle again for the current software status."))
+            .transition(.opacity)
         case .failed:
             otaStatusRow(
                 symbol: "clock.arrow.circlepath",
@@ -119,7 +136,7 @@ struct OTAControlsCard: View {
                 ProgressView().controlSize(.small).scaleEffect(0.8)
                 if let seconds = software.estimatedInstallDurationSeconds, seconds > 0 {
                     Text(L10n.format("Estimated %d min", max(1, seconds / 60)))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -159,6 +176,8 @@ struct OTAControlsCard: View {
             }
             .transition(.opacity)
         case .available, .downloading, .installing, .failed, .completed, .unknown:
+            // A failure that still requires attention renders its own action beside the status
+            // line, because it is the state's explanation and its way out together.
             EmptyView()
         }
     }
@@ -178,7 +197,7 @@ struct OTAControlsCard: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "calendar.badge.plus")
-                    Text(L10n.text("Schedule")).font(.system(size: 10, weight: .medium))
+                    Text(L10n.text("Schedule")).hisType(.caption, weight: .medium)
                 }
             }
             .buttonStyle(.bordered)
@@ -193,7 +212,7 @@ struct OTAControlsCard: View {
                 .foregroundStyle(tint)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             Text(text)
-                .font(.system(size: 11, weight: .medium))
+                .hisType(.label, weight: .medium)
                 .foregroundStyle(HisingenTheme.ink)
             Spacer(minLength: 0)
         }

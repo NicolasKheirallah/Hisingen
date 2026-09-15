@@ -49,6 +49,39 @@ struct RemoteCommandTests {
     }
 
     @Test
+    @MainActor
+    func testPendingAuthorizationReservesCommandLane() async throws {
+        let suiteName = "HisingenTests.command-auth-reservation.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.vin = "YSMFIRST"
+        var features = FeatureSelection.default
+        features.set(.remoteLocks, enabled: true)
+        preferences.features = features
+
+        let provider = CommandContextProvider()
+        let context = CommandContextMock(provider: provider, vehicleState: vehicle(vin: "YSMFIRST"))
+        let authorizer = DeferredCommandAuthorizer()
+        let coordinator = CommandCoordinator(
+            context: context, preferences: preferences, database: .inMemory(), authorizer: authorizer
+        )
+
+        let first = Task { await coordinator.perform(.lock) }
+        await authorizer.waitForAuthorizationRequest()
+        let quickAction = await coordinator.perform(.unlock)
+        if case .deferred(let reason) = quickAction {
+            #expect(reason == RemoteCommandError.busy.localizedDescription)
+        } else {
+            Issue.record("A notification action must not enter authorization while another approval is pending")
+        }
+        #expect(await provider.executedCount() == 0)
+        authorizer.allow()
+        _ = await first.value
+        #expect(await provider.executedCount() == 1)
+    }
+
+    @Test
     func testRemoteFeaturesAreDisabledByDefault() {
         #expect(FeatureSelection.default.enabled.intersection(AppFeature.remoteFeatures).isEmpty)
         #expect(RemoteCommand.unlock.feature == .remoteLocks)
@@ -177,7 +210,9 @@ struct RemoteCommandTests {
         let honk = RemoteCommand.honkHorn
         #expect(honk.feature == .remoteHonkFlash)
         #expect(honk.requiredCapability == .honkAndFlash)
-        #expect(honk.risk == .routine)
+        // Audible outside the car and not retractable: reclassified from `.routine` so it is
+        // confirmed like the other security-sensitive commands rather than firing on one click.
+        #expect(honk.risk == .securitySensitive)
         #expect(honk.identifier == "honk-horn")
         #expect(!(honk.title.isEmpty))
     }
@@ -624,7 +659,7 @@ struct RemoteCommandTests {
     @Test
     func testStartingTelemetryReplacesOptimisticClimateDuringGracePeriod() {
         // Regression: the car sits in the backend's STARTING state after a start command,
-        // and that reading must count as a live session — replacing the synthesized
+        // and that reading must count as a live session – replacing the synthesized
         // optimistic heating instead of being discarded as a non-running state, while a
         // stale idle frame still cannot revert the lock.
         var previous = VehicleState(

@@ -119,7 +119,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
-    /// The slow integrity poll still runs while the stream is healthy — that is the drift
+    /// The slow integrity poll still runs while the stream is healthy – that is the drift
     /// check the design keeps, and it is the only thing that fetches.
     @Test
     func integrityPollStillFetchesWhileStreamIsHealthy() async throws {
@@ -148,7 +148,7 @@ struct RefreshCoordinatorStreamTests {
     // MARK: - Reconnect behavior
 
     /// Transient disconnects reconnect with the collapsed backoff ladder and never touch the
-    /// token endpoints — and never run two streams at once.
+    /// token endpoints – and never run two streams at once.
     @Test
     func transientReconnectsCarryNoTokenGrantsAndNeverOverlap() async throws {
         let (defaults, suite) = try makeDefaults()
@@ -207,8 +207,8 @@ struct RefreshCoordinatorStreamTests {
 
     // MARK: - Purpose gating
 
-    /// When charging ends, the battery stream closes — it has nothing fresh to say about an
-    /// idle car — and the regular poll cadence returns.
+    /// When charging ends, the battery stream closes – it has nothing fresh to say about an
+    /// idle car – and the regular poll cadence returns.
     @Test
     func endingChargingStopsTheStreamAndRestoresPolling() async throws {
         let (defaults, suite) = try makeDefaults()
@@ -238,7 +238,7 @@ struct RefreshCoordinatorStreamTests {
 
     /// A lock command opens a short exterior-confirmation stream in place of the battery
     /// stream; when the window lapses the watchdog closes it and the charging gate decides
-    /// again — an expired confirmation stream must never linger as "the live stream".
+    /// again – an expired confirmation stream must never linger as "the live stream".
     @Test
     func commandConfirmationWindowOpensAndClosesTheExteriorStream() async throws {
         let (defaults, suite) = try makeDefaults()
@@ -1217,7 +1217,7 @@ struct RefreshCoordinatorStreamTests {
     }
 
     /// Switching vehicles cancels the old stream and opens at most one stream for the new
-    /// VIN — the expired task's cleanup must not resurrect state for a car we left.
+    /// VIN – the expired task's cleanup must not resurrect state for a car we left.
     @Test
     func vehicleSwitchCancelsTheOldStreamBeforeStartingTheNew() async throws {
         let (defaults, suite) = try makeDefaults()
@@ -1288,7 +1288,7 @@ private enum StreamBehavior: Sendable {
 }
 
 /// Lock-protected record of stream opens. `onTermination` runs on an arbitrary executor, so
-/// actor isolation cannot protect this state — and test closures read it synchronously.
+/// actor isolation cannot protect this state – and test closures read it synchronously.
 private final class StreamRecorder: @unchecked Sendable {
     private let lock = NSLock()
     var opened = 0

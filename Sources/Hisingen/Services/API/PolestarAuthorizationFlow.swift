@@ -4,7 +4,7 @@ import Foundation
 /// so a URI one flow accepts and the other rejects cannot diverge silently.
 enum OAuthCallback {
     /// The app-scheme callback carries no path, which URL reports as "" here and "/" in some
-    /// redirect forms — treat those as equal; longer paths compare without a trailing slash.
+    /// redirect forms – treat those as equal; longer paths compare without a trailing slash.
     static func normalizedPath(_ url: URL) -> String {
         let path = url.path
         guard path.count > 1 else { return path == "/" ? "" : path }

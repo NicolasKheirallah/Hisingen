@@ -99,7 +99,7 @@ extension PolestarGRPC {
         }
 
         // `Scheduler`: 1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by.
-        // This is a second source of the software id — it stays populated for a scheduled
+        // This is a second source of the software id – it stays populated for a scheduled
         // install even when GetSoftwareInfo has nothing to report, which is what makes
         // "cancel a scheduled installation" reachable.
         var scheduledAt: Date?
@@ -250,7 +250,7 @@ extension PolestarGRPC {
 
     /// Fetches vehicle information from `car_information.CarInformation/GetMyCars` (C3 gRPC).
     /// Returns backend-authoritative capability flags and the **actually installed** software
-    /// version (`consumerSoftwareVersion`) — which `GetSoftwareInfo` does not provide during
+    /// version (`consumerSoftwareVersion`) – which `GetSoftwareInfo` does not provide during
     /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
         let body = try await firstMessage(path: Self.myCarsPath, message: Self.myCarsRequest(vin: vin),
@@ -502,7 +502,7 @@ extension PolestarGRPC {
         var locked: Bool?
         var alarm: Bool?
         // `Exterior.tailgate_lock` (field 16) is an independent LockStatus in the upstream
-        // schema — it says whether the tailgate itself is locked, which is not derivable
+        // schema – it says whether the tailgate itself is locked, which is not derivable
         // from field 12 (whether the tailgate is open) and must not be inferred from it.
         var tailgateLocked: Bool?
         var reportedAt: Date?
@@ -648,7 +648,7 @@ extension PolestarGRPC {
             if lowVoltage == 2 { warnings.append(.lowVoltageBattery) }
         }
         // Tyre pressure warnings live on `tyres[].warning`, not a dedicated proto field, so they
-        // must be folded into `warnings` explicitly — otherwise `Notifier.warningLabels` (which
+        // must be folded into `warnings` explicitly – otherwise `Notifier.warningLabels` (which
         // only reads `healthDetails.warnings`) never sees a flagged tyre and no notification
         // fires even though the UI already shows it under "Needs Attention."
         if tyres.contains(where: { $0.warning != .unknown }) {
@@ -703,7 +703,7 @@ extension PolestarGRPC {
     /// `5 install_info{1 estimated_duration_seconds}`, `6 new_sw_version`,
     /// `8 schedule_info{2 scheduled_at}`, `10 state_timestamp{1 seconds}`, `11 originator`.
     ///
-    /// Field 5 is a nested message (not a scalar varint) — confirmed by
+    /// Field 5 is a nested message (not a scalar varint) – confirmed by
     /// `testDecodeGetSoftwareInfoRecursively`: `f5: msg(3){f1: varint=5400}`.
     static func parseSoftware(_ data: Data) -> VehicleSoftwareInfo {
         let fields = Protobuf.fields(data)
@@ -723,7 +723,7 @@ extension PolestarGRPC {
         // `new_sw_version` is the only version string the backend returns, and its meaning
         // depends on `state`: while an update is pending it is the *target* version, and the
         // running version is not reported at all. Only in the settled states does it describe
-        // what is actually on the car. Anything not settled leaves `installedVersion` nil —
+        // what is actually on the car. Anything not settled leaves `installedVersion` nil –
         // `VehicleState.merged` carries the last settled reading forward so the UI can still
         // show "installed → available" during a rollout.
         let describesInstalled: Bool
@@ -753,7 +753,7 @@ extension PolestarGRPC {
 
     /// `ota_mobcache.SoftwareState`. The enum it mirrors runs 0…14; 15 is an extra value this
     /// backend has been observed emitting for an update that has been *announced* but not yet
-    /// *authorized for download* — distinct from 1 (`DOWNLOAD_READY`, which means the payload
+    /// *authorized for download* – distinct from 1 (`DOWNLOAD_READY`, which means the payload
     /// has been downloaded and is ready to install). Both collapse into `.available` here for
     /// UI continuity; the precise distinction is preserved in `VehicleSoftwareInfo.rawState`
     /// (see `SoftwareStateRaw`). Pinned by
@@ -790,7 +790,7 @@ extension PolestarGRPC {
     /// Wire fields on the `GetMyCars` Car message whose meaning Hisingen has decoded. Any
     /// field number outside this set (and the nested sets below) is preserved raw in
     /// `VehicleOTACapabilities.unknownWireFields` so the richest raw surface the backend
-    /// offers loses nothing silently — mirroring the battery parser's unknown-field capture.
+    /// offers loses nothing silently – mirroring the battery parser's unknown-field capture.
     static let decodedCarFields: Set<Int> = [
         1, 2, 5, 6, 7, 9, 10, 16, 27, 32, 33, 34, 35, 36, 37, 39, 40, 42, 43, 46, 47,
         50, 57, 62, 68, 70, 73, 74, 87
@@ -854,7 +854,7 @@ extension PolestarGRPC {
             let supportsWindowsControl = locksData?.first(where: { $0.number == 5 })?.varint == 1
             let supportsTrunkControl = locksData?.first(where: { $0.number == 7 })?.varint == 1
             let supportsTrunkUnlock = locksData?.first(where: { $0.number == 10 })?.varint == 1
-            // Sunroof remote control (field 6) — captured as tri-state: nil when the field
+            // Sunroof remote control (field 6) – captured as tri-state: nil when the field
             // is absent so older vehicles don't read as "unsupported".
             let supportsSunroofControl: Bool? = locksData?.first(where: { $0.number == 6 })
                 .map { $0.varint == 1 }
@@ -1099,7 +1099,7 @@ extension PolestarGRPC {
             let starting = running == 3
             if active || starting {
                 // Wire field 6 correlates with session activity (3 idle, 2 during a verified
-                // live heating session) but its enum is unresolved — it must NOT be read as a
+                // live heating session) but its enum is unresolved – it must NOT be read as a
                 // ventilation flag, which mislabelled real heating sessions as ventilating.
                 // Classify by reported vs requested temperature when both exist.
                 if let current = interiorTemperature, let requested = requestedTemperature,
@@ -1125,7 +1125,7 @@ extension PolestarGRPC {
         }
         let timerTriggered = digitalTwin ? request == 3 : request == 2
         // Retain every field this parser does not semantically decode (on the digital-twin
-        // shape: 4, 5, 6, 9, 13 — 6/9/13 are live-observed but unresolved) so their values
+        // shape: 4, 5, 6, 9, 13 – 6/9/13 are live-observed but unresolved) so their values
         // accumulate for classification instead of disappearing.
         let decodedClimateFields: Set<Int> = digitalTwin
             ? [1, 2, 3, 7, 8, 10, 11, 12, 14, 15, 16]

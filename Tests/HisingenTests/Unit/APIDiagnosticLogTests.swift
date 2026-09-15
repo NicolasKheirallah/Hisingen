@@ -180,7 +180,7 @@ struct APIDiagnosticLogTests {
         let entries = await store.snapshot()
         let entry = try #require(entries.first)
 
-        // The type name alone cannot distinguish `server(statusCode: 503)` from 429 —
+        // The type name alone cannot distinguish `server(statusCode: 503)` from 429 –
         // the description must carry payload/codes.
         #expect(entry.errorType?.contains("URLError") == true)
         #expect(entry.durationMilliseconds >= 0)

@@ -44,7 +44,7 @@ struct RequestConstructionTests {
         #expect(core.contains("conve:vehicle_relation"))
         #expect(core.contains("openid"))
 
-        // A forged callback (wrong host) is rejected outright — and must leave the pending
+        // A forged callback (wrong host) is rejected outright – and must leave the pending
         // sign-in retryable rather than consuming it (API-11).
         let forged = try #require(URL(string: "https://example.invalid/callback?error=invalid_scope"))
         do {

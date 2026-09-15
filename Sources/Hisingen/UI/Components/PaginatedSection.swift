@@ -35,40 +35,59 @@ struct PaginatedSection<Row: Identifiable, Content: View>: View {
     private let resetKeys: [String]
     private let newerHelp: String
     private let olderHelp: String
+    /// Shown when there is nothing to paginate. The component rendered a page of nothing and a
+    /// footer reading "0–0 of 0", so every caller had to remember to guard it.
+    private let emptyMessage: String?
     private let content: (ArraySlice<Row>, PaginationFooter) -> Content
 
     @State private var page = 0
 
-    /// When any key changes — filter edit, period switch, fresh data — the list goes back
+    /// When any key changes – filter edit, period switch, fresh data – the list goes back
     /// to its first page, matching the behavior before paging moved into this module.
     init(items: [Row],
          pageSize: Int,
          resetKeys: [String] = [],
          newerHelp: String = L10n.text("Show newer entries"),
          olderHelp: String = L10n.text("Show older entries"),
+         emptyMessage: String? = nil,
          @ViewBuilder content: @escaping (ArraySlice<Row>, PaginationFooter) -> Content) {
         self.items = items
         self.pageSize = pageSize
         self.resetKeys = resetKeys
         self.newerHelp = newerHelp
         self.olderHelp = olderHelp
+        self.emptyMessage = emptyMessage
         self.content = content
     }
 
     var body: some View {
         let pageCount = HistoryPagination.pageCount(itemCount: items.count, pageSize: pageSize)
         let current = HistoryPagination.clampedPage(page, pageCount: pageCount)
-        // Keyed on the (clamped) page index so every page swap — footer navigation,
-        // filter reset, list shrinking under the last page — is a crossfade.
         Group {
-            content(HistoryPagination.page(of: items, index: current, pageSize: pageSize),
-                    PaginationFooter(page: current, pageCount: pageCount,
-                                     newerHelp: newerHelp, olderHelp: olderHelp) { page = $0 })
+            if items.isEmpty, let emptyMessage {
+                HisingenEmptyState(
+                    symbol: "tray",
+                    title: emptyMessage
+                )
+            } else {
+                content(HistoryPagination.page(of: items, index: current, pageSize: pageSize),
+                        PaginationFooter(page: current, pageCount: pageCount,
+                                         pageSize: pageSize, itemCount: items.count,
+                                         newerHelp: newerHelp, olderHelp: olderHelp) { page = $0 })
+            }
         }
-        .id(current)
-        .transition(.opacity)
-        .animation(Motion.resolve(Motion.entrance), value: current)
+        // Deliberately no `.id(current)`: re-creating the subtree discarded row state and made a
+        // second click unable to re-target. `resolveCrossfade` rather than `resolve`, because the
+        // swap carries status and `resolve` returns nil under Reduce Motion, which took away the
+        // only feedback the page change had.
+        .hisAnimation(Motion.layout, value: current)
         .onChange(of: resetKeys) { _, _ in page = 0 }
+        .onChange(of: current) { _, newPage in
+            // The rows are replaced in place, so nothing told VoiceOver the page had moved.
+            AccessibilityNotification.Announcement(
+                L10n.format("Page %d of %d", newPage + 1, pageCount)
+            ).post()
+        }
     }
 }
 
@@ -76,9 +95,25 @@ struct PaginatedSection<Row: Identifiable, Content: View>: View {
 struct PaginationFooter: View {
     let page: Int
     let pageCount: Int
+    let pageSize: Int
+    let itemCount: Int
     let newerHelp: String
     let olderHelp: String
+    /// Shown when there is nothing to paginate. Required in spirit: the component renders its own
+    /// empty state rather than a page of nothing and a "0–0 of 0" footer.
+    var emptyMessage: String? = nil
     let goTo: (Int) -> Void
+
+    /// "6–10 of 231" rather than "Page 2 of 47": the reader wants to know which rows they are
+    /// looking at, and page sizes differ per list.
+    private var rangeLabel: String {
+        guard itemCount > 0, pageSize > 0 else {
+            return L10n.format("Page %d of %d", page + 1, pageCount)
+        }
+        let first = page * pageSize + 1
+        let last = min(itemCount, first + pageSize - 1)
+        return L10n.format("%1$d–%2$d of %3$d", first, last, itemCount)
+    }
 
     var body: some View {
         if pageCount > 1 {
@@ -87,20 +122,24 @@ struct PaginationFooter: View {
                     Label(L10n.text("Newer"), systemImage: "chevron.left").labelStyle(.iconOnly)
                 }
                 .buttonStyle(.pressable).disabled(page == 0)
-                .help(newerHelp)
+                .help(page == 0 ? L10n.text("This is the newest page.") : newerHelp)
                 .accessibilityLabel(newerHelp)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
                 Spacer()
-                Text(L10n.format("Page %d of %d", page + 1, pageCount))
-                    .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary).monospacedDigit()
+                Text(rangeLabel)
+                    .hisType(.micro, weight: HisingenTheme.captionWeight).foregroundStyle(.secondary).monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(Motion.resolveCrossfade(Motion.telemetry), value: page)
+                    .hisAnimation(Motion.telemetry, value: page)
                 Spacer()
                 Button { goTo(min(pageCount - 1, page + 1)) } label: {
                     Label(L10n.text("Older"), systemImage: "chevron.right").labelStyle(.iconOnly)
                 }
                 .buttonStyle(.pressable).disabled(page >= pageCount - 1)
-                .help(olderHelp)
+                .help(page >= pageCount - 1 ? L10n.text("This is the oldest page.") : olderHelp)
                 .accessibilityLabel(olderHelp)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
             }
             .padding(.top, 2)
         }

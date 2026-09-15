@@ -17,18 +17,18 @@ struct SettingsFeatureToggleRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 12))
+                .hisType(.body)
                 .foregroundStyle(isSupported ? .secondary : .tertiary)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     Text(L10n.text(title))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                         .foregroundStyle(isSupported ? .primary : .secondary)
                     if let badgeText {
                         Text(L10n.text(badgeText))
-                            .font(.system(size: 8, weight: .semibold))
+                            .hisType(.nano, weight: .semibold)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
@@ -36,7 +36,7 @@ struct SettingsFeatureToggleRow: View {
                     }
                 }
                 Text(L10n.text(detail))
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary.opacity(isSupported ? 1.0 : 0.7))
             }
             Spacer()

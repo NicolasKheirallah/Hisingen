@@ -42,7 +42,7 @@ extension PolestarGRPC {
         }
         // Invocation-backed commands are gated on a client-id allowlist that the primary
         // (web) client is not on, so they need the command client's token (`lp8dyrd_10`). Everything else
-        // — OTA and chronos — is happy with the primary token. `PolestarAPI.executeRemoteCommand`
+        // – OTA and chronos – is happy with the primary token. `PolestarAPI.executeRemoteCommand`
         // resolves the command token (and reports "not authorized" vs "try again") before calling
         // in; this stays as a defensive backstop.
         if command.requiresCommandClientAuthorization && commandToken == nil {
@@ -117,7 +117,7 @@ extension PolestarGRPC {
             // Validate against the bounds the vehicle itself advertises via GetMyCars when
             // they are known; the hardcoded ranges are only a fallback for vehicles whose
             // capabilities have not been fetched yet. Some models reject targets below 50
-            // or above 90 — previously every such request failed server-side with an
+            // or above 90 – previously every such request failed server-side with an
             // opaque rejection instead of being caught here with a clear message.
             let bounds = VehicleChargeBounds(capabilities: capabilityLimits[vin])
             guard bounds.targetRange.contains(target) else {
@@ -130,7 +130,7 @@ extension PolestarGRPC {
             payload.append(Protobuf.intField(2, target))
             //  uses ChargeTargetLevelSettingType.CUSTOM (3), not DAILY (1).
             // DAILY is accepted by the backend (returns SYNCED) but doesn't actually change
-            // the target SOC — it's a preset type, not an override. CUSTOM (3) is the
+            // the target SOC – it's a preset type, not an override. CUSTOM (3) is the
             // setting type that actually applies the requested target level.
             payload.append(Protobuf.intField(3, 3))  // CUSTOM
             let body = try await lastMessage(path: Self.targetSOCService + "/SetTargetSoc",
@@ -189,7 +189,7 @@ extension PolestarGRPC {
             }
             return RemoteCommandResult(outcome: .completed, message: nil)
         case .scheduleOTA(let minutes):
-            // `relative_time` is in MINUTES, and the backend enforces 2…10080 (7 days) —
+            // `relative_time` is in MINUTES, and the backend enforces 2…10080 (7 days) –
             // verified live, which answers it with
             // `grpc-status 3: relativeTime should be between 2 to 10080!`.
             // This previously sent `minutes * 60`, so every schedule request was rejected as
@@ -282,13 +282,13 @@ extension PolestarGRPC {
 
     /// Every OTA write is addressed to a specific `software_id`, which only ever arrives on a
     /// `GetSoftwareInfo`/`GetSchedule` read. The id is cached per VIN, but a command issued
-    /// before the first successful software read — or after the app restarted — would otherwise
+    /// before the first successful software read – or after the app restarted – would otherwise
     /// fail with "missing context", so fetch it on demand instead of giving up.
     private func softwareID(vin: String, accessToken: String,
                             requiringInstallable: Bool = false) async throws -> String {
         // Always re-read before a write. A cached id can name a version the car has since
         // finished installing, and `InstallNow` on that is refused by the backend in HTTP/2
-        // trailers URLSession cannot surface — which reaches the user as an unexplained
+        // trailers URLSession cannot surface – which reaches the user as an unexplained
         // "unexpected response" rather than anything actionable.
         _ = try? await fetchSoftware(vin: vin, accessToken: accessToken, locale: "en")
         guard let resolved = otaSoftwareIDs[vin], !resolved.isEmpty else {
@@ -320,7 +320,7 @@ extension PolestarGRPC {
     /// `available` is deliberately excluded. Verified live: a Polestar 2 advertising an update
     /// in state 15 answers both `Schedule` and `InstallNow` with
     /// `grpc-status 3: The software with software id <id> is not ready to be scheduled!`
-    /// — "available" means the update has been *offered*, not that the car has downloaded it.
+    /// – "available" means the update has been *offered*, not that the car has downloaded it.
     /// Only once the download completes does the scheduler accept a request.
     private static let installableStates: Set<SoftwareUpdateState> = [
         .downloaded, .deferred, .scheduled
@@ -359,7 +359,7 @@ extension PolestarGRPC {
     }
 
     /// `token` is the command-client token resolved by the caller (`invocationToken` in
-    /// `executeRemoteCommand`) — invocation RPCs are the ones the primary web client is not
+    /// `executeRemoteCommand`) – invocation RPCs are the ones the primary web client is not
     /// allowlisted for.
     private func invocation(method: String, request: Data, vin: String,
                             token: String) async throws -> RemoteCommandResult {

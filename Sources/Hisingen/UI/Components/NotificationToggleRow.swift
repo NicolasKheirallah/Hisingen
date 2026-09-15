@@ -13,15 +13,15 @@ struct NotificationToggleRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 12))
+                .hisType(.body)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(L10n.text(title))
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
                 Text(L10n.text(detail))
-                    .font(.system(size: 9))
+                    .hisType(.micro, weight: HisingenTheme.captionWeight)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -33,5 +33,9 @@ struct NotificationToggleRow: View {
                 .accessibilityHint(L10n.text(detail))
         }
         .padding(.vertical, 3)
+        // The row reads as one control and it is the row a reader aims at, but only the mini switch
+        // was clickable: everything left of it was a dead zone that looked live.
+        .contentShape(Rectangle())
+        .onTapGesture { isOn.wrappedValue.toggle() }
     }
 }

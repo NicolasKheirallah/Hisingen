@@ -132,7 +132,7 @@ struct VehiclePresentationAnimationTests {
         #expect(VehicleRollCurve.settle(at: 0) == 0)
         #expect(VehicleRollCurve.settle(at: 1) == 0)
 
-        // Compression first — negative is downwards — then a much smaller rebound.
+        // Compression first – negative is downwards – then a much smaller rebound.
         let compression = VehicleRollCurve.settle(at: 0.18)
         let rebound = VehicleRollCurve.settle(at: 0.68)
         #expect(compression < -0.99)
@@ -224,31 +224,6 @@ struct VehiclePresentationAnimationTests {
         #expect(VehiclePresentationIdentity(vin: "V", angle: 99).facing == .square)
     }
 
-    @Test
-    func wheelRotationTracksTravelAndStopsWithTheCar() {
-        let radius: CGFloat = 26
-
-        // Rolling without slipping: one circumference of travel is one turn.
-        #expect(isClose(
-            VehicleRollCurve.wheelRotation(travelled: 2 * .pi * radius, radius: radius),
-            2 * .pi
-        ))
-        #expect(VehicleRollCurve.wheelRotation(travelled: 100, radius: 0) == 0)
-
-        // Driven off the body's own travel samples, so it can only ever turn
-        // forwards, and it is already still before the suspension finishes.
-        let samples = VehicleEntranceMotion.full.samples()
-        var previous: CGFloat = -1
-        for sample in samples {
-            let angle = VehicleRollCurve.wheelRotation(travelled: sample.travelled, radius: radius)
-            #expect(angle >= previous)
-            previous = angle
-        }
-        let last = VehicleRollCurve.wheelRotation(travelled: samples[samples.count - 1].travelled, radius: radius)
-        let penultimate = VehicleRollCurve.wheelRotation(travelled: samples[samples.count - 2].travelled, radius: radius)
-        #expect(abs(last - penultimate) < 0.001)
-    }
-
     // MARK: - Reduce Motion
 
     @Test
@@ -302,10 +277,6 @@ struct VehiclePresentationAnimationTests {
             #expect(last.y == VehicleEntranceFrame.rest.y)
             #expect(isClose(last.scale, VehicleEntranceFrame.rest.scale))
             #expect(isClose(last.opacity, VehicleEntranceFrame.rest.opacity))
-            // Ground covered is the one thing that does not return to zero: a
-            // wheel that has rolled stays rolled, so wheel layers added later
-            // hold their final angle instead of snapping back.
-            #expect(last.travelled == motion.travel)
         }
     }
 
@@ -356,8 +327,8 @@ struct VehiclePresentationAnimationTests {
         // These are the modifiers the hero cards have always laid the render out
         // with: an 8 pt inset and a 205 pt content height inside a 220 pt
         // container, zoomed 1.33 so it overflows and is clipped. The view applies
-        // them directly, so the resting state is not reproduced — it is the same
-        // layout — and these constants are the only thing that could drift.
+        // them directly, so the resting state is not reproduced – it is the same
+        // layout – and these constants are the only thing that could drift.
         #expect(VehicleRenderLayout.horizontalInset == 8)
         #expect(VehicleRenderLayout.contentHeight == 205)
         #expect(VehicleRenderLayout.containerHeight == 220)

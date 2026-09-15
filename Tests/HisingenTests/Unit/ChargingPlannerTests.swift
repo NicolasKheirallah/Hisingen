@@ -258,7 +258,7 @@ struct ElectricityPriceStoreTests {
         #expect(store.prices(zone: .se3) == first)
         #expect(store.fetchedAt(zone: .se3) == fixtureDate(2026, 2, 10, 14, 20))
 
-        // A second fetch replaces the zone wholesale — no duplicate or stale intervals.
+        // A second fetch replaces the zone wholesale – no duplicate or stale intervals.
         var second = [ElectricityPricePoint]()
         for hour in 0..<48 {
             let start = fixtureDate(2026, 2, 11, 0).addingTimeInterval(Double(hour) * 3_600)

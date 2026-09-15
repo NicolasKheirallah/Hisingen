@@ -7,7 +7,10 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(reduceMotion ? nil : Motion.interaction) {
+                // A disclosure opening re-lays-out everything below it, so it is a layout change
+                // and takes the layout token. `interaction` is for the press itself, and a spring
+                // tuned for a 0.2 s acknowledgement rings on a full-height expansion.
+                withAnimation(reduceMotion ? nil : Motion.layout) {
                     configuration.isExpanded.toggle()
                 }
             } label: {
@@ -15,7 +18,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
                     configuration.label
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .hisType(.label, weight: .semibold)
                         .foregroundStyle(HisingenTheme.inkMuted)
                         .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
                         .accessibilityHidden(true)
@@ -23,7 +26,6 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
-            .withoutFocusRing()
 
             if configuration.isExpanded {
                 configuration.content

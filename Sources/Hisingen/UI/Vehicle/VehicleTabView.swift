@@ -14,7 +14,10 @@ struct VehicleTabView: View {
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var moreExpanded = true
+    /// Collapsed by default: §16 asks the common path to come first and advanced detail to sit a
+    /// level deeper, and expanded-by-default meant the five secondary cards rendered at full size
+    /// and weight on first open.
+    @State private var moreExpanded = false
     @State private var dismissedSoftwareEventIdentifier: String?
     @Namespace private var carChipNamespace
 
@@ -105,8 +108,8 @@ struct VehicleTabView: View {
                         let selected = car.vin == currentVin
                         Button { onSelectCar(car.vin) } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill").font(.system(size: 10))
-                                Text(car.title).font(.system(size: 11, weight: selected ? .bold : .medium))
+                                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill").hisType(.caption)
+                                Text(car.title).hisType(.label, weight: selected ? .bold : .medium)
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             // One shared capsule slides between chips; matched
@@ -153,8 +156,8 @@ struct VehicleTabView: View {
                 }.padding(.top, HisingenTheme.sectionSpacing)
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "ellipsis.circle").foregroundStyle(HisingenTheme.inkMuted).font(.system(size: 13, weight: HisingenTheme.headingWeight)).accessibilityHidden(true)
-                    Text(L10n.format("More (%d)", cards.count)).font(.system(size: 13, weight: HisingenTheme.headingWeight)).foregroundStyle(HisingenTheme.ink)
+                    Image(systemName: "ellipsis.circle").foregroundStyle(HisingenTheme.inkMuted).hisType(.heading, weight: HisingenTheme.headingWeight).accessibilityHidden(true)
+                    Text(L10n.format("More (%d)", cards.count)).hisType(.heading, weight: HisingenTheme.headingWeight).foregroundStyle(HisingenTheme.ink)
                     Spacer()
                 }
                 .accessibilityElement(children: .ignore)
@@ -163,9 +166,12 @@ struct VehicleTabView: View {
             }
             .disclosureGroupStyle(WholeRowDisclosureStyle())
             .padding(HisingenTheme.cardPadding)
-            .background(HisingenTheme.cardBackground)
+            .background(HisingenTheme.cardSurface(
+                cornerRadius: HisingenTheme.cornerRadius,
+                prefersOpaque: false
+            ))
             .clipShape(RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous).stroke(HisingenTheme.hairline, lineWidth: HisingenTheme.cardBorderWidth))
+            .overlay(HisingenTheme.cardBoundary(increasedContrast: false))
         )
     }
 
@@ -201,23 +207,54 @@ struct VehicleTabView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
                     HStack(spacing: 8) {
-                        Image(systemName: "location.slash.fill").font(.system(size: 15)).foregroundStyle(HisingenTheme.semanticWarning)
-                        Text(explanation).font(.system(size: 11)).foregroundStyle(HisingenTheme.inkMuted)
+                        Image(systemName: "location.slash.fill").hisType(.title).foregroundStyle(HisingenTheme.semanticWarning)
+                        Text(explanation).hisType(.label).foregroundStyle(HisingenTheme.inkMuted)
                     }.padding(8).background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
                 }
             })
         }
-        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: state.weather, isLive: !state.isStale(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
+        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: state.weather, isLive: !state.hasOldData(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
     }
 
-    private func volvoUnavailableCard(symbol: String, title: String, color: Color, message: String) -> some View {
+    /// A section that cannot show its data.
+    ///
+    /// Every cause rendered the same: `.inkMuted` at `.label` behind a 3 % wash, which is the
+    /// weakest content on the surface, so a total provider failure was presented with less emphasis
+    /// than a fluid flag. An error now reads as an error and offers the one action that might help.
+    private func volvoUnavailableCard(
+        symbol: String,
+        title: String,
+        color: Color,
+        message: String,
+        isError: Bool = false,
+        onRetry: (() -> Void)? = nil
+    ) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: symbol, title: title, color: color)
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 13)).foregroundStyle(HisingenTheme.semanticWarning)
-                    Text(message).font(.system(size: 11)).foregroundStyle(HisingenTheme.inkMuted)
-                }.padding(8).background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: isError ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                        .hisType(.heading)
+                        .foregroundStyle(isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(message)
+                            .hisType(.label, weight: isError ? .semibold : .regular)
+                            .foregroundStyle(isError ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let onRetry {
+                            Button(L10n.text("Try Again"), action: onRetry)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                }
+                .padding(8)
+                .background(
+                    (isError ? HisingenTheme.semanticCritical : Color.primary).opacity(isError ? 0.08 : 0.03),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+                .hisCaptionLeading()
             }
         }
     }
@@ -229,7 +266,7 @@ struct VehicleTabView: View {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 6) {
                 CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Attention"), color: HisingenTheme.semanticWarning, isSemantic: true)
-                ForEach(items, id: \.self) { Text("• \($0)").font(.system(size: 11)).foregroundStyle(.secondary) }
+                ForEach(items, id: \.self) { Text("• \($0)").hisType(.label).foregroundStyle(.secondary) }
             }
         })
     }

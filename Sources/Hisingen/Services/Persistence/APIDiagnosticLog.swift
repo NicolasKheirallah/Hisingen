@@ -75,7 +75,7 @@ struct APILogEntry: Codable, Equatable, Sendable {
 ///
 /// Retention is bounded both by count and by age (24 h), and the `shared` instance
 /// persists its redacted entries to Application Support (debounced) so a crash or
-/// relaunch no longer wipes the evidence — direct initializations (tests) stay
+/// relaunch no longer wipes the evidence – direct initializations (tests) stay
 /// memory-only to remain hermetic.
 actor APIDiagnosticLogStore {
     static let shared = APIDiagnosticLogStore(persistsToDisk: true)
@@ -88,7 +88,7 @@ actor APIDiagnosticLogStore {
     /// Cumulative cap on retained payload bodies (metadata rows are tiny). Without it,
     /// 2,000 entries x 256 KB each could produce a half-gigabyte archive in a worst case.
     /// Rows past the budget keep their metadata and lose only their payload body,
-    /// oldest first — mirroring the export bundle's own budgeting.
+    /// oldest first – mirroring the export bundle's own budgeting.
     static let maximumTotalPayloadBytes = 32 * 1024 * 1024
     private static let launchIdentifier = UUID().uuidString
     private static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -109,7 +109,7 @@ actor APIDiagnosticLogStore {
                 statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
                 startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil) {
         // A cancelled request (`URLError.cancelled`, NSURLErrorDomain -999) is normal teardown
-        // — a superseded sign-in, a brand switch, app quit. Recording it as an error just adds
+        // – a superseded sign-in, a brand switch, app quit. Recording it as an error just adds
         // noise a support bundle then has to explain away. The providers wrap it in their own
         // `.network(URLError)` case, so check the whole error text, not just a top-level cast.
         if let error, Self.isCancellation(error) { return }
@@ -120,7 +120,7 @@ actor APIDiagnosticLogStore {
         let omissionReason = Self.payloadOmissionReason(
             data: responseData, redactedPayload: redactedPayload, sensitive: sensitiveResponse)
         let entry = APILogEntry(
-            // Request start, not completion — keeps exports correlatable with the
+            // Request start, not completion – keeps exports correlatable with the
             // unified log's timestamps for the same request.
             timestamp: overrideTimestamp ?? startedAt,
             provider: provider,

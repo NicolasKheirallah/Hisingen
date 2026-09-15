@@ -44,7 +44,7 @@ struct AccountCredentialsForm: View {
     private enum ConnectionHealth { case active, connectedInactive, sessionExpired, notConnected }
 
     /// Whether the selected brand has enough on file (developer keys / account email, plus a
-    /// previously-discovered VIN) to renew its session with a browser handshake alone — i.e.
+    /// previously-discovered VIN) to renew its session with a browser handshake alone – i.e.
     /// this is an *expired* session, not a brand that was never set up.
     private var hasRenewableCredentials: Bool {
         guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
@@ -92,7 +92,7 @@ struct AccountCredentialsForm: View {
         case .signingFlowChanged:
             return "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update."
         case .sessionExpired:
-            return "Your Polestar session expired. Sign in again — the interactive window handles any new verification step Polestar added."
+            return "Your Polestar session expired. Sign in again – the interactive window handles any new verification step Polestar added."
         default:
             return "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window."
         }
@@ -128,15 +128,6 @@ struct AccountCredentialsForm: View {
                                              volvoClientID: volvoClientID, volvoClientSecret: volvoClientSecret,
                                              volvoApiKey: volvoApiKey, volvoVIN: volvoVIN, volvoNickname: volvoNickname)
             selectedBrand = preferences.activeBrand
-        }
-        .onDisappear {
-            // Drafts improve navigation, but credentials must never survive the form.
-            polestarPassword = ""
-            volvoClientSecret = ""
-            volvoApiKey = ""
-            preferences.accountDraft.polestarPassword = ""
-            preferences.accountDraft.volvoClientSecret = ""
-            preferences.accountDraft.volvoApiKey = ""
         }
     }
 
@@ -183,7 +174,7 @@ struct AccountCredentialsForm: View {
                     .font(.system(size: 20))
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
                 Text(brand.displayName)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .hisType(.body, weight: isSelected ? .semibold : .medium)
                     .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
             }
             .frame(maxWidth: .infinity)
@@ -245,21 +236,24 @@ struct AccountCredentialsForm: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 12, weight: .semibold))
+                    Text(title).hisType(.body, weight: .semibold)
 
                     switch health {
                     case .active, .connectedInactive:
                         Text(L10n.format("Vehicle: %@", activeLabel))
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .hisType(.caption).foregroundStyle(.secondary)
                     case .sessionExpired:
                         Text(selectedBrand == .polestar
-                             ? L10n.text("Your Polestar sign-in needs renewing. Re-sign in below — no password required.")
+                             ? L10n.text("Your Polestar sign-in needs renewing. Re-sign in below – no password required.")
                              : L10n.text("Your Volvo sign-in needs renewing. Re-sign in below with the developer keys already saved."))
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .hisType(.caption).foregroundStyle(.secondary)
+                            .hisCaptionLeading()
                             .fixedSize(horizontal: false, vertical: true)
                     case .notConnected:
                         Text(L10n.text("Enter your credentials below to establish a live connection."))
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .hisType(.caption).foregroundStyle(.secondary)
+                            .hisCaptionLeading()
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer()
@@ -272,7 +266,7 @@ struct AccountCredentialsForm: View {
                             Image(systemName: "arrow.triangle.2.circlepath")
                             Text(L10n.text("Set Active"))
                         }
-                        .font(.system(size: 10, weight: .semibold))
+                        .hisType(.caption, weight: .semibold)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.mini)
@@ -292,7 +286,7 @@ struct AccountCredentialsForm: View {
                             Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
                             Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit Credentials"))
                         }
-                        .font(.system(size: 10, weight: .medium))
+                        .hisType(.caption, weight: .medium)
                     }
                     .controlSize(.mini)
 
@@ -301,7 +295,7 @@ struct AccountCredentialsForm: View {
                             testCurrentConnection()
                         } label: {
                             Text(L10n.text("Test"))
-                                .font(.system(size: 10, weight: .medium))
+                                .hisType(.caption, weight: .medium)
                         }
                         .controlSize(.mini)
                         .disabled(isTestingConnection)
@@ -315,9 +309,9 @@ struct AccountCredentialsForm: View {
                 HStack(spacing: 6) {
                     Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .foregroundStyle(test.success ? .green : .red)
-                        .font(.system(size: 10))
+                        .hisType(.caption)
                     Text(test.message)
-                        .font(.system(size: 10))
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 4)
@@ -332,7 +326,7 @@ struct AccountCredentialsForm: View {
         )
         // The Test flow mutates state from a Task continuation with no surrounding
         // transaction; this binding powers the spinner↔dot swap and result row.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: isTestingConnection)
+        .hisAnimation(Motion.stateChange, value: isTestingConnection)
     }
 
     @ViewBuilder
@@ -341,7 +335,7 @@ struct AccountCredentialsForm: View {
             Image(systemName: "arrow.clockwise.circle")
             Text(L10n.text("Re-sign In"))
         }
-        .font(.system(size: 10, weight: .semibold))
+        .hisType(.caption, weight: .semibold)
 
         if prominent {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
@@ -359,7 +353,7 @@ struct AccountCredentialsForm: View {
         VStack(alignment: .leading, spacing: 8) {
             if style == .welcoming {
                 Text(L10n.text("Sign in with your Polestar ID email and password."))
-                    .font(.system(size: 11))
+                    .hisType(.label)
                     .foregroundStyle(.secondary)
             }
 
@@ -369,7 +363,7 @@ struct AccountCredentialsForm: View {
                     .textContentType(.username)
                     .onChange(of: polestarEmail) { _, value in preferences.accountDraft.polestarEmail = value }
             }
-            if attemptedPolestarSignIn && !isValidEmail(polestarEmail) {
+            if shouldShowEmailError {
                 InlineValidationLabel(message: L10n.text("Enter a valid email address."))
             }
 
@@ -391,7 +385,7 @@ struct AccountCredentialsForm: View {
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: polestarVIN) { _, value in preferences.accountDraft.polestarVIN = value }
             }
-            if attemptedPolestarSignIn && !isValidOptionalVIN(polestarVIN) {
+            if shouldShowVINError {
                 InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
@@ -399,14 +393,16 @@ struct AccountCredentialsForm: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "globe")
-                            .font(.system(size: 11))
+                            .hisType(.label)
                             .foregroundStyle(HisingenTheme.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Interactive Verification Required"))
-                                .font(.system(size: 11, weight: .semibold))
+                                .hisType(.label, weight: .semibold)
                             Text(L10n.text(fallbackCopy(for: fallbackKind)))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                                 .foregroundStyle(.secondary)
+                                .hisCaptionLeading()
+                                .hisCaptionLeading()
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -423,13 +419,13 @@ struct AccountCredentialsForm: View {
                     .controlSize(.small)
                     HStack(spacing: 4) {
                         Text(L10n.text("Still failing?"))
-                            .font(.system(size: 9))
+                            .hisType(.micro)
                             .foregroundStyle(.tertiary)
                         Button {
                             onSettingsChanged(.exportDiagnosticLogs)
                         } label: {
                             Text(L10n.text("Export Diagnostic Logs"))
-                                .font(.system(size: 9, weight: .medium))
+                                .hisType(.micro, weight: .medium)
                         }
                         .buttonStyle(.pressable)
                         .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
@@ -445,7 +441,7 @@ struct AccountCredentialsForm: View {
             }
 
             Button {
-                // Only the attempt flag is animated — keying on the field text would
+                // Only the attempt flag is animated – keying on the field text would
                 // re-render (and risk focus churn) on every keystroke.
                 withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                     attemptedPolestarSignIn = true
@@ -461,13 +457,24 @@ struct AccountCredentialsForm: View {
                         Text(L10n.text("Sign In"))
                     }
                 }
-                .transition(.scale(scale: 0.85).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
                 .id(showSavedFeedback)
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled(!isValidEmail(polestarEmail) || !isValidOptionalVIN(polestarVIN))
+            // Deliberately not `.disabled(...)`. It used to be disabled by the same predicate that
+            // decides whether the inline errors show, and the only write to `attemptedPolestarSignIn`
+            // is inside this action, so a first-time user who mistyped their email saw a permanently
+            // dead button and never the sentence written for exactly that mistake. Pressing it now
+            // reveals the error, and the labels update live from then on because the condition
+            // re-evaluates on every keystroke.
+            .help(polestarFormIsValid
+                  ? L10n.text("Saves these credentials and connects.")
+                  : L10n.text("Some details still need fixing. Press to see what."))
+            .accessibilityHint(polestarFormIsValid
+                               ? L10n.text("Saves these credentials and connects.")
+                               : L10n.text("Some details still need fixing. Press to see what."))
             .padding(.top, style == .welcoming ? 6 : 4)
 
             if let keychainError {
@@ -490,13 +497,13 @@ struct AccountCredentialsForm: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(.green)
-                        .font(.system(size: 14))
+                        .hisType(.subhead)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Developer Access Ready"))
-                            .font(.system(size: 11, weight: .semibold))
+                            .hisType(.label, weight: .semibold)
                             .foregroundStyle(.primary)
                         Text(L10n.text("Default developer application credentials configured."))
-                            .font(.system(size: 9.5))
+                            .hisType(.micro)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -504,7 +511,7 @@ struct AccountCredentialsForm: View {
                         showCustomVolvoApp = true
                     } label: {
                         Text(L10n.text("Custom App"))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                     }
                     .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
@@ -515,11 +522,13 @@ struct AccountCredentialsForm: View {
                 Text(L10n.text(
                     "Register a free API application at developer.volvocars.com to get a Client ID, "
                     + "Client Secret, and VCC API Key, then sign in with your Volvo ID below. "
-                    + "Hisingen never sees your Volvo ID password directly — sign-in happens in a "
+                    + "Hisingen never sees your Volvo ID password directly – sign-in happens in a "
                     + "system browser window."
                 ))
-                .font(.system(size: 10))
+                .hisType(.caption)
                 .foregroundStyle(.secondary)
+                .hisCaptionLeading()
+                .hisCaptionLeading()
                 .fixedSize(horizontal: false, vertical: true)
 
                 if BuiltinVolvoSecrets.isConfigured {
@@ -532,7 +541,7 @@ struct AccountCredentialsForm: View {
                             volvoApiKey = ""
                         } label: {
                             Text(L10n.text("Use Default Developer Keys"))
-                                .font(.system(size: 10))
+                                .hisType(.caption)
                         }
                         .buttonStyle(.pressable)
                         .foregroundStyle(HisingenTheme.accent)
@@ -623,6 +632,21 @@ struct AccountCredentialsForm: View {
         }
     }
 
+    private var polestarFormIsValid: Bool {
+        isValidEmail(polestarEmail) && isValidOptionalVIN(polestarVIN)
+    }
+
+    /// The email error shows once the reader has tried to sign in, and keeps showing while they
+    /// fix it. A field nobody has touched is not shown as wrong.
+    private var shouldShowEmailError: Bool {
+        (attemptedPolestarSignIn || !polestarEmail.isEmpty) && !isValidEmail(polestarEmail)
+    }
+
+    /// Same for the optional VIN, which only complains once there is something to complain about.
+    private var shouldShowVINError: Bool {
+        !polestarVIN.isEmpty && !isValidOptionalVIN(polestarVIN)
+    }
+
     private func savePolestarCredentials() {
         guard isValidEmail(polestarEmail), isValidOptionalVIN(polestarVIN) else { return }
         keychainError = nil
@@ -709,7 +733,7 @@ struct AccountCredentialsForm: View {
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .hisType(.label, weight: .medium)
                 .foregroundStyle(.secondary)
             field()
         }

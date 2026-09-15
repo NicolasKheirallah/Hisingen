@@ -17,7 +17,7 @@ struct WelcomeSignInView: View {
                 header
                 if let error, !error.isEmpty {
                     errorBanner(error)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
                 Card {
                     AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
@@ -25,7 +25,7 @@ struct WelcomeSignInView: View {
                 }
             }
             .padding(HisingenTheme.sectionSpacing)
-            .animation(Motion.resolveCrossfade(Motion.stateChange), value: error)
+            .hisAnimation(Motion.stateChange, value: error)
         }
         .frame(width: HisingenTheme.layoutWidth)
     }
@@ -37,11 +37,11 @@ struct WelcomeSignInView: View {
                 .frame(width: 52, height: 52)
                 .padding(.top, 8)
             Text(L10n.text("Welcome to Hisingen"))
-                .font(.system(size: 17, weight: HisingenTheme.headingWeight))
-                .tracking(HisingenTheme.displayTracking * 0.3)
+                .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
+                .tracking(HisingenTheme.displayTracking(forSize: 17))
                 .foregroundStyle(HisingenTheme.ink)
-            Text(L10n.text("Monitor your Polestar or Volvo from the menu bar — pick your vehicle's brand and sign in below."))
-                .font(.system(size: 12))
+            Text(L10n.text("Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below."))
+                .hisType(.body)
                 .foregroundStyle(HisingenTheme.inkMuted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -52,10 +52,10 @@ struct WelcomeSignInView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
+                .hisType(.body)
                 .foregroundStyle(HisingenTheme.semanticWarning)
             Text(message)
-                .font(.system(size: 11))
+                .hisType(.label)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -65,5 +65,4 @@ struct WelcomeSignInView: View {
         .accessibilityElement(children: .combine)
     }
 }
-
 

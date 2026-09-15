@@ -51,7 +51,7 @@ struct TripSegmentationTests {
 
     @Test
     func anImplausibleOdometerDeltaFallsBackToTheTripMeter() {
-        // The odometer jumps 5,000 km — a rollover or a misread — while the automatic trip
+        // The odometer jumps 5,000 km – a rollover or a misread – while the automatic trip
         // meter moved a believable 12 km, so the trip meter supplies the distance.
         let trips = TripSegmentation.trips(from: [
             reading(id: 1, minute: 0, odometer: 1_000, automatic: 100),

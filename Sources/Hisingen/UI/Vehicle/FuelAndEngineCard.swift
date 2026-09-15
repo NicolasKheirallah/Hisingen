@@ -11,6 +11,11 @@ struct FuelAndEngineCard: View {
         return AnyView(card)
     }
 
+    /// The reader's Vehicle Health toggle. Two other cards gate the same engine-hours reading on
+    /// it and this one did not, so turning the feature off removed the row from one card and left
+    /// it in another.
+    private var features: Set<AppFeature> { preferences.features.enabled }
+
     private var rows: [KVRow] {
         guard state.powertrain.hasFuelRange || state.fuelSystem.rangeKm != nil
                 || state.fuelSystem.levelPercent != nil || state.fuelSystem.amountLiters != nil
@@ -31,7 +36,7 @@ struct FuelAndEngineCard: View {
         if let running = state.fuelSystem.isEngineRunning {
             rows.append(KVRow(L10n.text("Engine State"), running ? L10n.text("Running") : L10n.text("Stopped"), symbol: "engine.combustion.fill", valueWarning: false))
         }
-        if let hours = state.maintenance.service.engineHoursToService {
+        if features.contains(.vehicleHealth), let hours = state.maintenance.service.engineHoursToService {
             rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer"))
         }
         if let fuelType = state.fuelSystem.type {

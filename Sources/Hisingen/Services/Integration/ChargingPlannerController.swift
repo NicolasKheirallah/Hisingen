@@ -143,7 +143,7 @@ final class ChargingPlannerController {
         case (.connected, _):
             body = L10n.format("The cheap charging window runs %@.", window)
         case (_, true):
-            body = L10n.format("Plug in the vehicle — the cheap charging window runs %@.", window)
+            body = L10n.format("Plug in the vehicle. The cheap charging window runs %@.", window)
         default:
             body = L10n.format("Cheap charging window: %@.", window)
         }
@@ -221,7 +221,7 @@ final class ChargingPlannerController {
             // Mirror CalendarPreconditioningDispatchDecision.consumesOccurrence: only an
             // acknowledged send or a terminal refusal consumes the window. .deferred (command
             // pipeline busy, vehicle context changed mid-flight, shell still loading) must
-            // stay retryable — the next 60 s tick re-evaluates while `now < plan.end` holds.
+            // stay retryable – the next 60 s tick re-evaluates while `now < plan.end` holds.
             if !CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
                 self.autoStartedWindowStarts[vin] = nil
             }

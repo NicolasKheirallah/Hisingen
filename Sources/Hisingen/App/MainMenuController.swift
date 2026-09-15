@@ -1,6 +1,6 @@
 import AppKit
 
-/// Builds and installs the app's main menu — the menu-bar strip: the app menu ("Check for
+/// Builds and installs the app's main menu – the menu-bar strip: the app menu ("Check for
 /// Updates…", "Quit Hisingen") and a standard Edit menu.
 ///
 /// A menu-bar-only agent still needs a real main menu so the standard Edit shortcuts

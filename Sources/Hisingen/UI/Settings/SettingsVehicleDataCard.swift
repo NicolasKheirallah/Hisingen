@@ -26,7 +26,7 @@ struct SettingsVehicleDataCard: View {
 
     private func subsectionHeader(_ title: String) -> some View {
         Text(L10n.text(title))
-            .font(.system(size: 10, weight: .bold))
+            .hisType(.caption, weight: .bold)
             .foregroundStyle(.tertiary)
             .textCase(.uppercase)
             .tracking(0.3)
@@ -73,10 +73,12 @@ struct SettingsVehicleDataCard: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(L10n.text("Warranty in-service date"))
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                 Text(L10n.text("Not supplied by the vehicle API; enter the delivery/in-service date shown in your warranty documents."))
-                                    .font(.system(size: 9))
+                                    .hisType(.micro)
                                     .foregroundStyle(.secondary)
+                                    .hisCaptionLeading()
+                                    .hisCaptionLeading()
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
@@ -108,7 +110,7 @@ struct SettingsVehicleDataCard: View {
                     }
                     .padding(8)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .animation(Motion.resolve(Motion.layout), value: hasWarrantyInServiceDate)
+                    .hisAnimation(Motion.layout, value: hasWarrantyInServiceDate)
                 }
 
                 if !warrantyVIN.isEmpty, state?.powertrain.hasElectricRange == true {
@@ -116,10 +118,12 @@ struct SettingsVehicleDataCard: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(L10n.text("Exact vehicle references"))
-                                    .font(.system(size: 11, weight: .medium))
+                                    .hisType(.label, weight: .medium)
                                 Text(L10n.text("Optional VIN-specific values from the vehicle specification sheet. These replace broad model-family references in calculated range and SoH estimates."))
-                                    .font(.system(size: 9))
+                                    .hisType(.micro)
                                     .foregroundStyle(.secondary)
+                                    .hisCaptionLeading()
+                                    .hisCaptionLeading()
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 8)
@@ -127,25 +131,25 @@ struct SettingsVehicleDataCard: View {
                         }
                         HStack {
                             Text(L10n.text("Usable battery capacity"))
-                                .font(.system(size: 10.5))
+                                .hisType(.caption)
                             Spacer()
                             TextField(L10n.text("Automatic"), text: $usableBatteryCapacityOverride)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 70)
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
-                            Text("kWh").font(.system(size: 9)).foregroundStyle(.secondary)
+                            Text("kWh").hisType(.micro).foregroundStyle(.secondary)
                         }
                         HStack {
                             Text(L10n.text("WLTP reference range"))
-                                .font(.system(size: 10.5))
+                                .hisType(.caption)
                             Spacer()
                             TextField(L10n.text("Automatic"), text: $wltpRangeOverride)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 70)
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
-                            Text("km").font(.system(size: 9)).foregroundStyle(.secondary)
+                            Text("km").hisType(.micro).foregroundStyle(.secondary)
                         }
                         if let specificationValidationMessage {
                             InlineValidationLabel(message: specificationValidationMessage)
@@ -206,7 +210,7 @@ struct SettingsVehicleDataCard: View {
                 subsectionHeader("Location & Weather")
                 VStack(spacing: 4) {
                     row(.vehicleLocation, symbol: "location.fill", title: "Vehicle Location & Maps", detail: "Parking GPS coordinates and Apple Maps")
-                    row(.vehicleWeather, symbol: "cloud.sun.fill", title: "Vehicle Weather", detail: "Ambient weather at vehicle GPS location — sends vehicle coordinates to Open-Meteo")
+                    row(.vehicleWeather, symbol: "cloud.sun.fill", title: "Vehicle Weather", detail: "Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo")
                 }
 
                 subsectionHeader("Advanced Diagnostics")

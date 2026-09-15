@@ -20,8 +20,8 @@ protocol GarageScanContext: AnyObject {
 }
 
 /// Keeps the *unselected* vehicles fresh. The foreground `RefreshCoordinator` only ever polls
-/// the one selected car; this walks every brand with a resumable session — siblings on the
-/// active account and every vehicle on the dormant account — so the fleet list and the
+/// the one selected car; this walks every brand with a resumable session – siblings on the
+/// active account and every vehicle on the dormant account – so the fleet list and the
 /// warning badge stay current without the user switching to each car.
 ///
 /// Runs a first pass ~45 s after launch and every 5 min after that, plus a one-shot pass ~8 s
@@ -93,7 +93,7 @@ final class GarageScanner {
         }
     }
 
-    /// Schedules one extra pass `seconds` from now — used right after a session is established,
+    /// Schedules one extra pass `seconds` from now – used right after a session is established,
     /// since the foreground loop only ever refreshes the selected car.
     func schedulePass(after seconds: TimeInterval) {
         let id = UUID()
@@ -166,7 +166,7 @@ final class GarageScanner {
         let provider = self.provider(brand)
         // Re-establish the dormant brand's session only when it has gone cold. It usually
         // hasn't between five-minute passes, and an unconditional restore forced a token grant
-        // and a full vehicle re-discovery every pass — `fetchVehicleState` renews an expired
+        // and a full vehicle re-discovery every pass – `fetchVehicleState` renews an expired
         // access token on its own.
         if brand != originalBrand {
             let warm = await provider.hasWarmSession

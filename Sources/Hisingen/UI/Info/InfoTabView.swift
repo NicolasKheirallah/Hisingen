@@ -23,6 +23,11 @@ struct InfoTabView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State var vinCopied = false
     @State var asyncData = InfoAsyncData()
+    /// Whether the local read has completed once. The activity section used to be added only when
+    /// it had rows, so "nothing recorded" and "not read yet" were both simply silence: the section
+    /// appeared out of nowhere a moment after the tab opened, and an empty store looked the same
+    /// as an unread one.
+    @State var asyncDataLoaded = false
     @State var showAllCapabilities = false
     @State var reportError: String?
     @State private var isRefreshing = false
@@ -111,8 +116,7 @@ struct InfoTabView: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(Motion.resolve(Motion.cardChange), value: entries.map(\.id))
-            .dynamicTypeSize(.xSmall ... .accessibility1)
+            .hisAnimation(Motion.cardChange, value: entries.map(\.id))
             .onAppear {
                 let preferred = preferences.carRenderAngle
                 selectedAngleIndex = availableExteriorAngles.contains(preferred)
@@ -195,25 +199,49 @@ struct InfoTabView: View {
         } else if !capabilityProfileEntries.positive.isEmpty || !capabilityProfileEntries.negative.isEmpty {
             add(.capabilities, vehicleCapabilityCard)
         }
-        if !asyncData.recentTelemetry.isEmpty || !asyncData.recentCommands.isEmpty || !asyncData.recentActivities.isEmpty {
+        // Present from the first paint, with a placeholder until the read lands and an explicit
+        // empty state after it, rather than appearing only once it has something to show.
+        if !asyncDataLoaded {
+            add(.activity, activityPlaceholderCard(message: nil))
+        } else if asyncData.recentTelemetry.isEmpty, asyncData.recentCommands.isEmpty,
+                  asyncData.recentActivities.isEmpty {
+            add(.activity, activityPlaceholderCard(message: L10n.text("No local activity recorded yet.")))
+        } else {
             add(.activity, activityHistoryCard)
         }
         return out
     }
 
+    /// The activity section's loading and empty states, matching the header the loaded card uses so
+    /// the section does not change shape when its rows arrive.
+    @ViewBuilder
+    private func activityPlaceholderCard(message: String?) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
+                if let message {
+                    Text(message).hisType(.label).foregroundStyle(.secondary)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            }
+        }
+    }
+
     private func infoNavBar(proxy: ScrollViewProxy, entries: [InfoSectionEntry]) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: state.isStale() ? "moon.stars.fill" : "clock.arrow.circlepath")
-                .font(.system(size: 11))
-                .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.7))
-                .animation(Motion.resolveCrossfade(Motion.theme), value: state.isStale())
+            Image(systemName: state.hasOldData() ? "moon.stars.fill" : "clock.arrow.circlepath")
+                .hisType(.label)
+                .foregroundStyle(state.hasOldData() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.7))
+                .hisAnimation(Motion.theme, value: state.hasOldData())
                 .accessibilityHidden(true)
             Text(state.freshness.isCached ? L10n.text("Showing an offline copy") : state.freshnessDescription)
-                .font(.system(size: 10.5, weight: state.isStale() ? .semibold : .regular))
-                .foregroundStyle(state.isStale() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.8))
+                .hisType(.caption, weight: state.hasOldData() ? .semibold : .regular)
+                .foregroundStyle(state.hasOldData() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.8))
                 .lineLimit(1)
+                .minimumScaleFactor(0.9)
                 .truncationMode(.middle)
-                .animation(Motion.resolveCrossfade(Motion.theme), value: state.isStale())
+                .hisAnimation(Motion.theme, value: state.hasOldData())
 
             Spacer(minLength: 6)
 
@@ -227,11 +255,12 @@ struct InfoTabView: View {
                 }
             } label: {
                 Image(systemName: "list.bullet.indent")
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
+            .hisCaptionLeading()
+            .fixedSize(horizontal: false, vertical: true)
             .help(L10n.text("Jump to section"))
             .accessibilityLabel(L10n.text("Jump to section"))
 
@@ -248,11 +277,12 @@ struct InfoTabView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
+            .hisCaptionLeading()
+            .fixedSize(horizontal: false, vertical: true)
             .help(L10n.text("Vehicle report"))
             .accessibilityLabel(L10n.text("Vehicle report"))
 
@@ -261,12 +291,16 @@ struct InfoTabView: View {
                 isRefreshing = true
                 onRefresh()
                 Task {
-                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    // Backstop only. The spinner is normally cleared by the `.onChange` below when
+                    // the refresh actually lands. A fixed 2.5s cleared it regardless, so a slow
+                    // wake showed a finished spinner while data was still arriving, and a fast
+                    // local read kept spinning after it had finished.
+                    try? await Task.sleep(nanoseconds: 12_000_000_000)
                     isRefreshing = false
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                     .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                     .animation(
                         Motion.resolve(isRefreshing ? Motion.spin : .default),
@@ -275,8 +309,11 @@ struct InfoTabView: View {
             }
             .buttonStyle(.pressable)
             .disabled(isRefreshing)
-            .help(L10n.text("Refresh now"))
-            .accessibilityLabel(L10n.text("Refresh now"))
+            .onChange(of: state.freshness.fetchedAt) { _, _ in isRefreshing = false }
+            // "Refresh Telemetry", matching the footer's button and its tooltip: one action,
+            // one description. It was "Refresh now" here and "Refresh Telemetry" there.
+            .help(L10n.text("Refresh Telemetry"))
+            .accessibilityLabel(L10n.text("Refresh Telemetry"))
         }
         .padding(.horizontal, 4)
         .accessibilityElement(children: .contain)
@@ -299,6 +336,7 @@ struct InfoTabView: View {
         }.value
         guard !Task.isCancelled else { return }
         asyncData = loaded
+        asyncDataLoaded = true
     }
 
     private func resolveAddressIfNeeded() async {
@@ -375,18 +413,6 @@ struct InfoTabView: View {
         let directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"].map { L10n.text($0) }
         let index = Int(((normalized + 22.5) / 45.0).truncatingRemainder(dividingBy: 8))
         return directions[index]
-    }
-
-    func chartAccessibilityValue(points: [Double]) -> String {
-        guard let first = points.first, let last = points.last, !points.isEmpty else {
-            return L10n.text("No samples")
-        }
-        let lo = Int((points.min() ?? first).rounded())
-        let hi = Int((points.max() ?? first).rounded())
-        let latest = Int(last.rounded())
-        let trendKey = last > first ? "rising" : (last < first ? "falling" : "steady")
-        return L10n.format("%d samples, latest %d, range %d to %d, %@",
-                           points.count, latest, lo, hi, L10n.text(trendKey))
     }
 
     // MARK: - Vehicle report

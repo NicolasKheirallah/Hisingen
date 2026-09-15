@@ -5,7 +5,7 @@ import UserNotifications
 /// Who asked for a command. `.userInitiated` goes through the normal interactive
 /// authorization (confirmation sheet / device-owner prompt). `.automation` is a
 /// pre-authorized background trigger (e.g. calendar preconditioning) with nobody at the
-/// Mac to answer a prompt — it runs routine commands silently and refuses anything riskier.
+/// Mac to answer a prompt – it runs routine commands silently and refuses anything riskier.
 enum RemoteCommandOrigin: Sendable {
     case userInitiated
     case automation
@@ -81,6 +81,9 @@ final class CommandCoordinator {
     private weak var context: (any CommandExecutionContext)?
 
     private(set) var isInProgress = false
+    /// Interactive authorization can suspend while a biometric sheet is open. Reserve the
+    /// dispatch lane before that suspension so notification actions cannot race the approval.
+    private var isAuthorizing = false
     /// `RemoteCommand.identifier` of the command currently executing, so the Controls tab can
     /// show a "Sending…" state on the specific control that was tapped rather than dimming the
     /// whole page. `nil` whenever `isInProgress` is false.
@@ -105,7 +108,7 @@ final class CommandCoordinator {
     @discardableResult
     func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin = .userInitiated) async -> RemoteCommandDispatchOutcome {
         guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
-        guard !isInProgress else {
+        guard !isInProgress && !isAuthorizing else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
                 message: RemoteCommandError.busy.localizedDescription, success: false, target: nil)
@@ -114,11 +117,11 @@ final class CommandCoordinator {
         guard context.sessionIsValid, let state = context.vehicleState,
               (preferences.vin.isEmpty || state.identity.vin.caseInsensitiveCompare(preferences.vin) == .orderedSame) else {
             // Distinguish "still loading" (session fine, first telemetry fetch not back yet
-            // right after launch) from "you need to refresh" — the command is hard-gated on a
+            // right after launch) from "you need to refresh" – the command is hard-gated on a
             // snapshot for capability checks and the optimistic patch.
             let stillLoading = context.sessionIsValid && context.vehicleState == nil
             let message = stillLoading
-                ? L10n.text("Vehicle data is still loading — try again in a moment.")
+                ? L10n.text("Vehicle data is still loading. Try again in a moment.")
                 : RemoteCommandError.missingContext.localizedDescription
             context.presentResult(
                 title: L10n.text("Command not sent"),
@@ -133,7 +136,7 @@ final class CommandCoordinator {
             state: state,
             brand: executor.brand,
             enabledFeatures: preferences.features.enabled,
-            commandInProgress: isInProgress,
+            commandInProgress: isInProgress || isAuthorizing,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
         )
         guard availability == .available else {
@@ -173,6 +176,7 @@ final class CommandCoordinator {
         )
 
         let approved: Bool
+        isAuthorizing = true
         switch origin {
         case .userInitiated:
             approved = await self.authorizer.authorize(
@@ -185,6 +189,7 @@ final class CommandCoordinator {
             // fires. Anything non-routine still requires an explicit person.
             approved = adapted.risk == .routine
         }
+        isAuthorizing = false
         guard approved else { return .refused(reason: L10n.text("Authorization was not granted.")) }
         guard !isInProgress else {
             return .deferred(reason: RemoteCommandError.busy.localizedDescription)
@@ -240,7 +245,7 @@ final class CommandCoordinator {
                     outcome: result.outcome,
                     providerBrand: target.brand)
                 : nil
-            // The banner must say *what* ran, not just that something did — a bare
+            // The banner must say *what* ran, not just that something did – a bare
             // "Command sent" while two cars are in range reads as noise.
             let detail: String
             if let backendMessage = result.message, !backendMessage.isEmpty {
@@ -257,7 +262,7 @@ final class CommandCoordinator {
                 : L10n.format("%@ (%@)", command.title, target.displayName)
             context.presentResult(
                 title: L10n.text("Command sent"),
-                message: L10n.format("%@ — %@", commandTitle, detail),
+                message: L10n.format("%@ – %@", commandTitle, detail),
                 success: true,
                 target: target
             )

@@ -7,7 +7,7 @@ import OSLog
 /// service keeps the series in memory and rewrites the zone's rows wholesale after each
 /// fetch, so the table never holds more than the cache itself (≤ two days × zones) and
 /// needs no retention path. Market data, not user history: wipes, prunes, and backups
-/// deliberately ignore these tables — a fresh fetch replaces everything.
+/// deliberately ignore these tables – a fresh fetch replaces everything.
 final class ElectricityPriceStore: @unchecked Sendable {
     private let db: SQLiteDatabase
     private let logger = AppLog.logger("elpriser-db")

@@ -5,7 +5,7 @@ protocol VehicleProviding: RemoteCommandExecuting {
     var brand: VehicleBrand { get }
     var cars: [CarSummary] { get async }
     /// True when the provider already holds enough state (a refresh token, known vehicles, and
-    /// discovery metadata) to serve `fetchVehicleState` without a full `restoreSession` — the
+    /// discovery metadata) to serve `fetchVehicleState` without a full `restoreSession` – the
     /// lazy `refreshTokenIfNeeded` inside the fetch path covers an expired access token. The
     /// background garage scan checks this before re-restoring a dormant brand every pass, which
     /// otherwise forced a token grant and a full vehicle re-discovery every five minutes.

@@ -12,17 +12,18 @@ struct SettingsRemoteControlsCard: View {
     private var prefs: PreferencesStore { binder.preferences }
 
     private func supportsCapability(_ capability: VehicleCapability) -> Bool {
-        guard let state else { return true }
+        guard let state else { return false }
         return state.capabilityProfile.support(for: capability).permitsRequest
     }
 
     private func row(_ feature: AppFeature, symbol: String, title: String, detail: String,
                      isSupported: Bool = true, badgeText: String? = nil) -> SettingsFeatureToggleRow {
         SettingsFeatureToggleRow(binder: binder, feature: feature, symbol: symbol, title: title,
-                                 detail: detail, isSupported: isSupported, badgeText: badgeText)
+                                 detail: detail, isSupported: isSupported,
+                                 badgeText: isSupported ? badgeText : "Not supported by vehicle")
     }
 
-    /// Raw (unlocalized — `SettingsFeatureToggleRow` localizes) badge for a command whose
+    /// Raw (unlocalized – `SettingsFeatureToggleRow` localizes) badge for a command whose
     /// dispatch needs the Polestar command-client authorization the user has not granted yet.
     private func commandAuthBadge(_ needsCommandClientAuth: Bool) -> String? {
         guard needsCommandClientAuth,
@@ -40,7 +41,7 @@ struct SettingsRemoteControlsCard: View {
                 Text(isVolvo
                      ? L10n.text("Climate is available with the standard API subscription. Lock, locate, engine-start, and location permissions require approval for your Volvo developer application and a new sign-in.")
                      : L10n.text("Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization below. Charging, timers and software installation work with the account sign-in alone."))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
 
                 VStack(spacing: 4) {
@@ -48,9 +49,11 @@ struct SettingsRemoteControlsCard: View {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(L10n.text("Approved Volvo permissions"))
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .hisType(.label, weight: .semibold)
                                 Text(L10n.text("Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in."))
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
+                                    .hisCaptionLeading()
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -74,16 +77,16 @@ struct SettingsRemoteControlsCard: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
                                     Image(systemName: authorized ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                        .font(.system(size: 10))
+                                        .hisType(.caption)
                                         .foregroundStyle(authorized ? Color.green : Color.orange)
                                     Text(authorized ? L10n.text("Remote commands authorized")
                                                     : L10n.text("Authorize Remote Commands"))
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .hisType(.label, weight: .semibold)
                                 }
                                 Text(authorized
                                      ? L10n.text("Locks, climate, windows, cabin cleaning and locate are authorized. Re-authorize here if these commands start failing.")
                                      : L10n.text("Opens your browser to sign in for remote commands. Hisingen never sees your Polestar password for this step, and this is separate from the account sign-in above."))
-                                    .font(.system(size: 9.5))
+                                    .hisType(.micro)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -91,7 +94,7 @@ struct SettingsRemoteControlsCard: View {
                                 binder.notify(.polestarCommandAuthorization)
                             } label: {
                                 Text(authorized ? L10n.text("Re-authorize…") : L10n.text("Authorize…"))
-                                    .font(.system(size: 10, weight: .medium))
+                                    .hisType(.caption, weight: .medium)
                             }
                             .controlSize(.small)
                         }

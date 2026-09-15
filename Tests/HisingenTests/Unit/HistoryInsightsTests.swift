@@ -102,11 +102,11 @@ struct HistoryInsightsTests {
             // `21.0 - 21.05` isn't exactly 0.05 in IEEE 754 double precision (it lands a hair
             // above), which made this test fail nondeterministically-looking on the exact
             // boundary. A value clearly inside the tolerance tests the same behavior reliably.
-            telemetry(3, daysAfterStart: 0.2, odometerKm: nil, consumption: 21.03), // same reading, <6h later — collapses into #2
+            telemetry(3, daysAfterStart: 0.2, odometerKm: nil, consumption: 21.03), // same reading, <6h later – collapses into #2
             telemetry(4, daysAfterStart: 3, odometerKm: nil, consumption: 23.4),
         ])
         // #2 and #3 collapse into one point (close in both value and time); #1 keeps its own
-        // point even though its value matches #2 — it's 2 days later, well outside the
+        // point even though its value matches #2 – it's 2 days later, well outside the
         // collapse window, so it's a genuinely separate reading worth its own point on the
         // chart rather than a duplicate poll of the same one. #4 is simply a different value.
         #expect(points.count == 3)

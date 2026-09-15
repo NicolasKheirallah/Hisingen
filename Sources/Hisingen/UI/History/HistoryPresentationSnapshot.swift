@@ -48,6 +48,14 @@ struct HistoryDashboardLoadResult: Sendable {
 
 struct HistoryTripPresentation: Sendable {
     var trips: [TripHistoryEntry] = []
+    /// The same period, with hidden trips excluded but the search box ignored.
+    ///
+    /// The search field is a filter on the trip *list*; it sits inside that card and is
+    /// labelled for it. Letting it reach the summary totals above meant typing a date quietly
+    /// restated the period's distance and trip count, and left two adjacent cards disagreeing
+    /// about the same number. Hiding a trip is a deliberate, persisted decision, so it does
+    /// apply here.
+    var aggregateTrips: [TripHistoryEntry] = []
     var hours: [HistoryInsights.HourBucket] = []
     var weekdayWeekend = HistoryInsights.WeekdayWeekendSplit(
         weekdayKm: 0, weekendKm: 0, weekdayTripCount: 0, weekendTripCount: 0
@@ -69,8 +77,9 @@ struct HistoryTripPresentation: Sendable {
         }
         return HistoryTripPresentation(
             trips: trips,
-            hours: HistoryInsights.tripsByHourOfDay(from: trips),
-            weekdayWeekend: HistoryInsights.weekdayWeekendDistance(from: trips)
+            aggregateTrips: base,
+            hours: HistoryInsights.tripsByHourOfDay(from: base),
+            weekdayWeekend: HistoryInsights.weekdayWeekendDistance(from: base)
         )
     }
 }

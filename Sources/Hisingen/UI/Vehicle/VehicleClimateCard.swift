@@ -77,7 +77,7 @@ struct VehicleClimateCard: View {
                 HStack {
                     HStack(spacing: 7) {
                         SpinningFanView(isSpinning: climateActive, size: 14, color: climateActive ? .orange : HisingenTheme.inkMuted)
-                        Text(L10n.text("Climate & Timers")).font(.system(size: 12, weight: .bold)).foregroundStyle(HisingenTheme.ink)
+                        Text(L10n.text("Climate & Timers")).hisType(.body, weight: .bold).foregroundStyle(HisingenTheme.ink)
                     }
                     Spacer()
                     if climateActive {

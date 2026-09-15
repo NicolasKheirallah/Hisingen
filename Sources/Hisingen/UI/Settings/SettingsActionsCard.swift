@@ -19,6 +19,7 @@ struct SettingsActionsCard: View {
     var body: some View {
         Card {
             VStack(spacing: 8) {
+                CardHeader(symbol: "gearshape.2", title: L10n.text("Settings Actions"), color: .secondary)
                 HStack(spacing: 8) {
                     Button { exportSettings() } label: {
                         Label(L10n.text("Export Settings"), systemImage: "square.and.arrow.up")
@@ -43,12 +44,12 @@ struct SettingsActionsCard: View {
                             ? "exclamationmark.triangle.fill"
                             : "checkmark.circle.fill"
                     )
-                    .font(.system(size: 9.5, weight: .medium))
+                    .hisType(.micro, weight: .medium)
                     .foregroundStyle(settingsTransferFeedback.isError ? Color.red : HisingenTheme.semanticGood)
                     .textSelection(.enabled)
                 }
 
-                Divider().opacity(0.4)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 Button(role: .destructive) {
                     showSignOutConfirmation = true
                 } label: {
@@ -72,7 +73,7 @@ struct SettingsActionsCard: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.pressable)
-                .font(.system(size: 11))
+                .hisType(.label)
                 .foregroundStyle(.secondary)
                 .padding(.top, 2)
             }
@@ -107,7 +108,7 @@ struct SettingsActionsCard: View {
             Button(L10n.text("Reset Preferences"), role: .destructive) {
                 preferences.resetTransferableSettings()
                 notifyAllPreferenceSubsystems()
-                binder.notify(.closeSettings)
+                settingsTransferFeedback = (L10n.text("Preferences reset to defaults."), false)
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         } message: {

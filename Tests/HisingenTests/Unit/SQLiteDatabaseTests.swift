@@ -215,7 +215,7 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "BATTERY_VIN_DEDUP"
 
-        // First reading always lands — there is no history to compare against.
+        // First reading always lands – there is no history to compare against.
         #expect(vdb.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
         ))

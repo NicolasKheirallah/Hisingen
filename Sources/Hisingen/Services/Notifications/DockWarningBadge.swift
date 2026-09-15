@@ -20,7 +20,7 @@ final class DockWarningBadge {
         refresh()
     }
 
-    /// Repaints from the current count — call after a settings change that could flip the
+    /// Repaints from the current count – call after a settings change that could flip the
     /// gating preferences.
     func refresh() {
         guard preferences.features.contains(.notifications), preferences.showWarningBadge else {

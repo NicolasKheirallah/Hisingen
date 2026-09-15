@@ -25,7 +25,7 @@ struct LaunchAtLoginReconciliationTests {
         // First launch of a freshly replaced/updated bundle: the old registration
         // no longer matches this bundle's signature.
         #expect(resolve(intent: true, status: .notFound) == .register)
-        // And it does NOT depend on the launch being user-initiated — this fires on
+        // And it does NOT depend on the launch being user-initiated – this fires on
         // the automatic startup reconcile.
         #expect(resolve(intent: true, status: .notFound, userInitiated: false) == .register)
     }
@@ -33,7 +33,7 @@ struct LaunchAtLoginReconciliationTests {
     @Test
     func aWronglyClearedIntentIsRecoveredOnlyOnTheStartupReconcile() {
         // Automatic startup: registration survived the update but a previous build
-        // had already wiped the preference — restore it.
+        // had already wiped the preference – restore it.
         #expect(resolve(intent: false, status: .enabled, userInitiated: false) == .restoreClearedIntent)
         // User just toggled it off: that must win, not be reverted.
         #expect(resolve(intent: false, status: .enabled, userInitiated: true) == .unregister)
@@ -66,7 +66,7 @@ struct LaunchAtLoginReconciliationTests {
 
     @Test
     func intentOffWithNothingRegisteredIsANoOp() {
-        // The common case for a user who never enabled it — must not thrash.
+        // The common case for a user who never enabled it – must not thrash.
         #expect(resolve(intent: false, status: .notRegistered) == .none)
         #expect(resolve(intent: false, status: .notFound) == .none)
     }

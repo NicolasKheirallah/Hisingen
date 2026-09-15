@@ -85,7 +85,7 @@ struct LivePolestarReadOnlyIntegrationTests {
             }
             if let capabilities = state.otaCapabilities {
                 // Older `GetMyCars` schemas advertise charge-amperage / target-level support
-                // as a bare boolean with no numeric bounds — the limit fields are then 0
+                // as a bare boolean with no numeric bounds – the limit fields are then 0
                 // ("unknown"), and `VehicleChargeBounds` supplies the fallback range. Only
                 // assert the advertised bounds are self-consistent when the vehicle sends them.
                 if capabilities.chargeAmperageMinLimit > 0 {

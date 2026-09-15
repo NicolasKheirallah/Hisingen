@@ -166,15 +166,15 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     }
 
     /// Static model-family reference values are available. This does not mean the exact VIN,
-    /// battery, wheel, market or model-year variant has been verified — it means the capacity/
+    /// battery, wheel, market or model-year variant has been verified – it means the capacity/
     /// WLTP tables below have a non-zero entry for this model family. Volvo BEVs (XC40/EX40/C40/
     /// EC40/EX30/EX90/ES90) do; Volvo ICE/PHEV/unrecognized models don't, so this is model-driven
-    /// rather than brand-driven — a Polestar-only check would hide those Volvo models' own
+    /// rather than brand-driven – a Polestar-only check would hide those Volvo models' own
     /// reference numbers even though the same table already carries them.
     var hasModelReferenceSpecs: Bool { nominalWltpRangeKm > 0 && nominalUsableCapacityKwh > 0 }
 
     /// Base per-model-family capacity table. This is the single source of truth for battery
-    /// capacity — `VehicleState.factoryNominalBatteryCapacityKwh`/`factoryUsableBatteryCapacityKwh`
+    /// capacity – `VehicleState.factoryNominalBatteryCapacityKwh`/`factoryUsableBatteryCapacityKwh`
     /// read these values and layer year/powertrain-specific overrides on top (a 2024+ Polestar 2
     /// or Volvo XC40-family pack revision, or a PHEV's year-dependent pack), rather than
     /// maintaining a second independent table. `VehicleState.batteryPackDescription`'s prose
@@ -245,7 +245,7 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
     }
 
     /// Static charge-port reference for the model family: connector standard plus typical peak
-    /// AC and DC charging power. Like `nominalWltpRangeKm`, this is a model-family benchmark —
+    /// AC and DC charging power. Like `nominalWltpRangeKm`, this is a model-family benchmark –
     /// not a VIN/market-verified rating. Connector standard and peak rates vary by market and
     /// model year (a North-American car uses NACS/J1772; these figures follow the same
     /// EU-centric assumptions as the capacity/range tables above). `nil` for families without a
@@ -566,19 +566,19 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .unavailable
             case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations:
                 return .unavailable
-            // Volvo's public APIs expose no software/OTA resource at all — not a backend
+            // Volvo's public APIs expose no software/OTA resource at all – not a backend
             // that might answer on some vehicles, but an endpoint that does not exist.
             case .softwareStatus:
                 return .unavailable
             case .chargeTarget, .chargingCurrentLimit, .chargingScheduleOverride:
                 return .unavailable
             // Volvo's `tyres` endpoint (indirect TPMS, inferred from wheel-speed imbalance,
-            // not a per-wheel pressure sensor) reports a warning-level enum only — there is no
+            // not a per-wheel pressure sensor) reports a warning-level enum only – there is no
             // numeric kPa/PSI field to report, on any Volvo model, regardless of API product or
             // vehicle configuration. This is a fixed API/hardware fact, not something a live
             // probe could ever resolve differently, so it belongs in the static baseline (like
             // Polestar 2's equivalent case above) rather than sitting at `.backendDependent`
-            // forever. Tyre *warning* status itself is still fully supported — see
+            // forever. Tyre *warning* status itself is still fully supported – see
             // `healthDetails.tyres[].warning`; only the "direct value" capability is unavailable.
             case .tyrePressureValues:
                 return .unavailable
@@ -593,7 +593,7 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .softwareInstallControl, .softwareStatus:
                 return .unavailable
-            // See the comment on the same case above — applies to every Volvo model.
+            // See the comment on the same case above – applies to every Volvo model.
             case .tyrePressureValues:
                 return .unavailable
             default:

@@ -83,9 +83,10 @@ extension InfoTabView {
                 }
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 if failed {
-                    Text(L10n.text("The backend recorded a failed update event. This is an event record, not a live vehicle fault — a Polestar workshop can apply the update directly if it keeps failing."))
-                        .font(.system(size: 9.5))
+                    Text(L10n.text("The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing."))
+                        .hisType(.micro)
                         .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -120,8 +121,8 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "cloud.sun.fill", title: L10n.text("Ambient Conditions"), color: .cyan)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
-                Text(L10n.text("Reported by the vehicle at its parked location — not a forecast."))
-                    .font(.system(size: 9.5))
+                Text(L10n.text("Reported by the vehicle at its parked location, not a forecast."))
+                    .hisType(.micro)
                     .foregroundStyle(.tertiary)
             }
         })
@@ -281,7 +282,7 @@ extension InfoTabView {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Signal strength history chart"))
                     .accessibilityValue(chartAccessibilityValue(points: signalHistory.map { Double($0.signalBars ?? 0) }))
-                    .animation(Motion.resolve(Motion.progress), value: signalHistoryChartKey)
+                    .hisAnimation(Motion.progress, value: signalHistoryChartKey)
                 }
                 let wakes = history.compactMap(\.wakeReason)
                 if !wakes.isEmpty {

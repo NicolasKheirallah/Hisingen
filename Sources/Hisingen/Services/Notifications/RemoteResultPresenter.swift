@@ -3,7 +3,7 @@ import UserNotifications
 
 /// Posts a transient command / sign-in outcome through `UNUserNotificationCenter`, so it
 /// follows the user's system notification settings. Successful outcomes self-clean after
-/// 5 seconds; failures persist until dismissed — a failure that disappears early reads as
+/// 5 seconds; failures persist until dismissed – a failure that disappears early reads as
 /// "the command worked".
 ///
 /// Extracted from `AppDelegate.showRemoteResult`, which both the remote-command pipeline

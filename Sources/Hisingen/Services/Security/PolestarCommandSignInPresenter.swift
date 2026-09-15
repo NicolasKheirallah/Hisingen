@@ -1,12 +1,12 @@
 import AppKit
 import Foundation
 
-/// Authorizes the Polestar *command* client (`lp8dyrd_10`, remote commands only — see
+/// Authorizes the Polestar *command* client (`lp8dyrd_10`, remote commands only – see
 /// `PolestarAPI.commandClientID`) through the user's real system browser instead of Hisingen
 /// scripting the PingFederate login form itself. Mirrors `VolvoSignInPresenter` exactly: opens
 /// the authorization URL via `NSWorkspace`, and waits for the OS to hand the final redirect back
 /// through the app's registered `polestar-explore://` URL scheme (the command client's own
-/// registered redirect URI — see `PolestarAPI.commandRedirectURL`). Hisingen never sees the
+/// registered redirect URI – see `PolestarAPI.commandRedirectURL`). Hisingen never sees the
 /// Polestar ID password for this flow.
 @MainActor
 final class PolestarCommandSignInPresenter: NSObject {

@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor
 final class PreferencesStore {
     /// Process-wide instance for call sites outside the view hierarchy (App Intents,
-    /// service wiring) that previously constructed throwaway stores — each of which also
+    /// service wiring) that previously constructed throwaway stores – each of which also
     /// opened its own Keychain handle set.
     static let shared = PreferencesStore()
 
@@ -230,8 +230,8 @@ final class PreferencesStore {
         return result
     }
 
-    /// Whether the Polestar *command* client — remote locks, climate, windows, cabin cleaning,
-    /// and locate — has a stored authorization. This is a separate OAuth grant from the account
+    /// Whether the Polestar *command* client – remote locks, climate, windows, cabin cleaning,
+    /// and locate – has a stored authorization. This is a separate OAuth grant from the account
     /// session (`hasResumableSession`), obtained via Settings → Remote Controls → "Authorize
     /// Remote Commands". Backed by the Keychain item `PolestarAPI` writes on success and clears
     /// (`clearCommandAuthorization()`) when the grant is rejected. Charging, timers and OTA
@@ -241,7 +241,7 @@ final class PreferencesStore {
     }
 
     /// Preferred display order of the Charging card's detail rows. Identifiers not present
-    /// keep their natural position after the ordered ones — so a partial list is safe.
+    /// keep their natural position after the ordered ones – so a partial list is safe.
     var chargingStatOrder: [String] {
         get {
             guard let raw = d.array(forKey: "charging_stat_order") as? [String] else { return [] }
@@ -282,6 +282,22 @@ final class PreferencesStore {
         d.set(values, forKey: "polestar_vehicle_nicknames_v1")
         if key == vin.uppercased() { d.removeObject(forKey: "polestar_vehicle_nickname") }
     }
+    /// A VIN as it may be shown: redacted to its last four characters when screenshot privacy is on.
+    ///
+    /// The Privacy card promises that turning this on blurs "VIN, plate and coordinates across the
+    /// app", and every surface that shows a VIN has to give the same answer. Four of them spelled
+    /// the same expression by hand and one of them — the capability matrix, which is the card most
+    /// likely to be screenshotted and exported — did not redact at all.
+    func displayVIN(_ vin: String) -> String {
+        privacyRedactionEnabled ? "VIN •••·\(vin.suffix(4))" : "VIN: \(vin)"
+    }
+
+    /// Whether an export filename may carry the VIN. A redacted screenshot still leaves the file
+    /// sitting in a shared folder under the reader's own name.
+    func exportVINComponent(_ vin: String) -> String {
+        privacyRedactionEnabled ? "shared" : String(vin.prefix(8))
+    }
+
     func formattedVehicleTitle(vin: String, modelName: String?, modelYear: String?, registrationNo: String?, fallbackBrand: VehicleBrand? = nil, format: VehicleLabelFormat? = nil) -> String {
         let selected = format ?? vehicleLabelFormat, brand = fallbackBrand ?? activeBrand
         let nick = vehicleNickname(for: vin).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -344,7 +360,7 @@ final class PreferencesStore {
     /// Mac is a first run there and should see the pass.
     var hasCompletedSetupPass: Bool { get { d.bool(forKey: "setup_pass_completed") } set { d.set(newValue, forKey: "setup_pass_completed") } }
 
-    /// Set once the first-launch "lives in your menu bar" card has had its moment — the user
+    /// Set once the first-launch "lives in your menu bar" card has had its moment – the user
     /// dismissed it or the first panel session ended. Also stays out of settings transfer.
     var hasSeenFirstLaunchWelcome: Bool { get { d.bool(forKey: "first_launch_welcome_seen") } set { d.set(newValue, forKey: "first_launch_welcome_seen") } }
 
@@ -367,7 +383,7 @@ final class PreferencesStore {
         }
     }
     var historySampleRetentionDays: Int { get { let value = d.integer(forKey: "history_sample_retention_days"); return [30, 90, 180, 365].contains(value) ? value : 90 } set { d.set([30, 90, 180, 365].contains(newValue) ? newValue : 90, forKey: "history_sample_retention_days") } }
-    /// When enabled, signing out — or switching to a different account — also erases the
+    /// When enabled, signing out – or switching to a different account – also erases the
     /// local SQLite history (charging sessions, telemetry, battery health, fuel entries…)
     /// for the affected vehicles. Off by default: a re-signed local build, a Keychain
     /// prompt dismissed by accident, or a stray sign-out should not discard months of
@@ -417,7 +433,7 @@ final class PreferencesStore {
     /// How long before the cheap window opens the banner is posted; zero posts it as the
     /// window opens.
     var plannerWindowLeadMinutes: Int { get { let value = d.object(forKey: "planner_window_lead_minutes") as? Int; return min(max(value ?? 15, 0), 1_440) } set { d.set(min(max(newValue, 0), 1_440), forKey: "planner_window_lead_minutes") } }
-    /// Banner after the daily fetch once tomorrow's prices have landed. Off by default —
+    /// Banner after the daily fetch once tomorrow's prices have landed. Off by default –
     /// the information is rarely urgent enough to justify a daily ping.
     var notifyPlannerPricesPublished: Bool { get { d.bool(forKey: "notify_planner_prices_published") } set { d.set(newValue, forKey: "notify_planner_prices_published") } }
     /// The consent that lets the planner send `startChargingOverride` on its own when the

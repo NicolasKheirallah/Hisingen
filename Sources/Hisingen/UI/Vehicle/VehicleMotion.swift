@@ -170,8 +170,8 @@ enum VehicleEntranceStyle: Equatable {
 
 /// Remembers when each car last rolled in.
 ///
-/// Hisingen lives in the menu bar, so the popover — and with it the whole
-/// SwiftUI tree and every layer under it — is built from scratch every time it
+/// Hisingen lives in the menu bar, so the popover – and with it the whole
+/// SwiftUI tree and every layer under it – is built from scratch every time it
 /// opens. Per-view state cannot answer "have we already done this", so the
 /// decision is kept here, outside the view hierarchy, keyed by VIN.
 @MainActor
@@ -179,7 +179,7 @@ final class VehicleEntranceLedger {
     static let shared = VehicleEntranceLedger()
 
     /// Reopening this soon after an entrance is one continuous glance at the
-    /// car — a mis-click, or checking the other tab. Animating again would just
+    /// car – a mis-click, or checking the other tab. Animating again would just
     /// be noise.
     static let resumeWindow: TimeInterval = 2.5
     /// Past this the popover reads as a fresh visit and earns the full roll-in.
@@ -266,18 +266,6 @@ enum VehicleRollCurve {
         return sin(.pi * t)
     }
 
-    /// Wheel rotation, in radians, for a wheel of `radius` points that has
-    /// rolled `travelled` points to the left without slipping.
-    ///
-    /// Nothing calls this yet — the studio renders are flattened, so there are
-    /// no wheel layers to turn. It exists because it is the whole of the
-    /// physics: feed it the same travel the body uses and rotation necessarily
-    /// starts, holds and stops with the car. See
-    /// `docs/architecture/vehicle-motion.md`.
-    static func wheelRotation(travelled: CGFloat, radius: CGFloat) -> CGFloat {
-        guard radius > 0 else { return 0 }
-        return travelled / radius
-    }
 }
 
 // MARK: - Entrance motion
@@ -287,8 +275,6 @@ struct VehicleEntranceSample: Equatable {
     var translation: CGPoint
     var scale: CGFloat
     var opacity: CGFloat
-    /// Distance rolled so far, for wheel rotation.
-    var travelled: CGFloat
 }
 
 /// A tuned entrance. Values are points and fractions of the total duration.
@@ -336,7 +322,7 @@ struct VehicleEntranceMotion: Equatable {
         fadeFraction: 0.30
     )
 
-    /// The cabin photo has no exterior orientation, so it does not roll — it
+    /// The cabin photo has no exterior orientation, so it does not roll – it
     /// just resolves into place.
     static let cabin = VehicleEntranceMotion(
         duration: 0.30,
@@ -401,8 +387,7 @@ struct VehicleEntranceMotion: Equatable {
         return VehicleEntranceSample(
             translation: CGPoint(x: travel - travelled, y: lift + compression),
             scale: startScale + (1 - startScale) * CGFloat(covered),
-            opacity: CGFloat(1 - pow(1 - fade, 2)),
-            travelled: travelled
+            opacity: CGFloat(1 - pow(1 - fade, 2))
         )
     }
 
@@ -438,14 +423,19 @@ struct VehicleTransitionMotion: Equatable {
         reduceMotion: Bool
     ) -> VehicleTransitionMotion {
         if reduceMotion {
+            // The doc three lines up says the two pictures must not both be at half opacity over
+            // the same pixels, and the reduce-motion branch broke exactly that: `fadeOutFraction: 1`
+            // and `fadeInFraction: 1` with no delay dissolves one render through the other for the
+            // whole duration. They cross-fade sequentially instead, which is also the smaller ask
+            // for a reader who asked for less.
             return VehicleTransitionMotion(
                 duration: 0.14,
                 offset: 0,
                 outgoingScale: 1,
                 incomingScale: 1,
-                fadeOutFraction: 1,
-                fadeInDelayFraction: 0,
-                fadeInFraction: 1
+                fadeOutFraction: 0.5,
+                fadeInDelayFraction: 0.5,
+                fadeInFraction: 0.5
             )
         }
         return VehicleTransitionMotion(

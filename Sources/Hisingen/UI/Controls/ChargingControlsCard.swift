@@ -10,6 +10,10 @@ struct ChargingControlsCard: View {
     @State private var ampLimitDraft: Double?
     @State private var locationAmpDrafts: [String: Double] = [:]
     @State private var locationSocDrafts: [String: Double] = [:]
+    /// Optimised-charging has no drag to end, so its optimistic value is held until the
+    /// provider reports it. Reading straight from server state made the switch animate back
+    /// to where it started, undoing the user's gesture and then redoing it seconds later.
+    @State private var optimisedDrafts: [String: Bool] = [:]
     @State private var showAddLocation = false
     @State private var renamingLocation: ChargeLocationSnapshot?
     @State private var renameDraft: String = ""
@@ -29,13 +33,22 @@ struct ChargingControlsCard: View {
     private var ampLimit: Int? {
         state.energy.currentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
     }
+    /// What the slider is showing. The readout used to follow the server alone, so the knob
+    /// moved under the pointer while the number beside it stayed frozen until the command
+    /// round-tripped. §1 asks for feedback continuous *during* the interaction.
+    private var displayedChargeTarget: Int? {
+        chargeTargetDraft.map { Int($0.rounded()) } ?? chargeTarget
+    }
+    private var displayedAmpLimit: Int? {
+        ampLimitDraft.map { Int($0.rounded()) } ?? ampLimit
+    }
 
     var body: some View {
         let chargingCommands = [RemoteCommand.setChargeTarget(80), .setAmpLimit(16), .startChargingOverride]
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: .green)
-                gate.dimReason(gate.cardAvailability(chargingCommands))
+                gate.dimReason(gate.liveAvailability(chargingCommands))
 
                 if profile.permits(.chargeTarget) && features.contains(.remoteCharging) {
                     chargeTargetControls
@@ -45,7 +58,7 @@ struct ChargingControlsCard: View {
                 }
                 if profile.permits(.chargingScheduleOverride)
                     && (features.contains(.remoteCharging) || features.contains(.remoteSchedules)) {
-                    Divider().opacity(0.5)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     chargeOverrideButtons
                 }
 
@@ -53,14 +66,14 @@ struct ChargingControlsCard: View {
 
                 if profile.permits(.chargingSchedule)
                     && (features.contains(.remoteSchedules) || features.contains(.remoteCharging)) {
-                    Divider().opacity(0.5)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     Button {
                         onShowSchedule(.globalCharging)
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar.badge.clock")
                             Text(L10n.text("Manage Timers & Schedules…"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                         }
                         .frame(maxWidth: .infinity, minHeight: 28)
                     }
@@ -68,8 +81,8 @@ struct ChargingControlsCard: View {
                 }
             }
         }
-        .opacity(gate.cardOpacity(chargingCommands))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability(chargingCommands))
+        .opacity(gate.liveOpacity(chargingCommands))
+        .hisAnimation(Motion.stateChange, value: gate.liveAvailability(chargingCommands))
         .sheet(isPresented: $showAddLocation) {
             ChargeLocationEditorSheet(
                 defaultAmpLimit: ampLimit ?? 16,
@@ -91,15 +104,22 @@ struct ChargingControlsCard: View {
             )
         ) {
             TextField(L10n.text("Location name"), text: $renameDraft)
+            // Save used to close the alert and do nothing at all when the field was empty or
+            // unchanged, which reads as a save that worked. It is now disabled with the reason
+            // attached, so the state is visible before the press rather than after it.
             Button(L10n.text("Save")) {
-                if let location = renamingLocation {
-                    let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty, trimmed != location.alias {
-                        gate.send(.updateChargeLocationAlias(id: location.id, alias: trimmed))
-                    }
-                }
+                guard let location = renamingLocation else { return }
+                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, trimmed != location.alias else { return }
+                gate.send(.updateChargeLocationAlias(id: location.id, alias: trimmed))
                 renamingLocation = nil
             }
+            .disabled(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      || renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                          == (renamingLocation?.alias ?? ""))
+            .help(renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  ? L10n.text("Enter a name first.")
+                  : L10n.text("The name is unchanged."))
             Button(L10n.text("Cancel"), role: .cancel) { renamingLocation = nil }
         }
         .confirmationDialog(
@@ -139,14 +159,14 @@ struct ChargingControlsCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(L10n.text("Target Limit"))
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(chargeTarget.map { Format.percent(Double($0)) } ?? L10n.text("Unavailable"))
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Text(displayedChargeTarget.map { Format.percent(Double($0)) } ?? L10n.text("Unavailable"))
+                    .hisType(.subhead, weight: .bold, design: .rounded)
                     .monospacedDigit()
                     .foregroundStyle(.primary)
-                    .hisTelemetryValue(chargeTarget, reduceMotion: reduceMotion)
+                    .hisTelemetryValue(displayedChargeTarget, reduceMotion: reduceMotion)
             }
 
             HStack(spacing: 6) {
@@ -158,7 +178,7 @@ struct ChargingControlsCard: View {
                         Text(target == chargeBounds.dailyTarget
                              ? L10n.format("Daily %@", Format.percent(Double(target)))
                              : Format.percent(Double(target)))
-                            .font(.system(size: 9.5, weight: selected ? .bold : .medium))
+                            .hisType(.micro, weight: selected ? .bold : .medium)
                             .padding(.vertical, 3)
                             .frame(maxWidth: .infinity)
                             .background(
@@ -203,26 +223,26 @@ struct ChargingControlsCard: View {
                 gate.sendingOverlay(.setChargeTarget(chargeTarget))
             } else {
                 Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
         }
-        .animation(Motion.resolve(Motion.layout), value: chargeTarget)
+        .hisAnimation(Motion.layout, value: chargeTarget)
     }
 
     private var currentLimitControls: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(L10n.text("Current Limit"))
-                    .font(.system(size: 11, weight: .medium))
+                    .hisType(.label, weight: .medium)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(ampLimit.map { Format.amps($0) } ?? L10n.text("Unavailable"))
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Text(displayedAmpLimit.map { Format.amps($0) } ?? L10n.text("Unavailable"))
+                    .hisType(.subhead, weight: .bold, design: .rounded)
                     .monospacedDigit()
                     .foregroundStyle(.primary)
-                    .hisTelemetryValue(ampLimit, reduceMotion: reduceMotion)
+                    .hisTelemetryValue(displayedAmpLimit, reduceMotion: reduceMotion)
             }
 
             if let ampLimit {
@@ -234,7 +254,8 @@ struct ChargingControlsCard: View {
                                 gate.send(.setAmpLimit(preset))
                             } label: {
                                 Text(Format.amps(preset))
-                                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                                    .hisType(.micro, weight: .semibold, design: .rounded)
+                                    .monospacedDigit()
                                     .frame(minWidth: 34)
                             }
                             .buttonStyle(.bordered)
@@ -251,7 +272,7 @@ struct ChargingControlsCard: View {
                     .padding(.bottom, 2)
                     // Keyed on the filtered collection so the chip for the now-current
                     // limit slides out instead of vanishing with the next read.
-                    .animation(Motion.resolve(Motion.layout), value: chips)
+                    .hisAnimation(Motion.layout, value: chips)
                 }
                 Slider(
                     value: Binding(
@@ -276,12 +297,12 @@ struct ChargingControlsCard: View {
                 .transition(.opacity)
             } else {
                 Text(L10n.text("The vehicle did not report a configurable current limit."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
         }
-        .animation(Motion.resolve(Motion.layout), value: ampLimit)
+        .hisAnimation(Motion.layout, value: ampLimit)
     }
 
     private var chargeOverrideButtons: some View {
@@ -291,7 +312,7 @@ struct ChargingControlsCard: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "bolt.fill")
-                    Text(L10n.text("Charge Now")).font(.system(size: 11, weight: .medium))
+                    Text(L10n.text("Charge Now")).hisType(.label, weight: .medium)
                     gate.sendingOverlay(.startChargingOverride)
                 }
                 .frame(maxWidth: .infinity, minHeight: 30)
@@ -305,7 +326,7 @@ struct ChargingControlsCard: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "clock.arrow.circlepath")
-                    Text(L10n.text("Resume Schedule")).font(.system(size: 11, weight: .medium))
+                    Text(L10n.text("Resume Schedule")).hisType(.label, weight: .medium)
                     gate.sendingOverlay(.stopChargingOverride)
                 }
                 .frame(maxWidth: .infinity, minHeight: 30)
@@ -320,27 +341,32 @@ struct ChargingControlsCard: View {
         if profile.permits(.chargeLocations) && features.contains(.remoteCharging) {
             let locations = state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
             VStack(alignment: .leading, spacing: 10) {
-                Divider().opacity(0.5)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 HStack {
                     Text(L10n.text("Saved Charge Locations"))
-                        .font(.system(size: 11, weight: .semibold))
+                        .hisType(.label, weight: .semibold)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
                         showAddLocation = true
                     } label: {
                         Label(L10n.text("Add here"), systemImage: "plus.circle")
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(HisingenTheme.accent)
                     }
                     .buttonStyle(.pressable)
-                    .disabled(gate.remoteCommandInProgress)
+                    // Asks the gate, not the raw busy flag, so the card and this control always
+                    // agree on why it is inert. The placeholder values are the ones the sheet
+                    // starts from: availability reads the command's shape, not the user's numbers.
+                    .disabled(gate.isDisabled(.createChargeLocationAtCar(
+                        alias: "", ampLimit: 0, minimumSoc: 0, optimisedCharging: false
+                    )))
                     .help(L10n.text("Saves the vehicle's current position as a charge location."))
                 }
 
                 if locations.isEmpty {
                     Text(L10n.text("No saved locations. Use “Add here” while parked where you charge."))
-                        .font(.system(size: 9.5))
+                        .hisType(.micro)
                         .foregroundStyle(.tertiary)
                         .transition(.opacity)
                 }
@@ -352,7 +378,7 @@ struct ChargingControlsCard: View {
             }
             // Keyed on the collection itself so saved/removed locations reflow
             // instead of inserting and deleting instantly.
-            .animation(Motion.resolve(Motion.cardChange), value: locations)
+            .hisAnimation(Motion.cardChange, value: locations)
         }
     }
 
@@ -360,34 +386,37 @@ struct ChargingControlsCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 11))
+                    .hisType(.label)
                     .foregroundStyle(HisingenTheme.accent)
                 Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .hisType(.label, weight: .semibold)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.9)
                 Spacer()
                 Button {
                     renameDraft = location.alias
                     renamingLocation = location
                 } label: {
-                    Image(systemName: "pencil").font(.system(size: 10))
+                    Image(systemName: "pencil").hisType(.caption)
                         .foregroundStyle(HisingenTheme.accent)
                 }
                 .buttonStyle(.pressable)
-                .disabled(gate.remoteCommandInProgress)
+                .disabled(gate.isDisabled(.updateChargeLocationAlias(
+                    id: location.id, alias: location.alias
+                )))
                 .help(L10n.text("Rename"))
                 .accessibilityLabel(L10n.text("Rename location"))
             }
 
             HStack {
                 Text(L10n.text("Minimum charge"))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(Format.percent(Double(
                     locationSocDrafts[location.id].map { Int($0.rounded()) } ?? location.minimumSoc
                 )))
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .hisType(.label, weight: .bold, design: .rounded)
                 .monospacedDigit()
             }
             Slider(
@@ -406,26 +435,33 @@ struct ChargingControlsCard: View {
                 }
             )
             .tint(.green)
-            .disabled(gate.remoteCommandInProgress)
+            .disabled(gate.isDisabled(.updateChargeLocationMinimumSoc(id: location.id, soc: 0)))
             .accessibilityLabel(L10n.text("Minimum charge at location"))
 
             let locationAmpDraft = locationAmpDrafts[location.id]
             HStack {
                 Text(L10n.text("Current limit"))
-                    .font(.system(size: 10))
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                if let draftAmps = locationAmpDraft.map({ Int($0.rounded()) }) {
+                // `location.ampLimit > 0` is the vehicle's own answer; 0 means it does not have a
+                // per-location limit. The slider below still started at 16 A for that case while
+                // this label read "Vehicle default", so the two halves of one control disagreed.
+                if location.ampLimit == 0, locationAmpDraft == nil {
+                    Text(L10n.text("Vehicle default"))
+                        .hisType(.caption)
+                        .foregroundStyle(.tertiary)
+                } else if let draftAmps = locationAmpDraft.map({ Int($0.rounded()) }) {
                     Text(Format.amps(draftAmps))
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .hisType(.label, weight: .bold, design: .rounded)
                         .monospacedDigit()
                 } else if location.ampLimit > 0 {
                     Text(Format.amps(location.ampLimit))
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .hisType(.label, weight: .bold, design: .rounded)
                         .monospacedDigit()
                 } else {
                     Text(L10n.text("Vehicle default"))
-                        .font(.system(size: 10))
+                        .hisType(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -445,23 +481,35 @@ struct ChargingControlsCard: View {
                 }
             )
             .tint(.orange)
-            .disabled(gate.remoteCommandInProgress)
+            // Probed with 0 A so the question is "does this vehicle support location amperage",
+            // not "is the reading the vehicle last sent inside its own range".
+            .disabled(gate.isDisabled(.updateChargeLocationAmpLimit(id: location.id, amps: 0)))
             .accessibilityLabel(L10n.text("Charging current at location"))
 
             Toggle(
                 isOn: Binding(
-                    get: { location.optimisedChargingEnabled },
-                    set: { gate.send(.setChargeLocationOptimisedCharging(id: location.id, enabled: $0)) }
+                    get: { optimisedDrafts[location.id] ?? location.optimisedChargingEnabled },
+                    set: { newValue in
+                        optimisedDrafts[location.id] = newValue
+                        gate.send(.setChargeLocationOptimisedCharging(id: location.id, enabled: newValue))
+                    }
                 )
             ) {
-                Text(L10n.text("Optimised charging")).font(.system(size: 10.5))
+                Text(L10n.text("Optimised charging")).hisType(.caption)
             }
             .toggleStyle(.switch)
             .controlSize(.mini)
-            .disabled(gate.remoteCommandInProgress)
+            .disabled(gate.isDisabled(.setChargeLocationOptimisedCharging(
+                id: location.id, enabled: location.optimisedChargingEnabled
+            )))
+            .onChange(of: location.optimisedChargingEnabled) { _, _ in
+                // The provider has caught up, or disagreed and won. Either way the reading is
+                // authoritative again, so stop shadowing it.
+                optimisedDrafts[location.id] = nil
+            }
             if let modeName = location.optimisedChargingModeName {
                 Text(modeName)
-                    .font(.system(size: 9))
+                    .hisType(.micro)
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 4)
                     .transition(.opacity)
@@ -471,14 +519,14 @@ struct ChargingControlsCard: View {
                 locationPendingDelete = location
             } label: {
                 Label(L10n.text("Delete Location"), systemImage: "trash")
-                    .font(.system(size: 10, weight: .medium))
+                    .hisType(.caption, weight: .medium)
                     .foregroundStyle(.red)
             }
             .buttonStyle(.pressable)
-            .disabled(gate.remoteCommandInProgress)
+            .disabled(gate.isDisabled(.deleteChargeLocation(id: location.id)))
         }
         .padding(8)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: location.optimisedChargingModeName)
+        .hisAnimation(Motion.stateChange, value: location.optimisedChargingModeName)
     }
 }

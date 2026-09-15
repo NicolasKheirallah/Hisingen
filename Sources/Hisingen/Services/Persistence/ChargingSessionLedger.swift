@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Charging Session ledger — the sole owner of the Charging Session lifecycle.
+/// The Charging Session ledger – the sole owner of the Charging Session lifecycle.
 ///
 /// Owns every domain read and write over the `charging_sessions` and `charging_samples`
 /// tables: `VehicleDatabase` keeps the schema, migrations, and cross-table operations
@@ -140,7 +140,7 @@ extension ChargingSessionLedger {
     static let maximumEstimateSampleGap: TimeInterval = 3 * 3_600
 
     /// Splits a session's sample-integrated energy into day/night buckets by each interval's
-    /// local hour and prices each bucket separately — materially more accurate than
+    /// local hour and prices each bucket separately – materially more accurate than
     /// multiplying total energy by one flat rate once a night tariff is configured, since it
     /// reflects when the energy actually flowed rather than only how much flowed. `nightStart
     /// == nightEnd` disables the night bucket entirely (everything prices at `dayRatePerKwh`).
@@ -175,7 +175,7 @@ extension ChargingSessionLedger {
     /// Prices a session against hourly (or quarterly) spot prices, splitting every sample
     /// interval at price-slot boundaries so a rate change inside one polling interval
     /// prices each piece at its own rate (trapezoidal power within the pieces). Requires
-    /// the whole charged window to sit inside the price series' coverage — a session that
+    /// the whole charged window to sit inside the price series' coverage – a session that
     /// predates or overruns the available data stays uncosted (`nil`) rather than being
     /// priced with invented rates. The result is scaled to the authoritative session
     /// energy so sparse sampling cannot bias the figure.
@@ -603,7 +603,7 @@ final class ChargingSessionLedger: Sendable {
     }
 
     /// Peak power history for prior sessions at the same named location (newest excluded by
-    /// the caller passing its id), oldest-first — the baseline for anomaly detection.
+    /// the caller passing its id), oldest-first – the baseline for anomaly detection.
     func priorSessionPeaks(vin: String, locationName: String,
                            excludingSessionID: String, limit: Int = 10) -> [Double] {
         guard !locationName.isEmpty else { return [] }
@@ -845,7 +845,7 @@ final class ChargingSessionLedger: Sendable {
         return csv
     }
 
-    /// Raw per-sample export for one charging session — the curve data exactly as recorded,
+    /// Raw per-sample export for one charging session – the curve data exactly as recorded,
     /// for third-party analysis or debugging a misshapen curve.
     func exportChargingSamplesCSV(sessionID: String) -> String {
         let samples = chargingSamples(for: sessionID)

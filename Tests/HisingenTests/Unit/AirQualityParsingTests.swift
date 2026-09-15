@@ -34,7 +34,7 @@ struct AirQualityParsingTests {
         #expect(air.filterRemainingPercent == 74)
         #expect(air.runtimeRemainingMinutes == 17)
         #expect(!(air.hasError))
-        // Explicit `AirCleaningError.none`, not the bare `.none` shorthand — on an Optional
+        // Explicit `AirCleaningError.none`, not the bare `.none` shorthand – on an Optional
         // that shorthand resolves to `Optional.none` (nil), which would make this pass even if
         // `errorKind` came back unset instead of the wire value 0 ("no error") it's testing for.
         #expect(air.errorKind == AirCleaningError.none)

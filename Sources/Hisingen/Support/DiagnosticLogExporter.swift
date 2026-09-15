@@ -3,7 +3,7 @@ import OSLog
 
 /// Scrubbing rules shared by everything that leaves the process for support purposes.
 /// Applied defensively even to unified-log text, which is already privacy-annotated at
-/// the call site — belt and braces beats trusting every future log statement.
+/// the call site – belt and braces beats trusting every future log statement.
 enum DiagnosticRedaction {
     /// Replaces VIN-shaped tokens, UUID-shaped identifiers, and credential-bearing
     /// substrings (`token=…`, `Bearer …`) with placeholders.
@@ -23,10 +23,10 @@ enum DiagnosticRedaction {
     private static let vinExpression = try? NSRegularExpression(pattern: "(?i)[A-HJ-NPR-Z0-9]{17}")
     private static let uuidExpression = try? NSRegularExpression(
         pattern: "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
-    /// `token=x` — secret directly after the separator, no space.
+    /// `token=x` – secret directly after the separator, no space.
     private static let delimiterSecretExpression = try? NSRegularExpression(
         pattern: "(?i)(bearer|token|authorization|client_secret|password|api[_-]?key)[=:][^,; ]+")
-    /// `Authorization: Bearer eyJ…` — the canonical header form has a space after the
+    /// `Authorization: Bearer eyJ…` – the canonical header form has a space after the
     /// colon, which the no-space rule above never matches.
     private static let authorizationBearerExpression = try? NSRegularExpression(
         pattern: "(?i)(authorization\\s*:\\s*)bearer\\s+\\S+")
@@ -55,7 +55,7 @@ enum DiagnosticRedaction {
 
     /// Secret and identifier scrubbing without the VIN shape-heuristic. Used for
     /// recorded API payloads, which are already structurally sanitized at record
-    /// time — running the 17-character VIN regex over them again would corrupt
+    /// time – running the 17-character VIN regex over them again would corrupt
     /// legitimate 17-letter words ("batteryPercentage") inside the JSON.
     static func redactSecrets(_ value: String) -> String {
         var result = value

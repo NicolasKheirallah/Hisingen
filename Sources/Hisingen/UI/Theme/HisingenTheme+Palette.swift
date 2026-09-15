@@ -6,8 +6,18 @@ extension HisingenTheme {
 
     // MARK: - Brand Core Colors
 
-    /// Polestar signature Swedish Gold & Amber highlight (#E56E23)
-    static let polestarAmber = Color(red: 229/255, green: 110/255, blue: 35/255)
+    /// Polestar signature Swedish Gold & Amber highlight (#E56E23).
+    ///
+    /// Dual-appearance like `volvoBlue` and `volvoNavy` below it, and for a measured reason: this
+    /// amber is only 2.8:1 on the Polestar light canvas, yet it is used as a text colour (the
+    /// climate countdown, the cabin-temperature reading, the warranty header) while failing even
+    /// the 3:1 large-text bar on the surface it actually sits on. The light variant is the same
+    /// hue scaled to 0.70 in sRGB, which is 5.3:1 on the canvas and 5.9:1 on white.
+    /// `docs/design/verify-app-contrast.py` recomputes both from this file and fails the build.
+    static let polestarAmber = Color(
+        light: NSColor(red: 0.6275, green: 0.3020, blue: 0.0941, alpha: 1),
+        dark: NSColor(red: 0.8980, green: 0.4314, blue: 0.1373, alpha: 1)
+    )
 
     /// Official Volvo Digital / Electric Blue
     static let volvoBlue = Color(
@@ -63,7 +73,10 @@ extension HisingenTheme {
     static var inkMuted: Color {
         switch theme {
         case .polestar:
-            return Color(light: NSColor(red: 0.42, green: 0.42, blue: 0.46, alpha: 1), dark: NSColor(red: 0.65, green: 0.65, blue: 0.70, alpha: 1))
+            // 4.7:1 on canvas was 4.4 % of luminance headroom under AA, and text rarely renders on
+            // `canvas`: it renders on a card material over an arbitrary desktop. Raised to 7.2:1 in
+            // light mode so the token survives a backdrop it cannot see. Dark mode was already 8.2:1.
+            return Color(light: NSColor(red: 0.31, green: 0.31, blue: 0.34, alpha: 1), dark: NSColor(red: 0.65, green: 0.65, blue: 0.70, alpha: 1))
         case .volvo:
             return Color(light: NSColor(red: 0.35, green: 0.42, blue: 0.50, alpha: 1), dark: NSColor(red: 0.60, green: 0.68, blue: 0.76, alpha: 1))
         case .nordicNight:
@@ -79,7 +92,9 @@ extension HisingenTheme {
         case .sandDune:
             return Color(light: NSColor(red: 0.42, green: 0.36, blue: 0.30, alpha: 1), dark: NSColor(red: 0.82, green: 0.76, blue: 0.70, alpha: 1))
         case .hisingen:
-            return Color(light: NSColor(red: 0.38, green: 0.44, blue: 0.52, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
+            // Same reasoning as `.polestar`: this is the default theme, its 4.7:1 was the thinnest
+            // margin in the palette, and it is spent on a blur. Raised to 7.1:1 in light mode.
+            return Color(light: NSColor(red: 0.29, green: 0.33, blue: 0.40, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
         }
     }
 
@@ -106,7 +121,16 @@ extension HisingenTheme {
         }
     }
 
-    static var accent: Color {
+    static var accent: Color { accent(for: theme) }
+
+    /// The accent for a specific theme rather than the active one.
+    ///
+    /// The appearance card previews every theme at once, and it used `AppTheme.accentColorHex` — a
+    /// single fixed hex with no dark variant. Every other token in this file is a
+    /// `Color(light:dark:)` pair, so the selected state of a dark theme was a dark navy border and
+    /// checkmark on a near-black card: the hardest thing on the tile to see, in the card whose
+    /// whole job is judging a theme.
+    static func accent(for theme: AppTheme) -> Color {
         switch theme {
         case .polestar:
             return Color(light: NSColor(red: 0.90, green: 0.43, blue: 0.14, alpha: 1), dark: NSColor(red: 1.0, green: 0.54, blue: 0.24, alpha: 1))

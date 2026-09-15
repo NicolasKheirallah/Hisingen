@@ -36,7 +36,9 @@ struct VehicleSessionControllerTests {
         let suite = "VehicleSessionControllerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)"))
         preferences.activeBrand = originalBrand
         preferences.email = "new@example.invalid"
         preferences.setVin("P1", for: .polestar)

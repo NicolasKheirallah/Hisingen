@@ -136,7 +136,7 @@ struct SettingsPreferenceTests {
         for flag in flags { preferences[keyPath: flag] = false }
         #expect(!(preferences.anyNotificationAlertEnabled), "with every alert type off, nothing is enabled")
 
-        // Each flag on its own must be enough — catches a flag dropped from the OR chain.
+        // Each flag on its own must be enough – catches a flag dropped from the OR chain.
         for flag in flags {
             for other in flags { preferences[keyPath: other] = false }
             preferences[keyPath: flag] = true

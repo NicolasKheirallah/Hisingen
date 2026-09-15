@@ -10,16 +10,15 @@ struct Pill: View {
         self.symbol = symbol
     }
     var body: some View {
-        let isPolestar = HisingenTheme.cornerRadius == 0
-        let radius: CGFloat = isPolestar ? 0 : 5
+        let radius = HisingenTheme.statusChipRadius
         HStack(spacing: 4) {
             if let symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 9, weight: .semibold))
+                    .hisType(.micro, weight: .semibold)
                     .accessibilityHidden(true)
             }
             Text(text)
-                .font(.system(size: 10.5, weight: HisingenTheme.valueWeight))
+                .hisType(.caption, weight: HisingenTheme.valueWeight)
         }
         .foregroundStyle(color)
         .padding(.horizontal, 7)

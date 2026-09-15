@@ -12,17 +12,17 @@ import AppKit
 /// Priority (spec): `critical warning > active remote operation > charging >
 /// climate active > connected > normal`.
 enum MenuBarIconState: Int, Comparable, CaseIterable, Sendable {
-    /// Parked, online, nothing to report — the resting glyph.
+    /// Parked, online, nothing to report – the resting glyph.
     case normal = 0
     /// Plugged in but not drawing power.
     case connected = 1
     /// Climate / preconditioning is running.
     case climate = 2
-    /// Actively charging — a slow ambient breath.
+    /// Actively charging – a slow ambient breath.
     case charging = 3
-    /// Just reached the target — a brief, quiet acknowledgement.
+    /// Just reached the target – a brief, quiet acknowledgement.
     case chargingComplete = 4
-    /// A remote command is in flight — a quicker shimmer.
+    /// A remote command is in flight – a quicker shimmer.
     case remoteOperation = 5
     /// Alarm, charging fault, or another condition that must not be missed.
     case warning = 6
@@ -43,7 +43,7 @@ enum MenuBarIconState: Int, Comparable, CaseIterable, Sendable {
     var pulseProfile: MenuBarPulseProfile? {
         switch self {
         case .charging:
-            // Long, deep, unhurried — it runs for hours.
+            // Long, deep, unhurried – it runs for hours.
             return MenuBarPulseProfile(
                 cycle: Motion.menuBarBreathCycle,
                 frames: Motion.menuBarBreathFrames,
@@ -81,7 +81,7 @@ struct MenuBarPulseProfile: Equatable, Sendable {
 
 // MARK: - Deriving the state
 
-/// The raw signals the icon state is derived from — plain values, so the
+/// The raw signals the icon state is derived from – plain values, so the
 /// priority logic is trivially testable without constructing a `VehicleState`.
 struct MenuBarIconInputs: Equatable, Sendable {
     var isCharging = false
@@ -97,7 +97,7 @@ struct MenuBarIconInputs: Equatable, Sendable {
 }
 
 extension MenuBarIconState {
-    /// The winning state for a set of signals. Pure — this is the piece under test.
+    /// The winning state for a set of signals. Pure – this is the piece under test.
     static func resolve(_ inputs: MenuBarIconInputs) -> MenuBarIconState {
         var candidates: [MenuBarIconState] = [.normal]
         if inputs.pluggedIn { candidates.append(.connected) }
@@ -139,7 +139,7 @@ extension MenuBarIconState {
 /// The concrete menu-bar artwork matching `MenuBarIconState`. The state machine
 /// decides *priority*; this picks the bundled PNG that draws it.
 ///
-/// Artwork lives in `Sources/Hisingen/Resources/menubar-hisingen-*.png` — white
+/// Artwork lives in `Sources/Hisingen/Resources/menubar-hisingen-*.png` – white
 /// car-front glyphs with colored accents on transparency, downscaled from the
 /// `icons/` originals. They are rendered as template images (alpha mask), so
 /// macOS adapts them to light/dark menu bars automatically.
@@ -165,10 +165,16 @@ enum MenuBarGlyph: String, CaseIterable, Sendable {
     /// - Parameters:
     ///   - inputs: vehicle signals; pass `remoteCommandInProgress = false`.
     ///   - offline: no data at all, or the freshest snapshot is stale.
-    ///   - connectionGlyphsEnabled: mirrors the legacy `includeConnection` gate —
+    ///   - connectionGlyphsEnabled: mirrors the legacy `includeConnection` gate –
     ///     with "Charging details" turned off, charging/plugged/completion glyphs
     ///     collapse to the resting car, exactly as the SF-Symbol icons did.
-    ///     Warnings always surface.
+    ///     Warnings surface whenever there is data to draw them from. With none, the
+    ///     bar says that instead: "not connected" is the loudest statement it can make
+    ///     truthfully, and a stale snapshot is not evidence that the car is still in the
+    ///     state it describes. `MenuBarGlyphTests.offlineWinsOverEverythingElse` pins that
+    ///     precedence, so a critical condition is unreachable here while offline, which is
+    ///     why the status item's accessibility label is where one must still be spoken
+    ///     (see `accessibilitySummary` in `StatusItemController`).
     static func resolve(
         inputs: MenuBarIconInputs,
         offline: Bool,
@@ -188,7 +194,7 @@ enum MenuBarGlyph: String, CaseIterable, Sendable {
 
 /// Loads and caches the bundled menu-bar glyphs. Images are cached per
 /// (glyph, tint) so the same `NSImage` instance is handed out across telemetry
-/// renders — `MenuBarIconAnimator` fingerprints image identity to decide when
+/// renders – `MenuBarIconAnimator` fingerprints image identity to decide when
 /// its pulse frames need rebuilding, so stable instances mean zero rebuilds.
 @MainActor
 final class MenuBarGlyphImageProvider {
@@ -259,7 +265,7 @@ final class MenuBarGlyphImageProvider {
 
 /// Drives the `NSStatusItem` button image for the animated icon states.
 ///
-/// Efficiency is the whole design brief here — this can run for a multi-hour
+/// Efficiency is the whole design brief here – this can run for a multi-hour
 /// charge:
 ///
 /// - **Frame cache.** One cycle is pre-rendered into `MenuBarPulseProfile.frames`
@@ -267,7 +273,7 @@ final class MenuBarGlyphImageProvider {
 /// - **Coarse cadence.** ~5 fps for the charging breath (18 frames / 3.6 s).
 /// - **Paused when unseen.** The timer stops on display sleep and restarts on
 ///   wake; a still state carries no timer at all.
-/// - **Reduce Motion.** Falls straight through to the static base image — the
+/// - **Reduce Motion.** Falls straight through to the static base image – the
 ///   charging *glyph* still says "charging", it just doesn't move.
 @MainActor
 final class MenuBarIconAnimator {
@@ -295,6 +301,9 @@ final class MenuBarIconAnimator {
                            name: NSWorkspace.screensDidSleepNotification, object: nil)
         center.addObserver(self, selector: #selector(displaysDidWake),
                            name: NSWorkspace.screensDidWakeNotification, object: nil)
+        center.addObserver(self, selector: #selector(accessibilityDisplayOptionsDidChange),
+                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                           object: nil)
     }
 
     deinit {
@@ -304,7 +313,7 @@ final class MenuBarIconAnimator {
     }
 
     /// Point the icon at `state`, drawn from `image`. Safe to call on every
-    /// telemetry render — it only does work when something actually changed.
+    /// telemetry render – it only does work when something actually changed.
     func apply(state: MenuBarIconState, image: NSImage, reduceMotion: Bool) {
         self.baseImage = image
         self.reduceMotion = reduceMotion
@@ -366,6 +375,16 @@ final class MenuBarIconAnimator {
     @objc private func displaysDidSleep() {
         displayAsleep = true
         stopTimer()
+    }
+
+    /// A live Reduce Motion toggle has to reach the glyph now, not at the next telemetry render.
+    /// `apply` reads the flag as an argument and is only called from `render`, so for an idle car —
+    /// which can be an hour between polls — the menu bar was the one surface that kept animating
+    /// after the user asked it to stop. SwiftUI views in the same app respond immediately.
+    @objc private func accessibilityDisplayOptionsDidChange() {
+        guard let baseImage else { return }
+        apply(state: currentState, image: baseImage,
+              reduceMotion: VehicleMotionPreference.prefersReducedMotion)
     }
 
     @objc private func displaysDidWake() {

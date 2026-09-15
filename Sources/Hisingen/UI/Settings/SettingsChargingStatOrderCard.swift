@@ -50,11 +50,13 @@ struct SettingsChargingStatOrderCard: View {
                     }
                 }
                 Text(L10n.text("Reorders the detail rows on the Charging card. Unlisted rows keep their default position below."))
-                    .font(.system(size: 9.5))
+                    .hisType(.micro)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
                 ForEach(Array(order.enumerated()), id: \.element) { index, id in
                     HStack {
-                        Text(Self.titles[id] ?? id).font(.system(size: 11))
+                        Text(Self.titles[id] ?? id).hisType(.label)
                         Spacer()
                         Button {
                             guard index > 0 else { return }
@@ -78,7 +80,7 @@ struct SettingsChargingStatOrderCard: View {
                 // Remaining unlisted rows, offered for adoption into the order.
                 ForEach(unorderedTitles, id: \.self) { pending in
                     HStack {
-                        Text(pending).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        Text(pending).hisType(.caption).foregroundStyle(.secondary)
                         Spacer()
                         Button(L10n.text("Add")) {
                             let key = Self.knownKeys.first { Self.titles[$0] == pending } ?? pending

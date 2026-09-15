@@ -6,7 +6,7 @@ import Foundation
 enum CommandClientAuthorization: Sendable, Equatable {
     /// A usable command-client access token.
     case authorized(String)
-    /// No stored command-client session — the user has not run "Authorize Remote Commands",
+    /// No stored command-client session – the user has not run "Authorize Remote Commands",
     /// or the stored refresh token was rejected and cleared. Retrying will not help.
     case notAuthorized
     /// A command-client refresh token exists but could not be exchanged right now (offline,
@@ -34,7 +34,7 @@ extension PolestarAPI {
         try requireSession(epoch)
         try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
         // Remote-command authorization (the command client) is a separate, explicit step the
-        // user triggers from Settings — see `beginCommandAuthorization()`/
+        // user triggers from Settings – see `beginCommandAuthorization()`/
         // `completeCommandAuthorization(callbackURL:)` and `SignInCoordinator.beginPolestarCommandAuthorization()`.
         // It opens a real browser instead of reusing this sign-in's password, so it can't be
         // completed silently here.
@@ -46,7 +46,7 @@ extension PolestarAPI {
 
     /// Resolves the command-client access token, refreshing silently from the stored refresh
     /// token when needed. This **never** falls back to replaying a stored password or prompting
-    /// for one — once the command client's refresh token itself is gone or rejected, remote
+    /// for one – once the command client's refresh token itself is gone or rejected, remote
     /// commands stay unavailable until the user re-authorizes through a real browser window
     /// (`SignInCoordinator.beginPolestarCommandAuthorization()`, surfaced as "Authorize Remote
     /// Commands" in Settings).
@@ -111,7 +111,7 @@ extension PolestarAPI {
                 return .storageFailure
             } catch {
                 // Transient: offline, 5xx, rate limit, decode. The authorization is probably
-                // still good — keep the stored refresh token and let a later command retry.
+                // still good – keep the stored refresh token and let a later command retry.
                 logger.warning("Polestar command-token refresh failed transiently: \(String(describing: error), privacy: .public)")
                 return .unavailable
             }

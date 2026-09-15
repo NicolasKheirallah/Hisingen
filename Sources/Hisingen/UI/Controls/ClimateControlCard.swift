@@ -42,7 +42,7 @@ struct ClimateControlCard: View {
                             color: climateActive ? .orange : HisingenTheme.inkMuted
                         )
                         Text(L10n.text("Climate & Conditioning"))
-                            .font(.system(size: 12, weight: .bold))
+                            .hisType(.body, weight: .bold)
                             .foregroundStyle(HisingenTheme.ink)
                     }
                     Spacer()
@@ -55,25 +55,25 @@ struct ClimateControlCard: View {
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
-                .animation(Motion.resolve(Motion.entrance), value: climateActive)
-                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.activity)
+                .hisAnimation(Motion.entrance, value: climateActive)
+                .hisAnimation(Motion.stateChange, value: state.climateStatus?.activity)
 
-                gate.dimReason(gate.cardAvailability(climateCommands))
+                gate.dimReason(gate.liveAvailability(climateCommands))
 
                 if features.contains(.remoteClimate) {
                     if profile.hasSelectableClimateTemperature {
                         temperatureControls
                     } else {
                         climateAutomaticInfo
-                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: climateActive)
-                            .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.timeRemainingMinutes)
+                            .hisAnimation(Motion.stateChange, value: climateActive)
+                            .hisAnimation(Motion.stateChange, value: state.climateStatus?.timeRemainingMinutes)
                     }
 
                     if profile.hasSelectableSeatHeating || profile.hasSelectableSteeringWheelHeating {
                         seatAndSteeringControls
                     }
 
-                    Divider().opacity(0.5)
+                    Divider().opacity(HisingenTheme.dividerOpacity)
                     climateStartStopButtons
 
                     if features.contains(.remoteSchedules) && profile.permits(.climateTimers) {
@@ -83,7 +83,7 @@ struct ClimateControlCard: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "calendar.badge.clock")
                                 Text(L10n.text("Schedule departure preconditioning…"))
-                                    .font(.system(size: 10.5, weight: .medium))
+                                    .hisType(.caption, weight: .medium)
                             }
                             .frame(maxWidth: .infinity, minHeight: 26)
                         }
@@ -101,7 +101,7 @@ struct ClimateControlCard: View {
                             Image(systemName: "sparkles").foregroundStyle(.secondary)
                             Text(L10n.text(state.airQuality?.cleaningState == .on
                                 ? "Stop Air Cleaning" : "Clean Cabin Air (PM2.5 Pre-Clean)"))
-                                .font(.system(size: 11, weight: .medium))
+                                .hisType(.label, weight: .medium)
                             gate.sendingOverlay(.startPreCleaning)
                         }
                         .frame(maxWidth: .infinity, minHeight: 30)
@@ -112,8 +112,8 @@ struct ClimateControlCard: View {
                 }
             }
         }
-        .opacity(gate.cardOpacity(climateCommands))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: gate.cardAvailability(climateCommands))
+        .opacity(gate.liveOpacity(climateCommands))
+        .hisAnimation(Motion.stateChange, value: gate.liveAvailability(climateCommands))
         .onAppear {
             targetTemperature = min(
                 climateTemperatureRange.upperBound,
@@ -173,7 +173,7 @@ struct ClimateControlCard: View {
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "windshield.front.heat")
-                        Text(L10n.text("Max Heat")).font(.system(size: 9, weight: .semibold))
+                        Text(L10n.text("Max Heat")).hisType(.micro, weight: .semibold)
                         gate.sendingOverlay(maxHeatCommand)
                     }
                 }
@@ -185,20 +185,20 @@ struct ClimateControlCard: View {
                 Spacer()
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("Preconditioning Command Setpoint"))
-                        .font(.system(size: 11, weight: .medium))
+                        .hisType(.label, weight: .medium)
                         .foregroundStyle(.secondary)
                     Text(L10n.text("Saved command setting; not live cabin telemetry"))
-                        .font(.system(size: 9))
+                        .hisType(.micro)
                         .foregroundStyle(.tertiary)
                     if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive {
                         Text(L10n.format("%d min remaining", remaining))
-                            .font(.system(size: 10, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(HisingenTheme.polestarAmber)
                             .transition(.opacity)
                     }
                 }
-                .animation(Motion.resolveCrossfade(Motion.stateChange), value: state.climateStatus?.timeRemainingMinutes)
-                .animation(Motion.resolve(Motion.entrance), value: climateActive)
+                .hisAnimation(Motion.stateChange, value: state.climateStatus?.timeRemainingMinutes)
+                .hisAnimation(Motion.entrance, value: climateActive)
                 Spacer()
                 Text(Format.temperature(celsius: targetTemperature, unit: preferences.temperatureUnit))
                     .font(.system(size: 22, weight: .bold))
@@ -213,12 +213,18 @@ struct ClimateControlCard: View {
                     adjustTemperature(byDisplayUnits: -temperatureStep)
                 } label: {
                     Image(systemName: "minus")
-                        .font(.system(size: 12, weight: .bold))
-                        .frame(width: 28, height: 24)
+                        .hisType(.body, weight: .bold)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(targetTemperature <= climateTemperatureRange.lowerBound)
+                // It hard-stopped at the vehicle's limit with nothing saying why, so the control
+                // read as broken at exactly the moment the reader was asking what the range was.
+                .help(L10n.format("This vehicle accepts %@ to %@.",
+                                  Format.temperature(celsius: climateTemperatureRange.lowerBound, unit: preferences.temperatureUnit),
+                                  Format.temperature(celsius: climateTemperatureRange.upperBound, unit: preferences.temperatureUnit)))
                 .accessibilityLabel(L10n.text("Decrease target temperature"))
 
                 HStack(spacing: 4) {
@@ -229,7 +235,7 @@ struct ClimateControlCard: View {
                             preferences.remoteClimateTemperature = Double(temp)
                         } label: {
                             Text(Format.temperature(celsius: Double(temp), unit: preferences.temperatureUnit, decimals: 0))
-                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                .hisType(.label, weight: isSelected ? .bold : .medium)
                                 .padding(.vertical, 3)
                                 .frame(maxWidth: .infinity)
                                 .background(
@@ -252,8 +258,9 @@ struct ClimateControlCard: View {
                     adjustTemperature(byDisplayUnits: temperatureStep)
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .bold))
-                        .frame(width: 28, height: 24)
+                        .hisType(.body, weight: .bold)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -269,24 +276,24 @@ struct ClimateControlCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.text("Cabin Preconditioning Running"))
-                        .font(.system(size: 12, weight: .semibold))
+                        .hisType(.body, weight: .semibold)
                         .foregroundStyle(HisingenTheme.ink)
                     if let remaining = state.climateStatus?.timeRemainingMinutes {
                         Text(L10n.format("%d min remaining", remaining))
-                            .font(.system(size: 10.5, weight: .medium))
+                            .hisType(.caption, weight: .medium)
                             .foregroundStyle(.orange)
                     } else {
                         Text(L10n.text("Preconditions vehicle using in-car comfort settings."))
-                            .font(.system(size: 10))
+                            .hisType(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 if let interior = state.climateStatus?.interiorTemperatureCelsius {
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text(L10n.text("Interior")).font(.system(size: 9.5)).foregroundStyle(.secondary)
+                        Text(L10n.text("Interior")).hisType(.micro).foregroundStyle(.secondary)
                         Text(Format.temperature(celsius: interior, unit: preferences.temperatureUnit))
-                            .font(.system(size: 16, weight: .bold))
+                            .hisType(.title, weight: .bold)
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
                     }
@@ -298,12 +305,12 @@ struct ClimateControlCard: View {
         } else {
             HStack {
                 Text(L10n.text("Preconditions the cabin to comfortable temperature using in-car climate settings."))
-                    .font(.system(size: 11))
+                    .hisType(.label)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let interior = state.climateStatus?.interiorTemperatureCelsius {
                     Text(Format.temperature(celsius: interior, unit: preferences.temperatureUnit))
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .hisType(.body, weight: .semibold)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
@@ -317,12 +324,16 @@ struct ClimateControlCard: View {
             HStack(spacing: 8) {
                 if profile.hasSelectableSeatHeating
                     && state.otaCapabilities?.controlSettings?.frontSeatSettings != false {
-                    SeatHeatingControl(title: L10n.text("Driver"), level: $driverSeat) {
+                    HeatingLevelControl(
+                        title: L10n.text("Driver"), symbol: "carseat.left.fill", level: $driverSeat
+                    ) {
                         preferences.remoteDriverSeatHeating = $0
                     }
                     .disabled(gate.isDisabled(Self.probe))
 
-                    SeatHeatingControl(title: L10n.text("Passenger"), level: $passengerSeat) {
+                    HeatingLevelControl(
+                        title: L10n.text("Passenger"), symbol: "carseat.right.fill", level: $passengerSeat
+                    ) {
                         preferences.remoteFrontRightSeatHeating = $0
                     }
                     .disabled(gate.isDisabled(Self.probe))
@@ -330,7 +341,10 @@ struct ClimateControlCard: View {
 
                 if profile.hasSelectableSteeringWheelHeating
                     && state.otaCapabilities?.controlSettings?.steeringWheelSettings != false {
-                    SteeringHeatingControl(level: $steeringHeating) {
+                    HeatingLevelControl(
+                        title: L10n.text("Steering Wheel"), symbol: "steeringwheel",
+                        level: $steeringHeating
+                    ) {
                         preferences.remoteSteeringWheelHeating = $0
                     }
                     .disabled(gate.isDisabled(Self.probe))
@@ -341,11 +355,17 @@ struct ClimateControlCard: View {
                 && state.otaCapabilities?.controlSettings?.rearSeatSettings != false {
                 if showRearSeats {
                     HStack(spacing: 8) {
-                        SeatHeatingControl(title: L10n.text("Rear left"), level: $rearLeftSeat) {
+                        HeatingLevelControl(
+                            title: L10n.text("Rear left"), symbol: "carseat.left.fill",
+                            level: $rearLeftSeat
+                        ) {
                             preferences.remoteRearLeftSeatHeating = $0
                         }
                         .disabled(gate.isDisabled(Self.probe))
-                        SeatHeatingControl(title: L10n.text("Rear right"), level: $rearRightSeat) {
+                        HeatingLevelControl(
+                            title: L10n.text("Rear right"), symbol: "carseat.right.fill",
+                            level: $rearRightSeat
+                        ) {
                             preferences.remoteRearRightSeatHeating = $0
                         }
                         .disabled(gate.isDisabled(Self.probe))
@@ -358,7 +378,7 @@ struct ClimateControlCard: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.down")
-                            Text(L10n.text("Rear seat heating")).font(.system(size: 10, weight: .medium))
+                            Text(L10n.text("Rear seat heating")).hisType(.caption, weight: .medium)
                         }
                     }
                     .buttonStyle(.pressable)
@@ -403,7 +423,7 @@ struct ClimateControlCard: View {
                     }
                 }
                 Text(climateActive ? L10n.text("Stop Climate") : L10n.text("Start Climate"))
-                    .font(.system(size: 12, weight: .semibold))
+                    .hisType(.body, weight: .semibold)
                     .contentTransition(reduceMotion ? .identity : .opacity)
                 gate.sendingOverlay(climateActive ? .stopClimate : Self.probe)
             }
@@ -412,6 +432,6 @@ struct ClimateControlCard: View {
         .buttonStyle(.borderedProminent)
         .tint(climateActive ? Color.red : HisingenTheme.polestarAmber)
         .disabled(gate.isDisabled(climateActive ? .stopClimate : Self.probe))
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: climateActive)
+        .hisAnimation(Motion.stateChange, value: climateActive)
     }
 }

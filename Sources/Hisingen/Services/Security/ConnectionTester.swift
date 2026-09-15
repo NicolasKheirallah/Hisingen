@@ -6,7 +6,7 @@ import OSLog
 enum SignInFailureKind: Equatable, Sendable {
     /// Polestar/Polestar ID rejected the credentials themselves.
     case invalidCredentials
-    /// An interactive challenge (2FA, CAPTCHA, Terms) or a callback mismatch — the
+    /// An interactive challenge (2FA, CAPTCHA, Terms) or a callback mismatch – the
     /// in-app interactive sign-in window handles both.
     case interactiveChallenge
     /// The stored session material was rejected; signing in again is the way back.
@@ -14,7 +14,7 @@ enum SignInFailureKind: Equatable, Sendable {
     /// The sign-in page or its response format changed. Interactive sign-in may still
     /// work; otherwise an app update is needed.
     case signingFlowChanged
-    /// Offline, server trouble, or rate limiting — retrying later is the fix.
+    /// Offline, server trouble, or rate limiting – retrying later is the fix.
     case transient
     case unspecified
 
@@ -48,7 +48,7 @@ enum SignInFailureKind: Equatable, Sendable {
 }
 
 /// Runs a real, cheap, read-only connectivity check for a brand by re-executing the same
-/// session-restore path used at launch and by the background garage scan — never a fabricated
+/// session-restore path used at launch and by the background garage scan – never a fabricated
 /// result. Reports the round-trip time on success, or a human-readable failure reason plus a
 /// typed `failureKind`, including "no stored session" (returned without any network call).
 ///

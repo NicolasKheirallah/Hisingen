@@ -87,29 +87,49 @@ struct SettingsNavigationBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                ForEach(SettingsSection.allCases) { section in
-                    Button {
-                        selection = section
-                    } label: {
-                        Label(section.title, systemImage: section.symbol)
-                            .font(.system(size: 10, weight: selection == section ? .semibold : .regular))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 5)
-                            .contentShape(Rectangle())
+            // Nine sections in one non-scrolling row, in a panel that can be 350pt wide: after
+            // padding and gaps each tab had 31 to 59pt while "Notifications" needs about 75pt, so
+            // `.lineLimit(1)` truncated every multi-word section at every panel size. The row
+            // scrolls now and the labels keep their natural width, which is the one control a
+            // reader needs in order to reach the others.
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(SettingsSection.allCases) { section in
+                            Button {
+                                selection = section
+                            } label: {
+                                Label(section.title, systemImage: section.symbol)
+                                    .hisType(.caption, weight: selection == section ? .semibold : .regular)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.pressable)
+                            .foregroundStyle(selection == section ? HisingenTheme.accent : .secondary)
+                            .background(
+                                selection == section ? HisingenTheme.accent.opacity(0.12) : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                            .accessibilityAddTraits(selection == section ? .isSelected : [])
+                            .id(section)
+                        }
                     }
-                    .buttonStyle(.pressable)
-                    .foregroundStyle(selection == section ? HisingenTheme.accent : .secondary)
-                    .background(
-                        selection == section ? HisingenTheme.accent.opacity(0.12) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    )
-                    .accessibilityAddTraits(selection == section ? .isSelected : [])
+                    .padding(.horizontal, 1)
+                }
+                // The highlight pill crossfades between tabs instead of snapping.
+                .hisAnimation(Motion.selection, value: selection)
+                // A row that scrolls can hide the section the reader is in, so it comes back into
+                // view whenever the selection changes from anywhere: this row, search, or a link.
+                .onAppear { proxy.scrollTo(selection, anchor: .center) }
+                .onChange(of: selection) { _, section in
+                    withAnimation(Motion.resolve(Motion.selection)) {
+                        proxy.scrollTo(section, anchor: .center)
+                    }
                 }
             }
-            // The highlight pill crossfades between tabs instead of snapping.
-            .animation(Motion.resolve(Motion.selection), value: selection)
 
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)

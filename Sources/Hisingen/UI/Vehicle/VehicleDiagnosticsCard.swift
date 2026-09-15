@@ -10,7 +10,7 @@ struct VehicleDiagnosticsCard: View {
         let card = Self(state: state, features: features, preferences: preferences)
         if card.rows.isEmpty {
             guard !state.isVolvo else { return nil }
-            return UnavailableFeatureCard.make(state: state, feature: nil, symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange, badge: L10n.text("Sensor readings"))
+            return UnavailableFeatureCard.make(state: state, feature: nil, symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange, badge: L10n.text("Sensor readings"), message: L10n.text("No sensor readings were reported on the last refresh."))
         }
         return AnyView(card)
     }
@@ -38,7 +38,7 @@ struct VehicleDiagnosticsCard: View {
         if let speed = state.tripComputer.averageSpeedKmH { rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer")) }
         if let consumption = state.fuelSystem.averageConsumptionLPer100Km { rows.append(KVRow(L10n.text("Avg Fuel Consumption"), Format.fuelEconomy(lPer100Km: consumption, unit: preferences.fuelEconomyUnit), symbol: "chart.line.uptrend.xyaxis")) }
         if let range = state.tripComputer.electricRangeKm { rows.append(KVRow(L10n.text("Trip Computer EV Range"), Format.distance(km: range, unit: preferences.distanceUnit), symbol: "gauge.with.needle", info: L10n.text("Vehicle Dynamic Estimate. Real-time driving range estimated by the onboard computer based on recent driving speed, elevation profile, and climate consumption."))) }
-        if let hours = state.maintenance.service.engineHoursToService { rows.append(KVRow(L10n.text("Engine Hours to Service"), "\(hours) hrs", symbol: "timer")) }
+        if let hours = state.maintenance.service.engineHoursToService { rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer")) }
         return rows
     }
 

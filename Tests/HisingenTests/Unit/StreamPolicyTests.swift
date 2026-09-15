@@ -26,7 +26,7 @@ struct StreamPolicyTests {
     // MARK: - Gate
 
     /// The honesty gate: the only Polestar stream is battery state, so it opens for charging
-    /// alone. Climate activity must not keep a battery connection alive by itself — the
+    /// alone. Climate activity must not keep a battery connection alive by itself – the
     /// two-minute poll already covers climate freshness.
     @Test
     func gateStreamsOnlyWhileChargingAndAvailable() {
@@ -48,7 +48,7 @@ struct StreamPolicyTests {
 
     // MARK: - Stability
 
-    /// Backoff resets only after meaningful stability — ten connected minutes — not when the
+    /// Backoff resets only after meaningful stability – ten connected minutes – not when the
     /// socket merely opens.
     @Test
     func stabilityRequiresSustainedConnection() {
@@ -72,7 +72,7 @@ struct StreamPolicyTests {
         #expect(policy.retryDelay(consecutiveFailures: 0, retryAfter: nil, jitterUnit: 0) == 5)
     }
 
-    /// Jitter adds at most 20 % and never goes negative — still bounded, so bursts stay tame.
+    /// Jitter adds at most 20 % and never goes negative – still bounded, so bursts stay tame.
     @Test
     func jitterStaysWithinTwentyPercent() {
         let policy = LiveStreamPolicy()

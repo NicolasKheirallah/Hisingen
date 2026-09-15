@@ -109,7 +109,7 @@ struct VehicleCapabilityTests {
     @Test
     func polestar2TyrePressureValuesAreProbedNotAssumed() {
         // The MY23 reference car reported warning level only, but that is a backend fact for
-        // one car — the profile must not hard-block numeric pressures for every Polestar 2.
+        // one car – the profile must not hard-block numeric pressures for every Polestar 2.
         let profile = VehicleCapabilityProfile(modelName: "Polestar 2")
         #expect(profile.support(for: .tyrePressureValues) == .backendDependent)
         #expect(profile.permits(.tyrePressureValues))

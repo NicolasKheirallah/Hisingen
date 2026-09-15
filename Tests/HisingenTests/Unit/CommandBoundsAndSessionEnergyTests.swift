@@ -85,7 +85,7 @@ struct CommandBoundsAndSessionEnergyTests {
         current.energy.batteryPercentage = 70
         current.freshness.fetchedAt = start.addingTimeInterval(3_600)
 
-        // 50 % gained × 82 kWh override = 41 kWh — not the model-table default.
+        // 50 % gained × 82 kWh override = 41 kWh – not the model-table default.
         let session = try #require(ChargingSession.completed(
             previous: previous, current: current, pricePerKwh: 0,
             usableCapacityKwh: 82

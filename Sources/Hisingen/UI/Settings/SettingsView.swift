@@ -20,7 +20,7 @@ struct SettingsView: View {
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
 
-    /// Section cards fade and settle from 98% — a nudge, not a zoom (scale floor 0.95).
+    /// Section cards fade and settle from 98% – a nudge, not a zoom (scale floor 0.95).
     private static let sectionSwapTransition: AnyTransition =
         .opacity.combined(with: .scale(scale: 0.98))
 
@@ -132,8 +132,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
                 // Card insertions/removals are driven by section picks and search
                 // edits; both ride Motion.cardChange so the swap reads as one system.
-                .animation(Motion.resolve(Motion.cardChange), value: selectedSettingsSection)
-                .animation(Motion.resolve(Motion.cardChange), value: settingsSearchText)
+                .hisAnimation(Motion.cardChange, value: selectedSettingsSection)
+                .hisAnimation(Motion.cardChange, value: settingsSearchText)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,9 +178,11 @@ struct SettingsView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.left")
-                    Text(L10n.text("Dashboard"))
+                    // The shell calls this tab "Vehicle"; two of Settings' three exits called it
+                    // "Dashboard", so the reader was told they were going somewhere else.
+                    Text(L10n.text("Vehicle"))
                 }
-                .font(.system(size: 11, weight: .semibold))
+                .hisType(.label, weight: .semibold)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -188,7 +190,7 @@ struct SettingsView: View {
             Spacer()
 
             Text(L10n.text("Settings"))
-                .font(.system(size: 13, weight: .bold))
+                .hisType(.heading, weight: .bold)
                 .foregroundStyle(HisingenTheme.ink)
 
             Spacer()
@@ -197,18 +199,18 @@ struct SettingsView: View {
                 L10n.text("Changes save automatically"),
                 systemImage: "checkmark.circle"
             )
-            .font(.system(size: 9.5, weight: .medium))
+            .hisType(.micro, weight: .medium)
             .foregroundStyle(.secondary)
 
             Button {
                 onSettingsChanged(.closeSettings)
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
+                    .hisType(.subhead)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.pressable)
-            .help(L10n.text("Back to Dashboard"))
+            .help(L10n.text("Back to Vehicle"))
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
@@ -233,16 +235,22 @@ struct SettingsView: View {
 
     private var featureQuickActions: some View {
         HStack(spacing: 8) {
+            // Both bulk actions are additive. Each used to *assign* a whole new selection, so
+            // "Recommended" switched off all eight remote-control features for a reader who had
+            // them on, and "Enable All Safe Features" — labelled and iconed as purely additive —
+            // turned every remote control off by construction, because that is what its set
+            // excludes. A convenience action may add; it may not silently take away.
             Button {
-                preferences.features = FeatureSelection.default
+                preferences.features = preferences.features
+                    .adding(FeatureSelection.default.enabled)
                 prefsTick &+= 1
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "sparkles")
-                    Text(L10n.text("Recommended"))
+                    Text(L10n.text("Add Recommended"))
                 }
-                .font(.system(size: 11, weight: .semibold))
+                .hisType(.label, weight: .semibold)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
             .buttonStyle(.borderedProminent)
@@ -250,15 +258,16 @@ struct SettingsView: View {
             .controlSize(.small)
 
             Button {
-                preferences.features = FeatureSelection(enabled: Set(AppFeature.safeBulkEnableCases))
+                preferences.features = preferences.features
+                    .adding(AppFeature.safeBulkEnableCases)
                 prefsTick &+= 1
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle")
-                    Text(L10n.text("Enable All Safe Features"))
+                    Text(L10n.text("Add All Safe Features"))
                 }
-                .font(.system(size: 11, weight: .medium))
+                .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
             .buttonStyle(.bordered)
@@ -271,7 +280,7 @@ struct SettingsView: View {
                     Image(systemName: "key.horizontal")
                     Text(L10n.text("Enable Remote Controls"))
                 }
-                .font(.system(size: 11, weight: .medium))
+                .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
             .buttonStyle(.bordered)

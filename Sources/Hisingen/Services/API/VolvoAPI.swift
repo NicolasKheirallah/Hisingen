@@ -52,8 +52,8 @@ actor VolvoAPI {
     /// Ordered widest → narrowest for the `invalid_scope` fallback cascade.
     enum ScopeTier: Int, CaseIterable {
         case full       // readScopes + restrictedScopes (when the preference wants them)
-        case standard   // readScopes only — telemetry + remote climate, no lock/unlock/locate
-        case core       // coreReadScopes only — telemetry, no remote controls at all
+        case standard   // readScopes only – telemetry + remote climate, no lock/unlock/locate
+        case core       // coreReadScopes only – telemetry, no remote controls at all
     }
 
 
@@ -112,7 +112,7 @@ actor VolvoAPI {
         self.preferences = preferences
         session = Self.makeSession()
         // Restore endpoint back-offs so a market-restricted endpoint (e.g. `location`, which
-        // returns 403 in this region) is not re-probed once per launch forever — the dict was
+        // returns 403 in this region) is not re-probed once per launch forever – the dict was
         // in-memory only, so every restart erased hours of accumulated "known unavailable".
         endpointBackoff = Self.loadPersistedEndpointBackoff()
     }
@@ -179,8 +179,8 @@ actor VolvoAPI {
             bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
         case .stopEngine:
             commandName = "engine-stop"
-        // The command list reports this as `HONK_AND_FLASH` but its `href` — and therefore the
-        // real invocation path — is `honk-flash` (verified live against a production vehicle).
+        // The command list reports this as `HONK_AND_FLASH` but its `href` – and therefore the
+        // real invocation path – is `honk-flash` (verified live against a production vehicle).
         case .honkAndFlash: commandName = "honk-flash"
         case .flashLights: commandName = "flash"
         case .honkHorn: commandName = "honk"
@@ -354,7 +354,7 @@ actor VolvoAPI {
     /// When the most recent successful `refresh_token` grant landed, and the lifetime that
     /// grant advertised. A brand-new token is the freshest one obtainable, so a caller that
     /// arrives within a few seconds of a completed grant reuses it instead of starting
-    /// another — this collapses the ~20-endpoint telemetry fan-out (and a wave of requests
+    /// another – this collapses the ~20-endpoint telemetry fan-out (and a wave of requests
     /// that all `401` at once) from several `refresh_token` grants down to one. Cleared by
     /// `resetSession()`. Also lets the renewal threshold scale to a short-lived token
     /// instead of a flat five minutes that would treat it as perpetually stale.
@@ -414,12 +414,12 @@ actor VolvoAPI {
         }
     }
 
-    /// Wipes the stored Volvo session — memory and Keychain — after the identity provider has
+    /// Wipes the stored Volvo session – memory and Keychain – after the identity provider has
     /// declared the refresh token permanently dead (`invalid_grant` / `expired_token`). Without
     /// this, `hasResumableSession` stays `true` and the resume / garage-scan loop replays the
     /// dead token every few minutes; each replay is a failed login that counts toward Volvo's
     /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
-    /// network error — those can be transient or misconfiguration, and destroying a still-valid
+    /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
     private func discardDeadRefreshToken() async {
         refreshToken = nil
@@ -435,7 +435,7 @@ actor VolvoAPI {
         // Update the in-memory session *before* persisting. Volvo's identity provider is
         // rotate-on-use: this grant has already invalidated `previous` server-side, so if the
         // Keychain write fails (typically an ACL denial after the code-signing identity changed
-        // between dev builds) the app must still run this session on the rotated token —
+        // between dev builds) the app must still run this session on the rotated token –
         // otherwise it keeps replaying a token the server just killed and every refresh is
         // `invalid_grant`. A failed persist costs a restart, not the whole session.
         accessToken = token.accessToken
@@ -527,7 +527,7 @@ actor VolvoAPI {
             // Only per-vehicle telemetry GETs route through this helper, and for those a 403
             // is empirically a market/model gate rather than a token problem: the same token
             // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
-            // not use this path, so their 403s stay `.permissionDenied` — the asymmetry is
+            // not use this path, so their 403s stay `.permissionDenied` – the asymmetry is
             // deliberate. This is tuned from observed behaviour, not Volvo documentation.
             if path.hasPrefix("/location/") {
                 throw VolvoError.regionRestricted(service: path)
@@ -596,7 +596,7 @@ actor VolvoAPI {
             if isRestricted {
                 logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
             } else {
-                logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) — \(String(describing: error), privacy: .public)")
+                logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) – \(String(describing: error), privacy: .public)")
             }
             return nil
         }
@@ -628,7 +628,7 @@ actor VolvoAPI {
         }
     }
 
-    /// Request-level failures that must propagate instead of degrading to fallback data —
+    /// Request-level failures that must propagate instead of degrading to fallback data –
     /// auth problems, rate limiting, server outages, transport breakdowns.
     static func isRequestLevelFailure(_ error: Error) -> Bool {
         switch error as? VolvoError {

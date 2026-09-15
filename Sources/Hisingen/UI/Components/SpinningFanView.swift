@@ -15,24 +15,15 @@ struct SpinningFanView: View {
             .font(.system(size: size))
             .foregroundStyle(color)
             .rotationEffect(.degrees(angle))
-            .onAppear { if shouldSpin { startSpinning() } }
-            .onChange(of: shouldSpin) { _, spinning in
-                if spinning {
-                    startSpinning()
-                } else {
-                    // Snap to rest without re-animation: an animated reset
-                    // from a multi-turn angle visibly spins the fan backwards.
-                    var reset = Transaction()
-                    reset.animation = nil
-                    withTransaction(reset) { angle = 0 }
+            .task(id: shouldSpin) {
+                guard shouldSpin else { return }
+                while !Task.isCancelled {
+                    withAnimation(.linear(duration: Motion.spinCycle)) {
+                        angle += 360
+                    }
+                    try? await Task.sleep(for: .seconds(Motion.spinCycle))
                 }
             }
             .accessibilityHidden(true)
-    }
-
-    private func startSpinning() {
-        withAnimation(Motion.spin) {
-            angle = 360
-        }
     }
 }

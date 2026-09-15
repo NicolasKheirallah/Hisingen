@@ -9,12 +9,12 @@ import OSLog
 @MainActor
 protocol SignInCoordinatorContext: AnyObject {
     /// Adopt `brand` as the active brand (past the normal idempotence guards) and resume its
-    /// stored session — the pair every successful interactive sign-in ends with.
+    /// stored session – the pair every successful interactive sign-in ends with.
     func activateBrandAfterSignIn(_ brand: VehicleBrand)
     /// Close the Settings surface after a flow succeeds.
     func dismissSettingsAfterSignIn()
     /// Re-render the Settings surface in place (without closing it) so a card reflects state
-    /// that changed out from under it — e.g. the Polestar command-authorization status after
+    /// that changed out from under it – e.g. the Polestar command-authorization status after
     /// the browser round-trip completes.
     func refreshSettingsSurface()
     /// A persistent, notification-backed confirmation. Used where a transient banner that
@@ -24,12 +24,12 @@ protocol SignInCoordinatorContext: AnyObject {
 
 /// Owns Hisingen's three interactive OAuth handshakes and the routing of their callback URLs:
 ///
-/// - **Volvo sign-in** — full OAuth through the system browser, plus the builtin-secret /
+/// - **Volvo sign-in** – full OAuth through the system browser, plus the builtin-secret /
 ///   Keychain fallback chain and the "already configured, just re-adopt the brand" fast path.
-/// - **Polestar command authorization** — a separate, explicit browser step that unlocks
+/// - **Polestar command authorization** – a separate, explicit browser step that unlocks
 ///   remote commands; stays unavailable until the user completes it (and again once the
 ///   resulting session expires).
-/// - **Polestar interactive web sign-in** — an in-app `WKWebView` fallback for when headless
+/// - **Polestar interactive web sign-in** – an in-app `WKWebView` fallback for when headless
 ///   PingFederate login is met with an interactive challenge (2FA, CAPTCHA, ToS update).
 ///
 /// Extracted from `AppDelegate`, where the three flows were ~40 near-duplicate lines each and
@@ -82,7 +82,7 @@ final class SignInCoordinator {
 
     // MARK: - Volvo
 
-    /// `forceInteractive` bypasses the "already configured, nothing to do" fast path — used by
+    /// `forceInteractive` bypasses the "already configured, nothing to do" fast path – used by
     /// the explicit "Re-sign in" affordance, where the user wants a fresh browser handshake
     /// even if a (possibly stale) session token is still on file.
     func beginVolvoSignIn(clientID: String, clientSecret: String, vccApiKey: String,
@@ -110,7 +110,7 @@ final class SignInCoordinator {
         let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         // Already fully configured and the form came back blank: there is nothing to
-        // re-authorize — just re-adopt the Volvo brand and resume from the stored token.
+        // re-authorize – just re-adopt the Volvo brand and resume from the stored token.
         if !forceInteractive,
            !effectiveSecret.isEmpty, !effectiveApiKey.isEmpty, let sessionToken, !sessionToken.isEmpty,
            trimmedClientID == preferences.volvoClientID, clientSecret.isEmpty, vccApiKey.isEmpty {
@@ -144,8 +144,8 @@ final class SignInCoordinator {
                         if tier == .core { preferences.volvoRestrictedScopesEnabled = false }
                         context?.presentSignInNotice(
                             title: tier == .standard
-                                ? L10n.text("Volvo connected — data & climate")
-                                : L10n.text("Volvo connected — data only"),
+                                ? L10n.text("Volvo connected – data & climate")
+                                : L10n.text("Volvo connected – data only"),
                             body: tier == .standard
                                 ? L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location. Reconnected with vehicle data and remote climate; request those permissions on developer.volvocars.com to enable the rest.")
                                 : L10n.text("Your Volvo developer application is only approved for vehicle data. Reconnected in read-only mode; request command scopes on developer.volvocars.com to enable remote climate and controls."),
@@ -223,7 +223,7 @@ final class SignInCoordinator {
     // MARK: - Polestar command authorization
 
     /// Authorizes the Polestar command client (remote commands) through a real browser window
-    /// instead of Hisingen scripting the login form itself — see `PolestarAPI.beginCommandAuthorization()`/
+    /// instead of Hisingen scripting the login form itself – see `PolestarAPI.beginCommandAuthorization()`/
     /// `completeCommandAuthorization(callbackURL:)` and `PolestarCommandSignInPresenter`. This
     /// is a separate, explicit step from the base Polestar sign-in; remote commands stay
     /// unavailable until the user completes it (and again whenever the resulting session
@@ -246,7 +246,7 @@ final class SignInCoordinator {
                 authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
                 let callbackURL = try await polestarCommandPresenter.signIn(authorizeURL: authorizeURL)
                 try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
-                // Persistent banner through the Notifier pipeline — the transient
+                // Persistent banner through the Notifier pipeline – the transient
                 // `RemoteResultPresenter` variant self-cleans after 5 s, which reads as
                 // "did it actually go through?" for a step this easy to miss.
                 try Task.checkCancellation()

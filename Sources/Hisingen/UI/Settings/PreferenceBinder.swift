@@ -19,7 +19,7 @@ enum SettingsChange {
     case switchToBrand(VehicleBrand)
     case selectVehicle(String)
     case closeSettings
-    /// Builds the redacted diagnostic report and offers a save panel — reachable directly
+    /// Builds the redacted diagnostic report and offers a save panel – reachable directly
     /// from sign-in failure surfaces so a broken login can be attached to a bug report.
     case exportDiagnosticLogs
 }

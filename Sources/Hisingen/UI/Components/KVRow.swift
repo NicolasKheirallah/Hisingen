@@ -6,15 +6,20 @@ struct KVRow: View {
     let symbol: String?
     let valueWarning: Bool
     let warning: Bool
+    /// A critical row outranks a warning one. Both rendered in `semanticWarning`, so a triggered
+    /// alarm looked exactly like a low washer-fluid level: same size, same colour, same symbol
+    /// family, in whatever order the data arrived.
+    let critical: Bool
 
 
     let info: String?
-    init(_ key: String, _ value: String, symbol: String? = nil, valueWarning: Bool = false, warning: Bool = false, info: String? = nil) {
+    init(_ key: String, _ value: String, symbol: String? = nil, valueWarning: Bool = false, warning: Bool = false, critical: Bool = false, info: String? = nil) {
         self.key = key
         self.value = value
         self.symbol = symbol
         self.valueWarning = valueWarning
         self.warning = warning
+        self.critical = critical
         self.info = info
     }
 
@@ -24,20 +29,23 @@ struct KVRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if let symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(warning ? HisingenTheme.semanticWarning : .secondary)
+                    .hisType(.label, weight: .medium)
+                    .foregroundStyle(critical ? HisingenTheme.semanticCritical
+                                              : (warning ? HisingenTheme.semanticWarning : .secondary))
                     .accessibilityHidden(true)
             }
             Text(key)
-                .foregroundStyle(warning ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
-                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(critical ? HisingenTheme.semanticCritical
+                                          : (warning ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted))
+                .hisType(.body, weight: .regular)
             if let info {
-                InformationButton(message: info)
+                InformationButton(message: info, subject: key)
             }
             Spacer()
             Text(value)
-                .foregroundStyle(valueWarning ? HisingenTheme.semanticWarning : HisingenTheme.ink)
-                .font(.system(size: 12, weight: HisingenTheme.valueWeight))
+                .foregroundStyle(critical ? HisingenTheme.semanticCritical
+                                          : (valueWarning ? HisingenTheme.semanticWarning : HisingenTheme.ink))
+                .hisType(.body, weight: HisingenTheme.valueWeight)
                 .monospacedDigit()
                 .multilineTextAlignment(.trailing)
                 .lineLimit(3)
@@ -45,11 +53,14 @@ struct KVRow: View {
                 .help(value)
                 .hisTelemetryValue(value, reduceMotion: reduceMotion)
         }
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: warning)
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: valueWarning)
+        .hisAnimation(Motion.stateChange, value: warning)
+        .hisAnimation(Motion.stateChange, value: critical)
+        .hisAnimation(Motion.stateChange, value: valueWarning)
         .accessibilityElement(children: info == nil ? .ignore : .contain)
         .accessibilityLabel({
-            var label = warning || valueWarning ? "\(L10n.text("Warning")): \(key), \(value)" : "\(key): \(value)"
+            let severity = critical ? L10n.text("Critical")
+                : ((warning || valueWarning) ? L10n.text("Warning") : nil)
+            var label = severity.map { "\($0): \(key), \(value)" } ?? "\(key): \(value)"
             if let info { label += ". \(info)" }
             return label
         }())

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// An intent, not a set of guards: the caller states what it is trying to do and `RefreshGate`
 /// answers whether it may start. Naming the intent is also what lets the gate keep the orders
-/// that genuinely differ — see `checks`.
+/// that genuinely differ – see `checks`.
 enum RefreshIntent: Equatable {
     /// A scheduled tick.
     case scheduled
@@ -21,7 +21,7 @@ enum RefreshIntent: Equatable {
     /// A session needs establishing before anything else can run.
     case establishSession
 
-    /// A selection supersedes in-flight work — it bumps the generation and cancels what is
+    /// A selection supersedes in-flight work – it bumps the generation and cancels what is
     /// running. Every other intent coalesces with it: a second fetch of the same data buys
     /// nothing.
     var supersedesWorkInFlight: Bool {

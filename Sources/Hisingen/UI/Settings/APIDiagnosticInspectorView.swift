@@ -66,6 +66,9 @@ struct APIDiagnosticInspectorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [APILogEntry] = []
+    /// "No API requests recorded" was asserted on the first frame, before the first snapshot had
+    /// resolved, so an inspector with a full buffer briefly told the reader it had nothing.
+    @State private var hasLoadedOnce = false
     @State private var provider: APILogProvider?
     @State private var outcome: APIDiagnosticOutcomeFilter = .all
     @State private var query = ""
@@ -123,7 +126,14 @@ struct APIDiagnosticInspectorView: View {
                 .disabled(entries.isEmpty)
             }
 
-            if filtered.isEmpty {
+            if !hasLoadedOnce {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.text("Reading the request log…"))
+                        .hisType(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else if filtered.isEmpty {
                 ContentUnavailableView(
                     entries.isEmpty ? L10n.text("No API requests recorded") : L10n.text("No matching requests"),
                     systemImage: "network.slash"
@@ -153,7 +163,7 @@ struct APIDiagnosticInspectorView: View {
                             }
                             if let payload = entry.responsePayloadJSON {
                                 Text(payload)
-                                    .font(.system(size: 10, design: .monospaced))
+                                    .hisType(.caption, design: .monospaced)
                                     .textSelection(.enabled)
                                     .padding(7)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -173,6 +183,7 @@ struct APIDiagnosticInspectorView: View {
                                 .foregroundStyle(.secondary)
                             Text(entry.method).font(.caption.monospaced().weight(.medium))
                             Text(entry.operation).lineLimit(1)
+                            .minimumScaleFactor(0.9)
                             Spacer()
                             if let status = entry.statusCode {
                                 Text(String(status))
@@ -193,11 +204,13 @@ struct APIDiagnosticInspectorView: View {
             }
         }
         .padding(14)
-        .frame(minWidth: 760, minHeight: 520)
+        // 760 was wider than the 430pt panel it opens from, overhanging its own parent by up to
+        // 77 % at the narrow presets. It asks for what the measurement columns actually need.
+        .frame(minWidth: 560, minHeight: 480)
         // refreshLoop() rewrites `entries` every second from outside any transaction;
         // keying on the count is what animates per-second row inserts and the
         // list↔empty-state swap.
-        .animation(Motion.resolveCrossfade(Motion.stateChange), value: entries.count)
+        .hisAnimation(Motion.stateChange, value: entries.count)
         .confirmationDialog(
             L10n.text("Clear the redacted API request log?"),
             isPresented: $showClearConfirmation,
@@ -228,6 +241,7 @@ struct APIDiagnosticInspectorView: View {
     private func refreshLoop() async {
         while !Task.isCancelled {
             entries = await store.snapshot()
+            hasLoadedOnce = true
             do { try await Task.sleep(for: .seconds(1)) }
             catch { return }
         }
