@@ -102,7 +102,7 @@ jobs:
       - name: Test deterministic suite
         run: |
           set -euo pipefail
-          sh Scripts/test.sh --skip Live
+          sh Scripts/test.sh --skip Live --no-parallel
       - name: Validate localization and documentation
         run: |
           python3 Scripts/check-localization.py
